@@ -291,12 +291,6 @@ function performAttack(attacker, targetQ, targetR)
     local pushDirectionQ = targetQ - attacker.q
     local pushDirectionR = targetR - attacker.r
     
-    -- ОТЛАДКА: Выводим информацию о направлении
-    print(string.format("[DEBUG] Attacker at (%d,%d), Target at (%d,%d)", 
-        attacker.q, attacker.r, targetQ, targetR))
-    print(string.format("[DEBUG] Push direction: (q:%d, r:%d)", 
-        pushDirectionQ, pushDirectionR))
-    
     -- Определяем направление отталкивания через кубические координаты
     local function axialToCube(q, r)
         local x = q
@@ -320,23 +314,6 @@ function performAttack(attacker, targetQ, targetR)
     local pushZ = tZ + dirZ
     local pushTargetQ, pushTargetR = cubeToAxial(pushX, pushY, pushZ)
     
-    -- ОТЛАДКА: Выводим целевую клетку для отбрасывания
-    print(string.format("[DEBUG] Push target cell: (%d,%d)", 
-        pushTargetQ, pushTargetR))
-    print(string.format("[DEBUG] Is valid hex? %s", 
-        tostring(hex:isValidHex(pushTargetQ, pushTargetR))))
-    
-    -- ОТЛАДКА: Проверяем, что находится на целевой клетке
-    if hex:isValidHex(pushTargetQ, pushTargetR) then
-        local obstacleAtPush = getObstacleAtHex(pushTargetQ, pushTargetR)
-        local actorAtPush = getActorAtHex(pushTargetQ, pushTargetR)
-        print(string.format("[DEBUG] Cell status - Obstacle: %s, Actor: %s", 
-            obstacleAtPush and obstacleAtPush.name or "none",
-            actorAtPush and actorAtPush.name or "none"))
-    else
-        print("[DEBUG] Push target is outside map bounds!")
-    end
-    
     -- Наносим урон цели
     local target = targetActor or targetObstacle
     target.health = target.health - 1
@@ -346,8 +323,8 @@ function performAttack(attacker, targetQ, targetR)
         sounds.attack:play()
     end
     
-    -- Проверяем, уничтожена ли цель
-    if target.health <= 0 then
+    -- Проверяем, уничтожена ли цель (мертвых актеров все равно отталкиваю)
+    if target.health <= 0 and targetActor == false then
         if targetActor then
             -- Удаляем актера
             for i, actor in ipairs(actors) do
