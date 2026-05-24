@@ -248,15 +248,15 @@ function endTurn()
         sounds.turn:play()
     end
     
-    print("=== НОВЫЙ ХОД " .. turnState.currentTurn .. " ===")
-    print("Очередь: " .. selectedActor.name)
-    print("Максимум отмен: " .. maxUndoCount .. " (количество союзных юнитов)")
+    print("=== NEW TURN " .. turnState.currentTurn .. " ===")
+    print("Turn order: " .. selectedActor.name)
+    print("Max undos: " .. maxUndoCount .. " (number of allied units)")
 end
 
 -- Глобальная функция отмены последнего действия (не привязана к выбранному актеру)
 function undoLastAction()
     if #actionHistory == 0 then
-        print("Нет действий для отмены! (0/" .. maxUndoCount .. ")")
+        print("No actions to undo! (0/" .. maxUndoCount .. ")")
         return false
     end
     
@@ -274,26 +274,26 @@ function undoLastAction()
     end
     
     if not actorExists then
-        print("Актер больше не существует!")
+        print("Actor no longer exists!")
         table.remove(actionHistory)
         return undoLastAction()  -- Рекурсивно пробуем следующее действие
     end
     
     -- Проверяем, не двигается ли актер
     if currentActor.isMoving then
-        print("Нельзя отменить действие во время движения!")
+        print("Cannot undo action while moving!")
         return false
     end
     
     -- Проверяем, можно ли отменить (актер должен был совершить действие в этом ходу)
     if not currentActor.hasActedThisTurn then
-        print(currentActor.name .. " еще не совершал действие в этом ходу!")
+        print(currentActor.name .. " hasn't performed an action this turn yet!")
         return false
     end
     
     -- Проверяем, свободна ли начальная позиция
     if isPositionOccupied(lastAction.fromQ, lastAction.fromR, currentActor) then
-        print("Нельзя отменить: начальная позиция занята!")
+        print("Cannot undo: starting position is occupied!")
         return false
     end
     
@@ -325,8 +325,8 @@ function undoLastAction()
     table.remove(actionHistory)
     
     sounds.undo:play()
-    print("Отменено действие: " .. currentActor.name)
-    print("Осталось отмен: " .. #actionHistory .. "/" .. maxUndoCount)
+    print("Undone action: " .. currentActor.name)
+    print("Undos remaining: " .. #actionHistory .. "/" .. maxUndoCount)
     return true
 end
 
@@ -348,10 +348,10 @@ function addToHistory(actor, fromQ, fromR, toQ, toR)
     -- Ограничиваем историю до КОЛИЧЕСТВА СОЮЗНЫХ ЮНИТОВ
     while #actionHistory > maxUndoCount do
         local removed = table.remove(actionHistory, 1)
-        print("История превысила лимит (" .. maxUndoCount .. "), удалено старое действие " .. (removed.actor and removed.actor.name or "unknown"))
+        print("History exceeded limit (" .. maxUndoCount .. "), removed old action for " .. (removed.actor and removed.actor.name or "unknown"))
     end
     
-    print("Добавлено действие для " .. actor.name .. ". История: " .. #actionHistory .. "/" .. maxUndoCount)
+    print("Added action for " .. actor.name .. ". History: " .. #actionHistory .. "/" .. maxUndoCount)
 end
 
 function pixelToHex(px, py)
@@ -527,16 +527,16 @@ function performMove(actor, targetQ, targetR)
     -- ПРОВЕРКА ДАЛЬНОСТИ ДВИЖЕНИЯ
     local distance = getHexDistance(actor.q, actor.r, targetQ, targetR)
     if distance > actor.moveRange then
-        print(actor.name .. " не может пройти так далеко! Максимальная дистанция: " .. actor.moveRange .. " клеток")
+        print(actor.name .. " cannot move that far! Max distance: " .. actor.moveRange .. " cells")
         return false
     end
     
     if isPositionOccupied(targetQ, targetR, actor) then
         local obstacle = getObstacleAtHex(targetQ, targetR)
         if obstacle then
-            print("Невозможно пройти: клетка занята препятствием!")
+            print("Cannot move: cell is occupied by obstacle!")
         else
-            print("Клетка занята другим актером!")
+            print("Cell is occupied by another actor!")
         end
         return false
     end
@@ -546,7 +546,7 @@ function performMove(actor, targetQ, targetR)
     if path and #path > 0 then
         -- ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: длина пути не должна превышать дальность движения
         if #path > actor.moveRange then
-            print(actor.name .. " не может пройти " .. #path .. " клеток! Максимум: " .. actor.moveRange)
+            print(actor.name .. " cannot move " .. #path .. " cells! Max: " .. actor.moveRange)
             return false
         end
         
@@ -559,7 +559,7 @@ function performMove(actor, targetQ, targetR)
         
         return true
     else
-        print("Путь не найден!")
+        print("Path not found!")
         return false
     end
 end
@@ -716,7 +716,7 @@ function startNextMove(actor)
             end
             
             turnState.turnPhase = "waiting"
-            print(actor.name .. " завершил действие!")
+            print(actor.name .. " finished action!")
         end
         
         if selectedActor == actor then
@@ -759,7 +759,7 @@ function updateActorMovement(actor, dt)
                     end
                     
                     turnState.turnPhase = "waiting"
-                    print(actor.name .. " завершил действие!")
+                    print(actor.name .. " finished action!")
                 end
                 
                 if selectedActor == actor then
@@ -1031,7 +1031,7 @@ function love.mousepressed(x, y, button)
             if #actionHistory > 0 then
                 undoLastAction()
             else
-                print("Нет действий для отмены!")
+                print("No actions to undo!")
             end
             return
         end
@@ -1051,7 +1051,7 @@ function love.mousepressed(x, y, button)
             if anyActorActed then
                 endTurn()
             else
-                print("Ни один актер еще не совершил действие! Сначала нужно сходить хотя бы одним персонажем.")
+                print("No actor has taken an action yet! At least one character must move first.")
             end
             return
         end
@@ -1064,7 +1064,7 @@ function love.mousepressed(x, y, button)
             -- Если кликнули на актера
             if clickedActor and clickedActor.isPlayable then
                 if clickedActor.hasActedThisTurn then
-                    print(clickedActor.name .. " уже совершил действие в этом ходу!")
+                    print(clickedActor.name .. " has already acted this turn!")
                 else
                     selectedActor = clickedActor
                     hex.selectedQ = targetQ
@@ -1079,7 +1079,7 @@ function love.mousepressed(x, y, button)
                 hex.selectedQ = targetQ
                 hex.selectedR = targetR
             elseif selectedActor and selectedActor.hasActedThisTurn then
-                print(selectedActor.name .. " уже использовал действие!")
+                print(selectedActor.name .. " has already used their action!")
             end
         end
     end
@@ -1090,7 +1090,7 @@ function love.keypressed(key)
         if #actionHistory > 0 then
             undoLastAction()
         else
-            print("Нет действий для отмены!")
+            print("No actions to undo!")
         end
     end
     
