@@ -1,7 +1,7 @@
 function love.load()
     -- Настройки гексагональной сетки
     hex = {}
-    hex.radius = 35
+    hex.radius = 70
     hex.width = hex.radius * 2
     hex.height = hex.radius * 1.75
     hex.gridWidth = 9
@@ -16,6 +16,9 @@ function love.load()
     
     -- Список препятствий (непроходимые объекты)
     obstacles = {}
+    
+    -- Глобальный стек действий для отмены (максимум 3 действия)
+    actionHistory = {}  -- Каждый элемент: {actor, fromQ, fromR, toQ, toR, turnNumber}
     
     -- ПОШАГОВАЯ СИСТЕМА
     turnState = {
@@ -102,7 +105,6 @@ function love.load()
 
         actor.isPlayable = isPlayable or false  -- Управляемый игроком
         actor.hasActedThisTurn = false          -- Сделал ли действие в этом ходу
-        actor.lastMove = nil                    -- История последнего действия
         
         -- Статы
         actor.maxHealth = maxHealth or 3
@@ -175,7 +177,7 @@ function love.load()
         end
     end
     
-    background = love.graphics.newImage('sprites/background.png')
+    --background = love.graphics.newImage('sprites/background.png')
     
     sounds = {}
     sounds.undo = love.audio.newSource("sounds/blip.wav", "static")
@@ -201,43 +203,21 @@ end
 
 -- Функция завершения хода
 function endTurn()
-    -- Переключаемся на следующего актера
-    local nextActorIndex = turnState.currentActorIndex + 1
-    
-    -- Ищем следующего играбельного актера, у которого остались действия
-    local foundNext = false
-    for i = nextActorIndex, #actors do
-        if actors[i].isPlayable and turnState.actionsRemaining[i] > 0 and not actors[i].hasActedThisTurn then
-            turnState.currentActorIndex = i
-            foundNext = true
-            break
-        end
+    -- Сбрасываем флаги действий для ВСЕХ актеров (игроки + враги)
+    for i, actor in ipairs(actors) do
+        actor.hasActedThisTurn = false
+        turnState.actionsRemaining[i] = 1
     end
+
+    -- ОЧИЩАЕМ ИСТОРИЮ ДЕЙСТВИЙ ПРИ ЗАВЕРШЕНИИ ХОДА
+    actionHistory = {}
     
-    if not foundNext then
-        -- Если дошли до конца списка, начинаем новый ход
-        turnState.currentTurn = turnState.currentTurn + 1
-        turnState.currentActorIndex = 1
-        
-        -- Сбрасываем флаги действий для всех играбельных актеров
-        for i, actor in ipairs(actors) do
-            if actor.isPlayable then
-                actor.hasActedThisTurn = false
-                turnState.actionsRemaining[i] = 1
-            end
-        end
-        
-        -- Находим первого актера для нового хода
-        for i, actor in ipairs(actors) do
-            if actor.isPlayable then
-                turnState.currentActorIndex = i
-                break
-            end
-        end
-    end
+    -- Увеличиваем номер хода
+    turnState.currentTurn = turnState.currentTurn + 1
     
-    -- Обновляем выбранного актера
-    selectedActor = actors[turnState.currentActorIndex]
+    -- Находим ПЕРВОГО актера для нового хода (игрок или враг)
+    turnState.currentActorIndex = 1
+    selectedActor = actors[1]
     hex.selectedQ = selectedActor.q
     hex.selectedR = selectedActor.r
     turnState.turnPhase = "waiting"
@@ -247,8 +227,96 @@ function endTurn()
         sounds.turn:play()
     end
     
-    print("=== Ход " .. turnState.currentTurn .. " ===")
+    print("=== НОВЫЙ ХОД " .. turnState.currentTurn .. " ===")
     print("Очередь: " .. selectedActor.name)
+end
+
+-- Глобальная функция отмены последнего действия
+function undoLastAction()
+    if #actionHistory == 0 then
+        print("Нет действий для отмены!")
+        return false
+    end
+    
+    local lastAction = actionHistory[#actionHistory]
+    
+    -- Проверяем, не был ли актер уничтожен
+    local actorExists = false
+    for _, actor in ipairs(actors) do
+        if actor == lastAction.actor then
+            actorExists = true
+            break
+        end
+    end
+    
+    if not actorExists then
+        print("Актер больше не существует!")
+        table.remove(actionHistory)
+        return undoLastAction()  -- Рекурсивно пробуем следующее действие
+    end
+    
+    local actor = lastAction.actor
+    
+    -- Проверяем, не двигается ли актер
+    if actor.isMoving then
+        print("Нельзя отменить действие во время движения!")
+        return false
+    end
+    
+    -- Проверяем, свободна ли начальная позиция
+    if isPositionOccupied(lastAction.fromQ, lastAction.fromR, actor) then
+        print("Нельзя отменить: начальная позиция занята!")
+        return false
+    end
+    
+    -- Откатываем позицию актера
+    actor.q = lastAction.fromQ
+    actor.r = lastAction.fromR
+    
+    -- Сбрасываем флаги
+    actor.hasActedThisTurn = false
+    actor.isMoving = false
+    actor.path = {}
+    actor.currentPathIndex = 0
+    
+    -- Обновляем выделение, если это выбранный актер
+    if selectedActor == actor then
+        hex.selectedQ = actor.q
+        hex.selectedR = actor.r
+    end
+    
+    -- Удаляем действие из истории
+    table.remove(actionHistory)
+    
+    -- Восстанавливаем счетчик действий (если нужно)
+    for i, a in ipairs(actors) do
+        if a == actor then
+            turnState.actionsRemaining[i] = 1
+            break
+        end
+    end
+    
+    sounds.undo:play()
+    print("Отменено действие: " .. actor.name)
+    return true
+end
+
+function addToHistory(actor, fromQ, fromR, toQ, toR)
+    local action = {
+        actor = actor,
+        fromQ = fromQ,
+        fromR = fromR,
+        toQ = toQ,
+        toR = toR,
+        turnNumber = turnState.currentTurn
+    }
+    
+    table.insert(actionHistory, action)
+    
+    -- Ограничиваем историю до 3 действий
+    while #actionHistory > 3 do
+        table.remove(actionHistory, 1)
+    end
 end
 
 function pixelToHex(px, py)
@@ -412,61 +480,6 @@ function findPath(startQ, startR, targetQ, targetR, movingActor)
     return nil
 end
 
-function addToHistory(actor, fromQ, fromR, toQ, toR)
-    actor.lastMove = {
-        fromQ = fromQ,
-        fromR = fromR,
-        toQ = toQ,
-        toR = toR,
-        timestamp = love.timer.getTime()
-    }
-end
-
-function undoLastMove(actor)
-    if not actor or not actor.lastMove then
-        print(actor and actor.name or "Актер", "не имеет действий для отмены!")
-        return false
-    end
-    
-    if actor.isMoving then
-        print("Нельзя отменить действие во время движения!")
-        return false
-    end
-    
-    -- В пошаговой системе отмена возможна только если актер еще не закончил ход
-    if actor.hasActedThisTurn then
-        print("Нельзя отменить действие после завершения хода!")
-        return false
-    end
-    
-    local lastAction = actor.lastMove
-    
-    if isPositionOccupied(lastAction.fromQ, lastAction.fromR, actor) then
-        print("Нельзя отменить: начальная позиция занята!")
-        return false
-    end
-    
-    actor.q = lastAction.fromQ
-    actor.r = lastAction.fromR
-    
-    if selectedActor == actor then
-        hex.selectedQ = actor.q
-        hex.selectedR = actor.r
-    end
-    
-    actor.lastMove = nil
-    
-    if actor.isMoving then
-        actor.isMoving = false
-        actor.path = {}
-        actor.currentPathIndex = 0
-    end
-    
-    sounds.undo:play()
-    print("Отменено действие: " .. actor.name)
-    return true
-end
-
 function performMove(actor, targetQ, targetR)
     if actor.isMoving then
         return false
@@ -539,9 +552,6 @@ function startNextMove(actor)
             
             turnState.turnPhase = "waiting"
             print(actor.name .. " завершил действие!")
-            
-            -- Автоматически завершаем ход после действия (опционально)
-            -- endTurn()
         end
         
         if selectedActor == actor then
@@ -722,7 +732,7 @@ function drawActor(actor)
 end
 
 function drawUndoButton()
-    local canUndo = selectedActor and selectedActor.lastMove and not selectedActor.hasActedThisTurn
+    local canUndo = #actionHistory > 0
     
     if not selectedActor then
         love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
@@ -739,11 +749,9 @@ function drawUndoButton()
     love.graphics.rectangle("line", 10, 200, 120, 30, 5)
     
     love.graphics.setColor(1, 1, 1, 1)
-    local text = "Undo Move"
-    if selectedActor and not selectedActor.lastMove then
+    local text = "Undo (" .. #actionHistory .. "/3)"
+    if #actionHistory == 0 then
         text = "Nothing to Undo"
-    elseif selectedActor and selectedActor.hasActedThisTurn then
-        text = "Already Acted"
     end
     
     local font = love.graphics.getFont()
@@ -752,16 +760,27 @@ function drawUndoButton()
 end
 
 function drawEndTurnButton()
-    local active = selectedActor and selectedActor.hasActedThisTurn
+    -- Всегда активна, просто меняем цвет в зависимости от состояния
+    local anyActorActed = false
+    for _, actor in ipairs(actors) do
+        if actor.isPlayable and actor.hasActedThisTurn then
+            anyActorActed = true
+            break
+        end
+    end
     
-    if not selectedActor then
-        love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
-    elseif endTurnButton.isHovered and active then
-        love.graphics.setColor(0.9, 0.6, 0.2, 0.9)
-    elseif active then
-        love.graphics.setColor(0.7, 0.5, 0.2, 0.8)
+    if endTurnButton.isHovered then
+        if anyActorActed then
+            love.graphics.setColor(0.9, 0.6, 0.2, 0.9)  -- Оранжевый при наведении
+        else
+            love.graphics.setColor(0.7, 0.5, 0.2, 0.6)  -- Тусклый оранжевый
+        end
     else
-        love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
+        if anyActorActed then
+            love.graphics.setColor(0.7, 0.5, 0.2, 0.8)  -- Нормальный цвет
+        else
+            love.graphics.setColor(0.5, 0.3, 0.1, 0.5)  -- Полупрозрачный
+        end
     end
     
     love.graphics.rectangle("fill", endTurnButton.x, endTurnButton.y, endTurnButton.width, endTurnButton.height, 5)
@@ -770,8 +789,8 @@ function drawEndTurnButton()
     
     love.graphics.setColor(1, 1, 1, 1)
     local text = "End Turn"
-    if selectedActor and not selectedActor.hasActedThisTurn then
-        text = "Act First!"
+    if not anyActorActed then
+        text = "End Turn (no actions)"
     end
     
     local font = love.graphics.getFont()
@@ -780,7 +799,7 @@ function drawEndTurnButton()
 end
 
 function love.draw()
-    love.graphics.draw(background, 0, 0)
+    --love.graphics.draw(background, 0, 0)
     drawHexGrid()
     
     for _, obstacle in ipairs(obstacles) do
@@ -805,7 +824,7 @@ function love.draw()
     
     love.graphics.print("Click on any hex to move", 10, 130)
     love.graphics.print("Each actor: 1 action per turn", 10, 150)
-    love.graphics.print("Press 'U' to undo last move", 10, 170)
+    love.graphics.print("Press 'U' to undo last move (max 3)", 10, 170)
     
     if hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local obstacle = getObstacleAtHex(hex.hoverQ, hex.hoverR)
@@ -819,21 +838,30 @@ function love.mousepressed(x, y, button)
     if button == 1 then
         -- Проверяем кнопку Undo
         if x >= 10 and x <= 130 and y >= 200 and y <= 230 then
-            if selectedActor and selectedActor.lastMove and not selectedActor.hasActedThisTurn then
-                undoLastMove(selectedActor)
+            if #actionHistory > 0 then
+                undoLastAction()
             else
-                print("Нельзя отменить действие!")
+                print("Нет действий для отмены!")
             end
             return
         end
         
         -- Проверяем кнопку End Turn
         if x >= endTurnButton.x and x <= endTurnButton.x + endTurnButton.width and
-           y >= endTurnButton.y and y <= endTurnButton.y + endTurnButton.height then
-            if selectedActor and selectedActor.hasActedThisTurn then
+        y >= endTurnButton.y and y <= endTurnButton.y + endTurnButton.height then
+            -- Проверяем, есть ли хоть один актер, совершивший действие
+            local anyActorActed = false
+            for _, actor in ipairs(actors) do
+                if actor.isPlayable and actor.hasActedThisTurn then
+                    anyActorActed = true
+                    break
+                end
+            end
+            
+            if anyActorActed then
                 endTurn()
             else
-                print("Сначала совершите действие!")
+                print("Ни один актер еще не совершил действие! Сначала нужно сходить хотя бы одним персонажем.")
             end
             return
         end
@@ -861,7 +889,7 @@ function love.mousepressed(x, y, button)
                 hex.selectedQ = targetQ
                 hex.selectedR = targetR
             elseif selectedActor and selectedActor.hasActedThisTurn then
-                print(selectedActor.name .. " уже использовал свое действие в этом ходу!")
+                print(selectedActor.name .. " уже использовал действие!")
             end
         end
     end
@@ -869,21 +897,15 @@ end
 
 function love.keypressed(key)
     if key == "u" or key == "U" then
-        if selectedActor and selectedActor.lastMove and not selectedActor.hasActedThisTurn then
-            undoLastMove(selectedActor)
-        elseif selectedActor and selectedActor.hasActedThisTurn then
-            print("Нельзя отменить действие после завершения хода!")
+        if #actionHistory > 0 then
+            undoLastAction()
         else
-            print("Нет действия для отмены!")
+            print("Нет действий для отмены!")
         end
     end
     
     if key == "e" or key == "E" then
-        if selectedActor and selectedActor.hasActedThisTurn then
-            endTurn()
-        else
-            print("Сначала совершите действие!")
-        end
+        endTurn()  -- Всегда заканчиваем ход
     end
     
     -- Тестовая кнопка урона
