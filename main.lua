@@ -886,7 +886,7 @@ function love.keypressed(key)
         end
     end
     
-    -- Тестовая кнопка урона
+    -- Тестовая кнопка урона eqwe
     if key == "d" and selectedActor then
         selectedActor.health = math.max(0, selectedActor.health - 1)
         print(selectedActor.name .. " took 1 damage! Health: " .. selectedActor.health)
