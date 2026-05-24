@@ -128,4 +128,15 @@ function HexGrid:centerOnScreen(screenWidth, screenHeight)
     self.offsetY = (screenHeight - mapHeight) / 2
 end
 
+function axialToCube(q, r)
+    local x = q
+    local z = r - (q - (q % 2)) / 2
+    return x, -x - z, z
+end
+function cubeToAxial(x, y, z)
+    local q = x
+    local r = z + (x - (x % 2)) / 2
+    return q, r
+end
+
 return HexGrid
