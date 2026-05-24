@@ -1,21 +1,88 @@
+-- main.lua
+require("hexgrid")
+
 function love.load()
     -- Настройки гексагональной сетки
-    hex = {}
-    hex.radius = 70
-    hex.width = hex.radius * 2
-    hex.height = hex.radius * 1.75
-    hex.gridWidth = 9
-    hex.gridHeight = 7
-    
-    -- Смещение для центрирования
-    hex.offsetX = 0
-    hex.offsetY = 0
+    hex = require("hexgrid").new(70, 9, 7)
     
     -- Список актеров
     actors = {}
     
     -- Список препятствий (непроходимые объекты)
     obstacles = {}
+    
+    -- Типы земли (только визуальные)
+    terrainTypes = {
+        {name = "grass", color = {0.3, 0.7, 0.2, 0.9}, darkColor = {0.2, 0.5, 0.15, 0.9}},
+        {name = "dirt", color = {0.55, 0.4, 0.25, 0.9}, darkColor = {0.45, 0.3, 0.2, 0.9}},
+        {name = "sand", color = {0.85, 0.75, 0.5, 0.9}, darkColor = {0.7, 0.6, 0.4, 0.9}},
+        {name = "stone", color = {0.5, 0.5, 0.55, 0.9}, darkColor = {0.4, 0.4, 0.45, 0.9}},
+        {name = "mud", color = {0.45, 0.35, 0.25, 0.9}, darkColor = {0.35, 0.25, 0.2, 0.9}},
+        {name = "lava", color = {0.8, 0.3, 0.1, 0.9}, darkColor = {0.6, 0.2, 0.05, 0.9}},
+        {name = "snow", color = {0.9, 0.9, 0.95, 0.9}, darkColor = {0.7, 0.7, 0.75, 0.9}},
+        {name = "swamp", color = {0.35, 0.55, 0.3, 0.9}, darkColor = {0.25, 0.4, 0.2, 0.9}}
+    }
+    
+    -- Генерация карты земли
+    terrainMap = {}
+    for q = 0, hex.gridWidth - 1 do
+        terrainMap[q] = {}
+        for r = 0, hex.gridHeight - 1 do
+            -- Создаем интересный ландшафт с помощью шума/perlin-like распределения
+            local noiseValue = math.sin(q * 0.5) * math.cos(r * 0.5) + math.sin((q + r) * 0.8) * 0.5
+            
+            -- Центральная зона - трава
+            local centerQ = hex.gridWidth / 2
+            local centerR = hex.gridHeight / 2
+            local distToCenter = math.sqrt((q - centerQ)^2 + (r - centerR)^2)
+            
+            -- Разные типы земли в зависимости от позиции
+            if distToCenter < 2 then
+                terrainMap[q][r] = terrainTypes[1] -- grass в центре
+            elseif distToCenter < 3.5 then
+                if noiseValue > 0.3 then
+                    terrainMap[q][r] = terrainTypes[2] -- dirt
+                else
+                    terrainMap[q][r] = terrainTypes[1] -- grass
+                end
+            else
+                -- Периферия разнообразная
+                local rand = (q * 7 + r * 13) % 100 / 100
+                if rand < 0.3 then
+                    terrainMap[q][r] = terrainTypes[2] -- dirt
+                elseif rand < 0.5 then
+                    terrainMap[q][r] = terrainTypes[3] -- sand
+                elseif rand < 0.65 then
+                    terrainMap[q][r] = terrainTypes[4] -- stone
+                elseif rand < 0.75 then
+                    terrainMap[q][r] = terrainTypes[6] -- lava (редко)
+                else
+                    terrainMap[q][r] = terrainTypes[1] -- grass
+                end
+            end
+            
+            -- Углы карты - снег
+            if (q < 2 and r < 2) or (q > hex.gridWidth - 3 and r > hex.gridHeight - 3) then
+                terrainMap[q][r] = terrainTypes[7] -- snow
+            end
+            
+            -- Нижний левый угол - болото
+            if q < 3 and r > hex.gridHeight - 3 then
+                terrainMap[q][r] = terrainTypes[8] -- swamp
+            end
+            
+            -- Верхний правый - камень
+            if q > hex.gridWidth - 3 and r < 2 then
+                terrainMap[q][r] = terrainTypes[4] -- stone
+            end
+            
+            -- Добавляем немного случайности
+            local randomChance = (q * 11 + r * 17) % 100 / 100
+            if randomChance < 0.05 and terrainMap[q][r].name ~= "lava" then
+                terrainMap[q][r] = terrainTypes[6] -- иногда лава
+            end
+        end
+    end
     
     -- Глобальный стек действий для отмены (максимум 3 действия)
     -- кандидат на переработку - тут хранить вообще весь файл сохранения
@@ -182,7 +249,8 @@ function love.load()
         end
     end
     
-    --background = love.graphics.newImage('sprites/background.png')
+    -- Рассчитываем смещение для центрирования карты
+    hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
     
     sounds = {}
     sounds.undo = love.audio.newSource("sounds/blip.wav", "static")
@@ -190,21 +258,6 @@ function love.load()
     sounds.turn = love.audio.newSource("sounds/blip.wav", "static")
     sounds.turn:setVolume(0.3)
     
-    -- Рассчитываем смещение для центрирования карты
-    local mapWidth = hex.gridWidth * hex.width * 0.75 + hex.radius
-    local mapHeight = hex.gridHeight * hex.height + hex.radius
-    local screenWidth = love.graphics.getWidth()
-    local screenHeight = love.graphics.getHeight()
-    
-    hex.offsetX = (screenWidth - mapWidth) / 2
-    hex.offsetY = (screenHeight - mapHeight) / 2
-    
-    -- Подсветка гексов
-    hex.hoverQ = -1
-    hex.hoverR = -1
-    hex.selectedQ = -1
-    hex.selectedR = -1
-
     function countPlayableActors()
         local count = 0
         for _, actor in ipairs(actors) do
@@ -216,7 +269,6 @@ function love.load()
     end
 
     -- Глобальный стек действий (теперь с ограничением по количеству союзников)
-    actionHistory = {}  -- Каждый элемент: {actor, fromQ, fromR, toQ, toR, turnNumber}
     maxUndoCount = countPlayableActors()  -- Максимум отмен = количество союзных юнитов
 end
 
@@ -354,64 +406,6 @@ function addToHistory(actor, fromQ, fromR, toQ, toR)
     print("Added action for " .. actor.name .. ". History: " .. #actionHistory .. "/" .. maxUndoCount)
 end
 
-function pixelToHex(px, py)
-    local x = px - hex.offsetX
-    local y = py - hex.offsetY
-    
-    local q = math.floor(x / (hex.width * 0.75))
-    local r = math.floor(y / hex.height)
-    
-    if q < 0 then q = 0 end
-    if q >= hex.gridWidth then q = hex.gridWidth - 1 end
-    if r < 0 then r = 0 end
-    if r >= hex.gridHeight then r = hex.gridHeight - 1 end
-    
-    local bestQ, bestR = q, r
-    local bestDist = math.huge
-    
-    for dq = -1, 1 do
-        for dr = -1, 1 do
-            local checkQ = q + dq
-            local checkR = r + dr
-            if checkQ >= 0 and checkQ < hex.gridWidth and checkR >= 0 and checkR < hex.gridHeight then
-                local hexX, hexY = hexToPixel(checkQ, checkR)
-                local dist = math.sqrt((px - hexX)^2 + (py - hexY)^2)
-                if dist < bestDist then
-                    bestDist = dist
-                    bestQ, bestR = checkQ, checkR
-                end
-            end
-        end
-    end
-    
-    return bestQ, bestR
-end
-
-function getNeighbors(q, r)
-    local directions
-    if q % 2 == 0 then
-        directions = {
-            {q=1, r=0}, {q=-1, r=0}, {q=0, r=1},
-            {q=0, r=-1}, {q=1, r=-1}, {q=-1, r=-1}
-        }
-    else
-        directions = {
-            {q=1, r=0}, {q=-1, r=0}, {q=0, r=1},
-            {q=0, r=-1}, {q=1, r=1}, {q=-1, r=1}
-        }
-    end
-    
-    local neighbors = {}
-    for _, dir in ipairs(directions) do
-        neighbors[#neighbors+1] = {q = q + dir.q, r = r + dir.r}
-    end
-    return neighbors
-end
-
-function isValidHex(q, r)
-    return q >= 0 and q < hex.gridWidth and r >= 0 and r < hex.gridHeight
-end
-
 function isPositionOccupied(q, r, movingActor)
     for _, actor in ipairs(actors) do
         if actor ~= movingActor and actor.q == q and actor.r == r then
@@ -486,12 +480,12 @@ function findPath(startQ, startR, targetQ, targetR, movingActor)
         end
         
         closedSet[currentKey] = true
-        local neighbors = getNeighbors(current.q, current.r)
+        local neighbors = hex:getNeighbors(current.q, current.r)
         
         for _, neighbor in ipairs(neighbors) do
             local neighborKey = neighbor.q .. "," .. neighbor.r
             
-            if not closedSet[neighborKey] and isValidHex(neighbor.q, neighbor.r) then
+            if not closedSet[neighborKey] and hex:isValidHex(neighbor.q, neighbor.r) then
                 if not isPositionOccupied(neighbor.q, neighbor.r, movingActor) then
                     local tentativeG = current.g + 1
                     
@@ -525,7 +519,7 @@ function performMove(actor, targetQ, targetR)
     end
     
     -- ПРОВЕРКА ДАЛЬНОСТИ ДВИЖЕНИЯ
-    local distance = getHexDistance(actor.q, actor.r, targetQ, targetR)
+    local distance = hex:getDistance(actor.q, actor.r, targetQ, targetR)
     if distance > actor.moveRange then
         print(actor.name .. " cannot move that far! Max distance: " .. actor.moveRange .. " cells")
         return false
@@ -582,8 +576,8 @@ function drawMovementRange(actor)
                     -- Проверяем, не занята ли целевая клетка (но показываем её, если она занята?)
                     local isOccupied = isPositionOccupied(q, r, actor)
                     
-                    local x, y = hexToPixel(q, r)
-                    local vertices = drawHexagon(x, y, hex.radius)
+                    local x, y = hex:hexToPixel(q, r)
+                    local vertices = hex:drawHexagon(x, y, hex.radius)
                     
                     if isOccupied then
                         -- Занятые клетки подсвечиваем красным (недоступны для перемещения)
@@ -613,7 +607,7 @@ function drawPathPreview(actor, targetQ, targetR)
     end
     
     -- Проверяем, можно ли дойти до клетки
-    local distance = getHexDistance(actor.q, actor.r, targetQ, targetR)
+    local distance = hex:getDistance(actor.q, actor.r, targetQ, targetR)
     if distance > actor.moveRange then
         return
     end
@@ -622,17 +616,17 @@ function drawPathPreview(actor, targetQ, targetR)
     if path and #path > 0 and #path <= actor.moveRange then
         
         -- Получаем начальную позицию актера
-        local startX, startY = hexToPixel(actor.q, actor.r)
+        local startX, startY = hex:hexToPixel(actor.q, actor.r)
         
         -- Отрисовываем весь путь и стрелки
         local prevX, prevY = startX, startY
         
         for i = 1, #path do
             local step = path[i]
-            local x, y = hexToPixel(step.q, step.r)
+            local x, y = hex:hexToPixel(step.q, step.r)
             
             -- Подсвечиваем клетки пути
-            local vertices = drawHexagon(x, y, hex.radius)
+            local vertices = hex:drawHexagon(x, y, hex.radius)
             love.graphics.setColor(1, 1, 0, 0.3)
             love.graphics.polygon("fill", vertices)
             
@@ -672,8 +666,8 @@ function drawPathPreview(actor, targetQ, targetR)
         love.graphics.setLineWidth(1)
         
         -- Дополнительно подсвечиваем целевую клетку ярче
-        local targetX, targetY = hexToPixel(targetQ, targetR)
-        local targetVertices = drawHexagon(targetX, targetY, hex.radius)
+        local targetX, targetY = hex:hexToPixel(targetQ, targetR)
+        local targetVertices = hex:drawHexagon(targetX, targetY, hex.radius)
         love.graphics.setColor(1, 0.8, 0, 0.4)
         love.graphics.polygon("fill", targetVertices)
         love.graphics.setColor(1, 1, 0, 0.8)
@@ -690,8 +684,8 @@ function startNextMove(actor)
         actor.targetQ = nextStep.q
         actor.targetR = nextStep.r
         
-        actor.startX, actor.startY = hexToPixel(actor.q, actor.r)
-        actor.endX, actor.endY = hexToPixel(actor.targetQ, actor.targetR)
+        actor.startX, actor.startY = hex:hexToPixel(actor.q, actor.r)
+        actor.endX, actor.endY = hex:hexToPixel(actor.targetQ, actor.targetR)
     else
         actor.isMoving = false
         actor.path = {}
@@ -771,20 +765,6 @@ function updateActorMovement(actor, dt)
     end
 end
 
--- Функция для расчета расстояния между двумя гексами
-function getHexDistance(q1, r1, q2, r2)
-    -- Конвертируем в кубические координаты для простоты расчета
-    local x1 = q1
-    local z1 = r1 - (q1 - (q1 % 2)) / 2
-    local y1 = -x1 - z1
-    
-    local x2 = q2
-    local z2 = r2 - (q2 - (q2 % 2)) / 2
-    local y2 = -x2 - z2
-    
-    return (math.abs(x1 - x2) + math.abs(y1 - y2) + math.abs(z1 - z2)) / 2
-end
-
 function love.update(dt)
     for _, actor in ipairs(actors) do
         updateActorMovement(actor, dt)
@@ -792,7 +772,7 @@ function love.update(dt)
     end
     
     local mouseX, mouseY = love.mouse.getPosition()
-    hex.hoverQ, hex.hoverR = pixelToHex(mouseX, mouseY)
+    hex.hoverQ, hex.hoverR = hex:pixelToHex(mouseX, mouseY)
     
     -- Обновляем состояние кнопок
     local mouseInUndo = mouseX >= 10 and mouseX <= 130 and mouseY >= 200 and mouseY <= 230
@@ -804,33 +784,17 @@ function love.update(dt)
     endTurnButton.isHovered = mouseInEndTurn
 end
 
-function hexToPixel(q, r)
-    local x = q * hex.width * 0.75
-    local y = r * hex.height + (q % 2) * (hex.height / 2)
-    return x + hex.radius + hex.offsetX, y + hex.radius + hex.offsetY
-end
-
-function drawHexagon(x, y, radius)
-    local vertices = {}
-    for i = 0, 5 do
-        local angle = math.rad(60 * i)
-        local vx = x + math.cos(angle) * radius
-        local vy = y + math.sin(angle) * radius
-        table.insert(vertices, vx)
-        table.insert(vertices, vy)
-    end
-    return vertices
-end
-
 function drawHexGrid()
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
-            local x, y = hexToPixel(q, r)
-            local vertices = drawHexagon(x, y, hex.radius)
+            local x, y = hex:hexToPixel(q, r)
+            local vertices = hex:drawHexagon(x, y, hex.radius)
             
+            local terrain = terrainMap[q][r]
             local hasObstacle = getObstacleAtHex(q, r) ~= nil
             local isCurrentActor = selectedActor and selectedActor.q == q and selectedActor.r == r
             
+            -- Рисуем основную землю с текстурой
             if isCurrentActor then
                 love.graphics.setColor(0.2, 0.8, 0.2, 0.8)  -- Зеленый для текущего актера
             elseif hex.selectedQ == q and hex.selectedR == r then
@@ -839,13 +803,81 @@ function drawHexGrid()
                 love.graphics.setColor(0.5, 0.8, 0.3, 0.8)
             elseif hasObstacle then
                 love.graphics.setColor(0.5, 0.3, 0.2, 0.8)
-            elseif (q + r) % 2 == 0 then
-                love.graphics.setColor(0.3, 0.6, 0.2, 0.8)
             else
-                love.graphics.setColor(0.4, 0.7, 0.3, 0.8)
+                -- Используем цвет земли из terrainMap
+                love.graphics.setColor(terrain.color[1], terrain.color[2], terrain.color[3], terrain.color[4])
             end
             
             love.graphics.polygon("fill", vertices)
+            
+            -- Добавляем текстуру/детали для разных типов земли
+            if not hasObstacle and not isCurrentActor and not (hex.selectedQ == q and hex.selectedR == r) and not (hex.hoverQ == q and hex.hoverR == r) then
+                -- Рисуем узоры в зависимости от типа земли
+                if terrain.name == "grass" then
+                    -- Травинки
+                    love.graphics.setColor(0.2, 0.6, 0.1, 0.5)
+                    for i = 0, 2 do
+                        local angle = math.rad(60 * i + (q * 37 + r * 23) % 360)
+                        local tx = x + math.cos(angle) * 15
+                        local ty = y + math.sin(angle) * 15
+                        love.graphics.line(x + math.cos(angle - 0.2) * 8, y + math.sin(angle - 0.2) * 8, 
+                                         tx + math.cos(angle) * 5, ty + math.sin(angle) * 5)
+                    end
+                elseif terrain.name == "sand" then
+                    -- Песчинки/точки
+                    love.graphics.setColor(0.6, 0.5, 0.3, 0.5)
+                    for i = 1, 5 do
+                        local angle = math.rad(72 * i + (q * 31 + r * 19) % 360)
+                        local rad = 8 + math.sin(q * 0.5 + r * 0.5) * 4
+                        local tx = x + math.cos(angle) * rad
+                        local ty = y + math.sin(angle) * rad
+                        love.graphics.circle("fill", tx, ty, 1 + (q + r) % 2)
+                    end
+                elseif terrain.name == "stone" then
+                    -- Трещины
+                    love.graphics.setColor(0.3, 0.3, 0.35, 0.6)
+                    for i = 1, 3 do
+                        local startAngle = math.rad(120 * i + (q * 41 + r * 29) % 360)
+                        local endAngle = startAngle + math.rad(30)
+                        local startX = x + math.cos(startAngle) * 12
+                        local startY = y + math.sin(startAngle) * 12
+                        local endX = x + math.cos(endAngle) * 18
+                        local endY = y + math.sin(endAngle) * 18
+                        love.graphics.line(startX, startY, endX, endY)
+                    end
+                elseif terrain.name == "snow" then
+                    -- Снежинки
+                    love.graphics.setColor(0.8, 0.9, 1, 0.6)
+                    for i = 1, 6 do
+                        local angle = math.rad(60 * i + (q * 43 + r * 37) % 360)
+                        local tx = x + math.cos(angle) * 10
+                        local ty = y + math.sin(angle) * 10
+                        love.graphics.circle("fill", tx, ty, 1.5)
+                    end
+                elseif terrain.name == "swamp" then
+                    -- Пузырьки
+                    love.graphics.setColor(0.2, 0.4, 0.2, 0.6)
+                    for i = 1, 4 do
+                        local angle = math.rad(90 * i + (q * 29 + r * 17) % 360)
+                        local rad = 7 + (q + r) % 3
+                        local tx = x + math.cos(angle) * rad
+                        local ty = y + math.sin(angle) * rad
+                        love.graphics.circle("line", tx, ty, 2)
+                    end
+                elseif terrain.name == "lava" then
+                    -- Лавовые пузыри
+                    love.graphics.setColor(1, 0.5, 0.1, 0.7)
+                    for i = 1, 3 do
+                        local angle = math.rad(120 * i + love.timer.getTime() * 5)
+                        local rad = 6 + math.sin(love.timer.getTime() * 3 + q + r) * 2
+                        local tx = x + math.cos(angle) * rad
+                        local ty = y + math.sin(angle) * rad
+                        love.graphics.circle("fill", tx, ty, 2)
+                    end
+                end
+            end
+            
+            -- Рисуем границу
             love.graphics.setColor(0, 0, 0, 0.5)
             love.graphics.polygon("line", vertices)
         end
@@ -854,7 +886,7 @@ function drawHexGrid()
 end
 
 function drawObstacle(obstacle)
-    local x, y = hexToPixel(obstacle.q, obstacle.r)
+    local x, y = hex:hexToPixel(obstacle.q, obstacle.r)
     love.graphics.draw(obstacle.sprite, x, y, 0, 1, 1, 16, 16)
 end
 
@@ -883,7 +915,7 @@ function drawActor(actor)
         x = actor.startX + (actor.endX - actor.startX) * t
         y = actor.startY + (actor.endY - actor.startY) * t
     else
-        x, y = hexToPixel(actor.q, actor.r)
+        x, y = hex:hexToPixel(actor.q, actor.r)
     end
     
     local scale = 1 + math.sin(actor.pulse) * 0.05
@@ -978,7 +1010,6 @@ function drawEndTurnButton()
 end
 
 function love.draw()
-    --love.graphics.draw(background, 0, 0)
     drawHexGrid()
     
     for _, obstacle in ipairs(obstacles) do
@@ -1009,7 +1040,7 @@ function love.draw()
     if selectedActor then
         love.graphics.print("Current: " .. selectedActor.name, 10, 30)
         love.graphics.print("Status: " .. (selectedActor.hasActedThisTurn and "Acted ✓" or "Ready to act"), 10, 50)
-        love.graphics.print("Move Range: " .. selectedActor.moveRange .. " cells", 10, 70)  -- ДОБАВИТЬ ЭТУ СТРОКУ
+        love.graphics.print("Move Range: " .. selectedActor.moveRange .. " cells", 10, 70)
     end
     
     love.graphics.print("Click on any hex to move", 10, 130)
@@ -1018,9 +1049,11 @@ function love.draw()
     
     if hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local obstacle = getObstacleAtHex(hex.hoverQ, hex.hoverR)
+        local terrain = terrainMap[hex.hoverQ][hex.hoverR]
         if obstacle then
             love.graphics.print("Obstacle: " .. obstacle.name, 10, 90)
         end
+        love.graphics.print("Terrain: " .. terrain.name, 10, 110)
     end
 end
 
@@ -1057,8 +1090,8 @@ function love.mousepressed(x, y, button)
         end
         
         -- Клик по гексу
-        local targetQ, targetR = pixelToHex(x, y)
-        if isValidHex(targetQ, targetR) then
+        local targetQ, targetR = hex:pixelToHex(x, y)
+        if hex:isValidHex(targetQ, targetR) then
             local clickedActor = getActorAtHex(targetQ, targetR)
             
             -- Если кликнули на актера
