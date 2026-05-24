@@ -83,7 +83,7 @@ function love.load()
     end
     
     -- Функция создания актера
-    function createActor(q, r, name, color, spriteType, isPlayable, maxHealth)
+    function createActor(q, r, name, color, spriteType, isPlayable, maxHealth, moveRange)
         local actor = {}
         actor.q = q
         actor.r = r
@@ -109,6 +109,9 @@ function love.load()
         -- Статы
         actor.maxHealth = maxHealth or 3
         actor.health = actor.maxHealth
+
+        -- Дальность движения (по умолчанию 3, если не указана)
+        actor.moveRange = moveRange or 3
         
         -- Создаем спрайт
         actor.sprite = love.graphics.newCanvas(32, 32)
@@ -141,14 +144,14 @@ function love.load()
     end
     
     -- Создаем актеров (персонажи игрока)
-    table.insert(actors, createActor(2, 2, "Warrior", {1, 0.2, 0.2, 1}, "cross", true, 5))
-    table.insert(actors, createActor(6, 4, "Mage", {0.2, 0.2, 1, 1}, "star", true, 2))
-    table.insert(actors, createActor(4, 1, "Rogue", {0.2, 0.8, 0.2, 1}, "triangle", true, 3))
-    
-    -- Враги (неуправляемые, но могут быть добавлены позже)
-    table.insert(actors, createActor(3, 5, "Goblin", {0.5, 0.3, 0.1, 1}, "circle", false, 3))
-    table.insert(actors, createActor(7, 2, "Orc", {0.6, 0.2, 0.2, 1}, "cross", false, 4))
-    
+    table.insert(actors, createActor(2, 2, "Warrior", {1, 0.2, 0.2, 1}, "cross", true, 5, 2))   -- Воин ходит на 2 клетки
+    table.insert(actors, createActor(6, 4, "Mage", {0.2, 0.2, 1, 1}, "star", true, 2, 5))       -- Маг ходит на 5 клеток
+    table.insert(actors, createActor(4, 1, "Rogue", {0.2, 0.8, 0.2, 1}, "triangle", true, 3, 4)) -- Разбойник ходит на 4 клетки
+
+    -- Враги (неуправляемые)
+    table.insert(actors, createActor(3, 5, "Goblin", {0.5, 0.3, 0.1, 1}, "circle", false, 3, 3))  -- Гоблин ходит на 3 клетки
+    table.insert(actors, createActor(7, 2, "Orc", {0.6, 0.2, 0.2, 1}, "cross", false, 4, 2))      -- Орк ходит на 2 клетки
+        
     -- Создаем препятствия
     table.insert(obstacles, createObstacle(3, 3, "rock", "Big Rock"))
     table.insert(obstacles, createObstacle(5, 2, "tree", "Oak Tree"))
@@ -489,6 +492,13 @@ function performMove(actor, targetQ, targetR)
         return false
     end
     
+    -- ПРОВЕРКА ДАЛЬНОСТИ ДВИЖЕНИЯ
+    local distance = getHexDistance(actor.q, actor.r, targetQ, targetR)
+    if distance > actor.moveRange then
+        print(actor.name .. " не может пройти так далеко! Максимальная дистанция: " .. actor.moveRange .. " клеток")
+        return false
+    end
+    
     if isPositionOccupied(targetQ, targetR, actor) then
         local obstacle = getObstacleAtHex(targetQ, targetR)
         if obstacle then
@@ -502,6 +512,12 @@ function performMove(actor, targetQ, targetR)
     local path = findPath(actor.q, actor.r, targetQ, targetR, actor)
     
     if path and #path > 0 then
+        -- ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: длина пути не должна превышать дальность движения
+        if #path > actor.moveRange then
+            print(actor.name .. " не может пройти " .. #path .. " клеток! Максимум: " .. actor.moveRange)
+            return false
+        end
+        
         actor.startPosForHistory = {q = actor.q, r = actor.r}
         actor.targetPosForHistory = {q = targetQ, r = targetR}
         
@@ -513,6 +529,34 @@ function performMove(actor, targetQ, targetR)
     else
         print("Путь не найден!")
         return false
+    end
+end
+
+-- Функция для отображения доступной дистанции движения
+function drawMovementRange(actor)
+    if not actor or actor.isMoving or actor.hasActedThisTurn then
+        return
+    end
+    
+    for q = 0, hex.gridWidth - 1 do
+        for r = 0, hex.gridHeight - 1 do
+            local distance = getHexDistance(actor.q, actor.r, q, r)
+            if distance > 0 and distance <= actor.moveRange then
+                -- Проверяем, не занята ли клетка
+                if not isPositionOccupied(q, r, actor) then
+                    local x, y = hexToPixel(q, r)
+                    local vertices = drawHexagon(x, y, hex.radius)
+                    
+                    -- Прозрачная подсветка доступных клеток
+                    love.graphics.setColor(0.3, 0.8, 0.3, 0.3)
+                    love.graphics.polygon("fill", vertices)
+                    
+                    -- Отображаем дистанцию на клетке
+                    love.graphics.setColor(1, 1, 1, 0.7)
+                    love.graphics.print(distance, x - 5, y - 5)
+                end
+            end
+        end
     end
 end
 
@@ -604,6 +648,20 @@ function updateActorMovement(actor, dt)
             end
         end
     end
+end
+
+-- Функция для расчета расстояния между двумя гексами
+function getHexDistance(q1, r1, q2, r2)
+    -- Конвертируем в кубические координаты для простоты расчета
+    local x1 = q1
+    local z1 = r1 - (q1 - (q1 % 2)) / 2
+    local y1 = -x1 - z1
+    
+    local x2 = q2
+    local z2 = r2 - (q2 - (q2 % 2)) / 2
+    local y2 = -x2 - z2
+    
+    return (math.abs(x1 - x2) + math.abs(y1 - y2) + math.abs(z1 - z2)) / 2
 end
 
 function love.update(dt)
@@ -805,6 +863,11 @@ function love.draw()
     for _, obstacle in ipairs(obstacles) do
         drawObstacle(obstacle)
     end
+
+    -- ОТОБРАЖАЕМ ДОСТУПНУЮ ДИСТАНЦИЮ ДЛЯ ВЫБРАННОГО АКТЕРА
+    if selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving then
+        drawMovementRange(selectedActor)
+    end
     
     for _, actor in ipairs(actors) do
         drawActor(actor)
@@ -820,6 +883,7 @@ function love.draw()
     if selectedActor then
         love.graphics.print("Current: " .. selectedActor.name, 10, 30)
         love.graphics.print("Status: " .. (selectedActor.hasActedThisTurn and "Acted ✓" or "Ready to act"), 10, 50)
+        love.graphics.print("Move Range: " .. selectedActor.moveRange .. " cells", 10, 70)  -- ДОБАВИТЬ ЭТУ СТРОКУ
     end
     
     love.graphics.print("Click on any hex to move", 10, 130)
