@@ -1,0 +1,27 @@
+{
+    "activeFile": "testMap.tmx",
+    "expandedProjectPaths": [
+    ],
+    "file.lastUsedOpenFilter": "Все файлы (*)",
+    "fileStates": {
+        "testMap.tmx": {
+            "scale": 0.75,
+            "selectedLayer": 1,
+            "viewCenter": {
+                "x": 681.9999999999998,
+                "y": 622
+            }
+        },
+        "testMap.tmx#test-tiles": {
+            "scaleInDock": 1
+        }
+    },
+    "map.orientation": "5",
+    "openFiles": [
+        "testMap.tmx"
+    ],
+    "project": "",
+    "recentFiles": [
+        "testMap.tmx"
+    ]
+}

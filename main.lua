@@ -1,0 +1,894 @@
+function love.load()
+    -- Настройки гексагональной сетки
+    hex = {}
+    hex.radius = 35
+    hex.width = hex.radius * 2
+    hex.height = hex.radius * 1.75
+    hex.gridWidth = 9
+    hex.gridHeight = 7
+    
+    -- Смещение для центрирования
+    hex.offsetX = 0
+    hex.offsetY = 0
+    
+    -- Список актеров
+    actors = {}
+    
+    -- Список препятствий (непроходимые объекты)
+    obstacles = {}
+    
+    -- ПОШАГОВАЯ СИСТЕМА
+    turnState = {
+        currentTurn = 1,           -- Номер текущего хода
+        currentActorIndex = 1,     -- Индекс актера, который сейчас ходит
+        turnPhase = "waiting",     -- "waiting" (ожидание действия) или "moving" (движется)
+        actionsRemaining = {}       -- Сколько действий осталось у каждого актера в этом ходу
+    }
+    
+    -- Кнопка завершения хода
+    endTurnButton = {
+        x = 10,
+        y = 240,
+        width = 120,
+        height = 30,
+        text = "End Turn",
+        isHovered = false
+    }
+    
+    -- Функция создания препятствия
+    function createObstacle(q, r, type, name)
+        local obstacle = {}
+        obstacle.q = q
+        obstacle.r = r
+        obstacle.type = type or "rock"
+        obstacle.name = name or "Obstacle"
+        
+        obstacle.sprite = love.graphics.newCanvas(32, 32)
+        love.graphics.setCanvas(obstacle.sprite)
+        
+        if obstacle.type == "rock" then
+            love.graphics.setColor(0.4, 0.4, 0.4, 1)
+            love.graphics.circle("fill", 16, 16, 12)
+            love.graphics.setColor(0.3, 0.3, 0.3, 1)
+            love.graphics.circle("fill", 12, 12, 4)
+            love.graphics.circle("fill", 20, 20, 3)
+        elseif obstacle.type == "tree" then
+            love.graphics.setColor(0.3, 0.5, 0.2, 1)
+            love.graphics.polygon("fill", 16, 4, 24, 16, 8, 16)
+            love.graphics.setColor(0.5, 0.35, 0.2, 1)
+            love.graphics.rectangle("fill", 14, 16, 4, 12)
+        elseif obstacle.type == "wall" then
+            love.graphics.setColor(0.5, 0.5, 0.5, 1)
+            love.graphics.rectangle("fill", 6, 6, 20, 20)
+            love.graphics.setColor(0.6, 0.6, 0.6, 1)
+            for i = 0, 1 do
+                love.graphics.rectangle("fill", 8, 8 + i * 16, 16, 4)
+            end
+        elseif obstacle.type == "spike" then
+            love.graphics.setColor(0.7, 0.7, 0.7, 1)
+            love.graphics.polygon("fill", 16, 6, 26, 26, 6, 26)
+            love.graphics.setColor(0.9, 0.2, 0.2, 1)
+            love.graphics.polygon("fill", 16, 8, 22, 22, 10, 22)
+        end
+        
+        love.graphics.setColor(0, 0, 0, 0.5)
+        love.graphics.setLineWidth(1)
+        love.graphics.circle("line", 16, 16, 14)
+        love.graphics.setCanvas()
+        
+        return obstacle
+    end
+    
+    -- Функция создания актера
+    function createActor(q, r, name, color, spriteType, isPlayable, maxHealth)
+        local actor = {}
+        actor.q = q
+        actor.r = r
+        actor.speed = 0.15
+        actor.timer = 0
+        actor.isMoving = false
+        actor.targetQ = q
+        actor.targetR = r
+        actor.startX = 0
+        actor.startY = 0
+        actor.endX = 0
+        actor.endY = 0
+        actor.path = {}
+        actor.currentPathIndex = 0
+        actor.name = name
+        actor.color = color
+        actor.pulse = 0
+        actor.pulseSpeed = 0.5 + math.random() * 1.5
+
+        actor.isPlayable = isPlayable or false  -- Управляемый игроком
+        actor.hasActedThisTurn = false          -- Сделал ли действие в этом ходу
+        actor.lastMove = nil                    -- История последнего действия
+        
+        -- Статы
+        actor.maxHealth = maxHealth or 3
+        actor.health = actor.maxHealth
+        
+        -- Создаем спрайт
+        actor.sprite = love.graphics.newCanvas(32, 32)
+        love.graphics.setCanvas(actor.sprite)
+        love.graphics.setColor(color[1], color[2], color[3], color[4])
+        love.graphics.circle("fill", 16, 16, 14)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setLineWidth(2)
+        
+        if spriteType == "cross" then
+            love.graphics.line(8, 8, 24, 24)
+            love.graphics.line(24, 8, 8, 24)
+        elseif spriteType == "star" then
+            for i = 0, 4 do
+                local angle = i * math.pi * 2 / 5
+                local x1 = 16 + math.cos(angle) * 10
+                local y1 = 16 + math.sin(angle) * 10
+                local x2 = 16 + math.cos(angle + math.pi) * 10
+                local y2 = 16 + math.sin(angle + math.pi) * 10
+                love.graphics.line(x1, y1, x2, y2)
+            end
+        elseif spriteType == "triangle" then
+            love.graphics.polygon("line", 16, 6, 26, 26, 6, 26)
+        end
+        
+        love.graphics.circle("line", 16, 16, 14)
+        love.graphics.setCanvas()
+        
+        return actor
+    end
+    
+    -- Создаем актеров (персонажи игрока)
+    table.insert(actors, createActor(2, 2, "Warrior", {1, 0.2, 0.2, 1}, "cross", true, 5))
+    table.insert(actors, createActor(6, 4, "Mage", {0.2, 0.2, 1, 1}, "star", true, 2))
+    table.insert(actors, createActor(4, 1, "Rogue", {0.2, 0.8, 0.2, 1}, "triangle", true, 3))
+    
+    -- Враги (неуправляемые, но могут быть добавлены позже)
+    table.insert(actors, createActor(3, 5, "Goblin", {0.5, 0.3, 0.1, 1}, "circle", false, 3))
+    table.insert(actors, createActor(7, 2, "Orc", {0.6, 0.2, 0.2, 1}, "cross", false, 4))
+    
+    -- Создаем препятствия
+    table.insert(obstacles, createObstacle(3, 3, "rock", "Big Rock"))
+    table.insert(obstacles, createObstacle(5, 2, "tree", "Oak Tree"))
+    table.insert(obstacles, createObstacle(1, 4, "wall", "Stone Wall"))
+    table.insert(obstacles, createObstacle(7, 5, "spike", "Spike Trap"))
+    table.insert(obstacles, createObstacle(4, 4, "tree", "Pine Tree"))
+    table.insert(obstacles, createObstacle(2, 5, "rock", "Small Rock"))
+    
+    -- Инициализируем счетчики действий для каждого актера
+    for i, actor in ipairs(actors) do
+        if actor.isPlayable then
+            turnState.actionsRemaining[i] = 1  -- У каждого по 1 действию на ход
+        else
+            turnState.actionsRemaining[i] = 0  -- Враги пока не ходят
+        end
+    end
+    
+    -- Находим первого играбельного актера
+    for i, actor in ipairs(actors) do
+        if actor.isPlayable and turnState.actionsRemaining[i] > 0 then
+            turnState.currentActorIndex = i
+            selectedActor = actor
+            hex.selectedQ = actor.q
+            hex.selectedR = actor.r
+            break
+        end
+    end
+    
+    background = love.graphics.newImage('sprites/background.png')
+    
+    sounds = {}
+    sounds.undo = love.audio.newSource("sounds/blip.wav", "static")
+    sounds.undo:setVolume(0.4)
+    sounds.turn = love.audio.newSource("sounds/click.wav", "static")
+    sounds.turn:setVolume(0.3)
+    
+    -- Рассчитываем смещение для центрирования карты
+    local mapWidth = hex.gridWidth * hex.width * 0.75 + hex.radius
+    local mapHeight = hex.gridHeight * hex.height + hex.radius
+    local screenWidth = love.graphics.getWidth()
+    local screenHeight = love.graphics.getHeight()
+    
+    hex.offsetX = (screenWidth - mapWidth) / 2
+    hex.offsetY = (screenHeight - mapHeight) / 2
+    
+    -- Подсветка гексов
+    hex.hoverQ = -1
+    hex.hoverR = -1
+    hex.selectedQ = -1
+    hex.selectedR = -1
+end
+
+-- Функция завершения хода
+function endTurn()
+    -- Переключаемся на следующего актера
+    local nextActorIndex = turnState.currentActorIndex + 1
+    
+    -- Ищем следующего играбельного актера, у которого остались действия
+    local foundNext = false
+    for i = nextActorIndex, #actors do
+        if actors[i].isPlayable and turnState.actionsRemaining[i] > 0 and not actors[i].hasActedThisTurn then
+            turnState.currentActorIndex = i
+            foundNext = true
+            break
+        end
+    end
+    
+    if not foundNext then
+        -- Если дошли до конца списка, начинаем новый ход
+        turnState.currentTurn = turnState.currentTurn + 1
+        turnState.currentActorIndex = 1
+        
+        -- Сбрасываем флаги действий для всех играбельных актеров
+        for i, actor in ipairs(actors) do
+            if actor.isPlayable then
+                actor.hasActedThisTurn = false
+                turnState.actionsRemaining[i] = 1
+            end
+        end
+        
+        -- Находим первого актера для нового хода
+        for i, actor in ipairs(actors) do
+            if actor.isPlayable then
+                turnState.currentActorIndex = i
+                break
+            end
+        end
+    end
+    
+    -- Обновляем выбранного актера
+    selectedActor = actors[turnState.currentActorIndex]
+    hex.selectedQ = selectedActor.q
+    hex.selectedR = selectedActor.r
+    turnState.turnPhase = "waiting"
+    
+    -- Воспроизводим звук смены хода
+    if sounds.turn then
+        sounds.turn:play()
+    end
+    
+    print("=== Ход " .. turnState.currentTurn .. " ===")
+    print("Очередь: " .. selectedActor.name)
+end
+
+function pixelToHex(px, py)
+    local x = px - hex.offsetX
+    local y = py - hex.offsetY
+    
+    local q = math.floor(x / (hex.width * 0.75))
+    local r = math.floor(y / hex.height)
+    
+    if q < 0 then q = 0 end
+    if q >= hex.gridWidth then q = hex.gridWidth - 1 end
+    if r < 0 then r = 0 end
+    if r >= hex.gridHeight then r = hex.gridHeight - 1 end
+    
+    local bestQ, bestR = q, r
+    local bestDist = math.huge
+    
+    for dq = -1, 1 do
+        for dr = -1, 1 do
+            local checkQ = q + dq
+            local checkR = r + dr
+            if checkQ >= 0 and checkQ < hex.gridWidth and checkR >= 0 and checkR < hex.gridHeight then
+                local hexX, hexY = hexToPixel(checkQ, checkR)
+                local dist = math.sqrt((px - hexX)^2 + (py - hexY)^2)
+                if dist < bestDist then
+                    bestDist = dist
+                    bestQ, bestR = checkQ, checkR
+                end
+            end
+        end
+    end
+    
+    return bestQ, bestR
+end
+
+function getNeighbors(q, r)
+    local directions
+    if q % 2 == 0 then
+        directions = {
+            {q=1, r=0}, {q=-1, r=0}, {q=0, r=1},
+            {q=0, r=-1}, {q=1, r=-1}, {q=-1, r=-1}
+        }
+    else
+        directions = {
+            {q=1, r=0}, {q=-1, r=0}, {q=0, r=1},
+            {q=0, r=-1}, {q=1, r=1}, {q=-1, r=1}
+        }
+    end
+    
+    local neighbors = {}
+    for _, dir in ipairs(directions) do
+        neighbors[#neighbors+1] = {q = q + dir.q, r = r + dir.r}
+    end
+    return neighbors
+end
+
+function isValidHex(q, r)
+    return q >= 0 and q < hex.gridWidth and r >= 0 and r < hex.gridHeight
+end
+
+function isPositionOccupied(q, r, movingActor)
+    for _, actor in ipairs(actors) do
+        if actor ~= movingActor and actor.q == q and actor.r == r then
+            return true
+        end
+    end
+    for _, obstacle in ipairs(obstacles) do
+        if obstacle.q == q and obstacle.r == r then
+            return true
+        end
+    end
+    return false
+end
+
+function getObstacleAtHex(q, r)
+    for _, obstacle in ipairs(obstacles) do
+        if obstacle.q == q and obstacle.r == r then
+            return obstacle
+        end
+    end
+    return nil
+end
+
+function getActorAtHex(q, r)
+    for _, actor in ipairs(actors) do
+        if actor.q == q and actor.r == r then
+            return actor
+        end
+    end
+    return nil
+end
+
+function findPath(startQ, startR, targetQ, targetR, movingActor)
+    if startQ == targetQ and startR == targetR then
+        return {}
+    end
+    
+    local nodeInfo = {}
+    local startKey = startQ .. "," .. startR
+    nodeInfo[startKey] = {
+        q = startQ,
+        r = startR,
+        g = 0,
+        parent = nil
+    }
+    
+    local openSet = {startKey}
+    local closedSet = {}
+    
+    while #openSet > 0 do
+        local currentKey = openSet[1]
+        local currentIndex = 1
+        
+        for i, key in ipairs(openSet) do
+            if nodeInfo[key].g < nodeInfo[currentKey].g then
+                currentKey = key
+                currentIndex = i
+            end
+        end
+        
+        table.remove(openSet, currentIndex)
+        local current = nodeInfo[currentKey]
+        
+        if current.q == targetQ and current.r == targetR then
+            local path = {}
+            local node = current
+            while node.parent do
+                table.insert(path, 1, {q = node.q, r = node.r})
+                node = node.parent
+            end
+            return path
+        end
+        
+        closedSet[currentKey] = true
+        local neighbors = getNeighbors(current.q, current.r)
+        
+        for _, neighbor in ipairs(neighbors) do
+            local neighborKey = neighbor.q .. "," .. neighbor.r
+            
+            if not closedSet[neighborKey] and isValidHex(neighbor.q, neighbor.r) then
+                if not isPositionOccupied(neighbor.q, neighbor.r, movingActor) then
+                    local tentativeG = current.g + 1
+                    
+                    if not nodeInfo[neighborKey] then
+                        nodeInfo[neighborKey] = {
+                            q = neighbor.q,
+                            r = neighbor.r,
+                            g = tentativeG,
+                            parent = current
+                        }
+                        table.insert(openSet, neighborKey)
+                    elseif tentativeG < nodeInfo[neighborKey].g then
+                        nodeInfo[neighborKey].g = tentativeG
+                        nodeInfo[neighborKey].parent = current
+                    end
+                end
+            end
+        end
+    end
+    
+    return nil
+end
+
+function addToHistory(actor, fromQ, fromR, toQ, toR)
+    actor.lastMove = {
+        fromQ = fromQ,
+        fromR = fromR,
+        toQ = toQ,
+        toR = toR,
+        timestamp = love.timer.getTime()
+    }
+end
+
+function undoLastMove(actor)
+    if not actor or not actor.lastMove then
+        print(actor and actor.name or "Актер", "не имеет действий для отмены!")
+        return false
+    end
+    
+    if actor.isMoving then
+        print("Нельзя отменить действие во время движения!")
+        return false
+    end
+    
+    -- В пошаговой системе отмена возможна только если актер еще не закончил ход
+    if actor.hasActedThisTurn then
+        print("Нельзя отменить действие после завершения хода!")
+        return false
+    end
+    
+    local lastAction = actor.lastMove
+    
+    if isPositionOccupied(lastAction.fromQ, lastAction.fromR, actor) then
+        print("Нельзя отменить: начальная позиция занята!")
+        return false
+    end
+    
+    actor.q = lastAction.fromQ
+    actor.r = lastAction.fromR
+    
+    if selectedActor == actor then
+        hex.selectedQ = actor.q
+        hex.selectedR = actor.r
+    end
+    
+    actor.lastMove = nil
+    
+    if actor.isMoving then
+        actor.isMoving = false
+        actor.path = {}
+        actor.currentPathIndex = 0
+    end
+    
+    sounds.undo:play()
+    print("Отменено действие: " .. actor.name)
+    return true
+end
+
+function performMove(actor, targetQ, targetR)
+    if actor.isMoving then
+        return false
+    end
+    
+    if actor.q == targetQ and actor.r == targetR then
+        return false
+    end
+    
+    if isPositionOccupied(targetQ, targetR, actor) then
+        local obstacle = getObstacleAtHex(targetQ, targetR)
+        if obstacle then
+            print("Невозможно пройти: клетка занята препятствием!")
+        else
+            print("Клетка занята другим актером!")
+        end
+        return false
+    end
+    
+    local path = findPath(actor.q, actor.r, targetQ, targetR, actor)
+    
+    if path and #path > 0 then
+        actor.startPosForHistory = {q = actor.q, r = actor.r}
+        actor.targetPosForHistory = {q = targetQ, r = targetR}
+        
+        actor.path = path
+        actor.currentPathIndex = 1
+        startNextMove(actor)
+        
+        return true
+    else
+        print("Путь не найден!")
+        return false
+    end
+end
+
+function startNextMove(actor)
+    if actor.currentPathIndex <= #actor.path then
+        local nextStep = actor.path[actor.currentPathIndex]
+        
+        actor.isMoving = true
+        actor.timer = 0
+        actor.targetQ = nextStep.q
+        actor.targetR = nextStep.r
+        
+        actor.startX, actor.startY = hexToPixel(actor.q, actor.r)
+        actor.endX, actor.endY = hexToPixel(actor.targetQ, actor.targetR)
+    else
+        actor.isMoving = false
+        actor.path = {}
+        actor.currentPathIndex = 0
+        
+        if actor.startPosForHistory and actor.targetPosForHistory then
+            addToHistory(actor,
+                        actor.startPosForHistory.q, actor.startPosForHistory.r,
+                        actor.targetPosForHistory.q, actor.targetPosForHistory.r)
+            actor.startPosForHistory = nil
+            actor.targetPosForHistory = nil
+            
+            -- Помечаем, что актер совершил действие в этом ходу
+            actor.hasActedThisTurn = true
+            
+            -- Уменьшаем счетчик действий
+            for i, a in ipairs(actors) do
+                if a == actor then
+                    turnState.actionsRemaining[i] = 0
+                    break
+                end
+            end
+            
+            turnState.turnPhase = "waiting"
+            print(actor.name .. " завершил действие!")
+            
+            -- Автоматически завершаем ход после действия (опционально)
+            -- endTurn()
+        end
+        
+        if selectedActor == actor then
+            hex.selectedQ = actor.q
+            hex.selectedR = actor.r
+        end
+    end
+end
+
+function updateActorMovement(actor, dt)
+    if actor.isMoving then
+        actor.timer = actor.timer + dt
+        local t = actor.timer / actor.speed
+        
+        if t >= 1 then
+            actor.q = actor.targetQ
+            actor.r = actor.targetR
+            actor.isMoving = false
+            
+            actor.currentPathIndex = actor.currentPathIndex + 1
+            if actor.currentPathIndex <= #actor.path then
+                startNextMove(actor)
+            else
+                actor.path = {}
+                actor.currentPathIndex = 0
+                
+                if actor.startPosForHistory and actor.targetPosForHistory then
+                    addToHistory(actor,
+                                actor.startPosForHistory.q, actor.startPosForHistory.r,
+                                actor.targetPosForHistory.q, actor.targetPosForHistory.r)
+                    actor.startPosForHistory = nil
+                    actor.targetPosForHistory = nil
+                    
+                    actor.hasActedThisTurn = true
+                    for i, a in ipairs(actors) do
+                        if a == actor then
+                            turnState.actionsRemaining[i] = 0
+                            break
+                        end
+                    end
+                    
+                    turnState.turnPhase = "waiting"
+                    print(actor.name .. " завершил действие!")
+                end
+                
+                if selectedActor == actor then
+                    hex.selectedQ = actor.q
+                    hex.selectedR = actor.r
+                end
+            end
+        end
+    end
+end
+
+function love.update(dt)
+    for _, actor in ipairs(actors) do
+        updateActorMovement(actor, dt)
+        actor.pulse = actor.pulse + dt * actor.pulseSpeed
+    end
+    
+    local mouseX, mouseY = love.mouse.getPosition()
+    hex.hoverQ, hex.hoverR = pixelToHex(mouseX, mouseY)
+    
+    -- Обновляем состояние кнопок
+    local mouseInUndo = mouseX >= 10 and mouseX <= 130 and mouseY >= 200 and mouseY <= 230
+    undoButton = undoButton or {}
+    undoButton.isHovered = mouseInUndo
+    
+    local mouseInEndTurn = mouseX >= endTurnButton.x and mouseX <= endTurnButton.x + endTurnButton.width and
+                         mouseY >= endTurnButton.y and mouseY <= endTurnButton.y + endTurnButton.height
+    endTurnButton.isHovered = mouseInEndTurn
+end
+
+function hexToPixel(q, r)
+    local x = q * hex.width * 0.75
+    local y = r * hex.height + (q % 2) * (hex.height / 2)
+    return x + hex.radius + hex.offsetX, y + hex.radius + hex.offsetY
+end
+
+function drawHexagon(x, y, radius)
+    local vertices = {}
+    for i = 0, 5 do
+        local angle = math.rad(60 * i)
+        local vx = x + math.cos(angle) * radius
+        local vy = y + math.sin(angle) * radius
+        table.insert(vertices, vx)
+        table.insert(vertices, vy)
+    end
+    return vertices
+end
+
+function drawHexGrid()
+    for q = 0, hex.gridWidth - 1 do
+        for r = 0, hex.gridHeight - 1 do
+            local x, y = hexToPixel(q, r)
+            local vertices = drawHexagon(x, y, hex.radius)
+            
+            local hasObstacle = getObstacleAtHex(q, r) ~= nil
+            local isCurrentActor = selectedActor and selectedActor.q == q and selectedActor.r == r
+            
+            if isCurrentActor then
+                love.graphics.setColor(0.2, 0.8, 0.2, 0.8)  -- Зеленый для текущего актера
+            elseif hex.selectedQ == q and hex.selectedR == r then
+                love.graphics.setColor(0.2, 0.4, 0.8, 0.8)
+            elseif hex.hoverQ == q and hex.hoverR == r then
+                love.graphics.setColor(0.5, 0.8, 0.3, 0.8)
+            elseif hasObstacle then
+                love.graphics.setColor(0.5, 0.3, 0.2, 0.8)
+            elseif (q + r) % 2 == 0 then
+                love.graphics.setColor(0.3, 0.6, 0.2, 0.8)
+            else
+                love.graphics.setColor(0.4, 0.7, 0.3, 0.8)
+            end
+            
+            love.graphics.polygon("fill", vertices)
+            love.graphics.setColor(0, 0, 0, 0.5)
+            love.graphics.polygon("line", vertices)
+        end
+    end
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+function drawObstacle(obstacle)
+    local x, y = hexToPixel(obstacle.q, obstacle.r)
+    love.graphics.draw(obstacle.sprite, x, y, 0, 1, 1, 16, 16)
+end
+
+function drawHealthBar(actor, x, y)
+    local barWidth = 40
+    local barHeight = 6
+    local healthPercent = actor.health / actor.maxHealth
+    
+    love.graphics.setColor(0.5, 0, 0, 0.8)
+    love.graphics.rectangle("fill", x - barWidth/2, y - 28, barWidth, barHeight)
+    
+    love.graphics.setColor(0, 1, 0, 0.8)
+    love.graphics.rectangle("fill", x - barWidth/2, y - 28, barWidth * healthPercent, barHeight)
+    
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.rectangle("line", x - barWidth/2, y - 28, barWidth, barHeight)
+    
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(actor.health .. "/" .. actor.maxHealth, x - 15, y - 38)
+end
+
+function drawActor(actor)
+    local x, y
+    if actor.isMoving then
+        local t = actor.timer / actor.speed
+        x = actor.startX + (actor.endX - actor.startX) * t
+        y = actor.startY + (actor.endY - actor.startY) * t
+    else
+        x, y = hexToPixel(actor.q, actor.r)
+    end
+    
+    local scale = 1 + math.sin(actor.pulse) * 0.05
+    love.graphics.draw(actor.sprite, x, y, 0, scale, scale, 16, 16)
+    
+    -- Подсветка текущего актера
+    if selectedActor == actor and turnState.turnPhase == "waiting" then
+        love.graphics.setColor(1, 1, 0, 0.8)
+        love.graphics.circle("line", x, y, 22)
+        love.graphics.setColor(1, 1, 1, 1)
+    end
+    
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(actor.name, x - 20, y - 25)
+    
+    -- Отображаем, сделал ли действие
+    if actor.hasActedThisTurn then
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
+        love.graphics.circle("fill", x + 15, y - 15, 8)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print("✓", x + 11, y - 20)
+    end
+
+    drawHealthBar(actor, x, y)
+end
+
+function drawUndoButton()
+    local canUndo = selectedActor and selectedActor.lastMove and not selectedActor.hasActedThisTurn
+    
+    if not selectedActor then
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
+    elseif canUndo and undoButton.isHovered then
+        love.graphics.setColor(0.3, 0.6, 0.9, 0.9)
+    elseif canUndo then
+        love.graphics.setColor(0.2, 0.4, 0.7, 0.8)
+    else
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
+    end
+    
+    love.graphics.rectangle("fill", 10, 200, 120, 30, 5)
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.rectangle("line", 10, 200, 120, 30, 5)
+    
+    love.graphics.setColor(1, 1, 1, 1)
+    local text = "Undo Move"
+    if selectedActor and not selectedActor.lastMove then
+        text = "Nothing to Undo"
+    elseif selectedActor and selectedActor.hasActedThisTurn then
+        text = "Already Acted"
+    end
+    
+    local font = love.graphics.getFont()
+    local textWidth = font:getWidth(text)
+    love.graphics.print(text, 10 + (120 - textWidth) / 2, 208)
+end
+
+function drawEndTurnButton()
+    local active = selectedActor and selectedActor.hasActedThisTurn
+    
+    if not selectedActor then
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
+    elseif endTurnButton.isHovered and active then
+        love.graphics.setColor(0.9, 0.6, 0.2, 0.9)
+    elseif active then
+        love.graphics.setColor(0.7, 0.5, 0.2, 0.8)
+    else
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
+    end
+    
+    love.graphics.rectangle("fill", endTurnButton.x, endTurnButton.y, endTurnButton.width, endTurnButton.height, 5)
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.rectangle("line", endTurnButton.x, endTurnButton.y, endTurnButton.width, endTurnButton.height, 5)
+    
+    love.graphics.setColor(1, 1, 1, 1)
+    local text = "End Turn"
+    if selectedActor and not selectedActor.hasActedThisTurn then
+        text = "Act First!"
+    end
+    
+    local font = love.graphics.getFont()
+    local textWidth = font:getWidth(text)
+    love.graphics.print(text, endTurnButton.x + (endTurnButton.width - textWidth) / 2, endTurnButton.y + 8)
+end
+
+function love.draw()
+    love.graphics.draw(background, 0, 0)
+    drawHexGrid()
+    
+    for _, obstacle in ipairs(obstacles) do
+        drawObstacle(obstacle)
+    end
+    
+    for _, actor in ipairs(actors) do
+        drawActor(actor)
+    end
+    
+    drawUndoButton()
+    drawEndTurnButton()
+    
+    love.graphics.setColor(1, 1, 1, 1)
+    
+    -- Информация о ходе
+    love.graphics.print("Turn: " .. turnState.currentTurn, 10, 10)
+    if selectedActor then
+        love.graphics.print("Current: " .. selectedActor.name, 10, 30)
+        love.graphics.print("Status: " .. (selectedActor.hasActedThisTurn and "Acted ✓" or "Ready to act"), 10, 50)
+    end
+    
+    love.graphics.print("Click on any hex to move", 10, 130)
+    love.graphics.print("Each actor: 1 action per turn", 10, 150)
+    love.graphics.print("Press 'U' to undo last move", 10, 170)
+    
+    if hex.hoverQ >= 0 and hex.hoverR >= 0 then
+        local obstacle = getObstacleAtHex(hex.hoverQ, hex.hoverR)
+        if obstacle then
+            love.graphics.print("Obstacle: " .. obstacle.name, 10, 90)
+        end
+    end
+end
+
+function love.mousepressed(x, y, button)
+    if button == 1 then
+        -- Проверяем кнопку Undo
+        if x >= 10 and x <= 130 and y >= 200 and y <= 230 then
+            if selectedActor and selectedActor.lastMove and not selectedActor.hasActedThisTurn then
+                undoLastMove(selectedActor)
+            else
+                print("Нельзя отменить действие!")
+            end
+            return
+        end
+        
+        -- Проверяем кнопку End Turn
+        if x >= endTurnButton.x and x <= endTurnButton.x + endTurnButton.width and
+           y >= endTurnButton.y and y <= endTurnButton.y + endTurnButton.height then
+            if selectedActor and selectedActor.hasActedThisTurn then
+                endTurn()
+            else
+                print("Сначала совершите действие!")
+            end
+            return
+        end
+        
+        -- Клик по гексу
+        local targetQ, targetR = pixelToHex(x, y)
+        if isValidHex(targetQ, targetR) then
+            local clickedActor = getActorAtHex(targetQ, targetR)
+            
+            -- Если кликнули на актера
+            if clickedActor and clickedActor.isPlayable then
+                if clickedActor.hasActedThisTurn then
+                    print(clickedActor.name .. " уже совершил действие в этом ходу!")
+                else
+                    selectedActor = clickedActor
+                    hex.selectedQ = targetQ
+                    hex.selectedR = targetR
+                    print("Selected: " .. clickedActor.name)
+                end
+                return
+            end            
+            -- Пытаемся переместить выбранного актера
+            if selectedActor and not selectedActor.isMoving and not selectedActor.hasActedThisTurn then
+                performMove(selectedActor, targetQ, targetR)
+                hex.selectedQ = targetQ
+                hex.selectedR = targetR
+            elseif selectedActor and selectedActor.hasActedThisTurn then
+                print(selectedActor.name .. " уже использовал свое действие в этом ходу!")
+            end
+        end
+    end
+end
+
+function love.keypressed(key)
+    if key == "u" or key == "U" then
+        if selectedActor and selectedActor.lastMove and not selectedActor.hasActedThisTurn then
+            undoLastMove(selectedActor)
+        elseif selectedActor and selectedActor.hasActedThisTurn then
+            print("Нельзя отменить действие после завершения хода!")
+        else
+            print("Нет действия для отмены!")
+        end
+    end
+    
+    if key == "e" or key == "E" then
+        if selectedActor and selectedActor.hasActedThisTurn then
+            endTurn()
+        else
+            print("Сначала совершите действие!")
+        end
+    end
+    
+    -- Тестовая кнопка урона
+    if key == "d" and selectedActor then
+        selectedActor.health = math.max(0, selectedActor.health - 1)
+        print(selectedActor.name .. " took 1 damage! Health: " .. selectedActor.health)
+    end
+end
