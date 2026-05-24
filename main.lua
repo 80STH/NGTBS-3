@@ -18,6 +18,7 @@ function love.load()
     obstacles = {}
     
     -- Глобальный стек действий для отмены (максимум 3 действия)
+    -- кандидат на переработку - тут хранить вообще весь файл сохранения
     actionHistory = {}  -- Каждый элемент: {actor, fromQ, fromR, toQ, toR, turnNumber}
     
     -- ПОШАГОВАЯ СИСТЕМА
@@ -147,6 +148,7 @@ function love.load()
     table.insert(actors, createActor(2, 2, "Warrior", {1, 0.2, 0.2, 1}, "cross", true, 5, 2))   -- Воин ходит на 2 клетки
     table.insert(actors, createActor(6, 4, "Mage", {0.2, 0.2, 1, 1}, "star", true, 2, 5))       -- Маг ходит на 5 клеток
     table.insert(actors, createActor(4, 1, "Rogue", {0.2, 0.8, 0.2, 1}, "triangle", true, 3, 4)) -- Разбойник ходит на 4 клетки
+    table.insert(actors, createActor(4, 2, "Rogue", {0.2, 0.8, 0.2, 1}, "triangle", true, 3, 4)) -- Разбойник ходит на 4 клетки
 
     -- Враги (неуправляемые)
     table.insert(actors, createActor(3, 5, "Goblin", {0.5, 0.3, 0.1, 1}, "circle", false, 3, 3))  -- Гоблин ходит на 3 клетки
@@ -202,42 +204,60 @@ function love.load()
     hex.hoverR = -1
     hex.selectedQ = -1
     hex.selectedR = -1
+
+    function countPlayableActors()
+        local count = 0
+        for _, actor in ipairs(actors) do
+            if actor.isPlayable then
+                count = count + 1
+            end
+        end
+        return count
+    end
+
+    -- Глобальный стек действий (теперь с ограничением по количеству союзников)
+    actionHistory = {}  -- Каждый элемент: {actor, fromQ, fromR, toQ, toR, turnNumber}
+    maxUndoCount = countPlayableActors()  -- Максимум отмен = количество союзных юнитов
 end
 
 -- Функция завершения хода
 function endTurn()
-    -- Сбрасываем флаги действий для ВСЕХ актеров (игроки + враги)
+    -- Сбрасываем флаги действий для ВСЕХ актеров
     for i, actor in ipairs(actors) do
         actor.hasActedThisTurn = false
         turnState.actionsRemaining[i] = 1
     end
-
+    
     -- ОЧИЩАЕМ ИСТОРИЮ ДЕЙСТВИЙ ПРИ ЗАВЕРШЕНИИ ХОДА
     actionHistory = {}
+    
+    -- Обновляем максимальное количество отмен (на случай, если появились новые союзники)
+    maxUndoCount = countPlayableActors()
     
     -- Увеличиваем номер хода
     turnState.currentTurn = turnState.currentTurn + 1
     
-    -- Находим ПЕРВОГО актера для нового хода (игрок или враг)
+    -- Находим ПЕРВОГО актера для нового хода
     turnState.currentActorIndex = 1
     selectedActor = actors[1]
     hex.selectedQ = selectedActor.q
     hex.selectedR = selectedActor.r
     turnState.turnPhase = "waiting"
     
-    -- Воспроизводим звук смены хода
     if sounds.turn then
         sounds.turn:play()
     end
     
     print("=== НОВЫЙ ХОД " .. turnState.currentTurn .. " ===")
     print("Очередь: " .. selectedActor.name)
+    print("Максимум отмен: " .. maxUndoCount .. " (количество союзных юнитов)")
 end
 
 -- Глобальная функция отмены последнего действия
+-- Глобальная функция отмены последнего действия (не привязана к выбранному актеру)
 function undoLastAction()
     if #actionHistory == 0 then
-        print("Нет действий для отмены!")
+        print("Нет действий для отмены! (0/" .. maxUndoCount .. ")")
         return false
     end
     
@@ -245,9 +265,11 @@ function undoLastAction()
     
     -- Проверяем, не был ли актер уничтожен
     local actorExists = false
+    local currentActor = nil
     for _, actor in ipairs(actors) do
         if actor == lastAction.actor then
             actorExists = true
+            currentActor = actor
             break
         end
     end
@@ -258,49 +280,54 @@ function undoLastAction()
         return undoLastAction()  -- Рекурсивно пробуем следующее действие
     end
     
-    local actor = lastAction.actor
-    
     -- Проверяем, не двигается ли актер
-    if actor.isMoving then
+    if currentActor.isMoving then
         print("Нельзя отменить действие во время движения!")
         return false
     end
     
+    -- Проверяем, можно ли отменить (актер должен был совершить действие в этом ходу)
+    if not currentActor.hasActedThisTurn then
+        print(currentActor.name .. " еще не совершал действие в этом ходу!")
+        return false
+    end
+    
     -- Проверяем, свободна ли начальная позиция
-    if isPositionOccupied(lastAction.fromQ, lastAction.fromR, actor) then
+    if isPositionOccupied(lastAction.fromQ, lastAction.fromR, currentActor) then
         print("Нельзя отменить: начальная позиция занята!")
         return false
     end
     
     -- Откатываем позицию актера
-    actor.q = lastAction.fromQ
-    actor.r = lastAction.fromR
+    currentActor.q = lastAction.fromQ
+    currentActor.r = lastAction.fromR
     
     -- Сбрасываем флаги
-    actor.hasActedThisTurn = false
-    actor.isMoving = false
-    actor.path = {}
-    actor.currentPathIndex = 0
+    currentActor.hasActedThisTurn = false
+    currentActor.isMoving = false
+    currentActor.path = {}
+    currentActor.currentPathIndex = 0
     
     -- Обновляем выделение, если это выбранный актер
-    if selectedActor == actor then
-        hex.selectedQ = actor.q
-        hex.selectedR = actor.r
+    if selectedActor == currentActor then
+        hex.selectedQ = currentActor.q
+        hex.selectedR = currentActor.r
     end
     
-    -- Удаляем действие из истории
-    table.remove(actionHistory)
-    
-    -- Восстанавливаем счетчик действий (если нужно)
+    -- Восстанавливаем счетчик действий
     for i, a in ipairs(actors) do
-        if a == actor then
+        if a == currentActor then
             turnState.actionsRemaining[i] = 1
             break
         end
     end
     
+    -- Удаляем действие из истории
+    table.remove(actionHistory)
+    
     sounds.undo:play()
-    print("Отменено действие: " .. actor.name)
+    print("Отменено действие: " .. currentActor.name)
+    print("Осталось отмен: " .. #actionHistory .. "/" .. maxUndoCount)
     return true
 end
 
@@ -316,10 +343,16 @@ function addToHistory(actor, fromQ, fromR, toQ, toR)
     
     table.insert(actionHistory, action)
     
-    -- Ограничиваем историю до 3 действий
-    while #actionHistory > 3 do
-        table.remove(actionHistory, 1)
+    -- Обновляем максимальное количество отмен (на случай, если появятся новые союзники)
+    maxUndoCount = countPlayableActors()
+    
+    -- Ограничиваем историю до КОЛИЧЕСТВА СОЮЗНЫХ ЮНИТОВ
+    while #actionHistory > maxUndoCount do
+        local removed = table.remove(actionHistory, 1)
+        print("История превысила лимит (" .. maxUndoCount .. "), удалено старое действие " .. (removed.actor and removed.actor.name or "unknown"))
     end
+    
+    print("Добавлено действие для " .. actor.name .. ". История: " .. #actionHistory .. "/" .. maxUndoCount)
 end
 
 function pixelToHex(px, py)
@@ -532,31 +565,120 @@ function performMove(actor, targetQ, targetR)
     end
 end
 
--- Функция для отображения доступной дистанции движения
+-- Функция для отображения доступной дистанции движения с учетом препятствий
 function drawMovementRange(actor)
     if not actor or actor.isMoving or actor.hasActedThisTurn then
         return
     end
     
+    -- Для каждой клетки на карте проверяем, может ли актер до нее дойти (кандидат на оптимизацию?)
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
-            local distance = getHexDistance(actor.q, actor.r, q, r)
-            if distance > 0 and distance <= actor.moveRange then
-                -- Проверяем, не занята ли клетка
-                if not isPositionOccupied(q, r, actor) then
+            -- Пропускаем текущую позицию актера
+            if not (q == actor.q and r == actor.r) then
+                -- Ищем путь до клетки
+                local path = findPath(actor.q, actor.r, q, r, actor)
+                
+                if path and #path > 0 and #path <= actor.moveRange then
+                    -- Проверяем, не занята ли целевая клетка (но показываем её, если она занята?)
+                    local isOccupied = isPositionOccupied(q, r, actor)
+                    
                     local x, y = hexToPixel(q, r)
                     local vertices = drawHexagon(x, y, hex.radius)
                     
-                    -- Прозрачная подсветка доступных клеток
-                    love.graphics.setColor(0.3, 0.8, 0.3, 0.3)
-                    love.graphics.polygon("fill", vertices)
-                    
-                    -- Отображаем дистанцию на клетке
-                    love.graphics.setColor(1, 1, 1, 0.7)
-                    love.graphics.print(distance, x - 5, y - 5)
+                    if isOccupied then
+                        -- Занятые клетки подсвечиваем красным (недоступны для перемещения)
+                        love.graphics.setColor(0.8, 0.2, 0.2, 0.3)
+                        love.graphics.polygon("fill", vertices)
+                        love.graphics.setColor(1, 1, 1, 0.5)
+                        love.graphics.print("🚫", x - 5, y - 8)
+                    else
+                        -- Доступные клетки подсвечиваем зеленым
+                        love.graphics.setColor(0.3, 0.8, 0.3, 0.35)
+                        love.graphics.polygon("fill", vertices)
+                        
+                        -- Отображаем количество шагов до клетки
+                        love.graphics.setColor(1, 1, 1, 0.8)
+                        love.graphics.print(#path, x - 5, y - 5)
+                    end
                 end
             end
         end
+    end
+end
+
+-- Функция для отображения пути к выбранной клетке (вызывать при наведении)
+function drawPathPreview(actor, targetQ, targetR)
+    if not actor or actor.isMoving or actor.hasActedThisTurn then
+        return
+    end
+    
+    -- Проверяем, можно ли дойти до клетки
+    local distance = getHexDistance(actor.q, actor.r, targetQ, targetR)
+    if distance > actor.moveRange then
+        return
+    end
+    
+    local path = findPath(actor.q, actor.r, targetQ, targetR, actor)
+    if path and #path > 0 and #path <= actor.moveRange then
+        
+        -- Получаем начальную позицию актера
+        local startX, startY = hexToPixel(actor.q, actor.r)
+        
+        -- Отрисовываем весь путь и стрелки
+        local prevX, prevY = startX, startY
+        
+        for i = 1, #path do
+            local step = path[i]
+            local x, y = hexToPixel(step.q, step.r)
+            
+            -- Подсвечиваем клетки пути
+            local vertices = drawHexagon(x, y, hex.radius)
+            love.graphics.setColor(1, 1, 0, 0.3)
+            love.graphics.polygon("fill", vertices)
+            
+            -- Рисуем стрелку от предыдущей клетки к текущей
+            love.graphics.setColor(1, 0.8, 0, 0.8)
+            love.graphics.setLineWidth(3)
+            
+            -- Вычисляем направление стрелки
+            local angle = math.atan2(y - prevY, x - prevX)
+            local arrowLength = 15
+            local arrowSize = 8
+            
+            -- Рисуем линию
+            love.graphics.line(prevX, prevY, x, y)
+            
+            -- Рисуем наконечник стрелки (на клетке, не в центре, а ближе к концу)
+            local arrowX = x - math.cos(angle) * 12
+            local arrowY = y - math.sin(angle) * 12
+            
+            -- Левое крыло стрелки
+            local leftAngle = angle + math.pi * 0.8
+            local leftX = arrowX + math.cos(leftAngle) * arrowSize
+            local leftY = arrowY + math.sin(leftAngle) * arrowSize
+            
+            -- Правое крыло стрелки
+            local rightAngle = angle - math.pi * 0.8
+            local rightX = arrowX + math.cos(rightAngle) * arrowSize
+            local rightY = arrowY + math.sin(rightAngle) * arrowSize
+            
+            love.graphics.line(arrowX, arrowY, leftX, leftY)
+            love.graphics.line(arrowX, arrowY, rightX, rightY)
+            
+            -- Обновляем предыдущую позицию
+            prevX, prevY = x, y
+        end
+        
+        love.graphics.setLineWidth(1)
+        
+        -- Дополнительно подсвечиваем целевую клетку ярче
+        local targetX, targetY = hexToPixel(targetQ, targetR)
+        local targetVertices = drawHexagon(targetX, targetY, hex.radius)
+        love.graphics.setColor(1, 0.8, 0, 0.4)
+        love.graphics.polygon("fill", targetVertices)
+        love.graphics.setColor(1, 1, 0, 0.8)
+        love.graphics.polygon("line", targetVertices)
     end
 end
 
@@ -807,7 +929,7 @@ function drawUndoButton()
     love.graphics.rectangle("line", 10, 200, 120, 30, 5)
     
     love.graphics.setColor(1, 1, 1, 1)
-    local text = "Undo (" .. #actionHistory .. "/3)"
+    local text = "Undo (" .. #actionHistory .. "/" .. maxUndoCount .. ")"
     if #actionHistory == 0 then
         text = "Nothing to Undo"
     end
@@ -864,9 +986,14 @@ function love.draw()
         drawObstacle(obstacle)
     end
 
-    -- ОТОБРАЖАЕМ ДОСТУПНУЮ ДИСТАНЦИЮ ДЛЯ ВЫБРАННОГО АКТЕРА
+    -- Отображаем доступную дистанцию для выбранного актера
     if selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving then
         drawMovementRange(selectedActor)
+        
+        -- Отображаем путь к клетке под курсором
+        if hex.hoverQ >= 0 and hex.hoverR >= 0 then
+            drawPathPreview(selectedActor, hex.hoverQ, hex.hoverR)
+        end
     end
     
     for _, actor in ipairs(actors) do
