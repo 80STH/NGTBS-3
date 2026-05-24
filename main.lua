@@ -180,7 +180,7 @@ function love.load()
     sounds = {}
     sounds.undo = love.audio.newSource("sounds/blip.wav", "static")
     sounds.undo:setVolume(0.4)
-    sounds.turn = love.audio.newSource("sounds/click.wav", "static")
+    sounds.turn = love.audio.newSource("sounds/blip.wav", "static")
     sounds.turn:setVolume(0.3)
     
     -- Рассчитываем смещение для центрирования карты
