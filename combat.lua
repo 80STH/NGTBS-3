@@ -1,14 +1,45 @@
 -- combat.lua
 -- Система боя: атаки, урон, эффекты
--- Легко расширяемый дизайн для добавления новых атак
+-- Переписана логика прямой линии и отталкивания с использованием кубических координат
 
 local combat = {}
 
 -- ============================================================
--- БАЗОВЫЕ КЛАССЫ ДЛЯ АТАК
+-- КОНВЕРТАЦИЯ КООРДИНАТ (кубические <-> осевые)
 -- ============================================================
 
--- Базовый класс для всех атак
+local function axialToCube(q, r)
+    local x = q
+    local z = r - (q - (q % 2)) / 2
+    local y = -x - z
+    return x, y, z
+end
+
+local function cubeToAxial(x, y, z)
+    local q = x
+    local r = z + (x - (x % 2)) / 2
+    return q, r
+end
+
+-- Применение кубического шага к осевым координатам
+local function applyCubeStep(q, r, stepX, stepY, stepZ)
+    local x, y, z = axialToCube(q, r)
+    x = x + stepX
+    y = y + stepY
+    z = z + stepZ
+    return cubeToAxial(x, y, z)
+end
+
+local function debugPrint(...)
+    if _G.DEBUG_COMBAT then
+        print(...)
+    end
+end
+
+-- ============================================================
+-- БАЗОВЫЙ КЛАСС ДЛЯ АТАК
+-- ============================================================
+
 combat.Attack = {}
 combat.Attack.__index = combat.Attack
 
@@ -16,234 +47,174 @@ function combat.Attack.new(name, description, range, damage, effects)
     local self = setmetatable({}, combat.Attack)
     self.name = name or "Attack"
     self.description = description or "A basic attack"
-    self.range = range or 1  -- дальность атаки в гексах
+    self.range = range or 1
     self.damage = damage or 1
-    self.effects = effects or {}  -- таблица эффектов
+    self.effects = effects or {}
     return self
 end
 
--- Основной метод атаки (переопределяется в наследниках)
-function combat.Attack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
-    -- Базовое поведение: прямой урон + отталкивание
-    return self:dealDamageAndPush(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
+-- ============================================================
+-- ОПРЕДЕЛЕНИЕ ПРЯМОЙ ЛИНИИ (кубические координаты)
+-- ============================================================
+
+function combat.Attack:getLineDirection(fromQ, fromR, toQ, toR, hex)
+    debugPrint("--- getLineDirection ---")
+    local ax, ay, az = axialToCube(fromQ, fromR)
+    local bx, by, bz = axialToCube(toQ, toR)
+    local dx, dy, dz = bx - ax, by - ay, bz - az
+
+    local function gcd(a, b)
+        a = math.abs(a)
+        b = math.abs(b)
+        while b ~= 0 do
+            a, b = b, a % b
+        end
+        return a
+    end
+
+    local g = gcd(gcd(dx, dy), dz)
+    if g == 0 then
+        debugPrint("Same point, no direction")
+        return nil
+    end
+
+    local stepX, stepY, stepZ = dx / g, dy / g, dz / g
+
+    -- Направление должно быть единичным вектором в кубических координатах
+    if math.abs(stepX) > 1 or math.abs(stepY) > 1 or math.abs(stepZ) > 1 then
+        debugPrint("Not a unit direction")
+        return nil
+    end
+    if stepX + stepY + stepZ ~= 0 then
+        debugPrint("Invalid cube direction (sum != 0)")
+        return nil
+    end
+
+    debugPrint(string.format("Cube direction: (%d, %d, %d)", stepX, stepY, stepZ))
+    return stepX, stepY, stepZ
 end
 
-function combat.Attack:dealDamageAndPush(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
-    local targetActor = combat.getActorAtHex(targetQ, targetR, actors)
-    local targetObstacle = combat.getObstacleAtHex(targetQ, targetR, obstacles)
-    
-    if not targetActor and not targetObstacle then
-        return false, "No target at that hex!"
-    end
-    
-    local target = targetActor or targetObstacle
-    
-    -- Проверяем, является ли цель строением
-    local isBuilding = target.isBuilding == true
-    
-    -- Наносим урон
-    if isBuilding then
-        -- Для строений используем специальную обработку
-        -- Требуется передать globalHealth из main.lua
-        -- Для этого нужно модифицировать вызов или сделать globalHealth глобальной
-        local wasDestroyed = combat.handleBuildingDamage(target, self.damage, _G.globalHealth)
-        if wasDestroyed then
-            combat.removeObstacle(target, obstacles)
+-- ============================================================
+-- ПОИСК ЦЕЛЕЙ НА ЛИНИИ (с использованием кубического шага)
+-- ============================================================
+
+function combat.Attack:findFirstTargetOnLine(startQ, startR, stepX, stepY, stepZ, hex, actors, obstacles)
+    debugPrint("--- findFirstTargetOnLine (cube step) ---")
+    local curQ, curR = startQ, startR
+    local step = 0
+    while true do
+        curQ, curR = applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        step = step + 1
+        if not hex:isValidHex(curQ, curR) then
+            debugPrint("Reached map edge")
+            break
         end
-    else
-        target.health = target.health - self.damage
-        print(string.format("%s attacks %s for %d damage!", attacker.name, target.name or target.type, self.damage))
-    end
-    
-    if sounds and sounds.attack then
-        sounds.attack:play()
-    end
-    
-    local wasActorDead = targetActor and target.health <= 0
-    
-    -- Проверка на смерть цели
-    local isDead = false
-    if target.health <= 0 then
-        if targetActor then
-            combat.removeActor(targetActor, actors)
-            print(targetActor.name .. " has been defeated!")
-        elseif not isBuilding then
-            combat.removeObstacle(targetObstacle, obstacles)
-            print(targetObstacle.name .. " has been destroyed!")
+        debugPrint(string.format("Step %d: checking (%d, %d)", step, curQ, curR))
+        local target = combat.getActorAtHex(curQ, curR, actors) or
+                       combat.getObstacleAtHex(curQ, curR, obstacles)
+        if target then
+            debugPrint(string.format("Target found at (%d, %d)", curQ, curR))
+            return target, {q = curQ, r = curR}
         end
-        isDead = true
     end
-    
-    -- Отталкивание (только если цель выжила или это актер)
-    if not isDead or targetActor then
-        self:pushTarget(attacker, targetQ, targetR, target, hex, actors, obstacles, sounds, wasActorDead)
-    end
-    
-    return true, nil
+    debugPrint("No target found")
+    return nil, nil
 end
 
--- Отталкивание цели
+function combat.Attack:findFirstTwoTargetsOnLine(startQ, startR, stepX, stepY, stepZ, hex, actors, obstacles)
+    debugPrint("--- findFirstTwoTargetsOnLine (cube step) ---")
+    local curQ, curR = startQ, startR
+    local step = 0
+    local firstTarget, firstHex = nil, nil
+    local secondTarget, secondHex = nil, nil
+    while true do
+        curQ, curR = applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        step = step + 1
+        if not hex:isValidHex(curQ, curR) then break end
+        debugPrint(string.format("Step %d: checking (%d, %d)", step, curQ, curR))
+        local target = combat.getActorAtHex(curQ, curR, actors) or
+                       combat.getObstacleAtHex(curQ, curR, obstacles)
+        if target then
+            if not firstTarget then
+                firstTarget = target
+                firstHex = {q = curQ, r = curR}
+                debugPrint(string.format("First target at (%d, %d)", curQ, curR))
+            elseif not secondTarget and target ~= firstTarget then
+                secondTarget = target
+                secondHex = {q = curQ, r = curR}
+                debugPrint(string.format("Second target at (%d, %d)", curQ, curR))
+                break
+            end
+        end
+    end
+    return firstTarget, firstHex, secondTarget, secondHex
+end
 
-function combat.Attack:pushTarget(attacker, targetQ, targetR, target, hex, actors, obstacles, sounds, wasDeadBeforePush)
-    -- Определяем направление отталкивания через кубические координаты
-    local function axialToCube(q, r)
-        local x = q
-        local z = r - (q - (q % 2)) / 2
-        return x, -x - z, z
-    end
-    
-    local function cubeToAxial(x, y, z)
-        local q = x
-        local r = z + (x - (x % 2)) / 2
-        return q, r
-    end
-    
-    local aX, aY, aZ = axialToCube(attacker.q, attacker.r)
-    local tX, tY, tZ = axialToCube(target.q, target.r)
-    local dirX = tX - aX
-    local dirY = tY - aY
-    local dirZ = tZ - aZ
-    
-    local pushX = tX + dirX
-    local pushY = tY + dirY
-    local pushZ = tZ + dirZ
-    local pushTargetQ, pushTargetR = cubeToAxial(pushX, pushY, pushZ)
-    
-    local targetActor = combat.getActorAtHex(target.q, target.r, actors)
-    
-    -- Если цель была актёром и умерла прямо перед отталкиванием
-    if wasDeadBeforePush and targetActor == nil then
-        self:applyDeathPushDamage(attacker, targetQ, targetR, pushTargetQ, pushTargetR, hex, actors, obstacles, sounds)
-        return
-    end
-    
-    -- ЕСЛИ ЦЕЛЬ - СТРОЕНИЕ
-    if target.isBuilding then
-        if target.health > 0 then
-            local oldHealth = target.health
+-- ============================================================
+-- ОТТАЛКИВАНИЕ (с кубическим шагом)
+-- ============================================================
+
+-- Отталкивание цели в направлении (кубический шаг)
+function combat.Attack:pushTargetInDirection(target, fromQ, fromR, stepX, stepY, stepZ, hex, actors, obstacles, sounds)
+    local pushQ, pushR = applyCubeStep(fromQ, fromR, stepX, stepY, stepZ)
+    debugPrint(string.format("Pushing %s from (%d,%d) to (%d,%d)", target.name or target.type, fromQ, fromR, pushQ, pushR))
+    self:pushTargetToHex(target, fromQ, fromR, pushQ, pushR, hex, actors, obstacles, sounds)
+end
+
+-- Отталкивание цели на конкретную клетку (без изменений, логика корректна)
+function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, actors, obstacles, sounds)
+    local isActor = target.maxHealth ~= nil and target.isBuilding ~= true
+
+    if not hex:isValidHex(toQ, toR) then
+        debugPrint("Target cell is outside map!")
+        if isActor then
             target.health = target.health - 1
-            print(target.name .. " takes additional 1 damage from the force of the blow!")
-            
-            -- Глобальное здоровье снижается на 1 от дополнительного урона
-            if _G.globalHealth then
-                _G.globalHealth.current = math.max(0, _G.globalHealth.current - 1)
-                print(string.format("⚔ Global health reduced by 1 from impact! (%d/%d)", 
-                    _G.globalHealth.current, _G.globalHealth.max))
-            end
-            
+            print(target.name .. " is slammed against the edge! Takes 1 additional damage!")
+            if sounds and sounds.collision then sounds.collision:play() end
             if target.health <= 0 then
-                -- При разрушении от дополнительного урона
-                combat.removeObstacle(target, obstacles)
-                print(target.name .. " has been destroyed!")
+                combat.removeActor(target, actors)
+                print(target.name .. " has been defeated!")
             end
         end
         return
     end
-    
-    -- Далее существующий код для актеров и обычных препятствий
-    if targetActor then
-        self:pushActor(targetActor, pushTargetQ, pushTargetR, hex, actors, obstacles, sounds)
-    else
-        if target.health > 0 then
-            target.health = target.health - 1
-            print(target.name .. " takes additional 1 damage from the force of the blow!")
-            
-            if target.health <= 0 then
-                combat.removeObstacle(target, obstacles)
-                print(target.name .. " has been destroyed!")
-            end
-        end
-    end
-end
 
--- Предсмертный урон от отталкивания (когда цель уже мертва, но толкает врага)
-function combat.Attack:applyDeathPushDamage(attacker, deadQ, deadR, pushQ, pushR, hex, actors, obstacles, sounds)
-    -- Находим цель, которая должна получить предсмертный удар
-    -- (это актёр или препятствие на клетке pushQ, pushR)
-    local targetActor = combat.getActorAtHex(pushQ, pushR, actors)
-    local targetObstacle = combat.getObstacleAtHex(pushQ, pushR, obstacles)
-    
-    if targetActor and targetActor ~= attacker then
-        targetActor.health = targetActor.health - 1
-        print(targetActor.name .. " takes 1 damage from the death throes!")
-        if targetActor.health <= 0 then
-            combat.removeActor(targetActor, actors)
-            print(targetActor.name .. " has been defeated!")
-        end
-    elseif targetObstacle then
-        targetObstacle.health = targetObstacle.health - 1
-        print(targetObstacle.name .. " is damaged by the shockwave!")
-        if targetObstacle.health <= 0 then
-            combat.removeObstacle(targetObstacle, obstacles)
-            print(targetObstacle.name .. " has been destroyed!")
-        end
-    end
-    
-    if sounds and sounds.collision then
-        sounds.collision:play()
-    end
-end
+    local obstacleAtPush = combat.getObstacleAtHex(toQ, toR, obstacles)
+    local actorAtPush = combat.getActorAtHex(toQ, toR, actors)
 
--- Отталкивание актера
-function combat.Attack:pushActor(actor, pushQ, pushR, hex, actors, obstacles, sounds)
-    if not hex:isValidHex(pushQ, pushR) then
-        -- За границей карты - дополнительный урон
-        actor.health = actor.health - 1
-        print(actor.name .. " is slammed against the edge! Takes 1 additional damage!")
-        
-        if sounds and sounds.collision then
-            sounds.collision:play()
-        end
-        
-        if actor.health <= 0 then
-            combat.removeActor(actor, actors)
-            print(actor.name .. " has been defeated!")
-        end
-        return
-    end
-    
-    local obstacleAtPush = combat.getObstacleAtHex(pushQ, pushR, obstacles)
-    local actorAtPush = combat.getActorAtHex(pushQ, pushR, actors)
-    
     if not obstacleAtPush and not actorAtPush then
-        -- Свободная клетка - просто перемещаем
-        actor.q = pushQ
-        actor.r = pushR
-        print(actor.name .. " is pushed back!")
+        debugPrint("Target cell is free, moving")
+        if isActor then
+            target.q = toQ
+            target.r = toR
+            print(target.name .. " is pushed back!")
+        end
     elseif obstacleAtPush then
-        -- Столкновение с препятствием
-        obstacleAtPush.health = obstacleAtPush.health - 1
-        actor.health = actor.health - 1
-        print(actor.name .. " crashes into " .. obstacleAtPush.name .. "! Both take 1 damage!")
-        
-        if sounds and sounds.collision then
-            sounds.collision:play()
+        debugPrint(string.format("Collision with obstacle: %s", obstacleAtPush.name))
+        if isActor then
+            obstacleAtPush.health = obstacleAtPush.health - 1
+            target.health = target.health - 1
+            print(target.name .. " crashes into " .. obstacleAtPush.name .. "! Both take 1 damage!")
+            if sounds and sounds.collision then sounds.collision:play() end
+            if obstacleAtPush.health <= 0 then
+                combat.removeObstacle(obstacleAtPush, obstacles)
+                print(obstacleAtPush.name .. " has been destroyed!")
+            end
+            if target.health <= 0 then
+                combat.removeActor(target, actors)
+                print(target.name .. " has been defeated!")
+            end
         end
-        
-        if obstacleAtPush.health <= 0 then
-            combat.removeObstacle(obstacleAtPush, obstacles)
-            print(obstacleAtPush.name .. " has been destroyed!")
-        end
-        
-        if actor.health <= 0 then
-            combat.removeActor(actor, actors)
-            print(actor.name .. " has been defeated!")
-        end
-    elseif actorAtPush then
-        -- Столкновение с другим актером
+    elseif actorAtPush and actorAtPush ~= target then
+        debugPrint(string.format("Collision with actor: %s", actorAtPush.name))
         actorAtPush.health = actorAtPush.health - 1
-        actor.health = actor.health - 1
-        print(actor.name .. " crashes into " .. actorAtPush.name .. "! Both take 1 damage!")
-        
-        if sounds and sounds.collision then
-            sounds.collision:play()
+        target.health = target.health - 1
+        print(target.name .. " crashes into " .. actorAtPush.name .. "! Both take 1 damage!")
+        if sounds and sounds.collision then sounds.collision:play() end
+        if target.health <= 0 then
+            combat.removeActor(target, actors)
+            print(target.name .. " has been defeated!")
         end
-        
-        if actor.health <= 0 then
-            combat.removeActor(actor, actors)
-            print(actor.name .. " has been defeated!")
-        end
-        
         if actorAtPush.health <= 0 then
             combat.removeActor(actorAtPush, actors)
             print(actorAtPush.name .. " has been defeated!")
@@ -252,304 +223,321 @@ function combat.Attack:pushActor(actor, pushQ, pushR, hex, actors, obstacles, so
 end
 
 -- ============================================================
--- КОНКРЕТНЫЕ ТИПЫ АТАК
+-- НОВЫЕ ТИПЫ АТАК (обновлённые execute)
 -- ============================================================
 
--- 1. Базовая атака (меч/кулак)
-combat.MeleeAttack = setmetatable({}, combat.Attack)
-combat.MeleeAttack.__index = combat.MeleeAttack
+-- 1. РЫВОК ПО ПРЯМОЙ
+combat.DashAttack = setmetatable({}, combat.Attack)
+combat.DashAttack.__index = combat.DashAttack
 
-function combat.MeleeAttack.new()
-    local self = combat.Attack.new(
-        "Melee Strike",
-        "A powerful melee attack that pushes the target back",
-        1,  -- дальность
-        1,  -- урон
-        {}  -- эффекты
-    )
-    return setmetatable(self, combat.MeleeAttack)
+function combat.DashAttack.new()
+    local self = combat.Attack.new("Dash", "Charge forward in a straight line, pushing the first target hit", math.huge, 1, {})
+    return setmetatable(self, combat.DashAttack)
 end
 
--- 2. Дальняя атака (без отталкивания)
-combat.RangedAttack = setmetatable({}, combat.Attack)
-combat.RangedAttack.__index = combat.RangedAttack
-
-function combat.RangedAttack.new(damage, range)
-    local self = combat.Attack.new(
-        "Ranged Shot",
-        "A projectile attack from distance",
-        range or 3,
-        damage or 1,
-        {}
-    )
-    return setmetatable(self, combat.RangedAttack)
-end
-
-function combat.RangedAttack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
-    -- Проверка дальности
-    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    if distance > self.range then
-        return false, "Target out of range!"
+function combat.DashAttack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
+    debugPrint("=== DashAttack ===")
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then
+        debugPrint("ERROR: Not a straight line!")
+        return false, "Not a straight line!"
     end
-    
-    local targetActor = combat.getActorAtHex(targetQ, targetR, actors)
-    local targetObstacle = combat.getObstacleAtHex(targetQ, targetR, obstacles)
-    
-    if not targetActor and not targetObstacle then
-        return false, "No target at that hex!"
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, actors, obstacles)
+    if not firstTarget then
+        debugPrint("ERROR: No target in that direction!")
+        return false, "No target in that direction!"
     end
-    
-    local target = targetActor or targetObstacle
-    
-    -- Наносим урон (без отталкивания)
-    target.health = target.health - self.damage
-    print(string.format("%s shoots %s for %d damage!", attacker.name, target.name or target.type, self.damage))
-    
-    if sounds and sounds.attack then
-        sounds.attack:play()
-    end
-    
-    if target.health <= 0 then
-        if targetActor then
-            combat.removeActor(targetActor, actors)
-            print(targetActor.name .. " has been defeated!")
-        else
-            combat.removeObstacle(targetObstacle, obstacles)
-            print(targetObstacle.name .. " has been destroyed!")
-        end
-    end
-    
+    self:dealDamageToTarget(firstTarget, attacker, self.damage, actors, obstacles, sounds)
+    self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, actors, obstacles, sounds)
+    attacker.hasActedThisTurn = true
+    debugPrint("=== DashAttack complete ===")
     return true, nil
 end
 
--- 3. Атака со стихийным уроном (огонь)
-combat.FireAttack = setmetatable({}, combat.Attack)
-combat.FireAttack.__index = combat.FireAttack
+-- 2. ПЕРЕВОРОТ (без изменений, не использует линию)
+combat.FlipAttack = setmetatable({}, combat.Attack)
+combat.FlipAttack.__index = combat.FlipAttack
 
-function combat.FireAttack.new()
-    local self = combat.Attack.new(
-        "Fire Blast",
-        "Deals fire damage and leaves burning ground",
-        2,
-        2,
-        {burn = true}
-    )
-    return setmetatable(self, combat.FireAttack)
+function combat.FlipAttack.new()
+    local self = combat.Attack.new("Flip", "Flip the target behind you", 1, 0, {})
+    return setmetatable(self, combat.FlipAttack)
 end
 
-function combat.FireAttack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
+function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
+    debugPrint("=== FlipAttack ===")
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    if distance > self.range then
-        return false, "Target out of range!"
+    if distance ~= 1 then
+        return false, "Target must be adjacent!"
     end
-    
     local targetActor = combat.getActorAtHex(targetQ, targetR, actors)
-    
     if not targetActor then
         return false, "No enemy at that hex!"
     end
-    
-    -- Наносим двойной урон
-    targetActor.health = targetActor.health - self.damage
-    print(string.format("%s blasts %s with fire for %d damage!", attacker.name, targetActor.name, self.damage))
-    
-    if sounds and sounds.attack then
-        sounds.attack:play()
+    local aX, aY, aZ = axialToCube(attacker.q, attacker.r)
+    local tX, tY, tZ = axialToCube(targetQ, targetR)
+    local dirX, dirY, dirZ = tX - aX, tY - aY, tZ - aZ
+    local behindX, behindY, behindZ = tX + dirX, tY + dirY, tZ + dirZ
+    local behindQ, behindR = cubeToAxial(behindX, behindY, behindZ)
+    local isOccupied = combat.getActorAtHex(behindQ, behindR, actors) ~= nil or
+                       combat.getObstacleAtHex(behindQ, behindR, obstacles) ~= nil
+    if not hex:isValidHex(behindQ, behindR) or isOccupied then
+        return false, "No free space behind the target!"
     end
-    
-    if targetActor.health <= 0 then
-        combat.removeActor(targetActor, actors)
-        print(targetActor.name .. " has been defeated!")
-    end
-    
-    -- Эффект горения (можно добавить позже)
-    
+    targetActor.q = behindQ
+    targetActor.r = behindR
+    print(string.format("%s flips %s behind them!", attacker.name, targetActor.name))
+    if sounds and sounds.attack then sounds.attack:play() end
+    attacker.hasActedThisTurn = true
     return true, nil
 end
 
--- 4. Исцеление (лечение союзника)
-combat.HealAttack = setmetatable({}, combat.Attack)
-combat.HealAttack.__index = combat.HealAttack
+-- 3. ВЫСТРЕЛ ПО ПРЯМОЙ
+combat.ShootAttack = setmetatable({}, combat.Attack)
+combat.ShootAttack.__index = combat.ShootAttack
 
-function combat.HealAttack.new(healAmount)
-    local self = combat.Attack.new(
-        "Heal",
-        "Restores health to an ally",
-        1,
-        0,  -- урон 0
-        {heal = healAmount or 2}
-    )
-    return setmetatable(self, combat.HealAttack)
+function combat.ShootAttack.new(range)
+    local self = combat.Attack.new("Shoot", "Fire a projectile in a straight line, pushing the first target hit", range or 5, 1, {})
+    return setmetatable(self, combat.ShootAttack)
 end
 
-function combat.HealAttack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
+function combat.ShootAttack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
+    debugPrint("=== ShootAttack ===")
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then
+        return false, "Not a straight line!"
+    end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, actors, obstacles)
+    if not firstTarget then
+        return false, "No target in that direction!"
+    end
+    local distance = hex:getDistance(attacker.q, attacker.r, targetHex.q, targetHex.r)
+    if distance > self.range then
+        return false, "Target out of range!"
+    end
+    self:dealDamageToTarget(firstTarget, attacker, self.damage, actors, obstacles, sounds)
+    self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, actors, obstacles, sounds)
+    attacker.hasActedThisTurn = true
+    return true, nil
+end
+
+-- 4. ПРОНЗАЮЩИЙ ВЫСТРЕЛ
+combat.PiercingShootAttack = setmetatable({}, combat.Attack)
+combat.PiercingShootAttack.__index = combat.PiercingShootAttack
+
+function combat.PiercingShootAttack.new(range)
+    local self = combat.Attack.new("Piercing Shot", "Shoot through the first target (0 dmg, pushes) to hit the second (1 dmg, pushes)", range or 5, 0, {})
+    return setmetatable(self, combat.PiercingShootAttack)
+end
+
+function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
+    debugPrint("=== PiercingShootAttack ===")
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then
+        return false, "Not a straight line!"
+    end
+    local firstTarget, firstHex, secondTarget, secondHex = self:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, actors, obstacles)
+    if not firstTarget then
+        return false, "No target in that direction!"
+    end
+    print(string.format("%s shoots through %s!", attacker.name, firstTarget.name or firstTarget.type))
+    if secondTarget then
+        self:dealDamageToTarget(secondTarget, attacker, 1, actors, obstacles, sounds)
+        self:pushTargetInDirection(secondTarget, secondHex.q, secondHex.r, stepX, stepY, stepZ, hex, actors, obstacles, sounds)
+    end
+    self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, actors, obstacles, sounds)
+    attacker.hasActedThisTurn = true
+    return true, nil
+end
+
+-- 5. AoE ОТТАЛКИВАНИЕ ВОКРУГ (без изменений)
+combat.AoePushAttack = setmetatable({}, combat.Attack)
+combat.AoePushAttack.__index = combat.AoePushAttack
+
+function combat.AoePushAttack.new()
+    local self = combat.Attack.new("Shockwave", "Deals 1 damage to the center and pushes all adjacent targets outward", 1, 1, {})
+    return setmetatable(self, combat.AoePushAttack)
+end
+
+function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
+    debugPrint("=== AoePushAttack ===")
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
     if distance > self.range then
         return false, "Target out of range!"
     end
-    
-    local targetActor = combat.getActorAtHex(targetQ, targetR, actors)
-    
-    if not targetActor then
-        return false, "No ally at that hex!"
+    local centerTarget = combat.getActorAtHex(targetQ, targetR, actors) or combat.getObstacleAtHex(targetQ, targetR, obstacles)
+    if centerTarget then
+        self:dealDamageToTarget(centerTarget, attacker, self.damage, actors, obstacles, sounds)
     end
-    
-    local healAmount = self.effects.heal
-    local oldHealth = targetActor.health
-    targetActor.health = math.min(targetActor.maxHealth, targetActor.health + healAmount)
-    local healed = targetActor.health - oldHealth
-    
-    print(string.format("%s heals %s for %d HP!", attacker.name, targetActor.name, healed))
-    
-    if sounds and sounds.heal then
-        sounds.heal:play()
+    local neighbors = hex:getNeighbors(targetQ, targetR)
+    for _, neighbor in ipairs(neighbors) do
+        if hex:isValidHex(neighbor.q, neighbor.r) then
+            local target = combat.getActorAtHex(neighbor.q, neighbor.r, actors) or combat.getObstacleAtHex(neighbor.q, neighbor.r, obstacles)
+            if target then
+                local cX, cY, cZ = axialToCube(targetQ, targetR)
+                local nX, nY, nZ = axialToCube(neighbor.q, neighbor.r)
+                local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
+                local pushQ, pushR = applyCubeStep(neighbor.q, neighbor.r, dirX, dirY, dirZ)
+                self:pushTargetToHex(target, neighbor.q, neighbor.r, pushQ, pushR, hex, actors, obstacles, sounds)
+            end
+        end
     end
-    
+    attacker.hasActedThisTurn = true
     return true, nil
 end
 
--- 5. Атака с пробиванием (игнорирует часть защиты)
-combat.PiercingAttack = setmetatable({}, combat.Attack)
-combat.PiercingAttack.__index = combat.PiercingAttack
+-- 6. AoE ТРИ ЦЕЛИ В НАПРАВЛЕНИИ (без изменений)
+combat.AoeDirectionalAttack = setmetatable({}, combat.Attack)
+combat.AoeDirectionalAttack.__index = combat.AoeDirectionalAttack
 
-function combat.PiercingAttack.new()
-    local self = combat.Attack.new(
-        "Piercing Strike",
-        "Ignores armor and deals direct damage",
-        1,
-        2,
-        {piercing = true}
-    )
-    return setmetatable(self, combat.PiercingAttack)
+function combat.AoeDirectionalAttack.new()
+    local self = combat.Attack.new("Cone Blast", "Deals 1 damage to the center and pushes 3 adjacent targets in a chosen direction", 1, 1, {})
+    return setmetatable(self, combat.AoeDirectionalAttack)
+end
+
+function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
+    debugPrint("=== AoeDirectionalAttack ===")
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance > self.range then
+        return false, "Target out of range!"
+    end
+    local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
+    local centerTarget = combat.getActorAtHex(targetQ, targetR, actors) or combat.getObstacleAtHex(targetQ, targetR, obstacles)
+    if centerTarget then
+        self:dealDamageToTarget(centerTarget, attacker, self.damage, actors, obstacles, sounds)
+    end
+    local neighborsInDirection = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
+    for _, neighbor in ipairs(neighborsInDirection) do
+        local target = combat.getActorAtHex(neighbor.q, neighbor.r, actors) or combat.getObstacleAtHex(neighbor.q, neighbor.r, obstacles)
+        if target then
+            local cX, cY, cZ = axialToCube(targetQ, targetR)
+            local nX, nY, nZ = axialToCube(neighbor.q, neighbor.r)
+            local dX, dY, dZ = nX - cX, nY - cY, nZ - cZ
+            local pushQ, pushR = applyCubeStep(neighbor.q, neighbor.r, dX, dY, dZ)
+            self:pushTargetToHex(target, neighbor.q, neighbor.r, pushQ, pushR, hex, actors, obstacles, sounds)
+        end
+    end
+    attacker.hasActedThisTurn = true
+    return true, nil
 end
 
 -- ============================================================
--- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+-- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (без изменений)
 -- ============================================================
 
--- Поиск актера на гексе
 function combat.getActorAtHex(q, r, actors)
     for _, actor in ipairs(actors) do
-        if actor.q == q and actor.r == r then
-            return actor
-        end
+        if actor.q == q and actor.r == r then return actor end
     end
     return nil
 end
 
--- Поиск препятствия на гексе
 function combat.getObstacleAtHex(q, r, obstacles)
     for _, obstacle in ipairs(obstacles) do
-        if obstacle.q == q and obstacle.r == r then
-            return obstacle
-        end
+        if obstacle.q == q and obstacle.r == r then return obstacle end
     end
     return nil
 end
 
--- Удаление актера
 function combat.removeActor(actor, actors)
     for i, a in ipairs(actors) do
-        if a == actor then
-            table.remove(actors, i)
-            return true
-        end
+        if a == actor then table.remove(actors, i); return true end
     end
     return false
 end
 
--- Удаление препятствия
 function combat.removeObstacle(obstacle, obstacles)
     for i, o in ipairs(obstacles) do
-        if o == obstacle then
-            table.remove(obstacles, i)
-            return true
-        end
+        if o == obstacle then table.remove(obstacles, i); return true end
     end
     return false
 end
 
--- Фабрика атак (для удобного создания)
-combat.attackFactory = {
-    melee = function() return combat.MeleeAttack.new() end,
-    ranged = function(damage, range) return combat.RangedAttack.new(damage or 1, range or 3) end,
-    fire = function() return combat.FireAttack.new() end,
-    heal = function(amount) return combat.HealAttack.new(amount or 2) end,
-    piercing = function() return combat.PiercingAttack.new() end,
-}
-
--- Создание атаки для персонажа
-function combat.createAttackForActor(attackType, params)
-    local factory = combat.attackFactory[attackType]
-    if factory then
-        return factory(params)
+function combat.Attack:dealDamageToTarget(target, attacker, damage, actors, obstacles, sounds)
+    debugPrint(string.format("dealDamageToTarget: %s, damage=%d", target.name or target.type, damage))
+    local isBuilding = target.isBuilding == true
+    if isBuilding then
+        local wasDestroyed = combat.handleBuildingDamage(target, damage, _G.globalHealth)
+        if wasDestroyed then combat.removeObstacle(target, obstacles) end
+        return wasDestroyed
+    else
+        target.health = target.health - damage
+        print(string.format("%s deals %d damage to %s!", attacker.name, damage, target.name or target.type))
+        if target.health <= 0 then
+            if target.maxHealth ~= nil then
+                combat.removeActor(target, actors)
+            else
+                combat.removeObstacle(target, obstacles)
+            end
+            print(target.name .. " has been defeated!")
+            return true
+        end
     end
-    return combat.MeleeAttack.new()
+    if sounds and sounds.attack then sounds.attack:play() end
+    return false
 end
 
--- ============================================================
--- ОСНОВНАЯ ФУНКЦИЯ АТАКИ (для вызова из main.lua)
--- ============================================================
-
-function combat.performAttack(attacker, targetQ, targetR, hex, actors, obstacles, sounds, attackOverride)
-    if attacker.isMoving then
-        return false, "Cannot attack while moving!"
+function combat.Attack:getNeighborsInDirection(centerQ, centerR, dirQ, dirR, hex)
+    debugPrint("--- getNeighborsInDirection ---")
+    local neighbors = {}
+    local allNeighbors = hex:getNeighbors(centerQ, centerR)
+    local centerX, centerY, centerZ = axialToCube(centerQ, centerR)
+    local targetX = centerX + dirQ
+    local targetZ = centerR + dirR
+    local targetY = -targetX - targetZ
+    local function directionScore(q, r)
+        local nX, nY, nZ = axialToCube(q, r)
+        return (nX - centerX) * (targetX - centerX) +
+               (nY - centerY) * (targetY - centerY) +
+               (nZ - centerZ) * (targetZ - centerZ)
     end
-    
-    if attacker.hasActedThisTurn then
-        return false, attacker.name .. " has already acted this turn!"
+    table.sort(allNeighbors, function(a, b)
+        return directionScore(a.q, a.r) > directionScore(b.q, b.r)
+    end)
+    for i = 1, math.min(3, #allNeighbors) do
+        if hex:isValidHex(allNeighbors[i].q, allNeighbors[i].r) then
+            table.insert(neighbors, allNeighbors[i])
+        end
     end
-    
-    -- Выбираем атаку (можно переопределить для разных юнитов)
-    local attack = attackOverride or attacker.attack or combat.MeleeAttack.new()
-    
-    -- Проверяем дальность
-    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    if distance > attack.range then
-        return false, "Target out of range! Max range: " .. attack.range
-    end
-    
-    -- Выполняем атаку
-    local success, message = attack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
-    
-    if not success then
-        print(message)
-        return false
-    end
-    
-    -- Помечаем атакующего как совершившего действие
-    attacker.hasActedThisTurn = true
-    
-    -- Очищаем историю действий (нельзя отменить атаку)
-    return true
+    return neighbors
 end
-
 
 function combat.handleBuildingDamage(building, damage, globalHealth)
     local oldHealth = building.health
     building.health = building.health - damage
-    local actualDamage = oldHealth - building.health  -- Сколько реально урона прошло
-    
-    -- Глобальное здоровье снижается на ВЕЛИЧИНУ РЕАЛЬНОГО УРОНА
-    -- (2 урона = -2 к глобальному здоровью)
-    local globalLoss = actualDamage
-    globalHealth.current = math.max(0, globalHealth.current - globalLoss)
-    
-    print(string.format("%s takes %d damage! (%d/%d HP)", 
-        building.name, actualDamage, math.max(0, building.health), building.maxHealth))
-    print(string.format("⚔ Global health reduced by %d! (%d/%d)", 
-        globalLoss, globalHealth.current, globalHealth.max))
-    
-    -- Проверяем, уничтожено ли строение
-    local wasDestroyed = building.health <= 0
-    
-    if wasDestroyed then
-        -- При уничтожении - просто сообщаем, глобальное здоровье уже уменьшено на actualDamage
-        print(string.format("%s has been destroyed!", building.name))
-        return true
-    end
-    
-    return false
+    local actualDamage = oldHealth - building.health
+    globalHealth.current = math.max(0, globalHealth.current - actualDamage)
+    print(string.format("%s takes %d damage! (%d/%d HP)", building.name, actualDamage, math.max(0, building.health), building.maxHealth))
+    print(string.format("⚔ Global health reduced by %d! (%d/%d)", actualDamage, globalHealth.current, globalHealth.max))
+    return building.health <= 0
+end
+
+-- ============================================================
+-- ФАБРИКА АТАК
+-- ============================================================
+
+combat.attackFactory = {
+    dash = function() return combat.DashAttack.new() end,
+    flip = function() return combat.FlipAttack.new() end,
+    shoot = function(range) return combat.ShootAttack.new(range or 5) end,
+    piercingShoot = function(range) return combat.PiercingShootAttack.new(range or 5) end,
+    aoePush = function() return combat.AoePushAttack.new() end,
+    aoeDirectional = function() return combat.AoeDirectionalAttack.new() end,
+}
+
+function combat.createAttackForActor(attackType, params)
+    local factory = combat.attackFactory[attackType]
+    return factory and factory(params) or combat.DashAttack.new()
+end
+
+function combat.performAttack(attacker, targetQ, targetR, hex, actors, obstacles, sounds, attackOverride)
+    debugPrint(string.format("\n========== PERFORM ATTACK =========="))
+    if attacker.isMoving then return false, "Cannot attack while moving!" end
+    if attacker.hasActedThisTurn then return false, attacker.name .. " has already acted this turn!" end
+    local attack = attackOverride or attacker.attack or combat.DashAttack.new()
+    local success, message = attack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
+    if not success then print(message); return false end
+    attacker.hasActedThisTurn = true
+    return true
 end
 
 return combat

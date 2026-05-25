@@ -15,8 +15,8 @@ environment.terrainTypes = {
     {name = "swamp", color = {0.35, 0.55, 0.3, 0.9}, darkColor = {0.25, 0.4, 0.2, 0.9}}
 }
 
--- Функция создания препятствия с здоровьем
-function environment.createObstacle(q, r, type, name, health, isPermanent)
+-- УНИФИЦИРОВАННАЯ ФУНКЦИЯ создания препятствия/строения
+function environment.createObstacle(q, r, type, name, health, isPermanent, isBuilding, globalHealthCost)
     local obstacle = {}
     obstacle.q = q
     obstacle.r = r
@@ -24,7 +24,9 @@ function environment.createObstacle(q, r, type, name, health, isPermanent)
     obstacle.name = name or "Obstacle"
     obstacle.maxHealth = health or 2
     obstacle.health = obstacle.maxHealth
-    obstacle.isPermanent = isPermanent or false --цель не исчезает на 0 хп
+    obstacle.isPermanent = isPermanent or false
+    obstacle.isBuilding = isBuilding or false
+    obstacle.globalHealthCost = globalHealthCost or health
     
     obstacle.sprite = love.graphics.newCanvas(32, 32)
     love.graphics.setCanvas(obstacle.sprite)
@@ -52,6 +54,22 @@ function environment.createObstacle(q, r, type, name, health, isPermanent)
         love.graphics.polygon("fill", 16, 6, 26, 26, 6, 26)
         love.graphics.setColor(0.9, 0.2, 0.2, 1)
         love.graphics.polygon("fill", 16, 8, 22, 22, 10, 22)
+    elseif obstacle.type == "house" then
+        love.graphics.setColor(0.7, 0.5, 0.3, 1)
+        love.graphics.rectangle("fill", 8, 12, 16, 16)
+        love.graphics.setColor(0.6, 0.3, 0.2, 1)
+        love.graphics.polygon("fill", 6, 12, 16, 4, 26, 12)
+        love.graphics.setColor(0.4, 0.3, 0.2, 1)
+        love.graphics.rectangle("fill", 14, 20, 8, 8)
+        love.graphics.setColor(0.8, 0.7, 0.4, 1)
+        love.graphics.rectangle("fill", 15, 21, 2, 3)
+    elseif obstacle.type == "tower" then
+        love.graphics.setColor(0.5, 0.5, 0.6, 1)
+        love.graphics.rectangle("fill", 10, 8, 12, 20)
+        love.graphics.setColor(0.6, 0.6, 0.7, 1)
+        love.graphics.polygon("fill", 8, 8, 16, 2, 24, 8)
+        love.graphics.setColor(0.7, 0.2, 0.2, 1)
+        love.graphics.rectangle("fill", 14, 14, 4, 6)
     end
     
     love.graphics.setColor(0, 0, 0, 0.5)
@@ -62,8 +80,8 @@ function environment.createObstacle(q, r, type, name, health, isPermanent)
     return obstacle
 end
 
--- Функция создания актера
-function environment.createActor(q, r, name, color, spriteType, isPlayable, maxHealth, moveRange, isPermanent)
+-- Функция создания актера (расширена для поддержки нескольких атак)
+function environment.createActor(q, r, name, color, spriteType, isPlayable, maxHealth, moveRange, isPermanent, attacks)
     local actor = {}
     actor.q = q
     actor.r = r
@@ -82,7 +100,7 @@ function environment.createActor(q, r, name, color, spriteType, isPlayable, maxH
     actor.color = color
     actor.pulse = 0
     actor.pulseSpeed = 0.5 + math.random() * 1.5
-    actor.isPermanent = isPermanent or false --цель не исчезает на 0 хп
+    actor.isPermanent = isPermanent or false
 
     actor.isPlayable = isPlayable or false
     actor.hasActedThisTurn = false
@@ -91,6 +109,10 @@ function environment.createActor(q, r, name, color, spriteType, isPlayable, maxH
     actor.maxHealth = maxHealth or 3
     actor.health = actor.maxHealth
     actor.moveRange = moveRange or 3
+    
+    -- Атаки (список атак, доступных персонажу)
+    actor.attacks = attacks or {}
+    actor.currentAttackIndex = 1  -- индекс выбранной атаки
     
     -- Создаем спрайт
     actor.sprite = love.graphics.newCanvas(32, 32)
@@ -114,6 +136,8 @@ function environment.createActor(q, r, name, color, spriteType, isPlayable, maxH
         end
     elseif spriteType == "triangle" then
         love.graphics.polygon("line", 16, 6, 26, 26, 6, 26)
+    elseif spriteType == "circle" then
+        love.graphics.circle("line", 16, 16, 12)
     end
     
     love.graphics.circle("line", 16, 16, 14)
@@ -178,76 +202,125 @@ function environment.generateTerrainMap(hex)
     return terrainMap
 end
 
--- Создание начальных актеров
+-- ============================================================
+-- СОЗДАНИЕ АТАК ДЛЯ ПЕРСОНАЖЕЙ
+-- ============================================================
+
+-- Импортируем combat для создания атак
+local function getCombat()
+    return require("combat")
+end
+
+function environment.getWarriorAttacks()
+    local combat = getCombat()
+    return {
+        {
+            name = "⚔ Shield Bash",
+            description = "Knocks enemy back with a shield",
+            attack = combat.DashAttack.new(),
+            icon = "🛡"
+        },
+        {
+            name = "💪 Mighty Flip",
+            description = "Flips enemy behind you",
+            attack = combat.FlipAttack.new(),
+            icon = "🔄"
+        }
+    }
+end
+
+function environment.getMageAttacks()
+    local combat = getCombat()
+    return {
+        {
+            name = "✨ Force Bolt",
+            description = "Shoots a projectile that pushes the first target",
+            attack = combat.ShootAttack.new(6),
+            icon = "⚡"
+        },
+        {
+            name = "🏹 Piercing Arrow",
+            description = "Passes through first target, hits second",
+            attack = combat.PiercingShootAttack.new(5),
+            icon = "➡"
+        }
+    }
+end
+
+function environment.getRogueAttacks()
+    local combat = getCombat()
+    return {
+        {
+            name = "AoE Direct",
+            description = "AoE Direct",
+            attack = combat.AoeDirectionalAttack.new(5),
+            icon = "➡"
+        },
+        {
+            name = "Pure AoE",
+            description = "Pure AoE forward in a straight line",
+            attack = combat.AoePushAttack.new(),
+            icon = "⚡"
+        }
+    }
+end
+
+-- ============================================================
+-- СОЗДАНИЕ НАЧАЛЬНЫХ АКТЕРОВ (С АТАКАМИ)
+-- ============================================================
+
 function environment.createInitialActors()
     local actors = {}
     
-    table.insert(actors, environment.createActor(3, 3, "Warrior", {1, 0.2, 0.2, 1}, "cross", true, 5, 2, true))
-    table.insert(actors, environment.createActor(6, 4, "Mage", {0.2, 0.2, 1, 1}, "star", true, 2, 5, true))
-    table.insert(actors, environment.createActor(4, 1, "Rogue", {0.2, 0.8, 0.2, 1}, "triangle", true, 3, 4, true))
-    table.insert(actors, environment.createActor(4, 2, "Rogue", {0.2, 0.8, 0.2, 1}, "triangle", true, 3, 4, true))
+    -- ВОИН (Warrior) - танк с щитом и переворотом
+    table.insert(actors, environment.createActor(3, 3, "Warrior", {1, 0.2, 0.2, 1}, "cross", true, 6, 2, true, environment.getWarriorAttacks()))
+    
+    -- МАГ (Mage) - дальнобойщик с шоковой волной
+    table.insert(actors, environment.createActor(6, 4, "Mage", {0.2, 0.2, 1, 1}, "star", true, 3, 4, true, environment.getMageAttacks()))
+    
+    -- РАЗБОЙНИК 1 (Rogue) - с пронзающей стрелой и рывком
+    table.insert(actors, environment.createActor(4, 1, "Rogue", {0.2, 0.8, 0.2, 1}, "triangle", true, 4, 4, true, environment.getRogueAttacks()))
+    
+    -- РАЗБОЙНИК 2 (Rogue) - такой же
+    table.insert(actors, environment.createActor(4, 2, "Rogue", {0.2, 0.8, 0.2, 1}, "triangle", true, 4, 4, true, environment.getRogueAttacks()))
 
-    -- Враги
-    table.insert(actors, environment.createActor(3, 5, "Goblin", {0.5, 0.3, 0.1, 1}, "circle", false, 3, 3))
-    table.insert(actors, environment.createActor(7, 2, "Orc", {0.6, 0.2, 0.2, 1}, "cross", false, 4, 2))
+    -- ВРАГ: ГОБЛИН (Goblin)
+    table.insert(actors, environment.createActor(3, 5, "Goblin", {0.5, 0.3, 0.1, 1}, "circle", false, 3, 3, false))
+    
+    -- ВРАГ: ОРК (Orc)
+    table.insert(actors, environment.createActor(7, 2, "Orc", {0.6, 0.2, 0.2, 1}, "cross", false, 5, 2, false))
     
     return actors
 end
 
--- Создание начальных препятствий
-function environment.createInitialObstacles()
+-- Создание начальных препятствий и строений
+function environment.createInitialObstaclesAndBuildings()
     local obstacles = {}
     
-    table.insert(obstacles, environment.createObstacle(3, 3, "rock", "Big Rock", 3))
-    table.insert(obstacles, environment.createObstacle(5, 2, "tree", "Oak Tree", 2))
-    table.insert(obstacles, environment.createObstacle(1, 4, "wall", "Stone Wall", 4))
-    table.insert(obstacles, environment.createObstacle(7, 5, "spike", "Spike Trap", 1))
-    table.insert(obstacles, environment.createObstacle(4, 4, "tree", "Pine Tree", 2))
-    table.insert(obstacles, environment.createObstacle(2, 5, "rock", "Small Rock", 2))
+    -- Обычные препятствия
+    table.insert(obstacles, environment.createObstacle(3, 3, "rock", "Big Rock", 3, false, false))
+    table.insert(obstacles, environment.createObstacle(5, 2, "tree", "Oak Tree", 2, false, false))
+    table.insert(obstacles, environment.createObstacle(1, 4, "wall", "Stone Wall", 4, false, false))
+    table.insert(obstacles, environment.createObstacle(7, 5, "spike", "Spike Trap", 1, false, false))
+    table.insert(obstacles, environment.createObstacle(4, 4, "tree", "Pine Tree", 2, false, false))
+    table.insert(obstacles, environment.createObstacle(2, 5, "rock", "Small Rock", 2, false, false))
+    
+    -- Строения
+    table.insert(obstacles, environment.createObstacle(2, 2, "house", "Small House", 3, false, true, 3))
+    table.insert(obstacles, environment.createObstacle(5, 5, "house", "Small House", 4, false, true, 4))
+    table.insert(obstacles, environment.createObstacle(7, 3, "house", "Small House", 2, false, true, 2))
+    table.insert(obstacles, environment.createObstacle(1, 6, "tower", "Watch Tower", 5, false, true, 5))
     
     return obstacles
 end
 
--- Функция создания строения (подвид препятствия)
-function environment.createBuilding(q, r, buildingType, name, health, globalHealthCost)
-    local building = environment.createObstacle(q, r, buildingType, name, health, false)
-    building.isBuilding = true  -- Флаг, что это строение
-    building.globalHealthCost = globalHealthCost or health  -- Сколько глобального здоровья теряется при разрушении
-    
-    -- Переопределяем спрайт для строений
-    building.sprite = love.graphics.newCanvas(32, 32)
-    love.graphics.setCanvas(building.sprite)
-    
-    if buildingType == "house" then
-        -- Домик
-        love.graphics.setColor(0.7, 0.5, 0.3, 1)
-        love.graphics.rectangle("fill", 8, 12, 16, 16)
-        love.graphics.setColor(0.6, 0.3, 0.2, 1)
-        love.graphics.polygon("fill", 6, 12, 16, 4, 26, 12)
-        love.graphics.setColor(0.4, 0.3, 0.2, 1)
-        love.graphics.rectangle("fill", 14, 20, 8, 8)
-        love.graphics.setColor(0.8, 0.7, 0.4, 1)
-        love.graphics.rectangle("fill", 15, 21, 2, 3)
-    end
-    
-    love.graphics.setColor(0, 0, 0, 0.5)
-    love.graphics.setLineWidth(1)
-    love.graphics.circle("line", 16, 16, 14)
-    love.graphics.setCanvas()
-    
-    return building
+-- Для совместимости
+function environment.createInitialObstacles()
+    return environment.createInitialObstaclesAndBuildings()
 end
 
--- Добавляем начальные строения
 function environment.createInitialBuildings()
-    local buildings = {}
-    
-    table.insert(buildings, environment.createBuilding(2, 2, "house", "Small House", 3, 3))
-    table.insert(buildings, environment.createBuilding(5, 5, "house", "Small House", 4, 4))
-    table.insert(buildings, environment.createBuilding(7, 3, "house", "Small House", 2, 2))
-    table.insert(buildings, environment.createBuilding(1, 6, "house", "Small House", 5, 5))
-    
-    return buildings
+    return {}
 end
 
 return environment
