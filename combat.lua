@@ -28,7 +28,6 @@ function combat.Attack:execute(attacker, targetQ, targetR, hex, actors, obstacle
     return self:dealDamageAndPush(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
 end
 
--- Стандартный метод: урон + отталкивание
 function combat.Attack:dealDamageAndPush(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
     local targetActor = combat.getActorAtHex(targetQ, targetR, actors)
     local targetObstacle = combat.getObstacleAtHex(targetQ, targetR, obstacles)
@@ -39,13 +38,28 @@ function combat.Attack:dealDamageAndPush(attacker, targetQ, targetR, hex, actors
     
     local target = targetActor or targetObstacle
     
+    -- Проверяем, является ли цель строением
+    local isBuilding = target.isBuilding == true
+    
     -- Наносим урон
-    target.health = target.health - self.damage
-    print(string.format("%s attacks %s for %d damage!", attacker.name, target.name or target.type, self.damage))
+    if isBuilding then
+        -- Для строений используем специальную обработку
+        -- Требуется передать globalHealth из main.lua
+        -- Для этого нужно модифицировать вызов или сделать globalHealth глобальной
+        local wasDestroyed = combat.handleBuildingDamage(target, self.damage, _G.globalHealth)
+        if wasDestroyed then
+            combat.removeObstacle(target, obstacles)
+        end
+    else
+        target.health = target.health - self.damage
+        print(string.format("%s attacks %s for %d damage!", attacker.name, target.name or target.type, self.damage))
+    end
     
     if sounds and sounds.attack then
         sounds.attack:play()
     end
+    
+    local wasActorDead = targetActor and target.health <= 0
     
     -- Проверка на смерть цели
     local isDead = false
@@ -53,7 +67,7 @@ function combat.Attack:dealDamageAndPush(attacker, targetQ, targetR, hex, actors
         if targetActor then
             combat.removeActor(targetActor, actors)
             print(targetActor.name .. " has been defeated!")
-        else
+        elseif not isBuilding then
             combat.removeObstacle(targetObstacle, obstacles)
             print(targetObstacle.name .. " has been destroyed!")
         end
@@ -62,14 +76,15 @@ function combat.Attack:dealDamageAndPush(attacker, targetQ, targetR, hex, actors
     
     -- Отталкивание (только если цель выжила или это актер)
     if not isDead or targetActor then
-        self:pushTarget(attacker, targetQ, targetR, target, hex, actors, obstacles, sounds)
+        self:pushTarget(attacker, targetQ, targetR, target, hex, actors, obstacles, sounds, wasActorDead)
     end
     
     return true, nil
 end
 
 -- Отталкивание цели
-function combat.Attack:pushTarget(attacker, targetQ, targetR, target, hex, actors, obstacles, sounds)
+
+function combat.Attack:pushTarget(attacker, targetQ, targetR, target, hex, actors, obstacles, sounds, wasDeadBeforePush)
     -- Определяем направление отталкивания через кубические координаты
     local function axialToCube(q, r)
         local x = q
@@ -96,11 +111,39 @@ function combat.Attack:pushTarget(attacker, targetQ, targetR, target, hex, actor
     
     local targetActor = combat.getActorAtHex(target.q, target.r, actors)
     
+    -- Если цель была актёром и умерла прямо перед отталкиванием
+    if wasDeadBeforePush and targetActor == nil then
+        self:applyDeathPushDamage(attacker, targetQ, targetR, pushTargetQ, pushTargetR, hex, actors, obstacles, sounds)
+        return
+    end
+    
+    -- ЕСЛИ ЦЕЛЬ - СТРОЕНИЕ
+    if target.isBuilding then
+        if target.health > 0 then
+            local oldHealth = target.health
+            target.health = target.health - 1
+            print(target.name .. " takes additional 1 damage from the force of the blow!")
+            
+            -- Глобальное здоровье снижается на 1 от дополнительного урона
+            if _G.globalHealth then
+                _G.globalHealth.current = math.max(0, _G.globalHealth.current - 1)
+                print(string.format("⚔ Global health reduced by 1 from impact! (%d/%d)", 
+                    _G.globalHealth.current, _G.globalHealth.max))
+            end
+            
+            if target.health <= 0 then
+                -- При разрушении от дополнительного урона
+                combat.removeObstacle(target, obstacles)
+                print(target.name .. " has been destroyed!")
+            end
+        end
+        return
+    end
+    
+    -- Далее существующий код для актеров и обычных препятствий
     if targetActor then
-        -- Отталкивание актера
         self:pushActor(targetActor, pushTargetQ, pushTargetR, hex, actors, obstacles, sounds)
     else
-        -- Отталкивание препятствия (препятствия не двигаются, получают доп. урон)
         if target.health > 0 then
             target.health = target.health - 1
             print(target.name .. " takes additional 1 damage from the force of the blow!")
@@ -110,6 +153,34 @@ function combat.Attack:pushTarget(attacker, targetQ, targetR, target, hex, actor
                 print(target.name .. " has been destroyed!")
             end
         end
+    end
+end
+
+-- Предсмертный урон от отталкивания (когда цель уже мертва, но толкает врага)
+function combat.Attack:applyDeathPushDamage(attacker, deadQ, deadR, pushQ, pushR, hex, actors, obstacles, sounds)
+    -- Находим цель, которая должна получить предсмертный удар
+    -- (это актёр или препятствие на клетке pushQ, pushR)
+    local targetActor = combat.getActorAtHex(pushQ, pushR, actors)
+    local targetObstacle = combat.getObstacleAtHex(pushQ, pushR, obstacles)
+    
+    if targetActor and targetActor ~= attacker then
+        targetActor.health = targetActor.health - 1
+        print(targetActor.name .. " takes 1 damage from the death throes!")
+        if targetActor.health <= 0 then
+            combat.removeActor(targetActor, actors)
+            print(targetActor.name .. " has been defeated!")
+        end
+    elseif targetObstacle then
+        targetObstacle.health = targetObstacle.health - 1
+        print(targetObstacle.name .. " is damaged by the shockwave!")
+        if targetObstacle.health <= 0 then
+            combat.removeObstacle(targetObstacle, obstacles)
+            print(targetObstacle.name .. " has been destroyed!")
+        end
+    end
+    
+    if sounds and sounds.collision then
+        sounds.collision:play()
     end
 end
 
@@ -451,6 +522,34 @@ function combat.performAttack(attacker, targetQ, targetR, hex, actors, obstacles
     
     -- Очищаем историю действий (нельзя отменить атаку)
     return true
+end
+
+
+function combat.handleBuildingDamage(building, damage, globalHealth)
+    local oldHealth = building.health
+    building.health = building.health - damage
+    local actualDamage = oldHealth - building.health  -- Сколько реально урона прошло
+    
+    -- Глобальное здоровье снижается на ВЕЛИЧИНУ РЕАЛЬНОГО УРОНА
+    -- (2 урона = -2 к глобальному здоровью)
+    local globalLoss = actualDamage
+    globalHealth.current = math.max(0, globalHealth.current - globalLoss)
+    
+    print(string.format("%s takes %d damage! (%d/%d HP)", 
+        building.name, actualDamage, math.max(0, building.health), building.maxHealth))
+    print(string.format("⚔ Global health reduced by %d! (%d/%d)", 
+        globalLoss, globalHealth.current, globalHealth.max))
+    
+    -- Проверяем, уничтожено ли строение
+    local wasDestroyed = building.health <= 0
+    
+    if wasDestroyed then
+        -- При уничтожении - просто сообщаем, глобальное здоровье уже уменьшено на actualDamage
+        print(string.format("%s has been destroyed!", building.name))
+        return true
+    end
+    
+    return false
 end
 
 return combat

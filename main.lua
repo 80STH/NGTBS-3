@@ -1,11 +1,18 @@
 -- main.lua
-combat = require("combat")
+combat = require("combat") --почему для этого нужна переменная?
 require("hexgrid")
 require("environment")
 
 function love.load()
     -- Настройки гексагональной сетки
-    hex = require("hexgrid").new(70, 9, 7)
+    hex = require("hexgrid").new(60, 11, 9)
+
+    -- ГЛОБАЛЬНЫЙ СТОЛБ ЗДОРОВЬЯ
+    globalHealth = {
+        current = 5,
+        max = 5,
+        initial = 5  -- Для восстановления в начале игры
+    }
     
     -- Инициализация окружения из отдельного файла
     local env = require("environment")
@@ -16,6 +23,12 @@ function love.load()
     -- Создание актеров и препятствий
     actors = env.createInitialActors()
     obstacles = env.createInitialObstacles()
+    buildings = env.createInitialBuildings()  -- Добавляем строения
+
+    -- Объединяем препятствия и строения для удобства обработки
+    for _, building in ipairs(buildings) do
+        table.insert(obstacles, building)
+    end
     
     -- Глобальный стек действий для отмены
     actionHistory = {}
@@ -153,11 +166,24 @@ function undoLastAction()
         return false
     end
     
-    -- Проверяем, свободна ли начальная позиция
-    if isPositionOccupied(lastAction.fromQ, lastAction.fromR, currentActor) then
-        print("Cannot undo: starting position is occupied!")
-        return false
+function isPositionOccupied(q, r, movingActor)
+    -- Союзные актеры не могут занимать клетки на краю карты
+    if movingActor and movingActor.isPlayable and isEdgeCell(q, r) then
+        return true  -- Клетка считается "занятой" для союзников
     end
+    
+    for _, actor in ipairs(actors) do
+        if actor ~= movingActor and actor.q == q and actor.r == r then
+            return true
+        end
+    end
+    for _, obstacle in ipairs(obstacles) do
+        if obstacle.q == q and obstacle.r == r then
+            return true
+        end
+    end
+    return false
+end
     
     -- Откатываем позицию актера
     currentActor.q = lastAction.fromQ
@@ -296,6 +322,11 @@ function findPath(startQ, startR, targetQ, targetR, movingActor)
             local neighborKey = neighbor.q .. "," .. neighbor.r
             
             if not closedSet[neighborKey] and hex:isValidHex(neighbor.q, neighbor.r) then
+                -- Союзники не могут проходить через край карты
+                if movingActor.isPlayable and isEdgeCell(neighbor.q, neighbor.r) then
+                    goto continue
+                end
+                
                 if not isPositionOccupied(neighbor.q, neighbor.r, movingActor) then
                     local tentativeG = current.g + 1
                     
@@ -313,6 +344,7 @@ function findPath(startQ, startR, targetQ, targetR, movingActor)
                     end
                 end
             end
+            ::continue::
         end
     end
     
@@ -325,6 +357,12 @@ function performMove(actor, targetQ, targetR)
     end
     
     if actor.q == targetQ and actor.r == targetR then
+        return false
+    end
+    
+    -- Союзные актеры не могут двигаться на край карты
+    if actor.isPlayable and isEdgeCell(targetQ, targetR) then
+        print(actor.name .. " cannot move to the edge of the map!")
         return false
     end
     
@@ -374,38 +412,45 @@ function drawMovementRange(actor)
         return
     end
     
-    -- Для каждой клетки на карте проверяем, может ли актер до нее дойти (кандидат на оптимизацию?)
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
             -- Пропускаем текущую позицию актера
             if not (q == actor.q and r == actor.r) then
+                -- Союзники не могут ходить на край
+                if actor.isPlayable and isEdgeCell(q, r) then
+                    -- Показываем как запрещенную зону
+                    local x, y = hex:hexToPixel(q, r)
+                    local vertices = hex:drawHexagon(x, y, hex.radius)
+                    love.graphics.setColor(0.5, 0.2, 0.2, 0.3)
+                    love.graphics.polygon("fill", vertices)
+                    love.graphics.setColor(1, 0.5, 0.5, 0.8)
+                    love.graphics.print("⚠", x - 5, y - 8)
+                    goto continue
+                end
+                
                 -- Ищем путь до клетки
                 local path = findPath(actor.q, actor.r, q, r, actor)
                 
                 if path and #path > 0 and #path <= actor.moveRange then
-                    -- Проверяем, не занята ли целевая клетка (но показываем её, если она занята?)
                     local isOccupied = isPositionOccupied(q, r, actor)
                     
                     local x, y = hex:hexToPixel(q, r)
                     local vertices = hex:drawHexagon(x, y, hex.radius)
                     
                     if isOccupied then
-                        -- Занятые клетки подсвечиваем красным (недоступны для перемещения)
                         love.graphics.setColor(0.8, 0.2, 0.2, 0.3)
                         love.graphics.polygon("fill", vertices)
                         love.graphics.setColor(1, 1, 1, 0.5)
                         love.graphics.print("🚫", x - 5, y - 8)
                     else
-                        -- Доступные клетки подсвечиваем зеленым
                         love.graphics.setColor(0.3, 0.8, 0.3, 0.35)
                         love.graphics.polygon("fill", vertices)
-                        
-                        -- Отображаем количество шагов до клетки
                         love.graphics.setColor(1, 1, 1, 0.8)
                         love.graphics.print(#path, x - 5, y - 5)
                     end
                 end
             end
+            ::continue::
         end
     end
 end
@@ -581,6 +626,9 @@ function love.update(dt)
         actor.pulse = actor.pulse + dt * actor.pulseSpeed
     end
     
+    -- Проверяем край карты каждый кадр (убивает мгновенно)
+    killPlayableAtEdge()
+    
     local mouseX, mouseY = love.mouse.getPosition()
     hex.hoverQ, hex.hoverR = hex:pixelToHex(mouseX, mouseY)
     
@@ -591,6 +639,13 @@ function love.update(dt)
     local mouseInEndTurn = mouseX >= endTurnButton.x and mouseX <= endTurnButton.x + endTurnButton.width and
                          mouseY >= endTurnButton.y and mouseY <= endTurnButton.y + endTurnButton.height
     endTurnButton.isHovered = mouseInEndTurn
+
+    -- Проверка поражения
+    if globalHealth.current <= 0 then
+        print("GAME OVER!")
+        -- Можно добавить экран поражения
+        --love.event.quit()  -- или показать сообщение
+    end
 end
 
 function drawHexGrid()
@@ -850,6 +905,7 @@ end
 
 function love.draw()
     drawHexGrid()
+    drawEdgeWarning() 
     
     for _, obstacle in ipairs(obstacles) do
         drawObstacle(obstacle)
@@ -870,6 +926,7 @@ function love.draw()
     
     drawUndoButton()
     drawEndTurnButton()
+    drawGlobalHealthBar()
     
     love.graphics.setColor(1, 1, 1, 1)
     
@@ -964,6 +1021,82 @@ function love.mousepressed(x, y, button)
                 print(selectedActor.name .. " is currently moving!")
             else
                 performAttack(selectedActor, targetQ, targetR)
+            end
+        end
+    end
+end
+
+-- Проверка, является ли клетка краем карты
+function isEdgeCell(q, r)
+    return q == 0 or q == hex.gridWidth - 1 or r == 0 or r == hex.gridHeight - 1
+end
+
+function drawEdgeWarning()
+    for q = 0, hex.gridWidth - 1 do
+        for r = 0, hex.gridHeight - 1 do
+            if isEdgeCell(q, r) then
+                local x, y = hex:hexToPixel(q, r)
+                local vertices = hex:drawHexagon(x, y, hex.radius)
+                love.graphics.setColor(1, 0.2, 0.2, 0.2)
+                love.graphics.polygon("fill", vertices)
+                love.graphics.setColor(1, 0.3, 0.3, 0.6)
+                love.graphics.setLineWidth(2)
+                love.graphics.polygon("line", vertices)
+                love.graphics.setLineWidth(1)
+                
+                -- Иконка опасности
+                love.graphics.setColor(1, 0.5, 0.5, 0.9)
+                love.graphics.print("⚠", x - 5, y - 8)
+            end
+        end
+    end
+end
+
+function drawGlobalHealthBar()
+    local barWidth = 200
+    local barHeight = 20
+    local x = love.graphics.getWidth() - barWidth - 10
+    local y = 10
+    local healthPercent = globalHealth.current / globalHealth.max
+    
+    -- Фон
+    love.graphics.setColor(0.3, 0.3, 0.3, 0.8)
+    love.graphics.rectangle("fill", x, y, barWidth, barHeight, 5)
+    
+    -- Заполнение
+    if healthPercent > 0.6 then
+        love.graphics.setColor(0.2, 0.8, 0.2, 0.8)
+    elseif healthPercent > 0.3 then
+        love.graphics.setColor(0.8, 0.8, 0.2, 0.8)
+    else
+        love.graphics.setColor(0.8, 0.2, 0.2, 0.8)
+    end
+    love.graphics.rectangle("fill", x, y, barWidth * healthPercent, barHeight, 5)
+    
+    -- Рамка
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.rectangle("line", x, y, barWidth, barHeight, 5)
+    
+    -- Текст
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print("Global Health: " .. globalHealth.current .. "/" .. globalHealth.max, 
+                       x + 10, y + 3)
+end
+
+-- Проверка, находится ли актер на краю карты
+function isAtEdge(actor)
+    return actor.q == 0 or actor.q == hex.gridWidth - 1 or actor.r == 0 or actor.r == hex.gridHeight - 1
+end
+
+-- Убить союзного актера на краю карты
+function killPlayableAtEdge()
+    for i = #actors, 1, -1 do
+        local actor = actors[i]
+        if actor.isPlayable and isAtEdge(actor) then
+            print(actor.name .. " is on the edge of the map and falls to their death!")
+            table.remove(actors, i)
+            if sounds.death then
+                sounds.death:play()
             end
         end
     end

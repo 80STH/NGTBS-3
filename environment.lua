@@ -182,7 +182,7 @@ end
 function environment.createInitialActors()
     local actors = {}
     
-    table.insert(actors, environment.createActor(0, 0, "Warrior", {1, 0.2, 0.2, 1}, "cross", true, 5, 2, true))
+    table.insert(actors, environment.createActor(3, 3, "Warrior", {1, 0.2, 0.2, 1}, "cross", true, 5, 2, true))
     table.insert(actors, environment.createActor(6, 4, "Mage", {0.2, 0.2, 1, 1}, "star", true, 2, 5, true))
     table.insert(actors, environment.createActor(4, 1, "Rogue", {0.2, 0.8, 0.2, 1}, "triangle", true, 3, 4, true))
     table.insert(actors, environment.createActor(4, 2, "Rogue", {0.2, 0.8, 0.2, 1}, "triangle", true, 3, 4, true))
@@ -206,6 +206,48 @@ function environment.createInitialObstacles()
     table.insert(obstacles, environment.createObstacle(2, 5, "rock", "Small Rock", 2))
     
     return obstacles
+end
+
+-- Функция создания строения (подвид препятствия)
+function environment.createBuilding(q, r, buildingType, name, health, globalHealthCost)
+    local building = environment.createObstacle(q, r, buildingType, name, health, false)
+    building.isBuilding = true  -- Флаг, что это строение
+    building.globalHealthCost = globalHealthCost or health  -- Сколько глобального здоровья теряется при разрушении
+    
+    -- Переопределяем спрайт для строений
+    building.sprite = love.graphics.newCanvas(32, 32)
+    love.graphics.setCanvas(building.sprite)
+    
+    if buildingType == "house" then
+        -- Домик
+        love.graphics.setColor(0.7, 0.5, 0.3, 1)
+        love.graphics.rectangle("fill", 8, 12, 16, 16)
+        love.graphics.setColor(0.6, 0.3, 0.2, 1)
+        love.graphics.polygon("fill", 6, 12, 16, 4, 26, 12)
+        love.graphics.setColor(0.4, 0.3, 0.2, 1)
+        love.graphics.rectangle("fill", 14, 20, 8, 8)
+        love.graphics.setColor(0.8, 0.7, 0.4, 1)
+        love.graphics.rectangle("fill", 15, 21, 2, 3)
+    end
+    
+    love.graphics.setColor(0, 0, 0, 0.5)
+    love.graphics.setLineWidth(1)
+    love.graphics.circle("line", 16, 16, 14)
+    love.graphics.setCanvas()
+    
+    return building
+end
+
+-- Добавляем начальные строения
+function environment.createInitialBuildings()
+    local buildings = {}
+    
+    table.insert(buildings, environment.createBuilding(2, 2, "house", "Small House", 3, 3))
+    table.insert(buildings, environment.createBuilding(5, 5, "house", "Small House", 4, 4))
+    table.insert(buildings, environment.createBuilding(7, 3, "house", "Small House", 2, 2))
+    table.insert(buildings, environment.createBuilding(1, 6, "house", "Small House", 5, 5))
+    
+    return buildings
 end
 
 return environment
