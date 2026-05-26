@@ -4,6 +4,10 @@
 
 local combat = {}
 
+combat.axialToCube = axialToCube
+combat.cubeToAxial = cubeToAxial
+combat.applyCubeStep = applyCubeStep
+
 -- ============================================================
 -- КОНВЕРТАЦИЯ КООРДИНАТ (кубические <-> осевые)
 -- ============================================================
@@ -154,17 +158,22 @@ end
 -- ОТТАЛКИВАНИЕ (с кубическим шагом)
 -- ============================================================
 
--- Отталкивание цели в направлении (кубический шаг)
-function combat.Attack:pushTargetInDirection(target, fromQ, fromR, stepX, stepY, stepZ, hex, actors, obstacles, sounds)
+-- Отталкивание цели в направлении (с анимацией)
+function combat.Attack:pushTargetInDirection(target, fromQ, fromR, stepX, stepY, stepZ, hex, actors, obstacles, sounds, onComplete)
     local pushQ, pushR = applyCubeStep(fromQ, fromR, stepX, stepY, stepZ)
     debugPrint(string.format("Pushing %s from (%d,%d) to (%d,%d)", target.name or target.type, fromQ, fromR, pushQ, pushR))
-    self:pushTargetToHex(target, fromQ, fromR, pushQ, pushR, hex, actors, obstacles, sounds)
+    self:pushTargetToHex(target, fromQ, fromR, pushQ, pushR, hex, actors, obstacles, sounds, onComplete)
 end
 
--- Отталкивание цели на конкретную клетку (без изменений, логика корректна)
-function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, actors, obstacles, sounds)
+-- Отталкивание цели на конкретную клетку (с анимацией)
+function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, actors, obstacles, sounds, onComplete)
     local isActor = target.maxHealth ~= nil and target.isBuilding ~= true
-
+    local wasDestroyed = false
+    
+    local function finishPush()
+        if onComplete then onComplete(wasDestroyed) end
+    end
+    
     if not hex:isValidHex(toQ, toR) then
         debugPrint("Target cell is outside map!")
         if isActor then
@@ -174,51 +183,73 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, acto
             if target.health <= 0 then
                 combat.removeActor(target, actors)
                 print(target.name .. " has been defeated!")
+                wasDestroyed = true
             end
         end
+        finishPush()
         return
     end
-
+    
     local obstacleAtPush = combat.getObstacleAtHex(toQ, toR, obstacles)
     local actorAtPush = combat.getActorAtHex(toQ, toR, actors)
-
+    
     if not obstacleAtPush and not actorAtPush then
-        debugPrint("Target cell is free, moving")
+        debugPrint("Target cell is free, moving with animation")
         if isActor then
-            target.q = toQ
-            target.r = toR
-            print(target.name .. " is pushed back!")
+            -- Добавляем анимацию перемещения
+            combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
+                print(target.name .. " is pushed back!")
+                finishPush()
+            end)
+        else
+            finishPush()
         end
     elseif obstacleAtPush then
         debugPrint(string.format("Collision with obstacle: %s", obstacleAtPush.name))
         if isActor then
-            obstacleAtPush.health = obstacleAtPush.health - 1
-            target.health = target.health - 1
-            print(target.name .. " crashes into " .. obstacleAtPush.name .. "! Both take 1 damage!")
-            if sounds and sounds.collision then sounds.collision:play() end
-            if obstacleAtPush.health <= 0 then
-                combat.removeObstacle(obstacleAtPush, obstacles)
-                print(obstacleAtPush.name .. " has been destroyed!")
-            end
-            if target.health <= 0 then
-                combat.removeActor(target, actors)
-                print(target.name .. " has been defeated!")
-            end
+            -- Сначала добавляем анимацию к цели
+            combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
+                obstacleAtPush.health = obstacleAtPush.health - 1
+                target.health = target.health - 1
+                print(target.name .. " crashes into " .. obstacleAtPush.name .. "! Both take 1 damage!")
+                if sounds and sounds.collision then sounds.collision:play() end
+                
+                if obstacleAtPush.health <= 0 then
+                    combat.removeObstacle(obstacleAtPush, obstacles)
+                    print(obstacleAtPush.name .. " has been destroyed!")
+                end
+                if target.health <= 0 then
+                    combat.removeActor(target, actors)
+                    print(target.name .. " has been defeated!")
+                    wasDestroyed = true
+                end
+                finishPush()
+            end)
+        else
+            finishPush()
         end
     elseif actorAtPush and actorAtPush ~= target then
         debugPrint(string.format("Collision with actor: %s", actorAtPush.name))
-        actorAtPush.health = actorAtPush.health - 1
-        target.health = target.health - 1
-        print(target.name .. " crashes into " .. actorAtPush.name .. "! Both take 1 damage!")
-        if sounds and sounds.collision then sounds.collision:play() end
-        if target.health <= 0 then
-            combat.removeActor(target, actors)
-            print(target.name .. " has been defeated!")
-        end
-        if actorAtPush.health <= 0 then
-            combat.removeActor(actorAtPush, actors)
-            print(actorAtPush.name .. " has been defeated!")
-        end
+        -- Добавляем анимацию для цели
+        combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
+            actorAtPush.health = actorAtPush.health - 1
+            target.health = target.health - 1
+            print(target.name .. " crashes into " .. actorAtPush.name .. "! Both take 1 damage!")
+            if sounds and sounds.collision then sounds.collision:play() end
+            
+            if target.health <= 0 then
+                combat.removeActor(target, actors)
+                print(target.name .. " has been defeated!")
+                wasDestroyed = true
+            end
+            if actorAtPush.health <= 0 then
+                combat.removeActor(actorAtPush, actors)
+                print(actorAtPush.name .. " has been defeated!")
+            end
+            finishPush()
+        end)
+    else
+        finishPush()
     end
 end
 
@@ -248,7 +279,11 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, actors, obst
         return false, "No target in that direction!"
     end
     self:dealDamageToTarget(firstTarget, attacker, self.damage, actors, obstacles, sounds)
-    self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, actors, obstacles, sounds)
+        -- Вместо прямого вызова pushTargetInDirection, передаём колбэк
+    self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, actors, obstacles, sounds, function()
+        attacker.hasActedThisTurn = true
+        debugPrint("=== DashAttack complete ===")
+    end)
     attacker.hasActedThisTurn = true
     debugPrint("=== DashAttack complete ===")
     return true, nil
@@ -561,6 +596,183 @@ function combat.handleBuildingDamage(building, damage, globalHealth)
 end
 
 -- ============================================================
+-- 7. WIND TORRENT - ГЛОБАЛЬНЫЙ ВЕТЕР
+-- ============================================================
+
+combat.WindTorrentAttack = setmetatable({}, combat.Attack)
+combat.WindTorrentAttack.__index = combat.WindTorrentAttack
+
+function combat.WindTorrentAttack.new()
+    local self = combat.Attack.new(
+        "🌬️ Wind Torrent",
+        "Global wind pushes all actors and obstacles one step in chosen direction (once per game)",
+        999,  -- дальность не важна
+        0,    -- урон
+        {}
+    )
+    --self.hasBeenUsed = false
+    return setmetatable(self, combat.WindTorrentAttack)
+end
+
+-- Направления: "north", "northeast", "southeast", "south", "southwest", "northwest"
+-- ============================================================
+-- ОБНОВЛЁННЫЙ WIND TORRENT (с анимацией)
+-- ============================================================
+
+function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, actors, obstacles, sounds, onComplete)
+    -- if self.hasBeenUsed then
+    --     if onComplete then onComplete(false, "Already used") end
+    --     return false, "Already used"
+    -- end
+    
+    local stepMap = {
+        north = {dx = 0, dy = 1, dz = -1},
+        northeast = {dx = 1, dy = 0, dz = -1},
+        southeast = {dx = 1, dy = -1, dz = 0},
+        south = {dx = 0, dy = -1, dz = 1},
+        southwest = {dx = -1, dy = 0, dz = 1},
+        northwest = {dx = -1, dy = 1, dz = 0},
+    }
+    
+    local step = stepMap[direction]
+    if not step then
+        if onComplete then onComplete(false, "Invalid direction") end
+        return false, "Invalid direction"
+    end
+    
+    print(string.format("💨 WIND TORRENT: Pushing everything %s!", direction))
+    
+    local function applyCubeStep(q, r)
+        local x, y, z = axialToCube(q, r)
+        x = x + step.dx
+        y = y + step.dy
+        z = z + step.dz
+        return cubeToAxial(x, y, z)
+    end
+    
+    local function isValid(q, r)
+        return hex:isValidHex(q, r)
+    end
+    
+    -- Собираем все объекты для перемещения
+    local allObjects = {}
+    for _, actor in ipairs(actors) do
+        table.insert(allObjects, {obj = actor, type = "actor"})
+    end
+    for _, obstacle in ipairs(obstacles) do
+        table.insert(allObjects, {obj = obstacle, type = "obstacle"})
+    end
+    
+    -- Вычисляем новые позиции и обрабатываем коллизии
+    local pushes = {}  -- анимации для добавления
+    local damageEvents = {}  -- урон от столкновений/краёв
+    
+    for _, entry in ipairs(allObjects) do
+        local obj = entry.obj
+        local newQ, newR = applyCubeStep(obj.q, obj.r)
+        
+        if not isValid(newQ, newR) then
+            -- Вылет за край
+            table.insert(damageEvents, {obj = obj, reason = "edge"})
+        else
+            table.insert(pushes, {
+                obj = obj,
+                fromQ = obj.q,
+                fromR = obj.r,
+                toQ = newQ,
+                toR = newR
+            })
+        end
+    end
+    
+    -- Разрешаем коллизии (несколько объектов в одну клетку)
+    local targetMap = {}
+    local finalPushes = {}
+    local collisions = {}
+    
+    for _, push in ipairs(pushes) do
+        local key = push.toQ .. "," .. push.toR
+        if not targetMap[key] then
+            targetMap[key] = push
+            table.insert(finalPushes, push)
+        else
+            -- Коллизия: оба получают урон
+            local existing = targetMap[key]
+            table.insert(collisions, {obj1 = existing.obj, obj2 = push.obj})
+            -- Оставляем только один объект (актёр приоритетнее препятствия)
+            if push.obj.maxHealth ~= nil and existing.obj.maxHealth == nil then
+                targetMap[key] = push
+                -- Нужно обновить finalPushes
+                for i, fp in ipairs(finalPushes) do
+                    if fp.obj == existing.obj then
+                        finalPushes[i] = push
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Добавляем анимации в глобальную очередь
+    for _, push in ipairs(finalPushes) do
+        combat.addPushAnimation(push.obj, push.fromQ, push.fromR, push.toQ, push.toR)
+    end
+    
+    -- Обрабатываем урон от коллизий после анимаций
+    local function applyDamageAfterAnimations()
+        -- Урон от коллизий
+        for _, coll in ipairs(collisions) do
+            local dmg = 1
+            if coll.obj1.health then
+                coll.obj1.health = coll.obj1.health - dmg
+                print(string.format("💥 %s collides and takes %d damage!",
+                    coll.obj1.name or coll.obj1.type, dmg))
+            end
+            if coll.obj2.health then
+                coll.obj2.health = coll.obj2.health - dmg
+                print(string.format("💥 %s collides and takes %d damage!",
+                    coll.obj2.name or coll.obj2.type, dmg))
+            end
+            if sounds and sounds.collision then sounds.collision:play() end
+        end
+        
+        -- Урон от вылета за край
+        for _, dmg in ipairs(damageEvents) do
+            dmg.obj.health = dmg.obj.health - 1
+            print(string.format("💨 %s is blown off the map and takes 1 damage!",
+                dmg.obj.name or dmg.obj.type))
+            if sounds and sounds.collision then sounds.collision:play() end
+        end
+        
+        -- Удаляем уничтоженных
+        for i = #actors, 1, -1 do
+            if actors[i].health <= 0 then
+                print(string.format("💀 %s has been defeated!", actors[i].name))
+                table.remove(actors, i)
+            end
+        end
+        for i = #obstacles, 1, -1 do
+            if obstacles[i].health <= 0 then
+                print(string.format("💀 %s has been destroyed!", obstacles[i].name or obstacles[i].type))
+                table.remove(obstacles, i)
+            end
+        end
+        
+        self.hasBeenUsed = true
+        if sounds and sounds.wind then sounds.wind:play() end
+        print("🌪️ Wind Torrent used! No longer available this game.")
+        
+        if onComplete then onComplete(true, nil) end
+    end
+    
+    -- Запускаем анимации, затем применяем урон
+    combat.startPushAnimations(hex, applyDamageAfterAnimations)
+    
+    return true, nil
+end
+
+
+-- ============================================================
 -- ФАБРИКА АТАК
 -- ============================================================
 
@@ -572,6 +784,9 @@ combat.attackFactory = {
     aoePush = function() return combat.AoePushAttack.new() end,
     aoeDirectional = function() return combat.AoeDirectionalAttack.new() end,
 }
+
+-- Добавляем в фабрику
+combat.attackFactory.windTorrent = function() return combat.WindTorrentAttack.new() end
 
 function combat.createAttackForActor(attackType, params)
     local factory = combat.attackFactory[attackType]
@@ -588,5 +803,130 @@ function combat.performAttack(attacker, targetQ, targetR, hex, actors, obstacles
     attacker.hasActedThisTurn = true
     return true
 end
+
+-- ============================================================
+-- СИСТЕМА АНИМАЦИИ СМЕЩЕНИЙ
+-- ============================================================
+
+-- Очередь анимаций для плавных перемещений
+pushAnimations = {
+    queue = {},  -- {obj, fromQ, fromR, toQ, toR, type, onComplete}
+    active = false
+}
+
+function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
+    if not obj then return end
+    
+    -- Если это актёр и он уже двигается, отменяем его текущее движение
+    if obj.isMoving then
+        obj.isMoving = false
+        obj.path = {}
+        obj.currentPathIndex = 0
+    end
+    
+    local anim = {
+        obj = obj,
+        fromQ = fromQ,
+        fromR = fromR,
+        toQ = toQ,
+        toR = toR,
+        startX = 0, startY = 0,
+        endX = 0, endY = 0,
+        timer = 0,
+        duration = 0.2,
+        isMoving = false,
+        onComplete = onComplete or function() end
+    }
+    
+    table.insert(pushAnimations.queue, anim)
+end
+
+-- Функция для начала обработки очереди анимаций
+function combat.startPushAnimations(hex, callback)
+    if #pushAnimations.queue == 0 then
+        if callback then callback() end
+        return
+    end
+    
+    pushAnimations.active = true
+    pushAnimations.globalCallback = callback
+    
+    -- Инициализируем координаты для первой анимации
+    combat.initNextPushAnimation(hex)
+end
+
+function combat.initNextPushAnimation(hex)
+    if #pushAnimations.queue == 0 then
+        pushAnimations.active = false
+        if pushAnimations.globalCallback then
+            pushAnimations.globalCallback()
+            pushAnimations.globalCallback = nil
+        end
+        return
+    end
+    
+    local anim = pushAnimations.queue[1]
+    if not anim.isMoving then
+        -- Получаем пиксельные координаты
+        anim.startX, anim.startY = hex:hexToPixel(anim.fromQ, anim.fromR)
+        anim.endX, anim.endY = hex:hexToPixel(anim.toQ, anim.toR)
+        anim.timer = 0
+        anim.isMoving = true
+        
+        -- Логические координаты обновляем сразу
+        if anim.obj then
+            anim.obj.q = anim.toQ
+            anim.obj.r = anim.toR
+        end
+        
+        -- Для отладки
+        print(string.format("🎬 Animation started: %s from (%d,%d) to (%d,%d)",
+            anim.obj.name or anim.obj.type or "object",
+            anim.fromQ, anim.fromR, anim.toQ, anim.toR))
+    end
+end
+
+function combat.updatePushAnimations(dt, hex)
+    if not pushAnimations.active or #pushAnimations.queue == 0 then
+        return
+    end
+    
+    local anim = pushAnimations.queue[1]
+    if anim and anim.isMoving then
+        anim.timer = anim.timer + dt
+        
+        if anim.timer >= anim.duration then
+            -- Анимация завершена
+            if anim.obj then
+                anim.obj._isAnimating = false
+            end
+            
+            -- Вызываем колбэк
+            if anim.onComplete then
+                anim.onComplete(anim.obj)
+            end
+            
+            -- Удаляем завершённую анимацию
+            table.remove(pushAnimations.queue, 1)
+            
+            -- Запускаем следующую
+            combat.initNextPushAnimation(hex)
+        end
+    end
+end
+
+-- Функция для мгновенного применения всех отложенных анимаций
+function combat.flushPushAnimations()
+    for _, anim in ipairs(pushAnimations.queue) do
+        if anim.obj then
+            anim.obj.q = anim.toQ
+            anim.obj.r = anim.toR
+            anim.obj._isAnimating = false
+        end
+    end
+    pushAnimations.queue = {}
+    pushAnimations.active = false
+end
+
 
 return combat

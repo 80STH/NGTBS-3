@@ -4,7 +4,26 @@ ai = require("ai")
 require("hexgrid")
 require("environment")
 
+-- Делаем очередь анимаций доступной глобально для отрисовки
+pushAnimations = pushAnimations or { queue = {}, active = false }
+
 DEBUG_COMBAT = true  -- Включает подробный вывод отладки боя
+
+windTorrent = nil  -- будет инициализирован в love.load()
+windTorrentUI = {
+    active = false,           -- режим выбора направления
+    button = {
+        x = 10, y = 240, width = 120, height = 30
+    },
+    directions = {
+        north = { x = 0, y = 0, name = "↑ North" },
+        northeast = { x = 0, y = 0, name = "↗ Northeast" },
+        southeast = { x = 0, y = 0, name = "↘ Southeast" },
+        south = { x = 0, y = 0, name = "↓ South" },
+        southwest = { x = 0, y = 0, name = "↙ Southwest" },
+        northwest = { x = 0, y = 0, name = "↖ Northwest" }
+    }
+}
 
 function love.load()
     -- Настройки гексагональной сетки
@@ -40,10 +59,9 @@ function love.load()
         enemyTurnTimer = 0
     }
     
-    -- Кнопка завершения хода
     endTurnButton = {
         x = 10,
-        y = 240,
+        y = 280,  -- сдвигаем ниже
         width = 120,
         height = 30,
         text = "End Turn",
@@ -94,6 +112,30 @@ function love.load()
     end
 
     maxUndoCount = countPlayableActors()
+
+        -- Создаём глобальное заклинание ветра
+    windTorrent = combat.WindTorrentAttack.new()
+    
+    -- ... остальной код ...
+    
+    -- Подсчитаем позиции для кнопок направлений на правой панели
+    local startX = love.graphics.getWidth() - 160
+    local startY = 100
+    local dirIndex = 1
+    local dirOrder = {"north", "northeast", "southeast", "south", "southwest", "northwest"}
+    for _, dirName in ipairs(dirOrder) do
+        local row = math.floor((dirIndex - 1) / 2)
+        local col = (dirIndex - 1) % 2
+        windTorrentUI.directions[dirName].x = startX + col * 75
+        windTorrentUI.directions[dirName].y = startY + row * 35
+        dirIndex = dirIndex + 1
+    end
+    
+    -- Кнопка Wind Torrent
+    windTorrentUI.button.x = 10
+    windTorrentUI.button.y = 240
+    windTorrentUI.button.width = 120
+    windTorrentUI.button.height = 30
 end
 
 -- Функция завершения хода
@@ -647,11 +689,13 @@ function love.update(dt)
     -- Обновляем движение всех актеров
     for _, actor in ipairs(actors) do
         updateActorMovement(actor, dt)
-        -- Обновляем движение врагов через ИИ
         ai.updateEnemyMovement(actor, dt, hex)
         actor.pulse = actor.pulse + dt * actor.pulseSpeed
     end
     
+    -- Обновляем анимации смещений (ветер, отталкивания)
+    combat.updatePushAnimations(dt, hex)
+
     -- Проверяем край карты
     killPlayableAtEdge()
 
@@ -669,6 +713,13 @@ function love.update(dt)
     local mouseInEndTurn = mouseX >= endTurnButton.x and mouseX <= endTurnButton.x + endTurnButton.width and
                          mouseY >= endTurnButton.y and mouseY <= endTurnButton.y + endTurnButton.height
     endTurnButton.isHovered = mouseInEndTurn
+
+        -- Ховер для кнопки ветра
+    local mouseX, mouseY = love.mouse.getPosition()
+    windTorrentUI.button.isHovered = (mouseX >= windTorrentUI.button.x and 
+                                      mouseX <= windTorrentUI.button.x + windTorrentUI.button.width and
+                                      mouseY >= windTorrentUI.button.y and 
+                                      mouseY <= windTorrentUI.button.y + windTorrentUI.button.height)
 end
 
 function drawHexGrid()
@@ -763,7 +814,32 @@ function drawHexGrid()
 end
 
 function drawObstacle(obstacle)
-    local x, y = hex:hexToPixel(obstacle.q, obstacle.r)
+    local x, y
+    
+    -- Проверяем глобальную очередь pushAnimations
+    local pushAnim = nil
+    if pushAnimations and pushAnimations.queue then
+        for _, anim in ipairs(pushAnimations.queue) do
+            if anim.obj == obstacle and anim.isMoving then
+                pushAnim = anim
+                break
+            end
+        end
+    end
+    
+    if pushAnim then
+        local t = math.min(1, pushAnim.timer / pushAnim.duration)
+        local easeOut = 1 - (1 - t) * (1 - t)
+        if pushAnim.startX and pushAnim.endX then
+            x = pushAnim.startX + (pushAnim.endX - pushAnim.startX) * easeOut
+            y = pushAnim.startY + (pushAnim.endY - pushAnim.startY) * easeOut
+        else
+            x, y = hex:hexToPixel(obstacle.q, obstacle.r)
+        end
+    else
+        x, y = hex:hexToPixel(obstacle.q, obstacle.r)
+    end
+    
     love.graphics.draw(obstacle.sprite, x, y, 0, 1, 1, 16, 16)
     
     -- Отображаем здоровье препятствия
@@ -803,7 +879,30 @@ end
 
 function drawActor(actor)
     local x, y
-    if actor.isMoving then
+    
+    -- Проверяем глобальную очередь pushAnimations
+    local pushAnim = nil
+    if pushAnimations and pushAnimations.queue then
+        for _, anim in ipairs(pushAnimations.queue) do
+            if anim.obj == actor and anim.isMoving then
+                pushAnim = anim
+                break
+            end
+        end
+    end
+    
+    if pushAnim then
+        -- Активная анимация смещения
+        local t = math.min(1, pushAnim.timer / pushAnim.duration)
+        local easeOut = 1 - (1 - t) * (1 - t)
+        if pushAnim.startX and pushAnim.endX then
+            x = pushAnim.startX + (pushAnim.endX - pushAnim.startX) * easeOut
+            y = pushAnim.startY + (pushAnim.endY - pushAnim.startY) * easeOut
+        else
+            x, y = hex:hexToPixel(actor.q, actor.r)
+        end
+    elseif actor.isMoving then
+        -- Обычное движение по пути
         local t = actor.timer / actor.speed
         x = actor.startX + (actor.endX - actor.startX) * t
         y = actor.startY + (actor.endY - actor.startY) * t
@@ -960,6 +1059,7 @@ function love.draw()
     
     drawUndoButton()
     drawEndTurnButton()
+    drawWindTorrentUI()  -- <-- добавить сюда
     drawGlobalHealthBar()
     
     love.graphics.setColor(1, 1, 1, 1)
@@ -1029,6 +1129,53 @@ end
 
 function love.mousepressed(x, y, button)
     if button == 1 then  -- Левая кнопка мыши (движение)
+            -- Сначала проверяем кнопку Wind Torrent
+        if x >= windTorrentUI.button.x and x <= windTorrentUI.button.x + windTorrentUI.button.width and
+           y >= windTorrentUI.button.y and y <= windTorrentUI.button.y + windTorrentUI.button.height then
+            if windTorrent and not turnState.waitingForEnemies then --and not windTorrent.hasBeenUsed
+                windTorrentUI.active = true
+                print("Select wind direction...")
+            elseif windTorrent and windTorrent.hasBeenUsed then
+                print("Wind Torrent has already been used this game!")
+            elseif turnState.waitingForEnemies then
+                print("Cannot use Wind Torrent during enemy turn!")
+            end
+            return
+        end
+        
+        -- Если активен режим выбора направления
+        if windTorrentUI.active then
+            -- Проверяем клик по кнопкам направлений
+            for dirName, dir in pairs(windTorrentUI.directions) do
+                if x >= dir.x and x <= dir.x + 70 and y >= dir.y and y <= dir.y + 30 then
+                    windTorrent:executeGlobalWithAnimation(dirName, hex, actors, obstacles, sounds, function(success, message)
+                        if success then
+                            -- Очищаем историю действий после использования глобальной атаки
+                            actionHistory = {}
+                            print("Action history cleared (Wind Torrent used)")
+                        else
+                            print("Wind Torrent failed: " .. (message or "unknown error"))
+                        end
+                    end)
+                    windTorrentUI.active = false
+                    return
+                end
+            end
+            
+            -- Проверяем кнопку Cancel
+            local cancelX = love.graphics.getWidth() / 2 - 40
+            local cancelY = love.graphics.getHeight() - 80
+            if x >= cancelX and x <= cancelX + 80 and y >= cancelY and y <= cancelY + 30 then
+                windTorrentUI.active = false
+                print("Wind Torrent cancelled")
+                return
+            end
+            
+            -- Клик вне кнопок отменяет выбор
+            windTorrentUI.active = false
+            print("Wind Torrent cancelled")
+            return
+        end
         -- Проверяем кнопку Undo
         if x >= 10 and x <= 130 and y >= 200 and y <= 230 then
             if #actionHistory > 0 then
@@ -1187,6 +1334,83 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR)
     end
     
     return success, message
+end
+
+function drawWindTorrentUI()
+    -- Кнопка активации
+    local canUse = windTorrent and not windTorrent.hasBeenUsed and not turnState.waitingForEnemies
+    
+    if windTorrentUI.active then
+        love.graphics.setColor(0.3, 0.5, 0.8, 0.9)
+    elseif canUse and (windTorrentUI.button.isHovered or false) then
+        love.graphics.setColor(0.2, 0.6, 0.9, 0.9)
+    elseif canUse then
+        love.graphics.setColor(0.1, 0.4, 0.7, 0.8)
+    else
+        love.graphics.setColor(0.4, 0.4, 0.4, 0.6)
+    end
+    
+    love.graphics.rectangle("fill", windTorrentUI.button.x, windTorrentUI.button.y, 
+                           windTorrentUI.button.width, windTorrentUI.button.height, 5)
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.rectangle("line", windTorrentUI.button.x, windTorrentUI.button.y,
+                           windTorrentUI.button.width, windTorrentUI.button.height, 5)
+    
+    love.graphics.setColor(1, 1, 1, 1)
+    local text = "🌬️ Wind Torrent"
+    if windTorrent and windTorrent.hasBeenUsed then
+        text = "❌ Wind Torrent (used)"
+    end
+    local font = love.graphics.getFont()
+    local textWidth = font:getWidth(text)
+    love.graphics.print(text, windTorrentUI.button.x + (windTorrentUI.button.width - textWidth) / 2,
+                       windTorrentUI.button.y + 8)
+    
+    -- Если активен режим выбора направления
+    if windTorrentUI.active then
+        -- Полупрозрачный фон
+        love.graphics.setColor(0, 0, 0, 0.7)
+        love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+        
+        love.graphics.setColor(1, 1, 0.5, 1)
+        love.graphics.print("Choose wind direction:", love.graphics.getWidth() / 2 - 100, 40)
+        love.graphics.print("(Click on a direction button)", love.graphics.getWidth() / 2 - 90, 65)
+        
+        -- Рисуем кнопки направлений
+        for dirName, dir in pairs(windTorrentUI.directions) do
+            local mx, my = love.mouse.getPosition()
+            local isHover = mx >= dir.x and mx <= dir.x + 70 and my >= dir.y and my <= dir.y + 30
+            
+            if isHover then
+                love.graphics.setColor(0.4, 0.7, 1, 0.9)
+            else
+                love.graphics.setColor(0.2, 0.4, 0.6, 0.8)
+            end
+            love.graphics.rectangle("fill", dir.x, dir.y, 70, 30, 5)
+            love.graphics.setColor(1, 1, 1, 0.9)
+            love.graphics.rectangle("line", dir.x, dir.y, 70, 30, 5)
+            
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print(dir.name, dir.x + 5, dir.y + 8)
+        end
+        
+        -- Кнопка отмены
+        local cancelX = love.graphics.getWidth() / 2 - 40
+        local cancelY = love.graphics.getHeight() - 80
+        local mx, my = love.mouse.getPosition()
+        local cancelHover = mx >= cancelX and mx <= cancelX + 80 and my >= cancelY and my <= cancelY + 30
+        
+        if cancelHover then
+            love.graphics.setColor(0.8, 0.3, 0.3, 0.9)
+        else
+            love.graphics.setColor(0.6, 0.2, 0.2, 0.8)
+        end
+        love.graphics.rectangle("fill", cancelX, cancelY, 80, 30, 5)
+        love.graphics.setColor(1, 1, 1, 0.9)
+        love.graphics.rectangle("line", cancelX, cancelY, 80, 30, 5)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print("Cancel", cancelX + 15, cancelY + 8)
+    end
 end
 
 function drawGlobalHealthBar()
