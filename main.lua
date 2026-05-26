@@ -103,26 +103,22 @@ function endTurn()
         print("Enemies are already acting!")
         return
     end
-    
-    -- Проверяем, все ли союзники сходили
-    local allAlliesActed = true
+
+    -- === УДАЛЯЕМ проверку, что все союзники сходили ===
+    -- (раньше здесь был цикл allAlliesActed и return)
+
+    -- Принудительно помечаем всех союзников как "сходивших" (пропуск хода для неходивших)
     for _, actor in ipairs(actors) do
-        if actor.isPlayable and not actor.hasActedThisTurn and not actor.isMoving then
-            allAlliesActed = false
-            break
+        if actor.isPlayable and not actor.hasActedThisTurn then
+            actor.hasActedThisTurn = true
+            print(actor.name .. " skipped turn (end turn forced)")
         end
     end
-    
-    if not allAlliesActed then
-        print("Not all allies have acted yet!")
-        return
-    end
-    
-    -- === НОВОЕ: ОБНУЛЕНИЕ ИСТОРИИ ПРИ ЗАВЕРШЕНИИ ХОДА ===
+
+    -- Очищаем историю действий при завершении хода
     actionHistory = {}
-    print("Action history cleared at end of turn. (" .. #actionHistory .. " actions)")
-    -- ================================================
-    
+    print("Action history cleared at end of turn.")
+
     -- Начинаем ход врагов
     turnState.waitingForEnemies = true
     turnState.enemyTurnTimer = 0
