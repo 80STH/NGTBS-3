@@ -146,59 +146,31 @@ function environment.createActor(q, r, name, color, spriteType, isPlayable, maxH
     return actor
 end
 
--- Генерация карты земли
+-- Генерация карты земли (трава в центре, лава по краям, без переходов)
 function environment.generateTerrainMap(hex)
     local terrainMap = {}
+    local centerQ = (hex.gridWidth - 1) / 2
+    local centerR = (hex.gridHeight - 1) / 2
+    local radius = math.min(centerQ, centerR) - 1  -- Радиус травяной зоны
+    
     for q = 0, hex.gridWidth - 1 do
         terrainMap[q] = {}
         for r = 0, hex.gridHeight - 1 do
-            local noiseValue = math.sin(q * 0.5) * math.cos(r * 0.5) + math.sin((q + r) * 0.8) * 0.5
+            -- Расстояние Чебышева (квадратная зона) или манхэттенское
+            -- Используем максимальное отклонение для чёткой границы
+            local distQ = math.abs(q - centerQ)
+            local distR = math.abs(r - centerR)
+            local maxDist = math.max(distQ, distR)
             
-            local centerQ = hex.gridWidth / 2
-            local centerR = hex.gridHeight / 2
-            local distToCenter = math.sqrt((q - centerQ)^2 + (r - centerR)^2)
-            
-            if distToCenter < 2 then
-                terrainMap[q][r] = environment.terrainTypes[1]
-            elseif distToCenter < 3.5 then
-                if noiseValue > 0.3 then
-                    terrainMap[q][r] = environment.terrainTypes[2]
-                else
-                    terrainMap[q][r] = environment.terrainTypes[1]
-                end
+            -- Если внутри радиуса - трава, иначе - лава
+            if maxDist <= radius then
+                terrainMap[q][r] = environment.terrainTypes[1]  -- grass
             else
-                local rand = (q * 7 + r * 13) % 100 / 100
-                if rand < 0.3 then
-                    terrainMap[q][r] = environment.terrainTypes[2]
-                elseif rand < 0.5 then
-                    terrainMap[q][r] = environment.terrainTypes[3]
-                elseif rand < 0.65 then
-                    terrainMap[q][r] = environment.terrainTypes[4]
-                elseif rand < 0.75 then
-                    terrainMap[q][r] = environment.terrainTypes[6]
-                else
-                    terrainMap[q][r] = environment.terrainTypes[1]
-                end
-            end
-            
-            if (q < 2 and r < 2) or (q > hex.gridWidth - 3 and r > hex.gridHeight - 3) then
-                terrainMap[q][r] = environment.terrainTypes[7]
-            end
-            
-            if q < 3 and r > hex.gridHeight - 3 then
-                terrainMap[q][r] = environment.terrainTypes[8]
-            end
-            
-            if q > hex.gridWidth - 3 and r < 2 then
-                terrainMap[q][r] = environment.terrainTypes[4]
-            end
-            
-            local randomChance = (q * 11 + r * 17) % 100 / 100
-            if randomChance < 0.05 and terrainMap[q][r].name ~= "lava" then
-                terrainMap[q][r] = environment.terrainTypes[6]
+                terrainMap[q][r] = environment.terrainTypes[6]  -- lava
             end
         end
     end
+    
     return terrainMap
 end
 

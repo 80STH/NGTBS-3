@@ -254,40 +254,89 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, actors, obst
     return true, nil
 end
 
--- 2. ПЕРЕВОРОТ (без изменений, не использует линию)
+-- 2. ПЕРЕВОРОТ ЦЕЛИ ЗА АТАКУЮЩЕГО
 combat.FlipAttack = setmetatable({}, combat.Attack)
 combat.FlipAttack.__index = combat.FlipAttack
 
 function combat.FlipAttack.new()
-    local self = combat.Attack.new("Flip", "Flip the target behind you", 1, 0, {})
+    local self = combat.Attack.new(
+        "Flip",
+        "Flip the target behind the attacker",
+        1,
+        1,
+        {}
+    )
     return setmetatable(self, combat.FlipAttack)
 end
 
 function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
     debugPrint("=== FlipAttack ===")
+    debugPrint(string.format("Attacker: (%d,%d) -> Target: (%d,%d)", attacker.q, attacker.r, targetQ, targetR))
+    
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    debugPrint(string.format("Distance: %d", distance))
+    
     if distance ~= 1 then
+        debugPrint("ERROR: Target must be adjacent!")
         return false, "Target must be adjacent!"
     end
+    
     local targetActor = combat.getActorAtHex(targetQ, targetR, actors)
     if not targetActor then
+        debugPrint("ERROR: No enemy at that hex!")
         return false, "No enemy at that hex!"
     end
+    
+    -- Вычисляем позицию ЗА атакующим
+    -- Направление от цели к атакующему (цель -> атакующий)
     local aX, aY, aZ = axialToCube(attacker.q, attacker.r)
     local tX, tY, tZ = axialToCube(targetQ, targetR)
-    local dirX, dirY, dirZ = tX - aX, tY - aY, tZ - aZ
-    local behindX, behindY, behindZ = tX + dirX, tY + dirY, tZ + dirZ
+    
+    debugPrint(string.format("Attacker cube: (%d,%d,%d)", aX, aY, aZ))
+    debugPrint(string.format("Target cube: (%d,%d,%d)", tX, tY, tZ))
+    
+    -- Направление от цели к атакующему
+    local dirFromTargetToAttackerX = aX - tX
+    local dirFromTargetToAttackerY = aY - tY
+    local dirFromTargetToAttackerZ = aZ - tZ
+    
+    debugPrint(string.format("Direction from target to attacker: (%d,%d,%d)", 
+        dirFromTargetToAttackerX, dirFromTargetToAttackerY, dirFromTargetToAttackerZ))
+    
+    -- Позиция за атакующим = позиция атакующего + направление от цели к атакующему
+    local behindX = aX + dirFromTargetToAttackerX
+    local behindY = aY + dirFromTargetToAttackerY
+    local behindZ = aZ + dirFromTargetToAttackerZ
+    
     local behindQ, behindR = cubeToAxial(behindX, behindY, behindZ)
+    debugPrint(string.format("Behind position (axial): (%d,%d)", behindQ, behindR))
+    
+    -- Проверяем, можно ли переместить цель
     local isOccupied = combat.getActorAtHex(behindQ, behindR, actors) ~= nil or
                        combat.getObstacleAtHex(behindQ, behindR, obstacles) ~= nil
-    if not hex:isValidHex(behindQ, behindR) or isOccupied then
-        return false, "No free space behind the target!"
+    
+    if not hex:isValidHex(behindQ, behindR) then
+        debugPrint("ERROR: Behind position is outside map!")
+        return false, "No free space behind the attacker!"
     end
+    
+    if isOccupied then
+        debugPrint("ERROR: Behind position is occupied!")
+        return false, "No free space behind the attacker!"
+    end
+    
+    -- Перемещаем цель
     targetActor.q = behindQ
     targetActor.r = behindR
     print(string.format("%s flips %s behind them!", attacker.name, targetActor.name))
-    if sounds and sounds.attack then sounds.attack:play() end
+    debugPrint(string.format("Moved %s to (%d,%d)", targetActor.name, behindQ, behindR))
+    
+    if sounds and sounds.attack then
+        sounds.attack:play()
+    end
+    
     attacker.hasActedThisTurn = true
+    debugPrint("=== FlipAttack complete ===")
     return true, nil
 end
 

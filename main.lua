@@ -1,5 +1,6 @@
 -- main.lua
 combat = require("combat") --почему для этого нужна переменная?
+ai = require("ai")
 require("hexgrid")
 require("environment")
 
@@ -34,7 +35,9 @@ function love.load()
         currentTurn = 1,
         currentActorIndex = 1,
         turnPhase = "waiting",     -- "waiting" или "moving" или "attacking"
-        actionsRemaining = {}
+        actionsRemaining = {},
+        waitingForEnemies = false, -- Ожидание хода врагов
+        enemyTurnTimer = 0
     }
     
     -- Кнопка завершения хода
@@ -47,12 +50,13 @@ function love.load()
         isHovered = false
     }
     
-    -- Инициализируем счетчики действий
+    -- Инициализируем счетчики действий для всех актеров
     for i, actor in ipairs(actors) do
         if actor.isPlayable then
             turnState.actionsRemaining[i] = 1
         else
-            turnState.actionsRemaining[i] = 0
+            turnState.actionsRemaining[i] = 0  -- Враги начинают без действий
+            actor.hasActedThisTurn = false
         end
     end
     
@@ -92,36 +96,90 @@ function love.load()
     maxUndoCount = countPlayableActors()
 end
 
--- Функция для атаки с отталкиванием
-function performAttack(attacker, targetQ, targetR)
-    return combat.performAttack(attacker, targetQ, targetR, hex, actors, obstacles, sounds)
-end
-
 -- Функция завершения хода
 function endTurn()
-    for i, actor in ipairs(actors) do
-        actor.hasActedThisTurn = false
-        turnState.actionsRemaining[i] = 1
+    -- Проверяем, не начался ли уже ход врагов
+    if turnState.waitingForEnemies then
+        print("Enemies are already acting!")
+        return
     end
     
+    -- Проверяем, все ли союзники сходили
+    local allAlliesActed = true
+    for _, actor in ipairs(actors) do
+        if actor.isPlayable and not actor.hasActedThisTurn and not actor.isMoving then
+            allAlliesActed = false
+            break
+        end
+    end
+    
+    if not allAlliesActed then
+        print("Not all allies have acted yet!")
+        return
+    end
+    
+    -- === НОВОЕ: ОБНУЛЕНИЕ ИСТОРИИ ПРИ ЗАВЕРШЕНИИ ХОДА ===
     actionHistory = {}
-    maxUndoCount = countPlayableActors()
+    print("Action history cleared at end of turn. (" .. #actionHistory .. " actions)")
+    -- ================================================
     
-    turnState.currentTurn = turnState.currentTurn + 1
-    
-    turnState.currentActorIndex = 1
-    if #actors > 0 then
-        selectedActor = actors[1]
-        hex.selectedQ = selectedActor.q
-        hex.selectedR = selectedActor.r
+    -- Начинаем ход врагов
+    turnState.waitingForEnemies = true
+    turnState.enemyTurnTimer = 0
+    print("=== ENEMY TURN START ===")
+end
+
+-- Обработка хода врагов
+function updateEnemyTurn(dt)
+    if not turnState.waitingForEnemies then
+        return
     end
-    turnState.turnPhase = "waiting"
     
-    if sounds.turn then
-        sounds.turn:play()
+    -- Задержка перед каждым действием врага (для читаемости)
+    turnState.enemyTurnTimer = turnState.enemyTurnTimer + dt
+    
+    if turnState.enemyTurnTimer >= 0.3 then
+        -- Проверяем, есть ли враги, которые еще не ходили
+        local hasEnemyToAct = false
+        for _, actor in ipairs(actors) do
+            if not actor.isPlayable and not actor.hasActedThisTurn and not actor.isMoving then
+                hasEnemyToAct = true
+                break
+            end
+        end
+        
+        if hasEnemyToAct then
+            -- Выполняем действие одного врага
+            for _, enemy in ipairs(actors) do
+                if not enemy.isPlayable and not enemy.hasActedThisTurn and not enemy.isMoving then
+                    ai.performEnemyTurn(enemy, actors, obstacles, hex, sounds)
+                    turnState.enemyTurnTimer = 0
+                    break
+                end
+            end
+        else
+            -- Все враги сходили, заканчиваем их ход
+            turnState.waitingForEnemies = false
+            
+            -- Сбрасываем флаги действий для всех актеров
+            for _, actor in ipairs(actors) do
+                actor.hasActedThisTurn = false
+                if actor.isPlayable then
+                    -- Сбрасываем счетчик действий для союзников
+                    for i, a in ipairs(actors) do
+                        if a == actor then
+                            turnState.actionsRemaining[i] = 1
+                            break
+                        end
+                    end
+                end
+            end
+            
+            turnState.currentTurn = turnState.currentTurn + 1
+            print("=== NEW ROUND " .. turnState.currentTurn .. " ===")
+            print("Your turn again!")
+        end
     end
-    
-    print("=== NEW TURN " .. turnState.currentTurn .. " ===")
 end
 
 -- Глобальная функция отмены последнего действия (не привязана к выбранному актеру)
@@ -348,58 +406,54 @@ function findPath(startQ, startR, targetQ, targetR, movingActor)
 end
 
 function performMove(actor, targetQ, targetR)
-    if actor.isMoving then
-        return false
-    end
-    
-    if actor.q == targetQ and actor.r == targetR then
-        return false
-    end
-    
-    -- Союзные актеры не могут двигаться на край карты
+    if actor.isMoving then return false end
+    if actor.q == targetQ and actor.r == targetR then return false end
     if actor.isPlayable and isEdgeCell(targetQ, targetR) then
         print(actor.name .. " cannot move to the edge of the map!")
         return false
     end
     
-    -- ПРОВЕРКА ДАЛЬНОСТИ ДВИЖЕНИЯ
     local distance = hex:getDistance(actor.q, actor.r, targetQ, targetR)
     if distance > actor.moveRange then
-        print(actor.name .. " cannot move that far! Max distance: " .. actor.moveRange .. " cells")
+        print(actor.name .. " cannot move that far! Max distance: " .. actor.moveRange)
         return false
     end
     
     if isPositionOccupied(targetQ, targetR, actor) then
-        local obstacle = getObstacleAtHex(targetQ, targetR)
-        if obstacle then
-            print("Cannot move: cell is occupied by obstacle!")
-        else
-            print("Cell is occupied by another actor!")
-        end
+        print("Cell is occupied!")
         return false
     end
     
     local path = findPath(actor.q, actor.r, targetQ, targetR, actor)
-    
-    if path and #path > 0 then
-        -- ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: длина пути не должна превышать дальность движения
-        if #path > actor.moveRange then
-            print(actor.name .. " cannot move " .. #path .. " cells! Max: " .. actor.moveRange)
-            return false
-        end
-        
-        actor.startPosForHistory = {q = actor.q, r = actor.r}
-        actor.targetPosForHistory = {q = targetQ, r = targetR}
-        
-        actor.path = path
-        actor.currentPathIndex = 1
-        startNextMove(actor)
-        
-        return true
-    else
+    if not path or #path == 0 then
         print("Path not found!")
         return false
     end
+    
+    if #path > actor.moveRange then
+        print(actor.name .. " cannot move " .. #path .. " cells! Max: " .. actor.moveRange)
+        return false
+    end
+    
+    -- ========== НОВОЕ: СРАЗУ ДОБАВЛЯЕМ В ИСТОРИЮ ==========
+    addToHistory(actor, actor.q, actor.r, targetQ, targetR)
+    -- ===================================================
+    
+    -- Запоминаем, что действие уже использовано (чтобы нельзя было двигаться повторно)
+    actor.hasActedThisTurn = true
+    for i, a in ipairs(actors) do
+        if a == actor then
+            turnState.actionsRemaining[i] = 0
+            break
+        end
+    end
+    
+    -- Запускаем анимацию
+    actor.path = path
+    actor.currentPathIndex = 1
+    startNextMove(actor)  -- анимация будет обновлять координаты, но историю уже не трогаем
+    
+    return true
 end
 
 -- Функция для отображения доступной дистанции движения с учетом препятствий
@@ -529,40 +583,17 @@ end
 function startNextMove(actor)
     if actor.currentPathIndex <= #actor.path then
         local nextStep = actor.path[actor.currentPathIndex]
-        
         actor.isMoving = true
         actor.timer = 0
         actor.targetQ = nextStep.q
         actor.targetR = nextStep.r
-        
         actor.startX, actor.startY = hex:hexToPixel(actor.q, actor.r)
         actor.endX, actor.endY = hex:hexToPixel(actor.targetQ, actor.targetR)
     else
         actor.isMoving = false
         actor.path = {}
         actor.currentPathIndex = 0
-        
-        if actor.startPosForHistory and actor.targetPosForHistory then
-            addToHistory(actor,
-                        actor.startPosForHistory.q, actor.startPosForHistory.r,
-                        actor.targetPosForHistory.q, actor.targetPosForHistory.r)
-            actor.startPosForHistory = nil
-            actor.targetPosForHistory = nil
-            
-            -- Помечаем, что актер совершил действие в этом ходу
-            actor.hasActedThisTurn = true
-            
-            -- Уменьшаем счетчик действий
-            for i, a in ipairs(actors) do
-                if a == actor then
-                    turnState.actionsRemaining[i] = 0
-                    break
-                end
-            end
-            
-            turnState.turnPhase = "waiting"
-            print(actor.name .. " finished action!")
-        end
+        -- Удалён вызов addToHistory
         
         if selectedActor == actor then
             hex.selectedQ = actor.q
@@ -617,13 +648,20 @@ function updateActorMovement(actor, dt)
 end
 
 function love.update(dt)
+    -- Обновляем движение всех актеров
     for _, actor in ipairs(actors) do
         updateActorMovement(actor, dt)
+        -- Обновляем движение врагов через ИИ
+        ai.updateEnemyMovement(actor, dt, hex)
         actor.pulse = actor.pulse + dt * actor.pulseSpeed
     end
     
-    -- Проверяем край карты каждый кадр (убивает мгновенно)
+    -- Проверяем край карты
     killPlayableAtEdge()
+
+        
+    -- Обрабатываем ход врагов
+    updateEnemyTurn(dt)
     
     local mouseX, mouseY = love.mouse.getPosition()
     hex.hoverQ, hex.hoverR = hex:pixelToHex(mouseX, mouseY)
@@ -635,13 +673,6 @@ function love.update(dt)
     local mouseInEndTurn = mouseX >= endTurnButton.x and mouseX <= endTurnButton.x + endTurnButton.width and
                          mouseY >= endTurnButton.y and mouseY <= endTurnButton.y + endTurnButton.height
     endTurnButton.isHovered = mouseInEndTurn
-
-    -- Проверка поражения
-    if globalHealth.current <= 0 then
-        --print("GAME OVER!")
-        -- Можно добавить экран поражения
-        --love.event.quit()  -- или показать сообщение
-    end
 end
 
 function drawHexGrid()
@@ -835,6 +866,17 @@ function drawUndoButton()
 end
 
 function drawEndTurnButton()
+    -- Если враги ходят, кнопка неактивна
+    if turnState.waitingForEnemies then
+        love.graphics.setColor(0.4, 0.3, 0.1, 0.5)
+        love.graphics.rectangle("fill", endTurnButton.x, endTurnButton.y, endTurnButton.width, endTurnButton.height, 5)
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
+        love.graphics.rectangle("line", endTurnButton.x, endTurnButton.y, endTurnButton.width, endTurnButton.height, 5)
+        love.graphics.setColor(0.7, 0.7, 0.7, 0.7)
+        love.graphics.print("Enemies turn...", endTurnButton.x + 15, endTurnButton.y + 8)
+        return
+    end
+    
     local anyActorActed = false
     for _, actor in ipairs(actors) do
         if actor.isPlayable and actor.hasActedThisTurn then
@@ -934,27 +976,41 @@ function love.draw()
     end
 
     function drawCurrentAttack()
-    if selectedActor and #selectedActor.attacks > 0 then
-        local currentAttack = selectedActor.attacks[selectedActor.currentAttackIndex]
+        -- Если враги ходят, показываем другой текст
+        if turnState.waitingForEnemies then
+            love.graphics.setColor(0.2, 0.2, 0.3, 0.8)
+            love.graphics.rectangle("fill", 10, 280, 250, 60, 5)
+            love.graphics.setColor(1, 1, 1, 0.8)
+            love.graphics.rectangle("line", 10, 280, 250, 60, 5)
+            
+            love.graphics.setColor(1, 0.5, 0.2, 1)
+            love.graphics.print("ENEMY TURN", 15, 300)
+            love.graphics.setColor(0.8, 0.8, 0.8, 1)
+            love.graphics.print("Waiting for enemies to act...", 15, 320)
+            return
+        end
         
-        love.graphics.setColor(0.2, 0.2, 0.3, 0.8)
-        love.graphics.rectangle("fill", 10, 280, 250, 60, 5)
-        love.graphics.setColor(1, 1, 1, 0.8)
-        love.graphics.rectangle("line", 10, 280, 250, 60, 5)
-        
-        love.graphics.setColor(1, 1, 0.5, 1)
-        love.graphics.print("Current Attack:", 15, 285)
-        
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print(currentAttack.name, 15, 300)
-        
-        love.graphics.setColor(0.7, 0.7, 0.7, 1)
-        love.graphics.print(currentAttack.description, 15, 315)
-        
-        love.graphics.setColor(0.5, 0.8, 0.5, 1)
-        love.graphics.print("Press TAB to switch attack (" .. selectedActor.currentAttackIndex .. "/" .. #selectedActor.attacks .. ")", 15, 335)
+        if selectedActor and #selectedActor.attacks > 0 then
+            local currentAttack = selectedActor.attacks[selectedActor.currentAttackIndex]
+            
+            love.graphics.setColor(0.2, 0.2, 0.3, 0.8)
+            love.graphics.rectangle("fill", 10, 280, 250, 60, 5)
+            love.graphics.setColor(1, 1, 1, 0.8)
+            love.graphics.rectangle("line", 10, 280, 250, 60, 5)
+            
+            love.graphics.setColor(1, 1, 0.5, 1)
+            love.graphics.print("Current Attack:", 15, 285)
+            
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print(currentAttack.name, 15, 300)
+            
+            love.graphics.setColor(0.7, 0.7, 0.7, 1)
+            love.graphics.print(currentAttack.description, 15, 315)
+            
+            love.graphics.setColor(0.5, 0.8, 0.5, 1)
+            love.graphics.print("Press TAB to switch attack (" .. selectedActor.currentAttackIndex .. "/" .. #selectedActor.attacks .. ")", 15, 335)
+        end
     end
-end
     
     love.graphics.print("Left click: Move | Right click: Attack", 10, 130)
     love.graphics.print("Each actor: 1 action per turn", 10, 150)
@@ -1005,6 +1061,19 @@ function love.mousepressed(x, y, button)
             end
             return
         end
+
+        local allAlliesActed = true
+        for _, actor in ipairs(actors) do
+            if actor.isPlayable and not actor.hasActedThisTurn then
+                allAlliesActed = false
+                break
+            end
+        end
+        
+        if allAlliesActed then
+            print("Enemies are acting! Wait for your turn.")
+            return
+        end
         
         -- Клик по гексу для движения
         local targetQ, targetR = hex:pixelToHex(x, y)
@@ -1032,6 +1101,19 @@ function love.mousepressed(x, y, button)
             end
         end
     elseif button == 2 then  -- Правая кнопка мыши (атака)
+            -- Аналогичная проверка для атаки
+        local allAlliesActed = true
+        for _, actor in ipairs(actors) do
+            if actor.isPlayable and not actor.hasActedThisTurn then
+                allAlliesActed = false
+                break
+            end
+        end
+        
+        if allAlliesActed then
+            print("Enemies are acting! Wait for your turn.")
+            return
+        end
         local targetQ, targetR = hex:pixelToHex(x, y)
         if hex:isValidHex(targetQ, targetR) and selectedActor then
             if selectedActor.hasActedThisTurn then
@@ -1039,7 +1121,7 @@ function love.mousepressed(x, y, button)
             elseif selectedActor.isMoving then
                 print(selectedActor.name .. " is currently moving!")
             else
-                performAttack(selectedActor, targetQ, targetR)
+                performAttackWithSelectedAttack(selectedActor, targetQ, targetR)
             end
         end
     end
@@ -1100,7 +1182,15 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR)
     if not attack then
         return false, "No attack available!"
     end
-    return combat.performAttack(attacker, targetQ, targetR, hex, actors, obstacles, sounds, attack)
+    local success, message = combat.performAttack(attacker, targetQ, targetR, hex, actors, obstacles, sounds, attack)
+    
+    -- Очищаем историю после успешной атаки союзника
+    if success and attacker.isPlayable then
+        actionHistory = {}
+        print("Action history cleared (attack by " .. attacker.name .. ")")
+    end
+    
+    return success, message
 end
 
 function drawGlobalHealthBar()
