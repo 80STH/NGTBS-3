@@ -7,115 +7,65 @@ environment = require("environment")
 -- Делаем очередь анимаций доступной глобально для отрисовки
 pushAnimations = pushAnimations or { queue = {}, active = false }
 
-DEBUG_COMBAT = true  -- Включает подробный вывод отладки боя
+DEBUG_COMBAT = true
 
-windTorrent = nil  -- будет инициализирован в love.load()
+windTorrent = nil
 windTorrentUI = {
-    active = false,           -- режим выбора направления
-    button = {
-        x = 10, y = 240, width = 120, height = 30
-    },
-    directions = {
-        north = { x = 0, y = 0, name = "↑ North" },
-        northeast = { x = 0, y = 0, name = "↗ Northeast" },
-        southeast = { x = 0, y = 0, name = "↘ Southeast" },
-        south = { x = 0, y = 0, name = "↓ South" },
-        southwest = { x = 0, y = 0, name = "↙ Southwest" },
-        northwest = { x = 0, y = 0, name = "↖ Northwest" }
-    }
+    active = false,
+    button = { x = 10, y = 240, width = 120, height = 30 },
+    directions = {}
 }
 
 function love.load()
     sti = require 'libraries/sti'
-
-    -- Загружаем карту и получаем terrainMap + entities
     local env = require("environment")
     terrainMap, entities = env.loadMapFromTiled('maps/map1.lua')
-
-    -- Инициализация гексагональной сетки (под размеры карты)
     hex = require("hexgrid").new(56, 11, 11)
     hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
-
-    -- Глобальное здоровье (если нужно)
     globalHealth = { current = 5, max = 5, initial = 5 }
 
-    -- Разделяем для удобства (если нужно быстро получить отдельные списки)
-    function getPlayableActors()
-        local result = {}
-        for _, e in ipairs(entities) do
-            if e:isCharacter() and e.isPlayable then
-                table.insert(result, e)
-            end
-        end
-        return result
-    end
-
-    function getEnemies()
-        local result = {}
-        for _, e in ipairs(entities) do
-            if e:isCharacter() and not e.isPlayable then
-                table.insert(result, e)
-            end
-        end
-        return result
-    end
-
-    function getObstacles()
-        local result = {}
-        for _, e in ipairs(entities) do
-            if e:isObstacle() or e:isBuilding() then
-                table.insert(result, e)
-            end
-        end
-        return result
-    end
-
-    
-    -- Глобальный стек действий для отмены
-    actionHistory = {}
-    
-    -- ПОШАГОВАЯ СИСТЕМА
+    -- Состояние игры
     turnState = {
-        currentTurn = 1,
-        currentActorIndex = 1,
-        turnPhase = "waiting",     -- "waiting" или "moving" или "attacking"
-        actionsRemaining = {},
-        waitingForEnemies = false, -- Ожидание хода врагов
-        enemyTurnTimer = 0
+        phase = "enemy_prepare",   -- "enemy_prepare" → "player" → "enemy_attack"
+        enemyPrepareQueue = {},    -- очередь врагов на движение+подготовку
+        currentPreparingEnemy = nil,
+        enemyAttackQueue = {},
+        enemyAttackTimer = 0,
+        delayBetweenAttacks = 0.4
     }
-    
-    endTurnButton = {
-        x = 10,
-        y = 280,  -- сдвигаем ниже
-        width = 120,
-        height = 30,
-        text = "End Turn",
-        isHovered = false
-    }
-    
-    -- Инициализируем счетчики действий для всех актеров
-    for i, actor in ipairs(entities) do
-        if actor.isPlayable then
-            turnState.actionsRemaining[i] = 1
-        else
-            turnState.actionsRemaining[i] = 0  -- Враги начинают без действий
-            actor.hasActedThisTurn = false
+
+    -- Инициализация врагов
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable then
+            e.hasPreparedAttack = false
+            e.preparePos = nil
+            e.preparedTarget = nil
+            e.movementFinished = false
         end
     end
-    
-    -- Находим первого играбельного актера
-    for i, actor in ipairs(entities) do
-        if actor.isPlayable and turnState.actionsRemaining[i] > 0 then
-            turnState.currentActorIndex = i
-            selectedActor = actor
-            hex.selectedQ = actor.q
-            hex.selectedR = actor.r
+
+    -- Выбираем первого союзника
+    selectedActor = nil
+    for _, a in ipairs(entities) do
+        if a.isPlayable and a.health > 0 then
+            selectedActor = a
+            hex.selectedQ, hex.selectedR = a.q, a.r
             break
         end
     end
-    
+
+    for _, a in ipairs(entities) do
+        if a.isPlayable then
+            a.hasActedThisTurn = false
+            a.hasMovedThisTurn = false
+        end
+    end
+
+    -- Начинаем фазу подготовки врагов
+    startEnemyPreparePhase()
+
     hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
-    
+
     sounds = {}
     sounds.undo = love.audio.newSource("sounds/hover.wav", "static")
     sounds.undo:setVolume(0.4)
@@ -125,25 +75,17 @@ function love.load()
     sounds.attack:setVolume(0.5)
     sounds.collision = love.audio.newSource("sounds/blip.wav", "static")
     sounds.collision:setVolume(0.6)
-    
-    function countPlayableActors()
-        local count = 0
-        for _, actor in ipairs(entities) do
-            if actor.isPlayable then
-                count = count + 1
-            end
-        end
-        return count
-    end
 
     maxUndoCount = countPlayableActors()
+    actionHistory = {}
 
-        -- Создаём глобальное заклинание ветра
+    endTurnButton = {
+        x = 10, y = 280, width = 120, height = 30,
+        text = "End Turn", isHovered = false
+    }
+
+    -- Инициализация Wind Torrent UI
     windTorrent = combat.WindTorrentAttack.new()
-    
-    -- ... остальной код ...
-    
-    -- Подсчитаем позиции для кнопок направлений на правой панели
     local startX = love.graphics.getWidth() - 160
     local startY = 100
     local dirIndex = 1
@@ -151,47 +93,98 @@ function love.load()
     for _, dirName in ipairs(dirOrder) do
         local row = math.floor((dirIndex - 1) / 2)
         local col = (dirIndex - 1) % 2
-        windTorrentUI.directions[dirName].x = startX + col * 75
-        windTorrentUI.directions[dirName].y = startY + row * 35
+        windTorrentUI.directions[dirName] = {
+            x = startX + col * 75,
+            y = startY + row * 35,
+            name = dirName
+        }
         dirIndex = dirIndex + 1
     end
-    
-    -- Кнопка Wind Torrent
-    windTorrentUI.button.x = 10
-    windTorrentUI.button.y = 240
-    windTorrentUI.button.width = 120
-    windTorrentUI.button.height = 30
 end
 
--- Функция завершения хода
-function endTurn()
-    -- Проверяем, не начался ли уже ход врагов
-    if turnState.waitingForEnemies then
-        print("Enemies are already acting!")
+-- Подготовка всех врагов (выбор целей)
+function prepareAllEnemies()
+    local enemies = ai.getLivingEnemies(entities)
+    for _, enemy in ipairs(enemies) do
+        ai.prepareAttackForEnemy(enemy, entities, hex)
+    end
+    -- Переход к ходу игрока
+    turnState.phase = "player"
+    print("=== PLAYER TURN ===")
+    -- Сброс флагов действий для всех союзников
+    for _, actor in ipairs(entities) do
+        if actor.isPlayable then
+            actor.hasActedThisTurn = false
+        end
+    end
+    -- Очищаем историю действий (новый ход)
+    actionHistory = {}
+end
+
+-- Выполнить все подготовленные атаки врагов (вызывается в конце хода игрока)
+function executeAllEnemyAttacks()
+    local enemies = ai.getLivingEnemies(entities)
+    -- Собираем только тех, кто подготовил удар
+    local attackers = {}
+    for _, e in ipairs(enemies) do
+        if e.hasPreparedAttack then
+            table.insert(attackers, e)
+        end
+    end
+    turnState.enemyAttackQueue = attackers
+    turnState.enemyAttackTimer = 0
+    turnState.phase = "enemy_attack"
+    print("=== ENEMY ATTACK PHASE ===")
+end
+
+-- Обновление фазы атаки врагов (по очереди)
+function updateEnemyAttacks(dt)
+    if turnState.phase ~= "enemy_attack" then
         return
     end
 
-    -- === УДАЛЯЕМ проверку, что все союзники сходили ===
-    -- (раньше здесь был цикл allAlliesActed и return)
-
-    -- Принудительно помечаем всех союзников как "сходивших" (пропуск хода для неходивших)
-    for _, actor in ipairs(entities) do
-        if actor.isPlayable and not actor.hasActedThisTurn then
-            actor.hasActedThisTurn = true
-            print(actor.name .. " skipped turn (end turn forced)")
-        end
+    if #turnState.enemyAttackQueue == 0 then
+        -- Все враги атаковали → переходим к следующей подготовке
+        turnState.phase = "enemy_prepare"
+        prepareAllEnemies()
+        return
     end
 
-    -- Очищаем историю действий при завершении хода
-    actionHistory = {}
-    print("Action history cleared at end of turn.")
-
-    -- Начинаем ход врагов
-    turnState.waitingForEnemies = true
-    turnState.enemyTurnTimer = 0
-    print("=== ENEMY TURN START ===")
+    turnState.enemyAttackTimer = turnState.enemyAttackTimer + dt
+    if turnState.enemyAttackTimer >= turnState.delayBetweenAttacks then
+        turnState.enemyAttackTimer = 0
+        local enemy = table.remove(turnState.enemyAttackQueue, 1)
+        if enemy and enemy.health > 0 then
+            ai.executePreparedAttack(enemy, entities, hex, sounds)
+        end
+    end
 end
 
+-- Функция завершения хода игрока
+function endTurn()
+    if turnState.phase ~= "player" then
+        print("Cannot end turn now")
+        return
+    end
+    -- Принудительно завершаем ход для всех, кто не атаковал
+    for _, a in ipairs(entities) do
+        if a.isPlayable and not a.hasActedThisTurn then
+            a.hasActedThisTurn = true
+            print(a.name .. " did not attack, turn ended.")
+        end
+    end
+    -- Собираем врагов для атаки
+    local attackers = {}
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 then
+            table.insert(attackers, e)
+        end
+    end
+    turnState.enemyAttackQueue = attackers
+    turnState.enemyAttackTimer = 0
+    turnState.phase = "enemy_attack"
+    print("=== ENEMY ATTACK PHASE ===")
+end
 -- Обработка хода врагов
 function updateEnemyTurn(dt)
     if not turnState.waitingForEnemies then
@@ -248,71 +241,42 @@ end
 -- Глобальная функция отмены последнего действия (не привязана к выбранному актеру)
 function undoLastAction()
     if #actionHistory == 0 then
-        print("No actions to undo! (0/" .. maxUndoCount .. ")")
+        print("No actions to undo!")
         return false
     end
-    
     local lastAction = actionHistory[#actionHistory]
-    
-    -- Проверяем, не был ли актер уничтожен
-    local actorExists = false
-    local currentActor = nil
-    for _, actor in ipairs(entities) do
-        if actor == lastAction.actor then
-            actorExists = true
-            currentActor = actor
-            break
-        end
-    end
-    
-    if not actorExists then
-        print("Actor no longer exists!")
+    local actor = lastAction.actor
+    if not actor or actor.health <= 0 then
         table.remove(actionHistory)
-        return undoLastAction()  -- Рекурсивно пробуем следующее действие
+        return undoLastAction()
     end
-    
-    -- Проверяем, не двигается ли актер
-    if currentActor.isMoving then
-        print("Cannot undo action while moving!")
+    if actor.isMoving then
+        print("Cannot undo while moving")
         return false
     end
-    
-    -- Проверяем, можно ли отменить (актер должен был совершить действие в этом ходу)
-    if not currentActor.hasActedThisTurn then
-        print(currentActor.name .. " hasn't performed an action this turn yet!")
+    if not actor.hasActedThisTurn then
+        print(actor.name .. " hasn't acted this turn")
         return false
     end
-    
-    -- Откатываем позицию актера
-    currentActor.q = lastAction.fromQ
-    currentActor.r = lastAction.fromR
-    
-    -- Сбрасываем флаги
-    currentActor.hasActedThisTurn = false
-    currentActor.isMoving = false
-    currentActor.path = {}
-    currentActor.currentPathIndex = 0
-    
-    -- Обновляем выделение, если это выбранный актер
-    if selectedActor == currentActor then
-        hex.selectedQ = currentActor.q
-        hex.selectedR = currentActor.r
+    actor.q = lastAction.fromQ
+    actor.r = lastAction.fromR
+    actor.hasActedThisTurn = false
+    actor.isMoving = false
+    actor.path = {}
+    actor.currentPathIndex = 0
+    if selectedActor == actor then
+        hex.selectedQ = actor.q
+        hex.selectedR = actor.r
     end
-    
-    -- Восстанавливаем счетчик действий
     for i, a in ipairs(entities) do
-        if a == currentActor then
-            turnState.actionsRemaining[i] = 1
+        if a == actor then
+            -- восстанавливаем действие (у игрока всегда 1 действие)
             break
         end
     end
-    
-    -- Удаляем действие из истории
     table.remove(actionHistory)
-    
     sounds.undo:play()
-    print("Undone action: " .. currentActor.name)
-    print("Undos remaining: " .. #actionHistory .. "/" .. maxUndoCount)
+    print("Undone action for " .. actor.name)
     return true
 end
 
@@ -325,27 +289,27 @@ function isPositionOccupied(q, r, movingEntity)
     return false
 end
 
-function addToHistory(actor, fromQ, fromR, toQ, toR)
-    local action = {
-        actor = actor,
-        fromQ = fromQ,
-        fromR = fromR,
-        toQ = toQ,
-        toR = toR,
-        turnNumber = turnState.currentTurn
-    }
-    
-    table.insert(actionHistory, action)
-    
-    -- Обновляем максимальное количество отмен (на случай, если появятся новые союзники)
-    maxUndoCount = countPlayableActors()
-    
-    -- Ограничиваем историю до КОЛИЧЕСТВА СОЮЗНЫХ ЮНИТОВ
-    while #actionHistory > maxUndoCount do
-        local removed = table.remove(actionHistory, 1)
-        print("History exceeded limit (" .. maxUndoCount .. "), removed old action for " .. (removed.actor and removed.actor.name or "unknown"))
+function countPlayableActors()
+    local count = 0
+    for _, actor in ipairs(entities) do
+        if actor.isPlayable then
+            count = count + 1
+        end
     end
-    
+    return count
+end
+
+function addToHistory(actor, fromQ, fromR, toQ, toR)
+    if not actor.isPlayable then return end -- только для игроков
+    local action = {
+        actor = actor, fromQ = fromQ, fromR = fromR,
+        toQ = toQ, toR = toR, turnNumber = turnState.currentTurn
+    }
+    table.insert(actionHistory, action)
+    maxUndoCount = countPlayableActors()
+    while #actionHistory > maxUndoCount do
+        table.remove(actionHistory, 1)
+    end
     print("Added action for " .. actor.name .. ". History: " .. #actionHistory .. "/" .. maxUndoCount)
 end
 
@@ -369,36 +333,23 @@ function getEntityAtHex(q, r)
 end
 
 function findPath(startQ, startR, targetQ, targetR, movingActor)
-    if startQ == targetQ and startR == targetR then
-        return {}
-    end
-    
+    if startQ == targetQ and startR == targetR then return {} end
     local nodeInfo = {}
     local startKey = startQ .. "," .. startR
-    nodeInfo[startKey] = {
-        q = startQ,
-        r = startR,
-        g = 0,
-        parent = nil
-    }
-    
+    nodeInfo[startKey] = { q = startQ, r = startR, g = 0, parent = nil }
     local openSet = {startKey}
     local closedSet = {}
-    
     while #openSet > 0 do
         local currentKey = openSet[1]
         local currentIndex = 1
-        
         for i, key in ipairs(openSet) do
             if nodeInfo[key].g < nodeInfo[currentKey].g then
                 currentKey = key
                 currentIndex = i
             end
         end
-        
         table.remove(openSet, currentIndex)
         local current = nodeInfo[currentKey]
-        
         if current.q == targetQ and current.r == targetR then
             local path = {}
             local node = current
@@ -408,29 +359,16 @@ function findPath(startQ, startR, targetQ, targetR, movingActor)
             end
             return path
         end
-        
         closedSet[currentKey] = true
         local neighbors = hex:getNeighbors(current.q, current.r)
-        
         for _, neighbor in ipairs(neighbors) do
             local neighborKey = neighbor.q .. "," .. neighbor.r
-            
             if not closedSet[neighborKey] and hex:isValidHex(neighbor.q, neighbor.r) then
-                -- Союзники не могут проходить через край карты
-                if movingActor.isPlayable and isEdgeCell(neighbor.q, neighbor.r) then
-                    goto continue
-                end
-                
+                if movingActor.isPlayable and isEdgeCell(neighbor.q, neighbor.r) then goto continue end
                 if not isPositionOccupied(neighbor.q, neighbor.r, movingActor) then
                     local tentativeG = current.g + 1
-                    
                     if not nodeInfo[neighborKey] then
-                        nodeInfo[neighborKey] = {
-                            q = neighbor.q,
-                            r = neighbor.r,
-                            g = tentativeG,
-                            parent = current
-                        }
+                        nodeInfo[neighborKey] = { q = neighbor.q, r = neighbor.r, g = tentativeG, parent = current }
                         table.insert(openSet, neighborKey)
                     elseif tentativeG < nodeInfo[neighborKey].g then
                         nodeInfo[neighborKey].g = tentativeG
@@ -441,66 +379,46 @@ function findPath(startQ, startR, targetQ, targetR, movingActor)
             ::continue::
         end
     end
-    
     return nil
 end
 
 function performMove(actor, targetQ, targetR)
-    if actor.isMoving then return false end
-    if actor.q == targetQ and actor.r == targetR then return false end
-    if actor.isPlayable and isEdgeCell(targetQ, targetR) then
-        print(actor.name .. " cannot move to the edge of the map!")
+    if not actor.isPlayable then return false end
+    if actor.isMoving or actor.hasActedThisTurn then return false end
+    if actor.hasMovedThisTurn then
+        print(actor.name .. " has already moved this turn! You can still attack.")
         return false
     end
-    
+    if actor.q == targetQ and actor.r == targetR then return false end
+    if isEdgeCell(targetQ, targetR) then
+        print("Cannot move to edge cell")
+        return false
+    end
     local distance = hex:getDistance(actor.q, actor.r, targetQ, targetR)
     if distance > actor.moveRange then
-        print(actor.name .. " cannot move that far! Max distance: " .. actor.moveRange)
+        print("Too far")
         return false
     end
-    
     if isPositionOccupied(targetQ, targetR, actor) then
-        print("Cell is occupied!")
+        print("Cell occupied")
         return false
     end
-    
     local path = findPath(actor.q, actor.r, targetQ, targetR, actor)
-    if not path or #path == 0 then
-        print("Path not found!")
+    if not path or #path == 0 or #path > actor.moveRange then
+        print("No valid path")
         return false
     end
-    
-    if #path > actor.moveRange then
-        print(actor.name .. " cannot move " .. #path .. " cells! Max: " .. actor.moveRange)
-        return false
-    end
-    
-    -- ========== НОВОЕ: СРАЗУ ДОБАВЛЯЕМ В ИСТОРИЮ ==========
     addToHistory(actor, actor.q, actor.r, targetQ, targetR)
-    -- ===================================================
-    
-    -- Запоминаем, что действие уже использовано (чтобы нельзя было двигаться повторно)
-    actor.hasActedThisTurn = true
-    for i, a in ipairs(entities) do
-        if a == actor then
-            turnState.actionsRemaining[i] = 0
-            break
-        end
-    end
-    
-    -- Запускаем анимацию
+    actor.hasMovedThisTurn = true   -- помечаем, что двигались
     actor.path = path
     actor.currentPathIndex = 1
-    startNextMove(actor)  -- анимация будет обновлять координаты, но историю уже не трогаем
-    
+    startNextMove(actor)
     return true
 end
-
 -- Функция для отображения доступной дистанции движения с учетом препятствий
 function drawMovementRange(actor)
-    if not actor or actor.isMoving or actor.hasActedThisTurn then
-        return
-    end
+    if not actor or actor.isMoving or actor.hasActedThisTurn then return end
+    if actor.hasMovedThisTurn then return end   -- уже двигался – не показываем зелёные клетки
     
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
@@ -622,19 +540,17 @@ end
 
 function startNextMove(actor)
     if actor.currentPathIndex <= #actor.path then
-        local nextStep = actor.path[actor.currentPathIndex]
+        local step = actor.path[actor.currentPathIndex]
         actor.isMoving = true
         actor.timer = 0
-        actor.targetQ = nextStep.q
-        actor.targetR = nextStep.r
+        actor.targetQ = step.q
+        actor.targetR = step.r
         actor.startX, actor.startY = hex:hexToPixel(actor.q, actor.r)
         actor.endX, actor.endY = hex:hexToPixel(actor.targetQ, actor.targetR)
     else
         actor.isMoving = false
         actor.path = {}
         actor.currentPathIndex = 0
-        -- Удалён вызов addToHistory
-        
         if selectedActor == actor then
             hex.selectedQ = actor.q
             hex.selectedR = actor.r
@@ -642,42 +558,21 @@ function startNextMove(actor)
     end
 end
 
+
 function updateActorMovement(actor, dt)
     if actor.isMoving then
         actor.timer = actor.timer + dt
         local t = actor.timer / actor.speed
-        
         if t >= 1 then
             actor.q = actor.targetQ
             actor.r = actor.targetR
             actor.isMoving = false
-            
             actor.currentPathIndex = actor.currentPathIndex + 1
             if actor.currentPathIndex <= #actor.path then
                 startNextMove(actor)
             else
                 actor.path = {}
                 actor.currentPathIndex = 0
-                
-                if actor.startPosForHistory and actor.targetPosForHistory then
-                    addToHistory(actor,
-                                actor.startPosForHistory.q, actor.startPosForHistory.r,
-                                actor.targetPosForHistory.q, actor.targetPosForHistory.r)
-                    actor.startPosForHistory = nil
-                    actor.targetPosForHistory = nil
-                    
-                    actor.hasActedThisTurn = true
-                    for i, a in ipairs(entities) do
-                        if a == actor then
-                            turnState.actionsRemaining[i] = 0
-                            break
-                        end
-                    end
-                    
-                    turnState.turnPhase = "waiting"
-                    print(actor.name .. " finished action!")
-                end
-                
                 if selectedActor == actor then
                     hex.selectedQ = actor.q
                     hex.selectedR = actor.r
@@ -687,41 +582,118 @@ function updateActorMovement(actor, dt)
     end
 end
 
+function startEnemyPreparePhase()
+    local enemies = ai.getLivingEnemies(entities)
+    turnState.enemyPrepareQueue = {}
+    for _, e in ipairs(enemies) do
+        table.insert(turnState.enemyPrepareQueue, e)
+    end
+    turnState.phase = "enemy_prepare"
+    turnState.currentPreparingEnemy = nil
+    -- Запускаем первого врага
+    processNextEnemyPrepare()
+end
+
+function processNextEnemyPrepare()
+    if #turnState.enemyPrepareQueue == 0 then
+        turnState.phase = "player"
+        for _, a in ipairs(entities) do
+            if a.isPlayable and a.health > 0 then
+                a.hasActedThisTurn = false
+                a.hasMovedThisTurn = false
+            end
+        end
+        actionHistory = {}
+        print("=== PLAYER TURN ===")
+        return
+    end
+
+    local enemy = table.remove(turnState.enemyPrepareQueue, 1)
+    turnState.currentPreparingEnemy = enemy
+    enemy.movementFinished = false
+
+    local status = ai.moveAndPrepare(enemy, entities, hex)
+    if status == "prepared" then
+        -- Уже подготовлен, сразу переходим к следующему
+        turnState.currentPreparingEnemy = nil
+        processNextEnemyPrepare()
+    elseif status == "failed" then
+        -- Не может подготовиться (нет целей или движение невозможно)
+        -- Просто пропускаем этого врага
+        print(enemy.name .. " cannot prepare attack, skipping")
+        turnState.currentPreparingEnemy = nil
+        processNextEnemyPrepare()
+    elseif status == "moving" then
+        -- Будем ждать завершения движения в love.update
+        -- Ничего не делаем, ждём установки enemy.movementFinished
+    end
+end
+
 function love.update(dt)
-    -- Обновляем движение всех актеров
+    -- Обновление анимаций движения всех сущностей (включая врагов)
     for _, actor in ipairs(entities) do
         updateActorMovement(actor, dt)
-        ai.updateEnemyMovement(actor, dt, hex)
-        actor.pulse = actor.pulse + dt * actor.pulseSpeed
+        ai.updateEnemyMovement(actor, dt, hex)  -- внутри проверяет isMoving
+        if actor.pulse then
+            actor.pulse = actor.pulse + dt * (actor.pulseSpeed or 5)
+        end
     end
-    
-    -- Обновляем анимации смещений (ветер, отталкивания)
     combat.updatePushAnimations(dt, hex)
-
-    -- Проверяем край карты
     killPlayableAtEdge()
 
-        
-    -- Обрабатываем ход врагов
-    updateEnemyTurn(dt)
-    
-    local mouseX, mouseY = love.mouse.getPosition()
-    hex.hoverQ, hex.hoverR = hex:pixelToHex(mouseX, mouseY)
-    
-    local mouseInUndo = mouseX >= 10 and mouseX <= 130 and mouseY >= 200 and mouseY <= 230
-    undoButton = undoButton or {}
-    undoButton.isHovered = mouseInUndo
-    
-    local mouseInEndTurn = mouseX >= endTurnButton.x and mouseX <= endTurnButton.x + endTurnButton.width and
-                         mouseY >= endTurnButton.y and mouseY <= endTurnButton.y + endTurnButton.height
-    endTurnButton.isHovered = mouseInEndTurn
+    if turnState.phase == "enemy_prepare" and turnState.currentPreparingEnemy then
+        local enemy = turnState.currentPreparingEnemy
+        if not enemy or enemy.health <= 0 then
+            turnState.currentPreparingEnemy = nil
+            processNextEnemyPrepare()
+        elseif not enemy.isMoving and enemy.movementFinished then
+            ai.prepareAttackForEnemy(enemy, entities, hex)
+            enemy.movementFinished = false
+            turnState.currentPreparingEnemy = nil
+            processNextEnemyPrepare()
+        elseif not enemy.isMoving and not enemy.movementFinished then
+            -- Движение не началось и не завершилось – возможно, moveAndPrepare вернул "prepared" или "failed"
+            -- В любом случае, завершаем обработку этого врага
+            if not enemy.hasPreparedAttack then
+                -- Пробуем подготовить, если цель рядом
+                local dist = ai.getDistanceToNearestPlayer(enemy, entities, hex)
+                if dist == 1 then
+                    ai.prepareAttackForEnemy(enemy, entities, hex)
+                end
+            end
+            turnState.currentPreparingEnemy = nil
+            processNextEnemyPrepare()
+        end
+    end
 
-        -- Ховер для кнопки ветра
-    local mouseX, mouseY = love.mouse.getPosition()
-    windTorrentUI.button.isHovered = (mouseX >= windTorrentUI.button.x and 
-                                      mouseX <= windTorrentUI.button.x + windTorrentUI.button.width and
-                                      mouseY >= windTorrentUI.button.y and 
-                                      mouseY <= windTorrentUI.button.y + windTorrentUI.button.height)
+    -- Обновление фазы атаки врагов
+    if turnState.phase == "enemy_attack" then
+        if #turnState.enemyAttackQueue == 0 then
+            turnState.phase = "enemy_prepare"
+            startEnemyPreparePhase()
+            return
+        end
+        turnState.enemyAttackTimer = turnState.enemyAttackTimer + dt
+        if turnState.enemyAttackTimer >= turnState.delayBetweenAttacks then
+            turnState.enemyAttackTimer = 0
+            local enemy = table.remove(turnState.enemyAttackQueue, 1)
+            if enemy and enemy.health > 0 then
+                ai.executePreparedAttack(enemy, entities, hex, sounds)
+            end
+        end
+    end
+
+    -- Ховер для мыши
+    local mx, my = love.mouse.getPosition()
+    hex.hoverQ, hex.hoverR = hex:pixelToHex(mx, my)
+
+    -- Ховер кнопок
+    undoButton = undoButton or {}
+    undoButton.isHovered = (mx >= 10 and mx <= 130 and my >= 200 and my <= 230)
+    endTurnButton.isHovered = (mx >= endTurnButton.x and mx <= endTurnButton.x + endTurnButton.width and
+                               my >= endTurnButton.y and my <= endTurnButton.y + endTurnButton.height)
+    windTorrentUI.button.isHovered = (mx >= windTorrentUI.button.x and mx <= windTorrentUI.button.x + windTorrentUI.button.width and
+                                      my >= windTorrentUI.button.y and my <= windTorrentUI.button.y + windTorrentUI.button.height)
 end
 
 function drawHexGrid()
@@ -895,6 +867,11 @@ end
 function drawEntity(entity)
     local x, y = getEntityDrawPosition(entity)
     
+    if entity.isPlayable and entity.hasMovedThisTurn and not entity.hasActedThisTurn then
+        love.graphics.setColor(0.5, 0.8, 0.5, 0.9)
+        love.graphics.print("🏃", x + 18, y - 20)
+    end
+
     if entity.sprite then
         local sw, sh = entity.sprite:getDimensions()
         local scale = 6
@@ -1050,229 +1027,88 @@ function drawAttackIndicators()
     end
 end
 
+function drawPreparedAttacks()
+    for _, enemy in ipairs(entities) do
+        if enemy:isCharacter() and not enemy.isPlayable and enemy.hasPreparedAttack then
+            -- Вычисляем прогнозируемую цель с учётом текущего смещения врага
+            local deltaQ = enemy.q - enemy.preparePos.q
+            local deltaR = enemy.r - enemy.preparePos.r
+            local targetQ = enemy.preparedTarget.q + deltaQ
+            local targetR = enemy.preparedTarget.r + deltaR
+            if hex:isValidHex(targetQ, targetR) then
+                local x, y = hex:hexToPixel(targetQ, targetR)
+                local vertices = hex:drawHexagon(x, y, hex.radius)
+                love.graphics.setColor(1, 0, 0, 0.5)
+                love.graphics.polygon("fill", vertices)
+                love.graphics.setColor(1, 0.2, 0.2, 0.9)
+                love.graphics.setLineWidth(3)
+                love.graphics.polygon("line", vertices)
+                love.graphics.setLineWidth(1)
+                love.graphics.print("⚔", x-6, y-10)
+            end
+        end
+    end
+end
+
+
 function love.draw()
     drawHexGrid()
-    
     drawEdgeWarning()
     drawAllEntities()
+    drawPreparedAttacks()   -- отображение готовящихся ударов
 
-    if selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving then
+    if selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and turnState.phase == "player" then
         drawMovementRange(selectedActor)
         drawAttackIndicators()
-        
         if hex.hoverQ >= 0 and hex.hoverR >= 0 then
             drawPathPreview(selectedActor, hex.hoverQ, hex.hoverR)
         end
     end
-    
+
     drawUndoButton()
     drawEndTurnButton()
     drawWindTorrentUI()
     drawGlobalHealthBar()
-    
-    love.graphics.setColor(1, 1, 1, 1)
-    
-    love.graphics.print("Turn: " .. turnState.currentTurn, 10, 10)
-    if selectedActor then
-        love.graphics.print("Current: " .. selectedActor.name, 10, 30)
-        love.graphics.print("Status: " .. (selectedActor.hasActedThisTurn and "Acted ✓" or "Ready to act"), 10, 50)
-        love.graphics.print("Move Range: " .. selectedActor.moveRange .. " cells", 10, 70)
-    end
 
-    function drawCurrentAttack()
-        if turnState.waitingForEnemies then
-            love.graphics.setColor(0.2, 0.2, 0.3, 0.8)
-            love.graphics.rectangle("fill", 10, 280, 250, 60, 5)
-            love.graphics.setColor(1, 1, 1, 0.8)
-            love.graphics.rectangle("line", 10, 280, 250, 60, 5)
-            
-            love.graphics.setColor(1, 0.5, 0.2, 1)
-            love.graphics.print("ENEMY TURN", 15, 300)
-            love.graphics.setColor(0.8, 0.8, 0.8, 1)
-            love.graphics.print("Waiting for enemies to act...", 15, 320)
-            return
-        end
-        
-        if selectedActor and #selectedActor.attacks > 0 then
-            local currentAttack = selectedActor.attacks[selectedActor.currentAttackIndex]
-            
-            love.graphics.setColor(0.2, 0.2, 0.3, 0.8)
-            love.graphics.rectangle("fill", 10, 280, 250, 60, 5)
-            love.graphics.setColor(1, 1, 1, 0.8)
-            love.graphics.rectangle("line", 10, 280, 250, 60, 5)
-            
-            love.graphics.setColor(1, 1, 0.5, 1)
-            love.graphics.print("Current Attack:", 15, 285)
-            
-            love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.print(currentAttack.name, 15, 300)
-            
-            love.graphics.setColor(0.7, 0.7, 0.7, 1)
-            love.graphics.print(currentAttack.description, 15, 315)
-            
-            love.graphics.setColor(0.5, 0.8, 0.5, 1)
-            love.graphics.print("Press TAB to switch attack (" .. selectedActor.currentAttackIndex .. "/" .. #selectedActor.attacks .. ")", 15, 335)
-        end
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.print("Phase: " .. turnState.phase, 10, 10)
+    if selectedActor then
+        love.graphics.print("Selected: " .. selectedActor.name .. (selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 30)
     end
-    
     love.graphics.print("Left click: Move | Right click: Attack", 10, 130)
-    love.graphics.print("Each actor: 1 action per turn", 10, 150)
-    love.graphics.print("Press 'U' to undo last move (not attack)", 10, 170)
-    
-    if hex.hoverQ >= 0 and hex.hoverR >= 0 then
-        local entity = getEntityAtHex(hex.hoverQ, hex.hoverR)
-        local terrainType = (terrainMap[hex.hoverQ] and terrainMap[hex.hoverQ][hex.hoverR]) or "grass"
-        
-        if entity then
-            love.graphics.print("Obstacle: " .. entity.name .. " (" .. entity.health .. "/" .. entity.maxHealth .. " HP)", 10, 90)
-        else
-            love.graphics.print("Terrain: " .. terrainType, 10, 90)
-        end
-    end
+    love.graphics.print("Press TAB to switch attack | U to undo move", 10, 150)
 end
 
 function love.mousepressed(x, y, button)
-    if button == 1 then  -- Левая кнопка мыши (движение)
-            -- Сначала проверяем кнопку Wind Torrent
-        if x >= windTorrentUI.button.x and x <= windTorrentUI.button.x + windTorrentUI.button.width and
-           y >= windTorrentUI.button.y and y <= windTorrentUI.button.y + windTorrentUI.button.height then
-            if windTorrent and not turnState.waitingForEnemies then --and not windTorrent.hasBeenUsed
-                windTorrentUI.active = true
-                print("Select wind direction...")
-            elseif windTorrent and windTorrent.hasBeenUsed then
-                print("Wind Torrent has already been used this game!")
-            elseif turnState.waitingForEnemies then
-                print("Cannot use Wind Torrent during enemy turn!")
-            end
-            return
-        end
-        
-        -- Если активен режим выбора направления
-        if windTorrentUI.active then
-            -- Проверяем клик по кнопкам направлений
-            for dirName, dir in pairs(windTorrentUI.directions) do
-                if x >= dir.x and x <= dir.x + 70 and y >= dir.y and y <= dir.y + 30 then
-                    windTorrent:executeGlobalWithAnimation(dirName, hex, entities, sounds, function(success, message)
-                        if success then
-                            -- Очищаем историю действий после использования глобальной атаки
-                            actionHistory = {}
-                            print("Action history cleared (Wind Torrent used)")
-                        else
-                            print("Wind Torrent failed: " .. (message or "unknown error"))
-                        end
-                    end)
-                    windTorrentUI.active = false
+    if button == 1 then
+        -- ... обработка кнопок Undo, End Turn, Wind Torrent ...
+        if turnState.phase == "player" then
+            local tq, tr = hex:pixelToHex(x, y)
+            if hex:isValidHex(tq, tr) then
+                local clicked = getEntityAtHex(tq, tr)
+                if clicked and clicked.isPlayable and clicked.health > 0 then
+                    if not clicked.hasActedThisTurn then
+                        selectedActor = clicked
+                        hex.selectedQ, hex.selectedR = tq, tr
+                    end
                     return
                 end
-            end
-            
-            -- Проверяем кнопку Cancel
-            local cancelX = love.graphics.getWidth() / 2 - 40
-            local cancelY = love.graphics.getHeight() - 80
-            if x >= cancelX and x <= cancelX + 80 and y >= cancelY and y <= cancelY + 30 then
-                windTorrentUI.active = false
-                print("Wind Torrent cancelled")
-                return
-            end
-            
-            -- Клик вне кнопок отменяет выбор
-            windTorrentUI.active = false
-            print("Wind Torrent cancelled")
-            return
-        end
-        -- Проверяем кнопку Undo
-        if x >= 10 and x <= 130 and y >= 200 and y <= 230 then
-            if #actionHistory > 0 then
-                undoLastAction()
-            else
-                print("No actions to undo!")
-            end
-            return
-        end
-        
-        -- Проверяем кнопку End Turn
-        if x >= endTurnButton.x and x <= endTurnButton.x + endTurnButton.width and
-        y >= endTurnButton.y and y <= endTurnButton.y + endTurnButton.height then
-            local anyActorActed = false
-            for _, actor in ipairs(entities) do
-                if actor.isPlayable and actor.hasActedThisTurn then
-                    anyActorActed = true
-                    break
+                if selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.hasMovedThisTurn and not selectedActor.isMoving then
+                    performMove(selectedActor, tq, tr)
+                    hex.selectedQ, hex.selectedR = tq, tr
                 end
             end
-            
-            if anyActorActed then
-                endTurn()
-            else
-                print("No actor has taken an action yet! At least one character must act first.")
-            end
-            return
         end
-
-        local allAlliesActed = true
-        for _, actor in ipairs(entities) do
-            if actor.isPlayable and not actor.hasActedThisTurn then
-                allAlliesActed = false
-                break
-            end
-        end
-        
-        if allAlliesActed then
-            print("Enemies are acting! Wait for your turn.")
-            return
-        end
-        
-        -- Клик по гексу для движения
-        local targetQ, targetR = hex:pixelToHex(x, y)
-        if hex:isValidHex(targetQ, targetR) then
-            local clickedActor = getEntityAtHex(targetQ, targetR)
-            
-            if clickedActor and clickedActor.isPlayable then
-                if clickedActor.hasActedThisTurn then
-                    print(clickedActor.name .. " has already acted this turn!")
-                else
-                    selectedActor = clickedActor
-                    hex.selectedQ = targetQ
-                    hex.selectedR = targetR
-                    print("Selected: " .. clickedActor.name)
-                end
-                return
-            end            
-            
-            if selectedActor and not selectedActor.isMoving and not selectedActor.hasActedThisTurn then
-                performMove(selectedActor, targetQ, targetR)
-                hex.selectedQ = targetQ
-                hex.selectedR = targetR
-            elseif selectedActor and selectedActor.hasActedThisTurn then
-                print(selectedActor.name .. " has already used their action!")
-            end
-        end
-    elseif button == 2 then  -- Правая кнопка мыши (атака)
-            -- Аналогичная проверка для атаки
-        local allAlliesActed = true
-        for _, actor in ipairs(entities) do
-            if actor.isPlayable and not actor.hasActedThisTurn then
-                allAlliesActed = false
-                break
-            end
-        end
-        
-        if allAlliesActed then
-            print("Enemies are acting! Wait for your turn.")
-            return
-        end
-        local targetQ, targetR = hex:pixelToHex(x, y)
-        if hex:isValidHex(targetQ, targetR) and selectedActor then
-            if selectedActor.hasActedThisTurn then
-                print(selectedActor.name .. " has already acted this turn!")
-            elseif selectedActor.isMoving then
-                print(selectedActor.name .. " is currently moving!")
-            else
-                performAttackWithSelectedAttack(selectedActor, targetQ, targetR)
+    elseif button == 2 then
+        if turnState.phase == "player" then
+            local tq, tr = hex:pixelToHex(x, y)
+            if hex:isValidHex(tq, tr) and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving then
+                performAttackWithSelectedAttack(selectedActor, tq, tr)
             end
         end
     end
 end
+
 
 -- Проверка, является ли клетка краем карты
 function isEdgeCell(q, r)
@@ -1324,51 +1160,44 @@ function getCurrentAttack(actor)
 end
 
 function performAttackWithSelectedAttack(attacker, targetQ, targetR)
+    if not attacker.isPlayable then
+        print("Not a playable character")
+        return false, "Not a player"
+    end
+    if attacker.hasActedThisTurn then
+        print(attacker.name .. " has already acted this turn!")
+        return false, "Already acted"
+    end
     local attack = getCurrentAttack(attacker)
     if not attack then
-        return false, "No attack available!"
+        print("No attack available")
+        return false, "No attack"
     end
-    
-    -- Проверяем, находится ли цель в радиусе атаки
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
     if distance > attack.range then
         print(string.format("Target out of range! (%d > %d)", distance, attack.range))
-        return false, "Target out of range!"
+        return false, "Out of range"
     end
-    
-    -- Проверяем, есть ли цель по указанным координатам
     local target = combat.getEntityAtHex(targetQ, targetR, entities)
     if not target then
-        print("No entity at target position!")
-        return false, "No target there!"
+        print("No entity at target position")
+        return false, "No target"
     end
-    
-    -- Проверяем, не атакуем ли мы союзника
-    if attacker.isPlayable and target.isPlayable then
-        print("Cannot attack allies!")
-        return false, "Cannot attack allies!"
-    end
-    
     if not attacker.isPlayable and not target.isPlayable then
-        print("Enemies don't attack each other!")
-        return false, "Enemies don't attack each other!"
+        print("Enemies don't attack each other")
+        return false, "Enemies don't attack each other"
     end
-    
-    -- Выполняем атаку через метод execute
     local success, message = attack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    
-    -- Очищаем историю после успешной атаки союзника
-    if success and attacker.isPlayable then
-        actionHistory = {}
-        print("Action history cleared (attack by " .. attacker.name .. ")")
+    if success then
+        attacker.hasActedThisTurn = true   -- ход завершён
+        actionHistory = {}                 -- очищаем историю после атаки
+        print(attacker.name .. " attacked and ended turn.")
+    else
+        print("Attack failed: " .. (message or "unknown"))
     end
-    
-    if not success then
-        print("Attack failed: " .. (message or "unknown reason"))
-    end
-    
     return success, message
 end
+
 
 function drawWindTorrentUI()
     -- Кнопка активации
@@ -1499,38 +1328,12 @@ end
 
 function love.keypressed(key)
     if key == "u" or key == "U" then
-        if #actionHistory > 0 then
-            undoLastAction()
-        else
-            print("No actions to undo!")
+        if #actionHistory > 0 then undoLastAction() end
+    elseif key == "e" or key == "E" then
+        if turnState.phase == "player" then endTurn() end
+    elseif key == "tab" or key == "Tab" then
+        if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn then
+            switchAttack()
         end
-    end
-    
-    if key == "e" or key == "E" then
-        endTurn()
-    end
-    
-    if key == "d" and selectedActor then
-        selectedActor.health = math.max(0, selectedActor.health - 1)
-        print(selectedActor.name .. " took 1 damage! Health: " .. selectedActor.health)
-        
-        if selectedActor.health <= 0 then
-            for i, actor in ipairs(entities) do
-                if actor == selectedActor then
-                    table.remove(entities, i)
-                    break
-                end
-            end
-            print(selectedActor.name .. " has been defeated!")
-            if #entities > 0 then
-                selectedActor = entities[1]
-            else
-                selectedActor = nil
-            end
-        end
-    end
-
-    if key == "tab" or key == "Tab" then
-        switchAttack()
     end
 end

@@ -195,20 +195,20 @@ function combat.FlipAttack.new()
 end
 
 function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    debugPrint("=== FlipAttack ===")
-    debugPrint(string.format("Attacker: (%d,%d) -> Target: (%d,%d)", attacker.q, attacker.r, targetQ, targetR))
+    print("=== FlipAttack ===")
+    print(string.format("Attacker: (%d,%d) -> Target: (%d,%d)", attacker.q, attacker.r, targetQ, targetR))
     
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    debugPrint(string.format("Distance: %d", distance))
+    print(string.format("Distance: %d", distance))
     
     if distance ~= 1 then
-        debugPrint("ERROR: Target must be adjacent!")
+        print("ERROR: Target must be adjacent!")
         return false, "Target must be adjacent!"
     end
     
     local targetActor = combat.getEntityAtHex(targetQ, targetR, entities)
     if not targetActor then
-        debugPrint("ERROR: No enemy at that hex!")
+        print("ERROR: No enemy at that hex!")
         return false, "No enemy at that hex!"
     end
     
@@ -217,15 +217,15 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     local aX, aY, aZ = axialToCube(attacker.q, attacker.r)
     local tX, tY, tZ = axialToCube(targetQ, targetR)
     
-    debugPrint(string.format("Attacker cube: (%d,%d,%d)", aX, aY, aZ))
-    debugPrint(string.format("Target cube: (%d,%d,%d)", tX, tY, tZ))
+    print(string.format("Attacker cube: (%d,%d,%d)", aX, aY, aZ))
+    print(string.format("Target cube: (%d,%d,%d)", tX, tY, tZ))
     
     -- Направление от цели к атакующему
     local dirFromTargetToAttackerX = aX - tX
     local dirFromTargetToAttackerY = aY - tY
     local dirFromTargetToAttackerZ = aZ - tZ
     
-    debugPrint(string.format("Direction from target to attacker: (%d,%d,%d)", 
+    print(string.format("Direction from target to attacker: (%d,%d,%d)", 
         dirFromTargetToAttackerX, dirFromTargetToAttackerY, dirFromTargetToAttackerZ))
     
     -- Позиция за атакующим = позиция атакующего + направление от цели к атакующему
@@ -234,18 +234,18 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     local behindZ = aZ + dirFromTargetToAttackerZ
     
     local behindQ, behindR = cubeToAxial(behindX, behindY, behindZ)
-    debugPrint(string.format("Behind position (axial): (%d,%d)", behindQ, behindR))
+    print(string.format("Behind position (axial): (%d,%d)", behindQ, behindR))
     
     -- Проверяем, можно ли переместить цель
     local isOccupied = combat.getEntityAtHex(behindQ, behindR, entities) ~= nil
     
     if not hex:isValidHex(behindQ, behindR) then
-        debugPrint("ERROR: Behind position is outside map!")
+        print("ERROR: Behind position is outside map!")
         return false, "No free space behind the attacker!"
     end
     
     if isOccupied then
-        debugPrint("ERROR: Behind position is occupied!")
+        print("ERROR: Behind position is occupied!")
         return false, "No free space behind the attacker!"
     end
     
@@ -253,14 +253,14 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     targetActor.q = behindQ
     targetActor.r = behindR
     print(string.format("%s flips %s behind them!", attacker.name, targetActor.name))
-    debugPrint(string.format("Moved %s to (%d,%d)", targetActor.name, behindQ, behindR))
+    print(string.format("Moved %s to (%d,%d)", targetActor.name, behindQ, behindR))
     
     if sounds and sounds.attack then
         sounds.attack:play()
     end
     
     attacker.hasActedThisTurn = true
-    debugPrint("=== FlipAttack complete ===")
+    print("=== FlipAttack complete ===")
     return true, nil
 end
 
@@ -274,7 +274,7 @@ function combat.ShootAttack.new(range)
 end
 
 function combat.ShootAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    debugPrint("=== ShootAttack ===")
+    print("=== ShootAttack ===")
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then
         return false, "Not a straight line!"
@@ -303,7 +303,7 @@ function combat.PiercingShootAttack.new(range)
 end
 
 function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    debugPrint("=== PiercingShootAttack ===")
+    print("=== PiercingShootAttack ===")
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then
         return false, "Not a straight line!"
@@ -332,7 +332,7 @@ function combat.AoePushAttack.new()
 end
 
 function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    debugPrint("=== AoePushAttack ===")
+    print("=== AoePushAttack ===")
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
     if distance > self.range then
         return false, "Target out of range!"
@@ -368,7 +368,7 @@ function combat.AoeDirectionalAttack.new()
 end
 
 function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    debugPrint("=== AoeDirectionalAttack ===")
+    print("=== AoeDirectionalAttack ===")
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
     if distance > self.range then
         return false, "Target out of range!"
