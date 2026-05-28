@@ -14,7 +14,7 @@ local function debugPrint(...)
 end
 
 -- Maximum primitive AI: just goes to the nearest ally and attacks
-function ai.performEnemyTurn(enemy, actors, obstacles, hex, sounds)
+function ai.performEnemyTurn(enemy, entities, hex, sounds)
     debugPrint("=== Starting turn for enemy:", enemy.name, "===")
     debugPrint("Enemy position: q=" .. enemy.q .. ", r=" .. enemy.r)
     
@@ -32,14 +32,13 @@ function ai.performEnemyTurn(enemy, actors, obstacles, hex, sounds)
     local nearestAlly = nil
     local nearestDistance = math.huge
     
-    debugPrint("Searching for targets among", #actors, "actors")
-    for _, actor in ipairs(actors) do
-        if actor.isPlayable and actor.health > 0 then
-            local dist = hex:getDistance(enemy.q, enemy.r, actor.q, actor.r)
-            debugPrint("  " .. actor.name .. ": distance =", dist, "position: q=" .. actor.q .. ", r=" .. actor.r)
+    debugPrint("Searching for targets among", #entities, "actors")
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and e.isPlayable and e.health > 0 then
+            local dist = hex:getDistance(enemy.q, enemy.r, e.q, e.r)
             if dist < nearestDistance then
                 nearestDistance = dist
-                nearestAlly = actor
+                nearestAlly = e
             end
         end
     end
@@ -55,11 +54,11 @@ function ai.performEnemyTurn(enemy, actors, obstacles, hex, sounds)
     -- If enemy is adjacent to target (distance 1), attack
     if nearestDistance == 1 then
         debugPrint("Target is adjacent - attacking!")
-        return ai.performAttack(enemy, nearestAlly, actors, obstacles, hex, sounds)
+        return ai.performAttack(enemy, nearestAlly, entities, hex, sounds)
     else
         -- Otherwise move towards target (to distance 1 from it)
         debugPrint("Moving towards target (distance", nearestDistance .. ")")
-        local moveResult = ai.performMove(enemy, nearestAlly, actors, obstacles, hex)
+        local moveResult = ai.performMove(enemy, nearestAlly, entities, hex)
         if not moveResult then
             debugPrint(enemy.name .. " cannot move to target! Ending turn.")
             enemy.hasActedThisTurn = true
@@ -69,7 +68,7 @@ function ai.performEnemyTurn(enemy, actors, obstacles, hex, sounds)
 end
 
 -- Primitive movement towards target
-function ai.performMove(enemy, target, actors, obstacles, hex)
+function ai.performMove(enemy, target, entities, hex)
     debugPrint("--- Planning movement for", enemy.name, "---")
     debugPrint("Target:", target.name, "position: q=" .. target.q .. ", r=" .. target.r)
     
@@ -87,7 +86,7 @@ function ai.performMove(enemy, target, actors, obstacles, hex)
             local isOccupied = false
             local occupiedBy = ""
             
-            for _, actor in ipairs(actors) do
+            for _, actor in ipairs(entities) do
                 if actor ~= enemy and actor.q == neighbor.q and actor.r == neighbor.r then
                     isOccupied = true
                     occupiedBy = actor.name
@@ -96,7 +95,7 @@ function ai.performMove(enemy, target, actors, obstacles, hex)
             end
             
             if not isOccupied then
-                for _, obstacle in ipairs(obstacles) do
+                for _, obstacle in ipairs(entities) do
                     if obstacle.q == neighbor.q and obstacle.r == neighbor.r then
                         isOccupied = true
                         occupiedBy = "obstacle"
@@ -124,7 +123,7 @@ function ai.performMove(enemy, target, actors, obstacles, hex)
     if bestCell and bestDistance <= enemy.moveRange then
         debugPrint("Found optimal cell: q=" .. bestCell.q .. ", r=" .. bestCell.r .. 
                   ", distance:", bestDistance)
-        local moveResult = ai.moveToCell(enemy, bestCell.q, bestCell.r, hex, actors, obstacles)
+        local moveResult = ai.moveToCell(enemy, bestCell.q, bestCell.r, hex, entities)
         if not moveResult then
             debugPrint("Failed to move to optimal cell")
         end
@@ -133,7 +132,7 @@ function ai.performMove(enemy, target, actors, obstacles, hex)
     
     -- If no cell found near target, move towards target
     debugPrint("No free cells found near target, moving in direction of target")
-    local moveResult = ai.moveTowards(enemy, target.q, target.r, actors, obstacles, hex)
+    local moveResult = ai.moveTowards(enemy, target.q, target.r, entities, hex)
     if not moveResult then
         debugPrint("Failed to move towards target")
     end
@@ -141,7 +140,7 @@ function ai.performMove(enemy, target, actors, obstacles, hex)
 end
 
 -- Movement to specific cell
-function ai.moveToCell(enemy, targetQ, targetR, hex, actors, obstacles)
+function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
     debugPrint("--- Attempting to move to cell:", targetQ, targetR, "---")
     
     if enemy.isMoving then
@@ -159,14 +158,14 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, actors, obstacles)
     
     -- Check if cell is occupied
     debugPrint("Checking if target cell is occupied...")
-    for _, actor in ipairs(actors) do
+    for _, actor in ipairs(entities) do
         if actor ~= enemy and actor.q == targetQ and actor.r == targetR then
             debugPrint("Cell occupied by actor:", actor.name)
             return false
         end
     end
     
-    for _, obstacle in ipairs(obstacles) do
+    for _, obstacle in ipairs(entities) do
         if obstacle.q == targetQ and obstacle.r == targetR then
             debugPrint("Cell occupied by obstacle")
             return false
@@ -176,7 +175,7 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, actors, obstacles)
     debugPrint("Target cell is free, finding path...")
     
     -- Find path
-    local path = ai.findSimplePath(enemy.q, enemy.r, targetQ, targetR, enemy, actors, obstacles, hex)
+    local path = ai.findSimplePath(enemy.q, enemy.r, targetQ, targetR, enemy, entities, hex)
     
     if path then
         debugPrint("Path found, length:", #path, "steps")
@@ -198,7 +197,7 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, actors, obstacles)
 end
 
 -- Simple BFS pathfinding
-function ai.findSimplePath(startQ, startR, targetQ, targetR, enemy, actors, obstacles, hex)
+function ai.findSimplePath(startQ, startR, targetQ, targetR, enemy, entities, hex)
     debugPrint("--- BFS Pathfinding ---")
     debugPrint("From: q=" .. startQ .. ", r=" .. startR)
     debugPrint("To: q=" .. targetQ .. ", r=" .. targetR)
@@ -226,19 +225,10 @@ function ai.findSimplePath(startQ, startR, targetQ, targetR, enemy, actors, obst
                 -- Check if cell is occupied
                 local isOccupied = false
                 
-                for _, actor in ipairs(actors) do
-                    if actor ~= enemy and actor.q == neighbor.q and actor.r == neighbor.r then
+                for _, entity in ipairs(entities) do
+                    if entity ~= enemy and entity.q == neighbor.q and entity.r == neighbor.r then
                         isOccupied = true
                         break
-                    end
-                end
-                
-                if not isOccupied then
-                    for _, obstacle in ipairs(obstacles) do
-                        if obstacle.q == neighbor.q and obstacle.r == neighbor.r then
-                            isOccupied = true
-                            break
-                        end
                     end
                 end
                 
@@ -260,7 +250,7 @@ function ai.findSimplePath(startQ, startR, targetQ, targetR, enemy, actors, obst
 end
 
 -- Move towards target (straight line)
-function ai.moveTowards(enemy, targetQ, targetR, actors, obstacles, hex)
+function ai.moveTowards(enemy, targetQ, targetR, entities, hex)
     debugPrint("--- Moving towards target:", targetQ, targetR, "---")
     
     -- Find all neighbors of enemy
@@ -278,21 +268,11 @@ function ai.moveTowards(enemy, targetQ, targetR, actors, obstacles, hex)
             local isOccupied = false
             local occupiedBy = ""
             
-            for _, actor in ipairs(actors) do
-                if actor ~= enemy and actor.q == neighbor.q and actor.r == neighbor.r then
+            for _, entity in ipairs(entities) do
+                if entity ~= enemy and entity.q == neighbor.q and entity.r == neighbor.r then
                     isOccupied = true
-                    occupiedBy = actor.name
+                    occupiedBy = entity.name
                     break
-                end
-            end
-            
-            if not isOccupied then
-                for _, obstacle in ipairs(obstacles) do
-                    if obstacle.q == neighbor.q and obstacle.r == neighbor.r then
-                        isOccupied = true
-                        occupiedBy = "obstacle"
-                        break
-                    end
                 end
             end
             
@@ -314,7 +294,7 @@ function ai.moveTowards(enemy, targetQ, targetR, actors, obstacles, hex)
     
     if bestNeighbor then
         debugPrint("Moving to best neighbor: q=" .. bestNeighbor.q .. ", r=" .. bestNeighbor.r)
-        local moveResult = ai.moveToCell(enemy, bestNeighbor.q, bestNeighbor.r, actors, obstacles, hex)
+        local moveResult = ai.moveToCell(enemy, bestNeighbor.q, bestNeighbor.r, entities, hex)
         if not moveResult then
             debugPrint("Failed to move to neighbor cell, ending turn")
         end
@@ -382,7 +362,7 @@ function ai.updateEnemyMovement(enemy, dt, hex)
 end
 
 -- Enemy attack
-function ai.performAttack(enemy, target, actors, obstacles, hex, sounds)
+function ai.performAttack(enemy, target, entities, hex, sounds)
     debugPrint("---", enemy.name, "attacking", target.name, "---")
     
     -- Simple attack with damage 1
@@ -413,9 +393,9 @@ function ai.performAttack(enemy, target, actors, obstacles, hex, sounds)
     if target.health <= 0 then
         debugPrint(target.name .. " has been defeated!")
         print(target.name .. " has been defeated!")
-        for i, a in ipairs(actors) do
+        for i, a in ipairs(entities) do
             if a == target then
-                table.remove(actors, i)
+                table.remove(entities, i)
                 debugPrint(target.name .. " removed from actors list")
                 break
             end
@@ -452,14 +432,14 @@ function ai.hasEnemiesToAct(actors)
 end
 
 -- Execute turn for all enemies
-function ai.performAllEnemiesTurn(actors, obstacles, hex, sounds)
+function ai.performAllEnemiesTurn(entities, hex, sounds)
     debugPrint("=== Performing enemies turn ===")
     local anyActed = false
     
-    for _, enemy in ipairs(actors) do
+    for _, enemy in ipairs(entities) do
         if not enemy.isPlayable and not enemy.hasActedThisTurn and not enemy.isMoving then
             debugPrint("Processing enemy:", enemy.name)
-            ai.performEnemyTurn(enemy, actors, obstacles, hex, sounds)
+            ai.performEnemyTurn(enemy, entities, hex, sounds)
             anyActed = true
             break -- Process one enemy at a time
         end

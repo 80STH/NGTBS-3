@@ -1,0 +1,120 @@
+return {
+  version = "1.10",
+  luaversion = "5.1",
+  tiledversion = "1.12.1",
+  class = "",
+  orientation = "hexagonal",
+  renderorder = "right-down",
+  width = 11,
+  height = 11,
+  tilewidth = 14,
+  tileheight = 12,
+  nextlayerid = 3,
+  nextobjectid = 2,
+  hexsidelength = 6,
+  staggeraxis = "y",
+  staggerindex = "odd",
+  properties = {},
+  tilesets = {
+    {
+      name = "hex mini",
+      firstgid = 1,
+      class = "",
+      tilewidth = 18,
+      tileheight = 18,
+      spacing = 0,
+      margin = 0,
+      columns = 5,
+      image = "../../../../../Program Files/Tiled/examples/hexmini.png",
+      imagewidth = 106,
+      imageheight = 72,
+      objectalignment = "unspecified",
+      tilerendersize = "tile",
+      fillmode = "stretch",
+      tileoffset = {
+        x = 0,
+        y = 1
+      },
+      grid = {
+        orientation = "orthogonal",
+        width = 18,
+        height = 18
+      },
+      properties = {},
+      wangsets = {},
+      tilecount = 20,
+      tiles = {}
+    },
+    {
+      name = "wxtctr615cw31",
+      firstgid = 21,
+      class = "",
+      tilewidth = 16,
+      tileheight = 16,
+      spacing = 0,
+      margin = 0,
+      columns = 9,
+      image = "wxtctr615cw31.png",
+      imagewidth = 159,
+      imageheight = 142,
+      objectalignment = "unspecified",
+      tilerendersize = "tile",
+      fillmode = "stretch",
+      tileoffset = {
+        x = 0,
+        y = 0
+      },
+      grid = {
+        orientation = "orthogonal",
+        width = 16,
+        height = 16
+      },
+      properties = {},
+      wangsets = {},
+      tilecount = 72,
+      tiles = {}
+    }
+  },
+  layers = {
+    {
+      type = "tilelayer",
+      x = 0,
+      y = 0,
+      width = 11,
+      height = 11,
+      id = 1,
+      name = "Ground",
+      class = "",
+      visible = true,
+      opacity = 1,
+      offsetx = 0,
+      offsety = 0,
+      parallaxx = 1,
+      parallaxy = 1,
+      properties = {},
+      encoding = "base64",
+      compression = "zlib",
+      data = "eJyNzsEKACAIA1A9h/v/z61ASMYSB7s9h2YvOF2inOs8i2wMbOd509PExyrv5W4VVz3I1W22vDmx6t/OY2iVUx7Cbh6NA1Y="
+    },
+    {
+      type = "tilelayer",
+      x = 0,
+      y = 0,
+      width = 11,
+      height = 11,
+      id = 2,
+      name = "objects",
+      class = "",
+      visible = true,
+      opacity = 1,
+      offsetx = 0,
+      offsety = 0,
+      parallaxx = 1,
+      parallaxy = 1,
+      properties = {},
+      encoding = "base64",
+      compression = "zlib",
+      data = "eJxjYKA9kAJiHiCWRBKTo9BMHiSzGaBms0PF5fGox8XHBqSQ2EokuQ43gNkLcqskPoVUBABd0wFP"
+    }
+  }
+}

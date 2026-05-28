@@ -26,25 +26,50 @@ windTorrentUI = {
 }
 
 function love.load()
-    -- Настройки гексагональной сетки
-    hex = require("hexgrid").new(60, 11, 9)
+    sti = require 'libraries/sti'
 
-    -- ГЛОБАЛЬНЫЙ СТОЛБ ЗДОРОВЬЯ
-    globalHealth = {
-        current = 5,
-        max = 5,
-        initial = 5  -- Для восстановления в начале игры
-    }
-    
-    -- Инициализация окружения из отдельного файла
+    -- Загружаем карту и получаем terrainMap + entities
     local env = require("environment")
-    
-    -- Генерация карты земли
-    terrainMap = env.generateTerrainMap(hex)
-    
-    -- Создание актеров и препятствий (включая строения)
-    actors = env.createInitialActors()
-    obstacles = env.createInitialObstaclesAndBuildings()  -- Используем новую функцию
+    terrainMap, entities = env.loadMapFromTiled('maps/map1.lua')
+
+    -- Инициализация гексагональной сетки (под размеры карты)
+    hex = require("hexgrid").new(60, 13, 11)   -- ширина=13, высота=11
+    hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
+
+    -- Глобальное здоровье (если нужно)
+    globalHealth = { current = 5, max = 5, initial = 5 }
+
+    -- Разделяем для удобства (если нужно быстро получить отдельные списки)
+    function getPlayableActors()
+        local result = {}
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and e.isPlayable then
+                table.insert(result, e)
+            end
+        end
+        return result
+    end
+
+    function getEnemies()
+        local result = {}
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and not e.isPlayable then
+                table.insert(result, e)
+            end
+        end
+        return result
+    end
+
+    function getObstacles()
+        local result = {}
+        for _, e in ipairs(entities) do
+            if e:isObstacle() or e:isBuilding() then
+                table.insert(result, e)
+            end
+        end
+        return result
+    end
+
     
     -- Глобальный стек действий для отмены
     actionHistory = {}
@@ -69,7 +94,7 @@ function love.load()
     }
     
     -- Инициализируем счетчики действий для всех актеров
-    for i, actor in ipairs(actors) do
+    for i, actor in ipairs(entities) do
         if actor.isPlayable then
             turnState.actionsRemaining[i] = 1
         else
@@ -79,7 +104,7 @@ function love.load()
     end
     
     -- Находим первого играбельного актера
-    for i, actor in ipairs(actors) do
+    for i, actor in ipairs(entities) do
         if actor.isPlayable and turnState.actionsRemaining[i] > 0 then
             turnState.currentActorIndex = i
             selectedActor = actor
@@ -103,7 +128,7 @@ function love.load()
     
     function countPlayableActors()
         local count = 0
-        for _, actor in ipairs(actors) do
+        for _, actor in ipairs(entities) do
             if actor.isPlayable then
                 count = count + 1
             end
@@ -150,7 +175,7 @@ function endTurn()
     -- (раньше здесь был цикл allAlliesActed и return)
 
     -- Принудительно помечаем всех союзников как "сходивших" (пропуск хода для неходивших)
-    for _, actor in ipairs(actors) do
+    for _, actor in ipairs(entities) do
         if actor.isPlayable and not actor.hasActedThisTurn then
             actor.hasActedThisTurn = true
             print(actor.name .. " skipped turn (end turn forced)")
@@ -179,7 +204,7 @@ function updateEnemyTurn(dt)
     if turnState.enemyTurnTimer >= 0.3 then
         -- Проверяем, есть ли враги, которые еще не ходили
         local hasEnemyToAct = false
-        for _, actor in ipairs(actors) do
+        for _, actor in ipairs(entities) do
             if not actor.isPlayable and not actor.hasActedThisTurn and not actor.isMoving then
                 hasEnemyToAct = true
                 break
@@ -188,9 +213,9 @@ function updateEnemyTurn(dt)
         
         if hasEnemyToAct then
             -- Выполняем действие одного врага
-            for _, enemy in ipairs(actors) do
+            for _, enemy in ipairs(entities) do
                 if not enemy.isPlayable and not enemy.hasActedThisTurn and not enemy.isMoving then
-                    ai.performEnemyTurn(enemy, actors, obstacles, hex, sounds)
+                    ai.performEnemyTurn(enemy, entities, hex, sounds)
                     turnState.enemyTurnTimer = 0
                     break
                 end
@@ -200,11 +225,11 @@ function updateEnemyTurn(dt)
             turnState.waitingForEnemies = false
             
             -- Сбрасываем флаги действий для всех актеров
-            for _, actor in ipairs(actors) do
+            for _, actor in ipairs(entities) do
                 actor.hasActedThisTurn = false
                 if actor.isPlayable then
                     -- Сбрасываем счетчик действий для союзников
-                    for i, a in ipairs(actors) do
+                    for i, a in ipairs(entities) do
                         if a == actor then
                             turnState.actionsRemaining[i] = 1
                             break
@@ -232,7 +257,7 @@ function undoLastAction()
     -- Проверяем, не был ли актер уничтожен
     local actorExists = false
     local currentActor = nil
-    for _, actor in ipairs(actors) do
+    for _, actor in ipairs(entities) do
         if actor == lastAction.actor then
             actorExists = true
             currentActor = actor
@@ -258,25 +283,6 @@ function undoLastAction()
         return false
     end
     
-function isPositionOccupied(q, r, movingActor)
-    -- Союзные актеры не могут занимать клетки на краю карты
-    if movingActor and movingActor.isPlayable and isEdgeCell(q, r) then
-        return true  -- Клетка считается "занятой" для союзников
-    end
-    
-    for _, actor in ipairs(actors) do
-        if actor ~= movingActor and actor.q == q and actor.r == r then
-            return true
-        end
-    end
-    for _, obstacle in ipairs(obstacles) do
-        if obstacle.q == q and obstacle.r == r then
-            return true
-        end
-    end
-    return false
-end
-    
     -- Откатываем позицию актера
     currentActor.q = lastAction.fromQ
     currentActor.r = lastAction.fromR
@@ -294,7 +300,7 @@ end
     end
     
     -- Восстанавливаем счетчик действий
-    for i, a in ipairs(actors) do
+    for i, a in ipairs(entities) do
         if a == currentActor then
             turnState.actionsRemaining[i] = 1
             break
@@ -308,6 +314,15 @@ end
     print("Undone action: " .. currentActor.name)
     print("Undos remaining: " .. #actionHistory .. "/" .. maxUndoCount)
     return true
+end
+
+function isPositionOccupied(q, r, movingEntity)
+    for _, entity in ipairs(entities) do
+        if entity ~= movingEntity and entity.q == q and entity.r == r then
+            return true
+        end
+    end
+    return false
 end
 
 function addToHistory(actor, fromQ, fromR, toQ, toR)
@@ -334,33 +349,20 @@ function addToHistory(actor, fromQ, fromR, toQ, toR)
     print("Added action for " .. actor.name .. ". History: " .. #actionHistory .. "/" .. maxUndoCount)
 end
 
-function isPositionOccupied(q, r, movingActor)
-    for _, actor in ipairs(actors) do
-        if actor ~= movingActor and actor.q == q and actor.r == r then
-            return true
-        end
-    end
-    for _, obstacle in ipairs(obstacles) do
-        if obstacle.q == q and obstacle.r == r then
+-- Проверка занятости (для движения)
+function isPositionOccupied(q, r, movingEntity)
+    for _, e in ipairs(entities) do
+        if e ~= movingEntity and e.q == q and e.r == r then
             return true
         end
     end
     return false
 end
 
-function getObstacleAtHex(q, r)
-    for _, obstacle in ipairs(obstacles) do
-        if obstacle.q == q and obstacle.r == r then
-            return obstacle
-        end
-    end
-    return nil
-end
-
-function getActorAtHex(q, r)
-    for _, actor in ipairs(actors) do
-        if actor.q == q and actor.r == r then
-            return actor
+function getEntityAtHex(q, r)
+    for _, e in ipairs(entities) do
+        if e.q == q and e.r == r then
+            return e
         end
     end
     return nil
@@ -479,7 +481,7 @@ function performMove(actor, targetQ, targetR)
     
     -- Запоминаем, что действие уже использовано (чтобы нельзя было двигаться повторно)
     actor.hasActedThisTurn = true
-    for i, a in ipairs(actors) do
+    for i, a in ipairs(entities) do
         if a == actor then
             turnState.actionsRemaining[i] = 0
             break
@@ -665,7 +667,7 @@ function updateActorMovement(actor, dt)
                     actor.targetPosForHistory = nil
                     
                     actor.hasActedThisTurn = true
-                    for i, a in ipairs(actors) do
+                    for i, a in ipairs(entities) do
                         if a == actor then
                             turnState.actionsRemaining[i] = 0
                             break
@@ -687,7 +689,7 @@ end
 
 function love.update(dt)
     -- Обновляем движение всех актеров
-    for _, actor in ipairs(actors) do
+    for _, actor in ipairs(entities) do
         updateActorMovement(actor, dt)
         ai.updateEnemyMovement(actor, dt, hex)
         actor.pulse = actor.pulse + dt * actor.pulseSpeed
@@ -728,8 +730,10 @@ function drawHexGrid()
             local x, y = hex:hexToPixel(q, r)
             local vertices = hex:drawHexagon(x, y, hex.radius)
             
-            local terrain = terrainMap[q][r]
-            local hasObstacle = getObstacleAtHex(q, r) ~= nil
+            -- Получаем тип местности из terrainMap
+            local terrainType = (terrainMap[q] and terrainMap[q][r]) or "grass"
+            --local terrainColor = getTerrainColor(terrainType)
+            local hasEntity = getEntityAtHex(q, r) ~= nil
             local isCurrentActor = selectedActor and selectedActor.q == q and selectedActor.r == r
             
             if isCurrentActor then
@@ -738,17 +742,17 @@ function drawHexGrid()
                 love.graphics.setColor(0.2, 0.4, 0.8, 0.8)
             elseif hex.hoverQ == q and hex.hoverR == r then
                 love.graphics.setColor(0.5, 0.8, 0.3, 0.8)
-            elseif hasObstacle then
+            elseif hasEntity then
                 love.graphics.setColor(0.5, 0.3, 0.2, 0.8)
             else
-                love.graphics.setColor(terrain.color[1], terrain.color[2], terrain.color[3], terrain.color[4])
+                --love.graphics.setColor(terrainColor)
             end
             
             love.graphics.polygon("fill", vertices)
             
-            -- Отрисовка текстур земли (без изменений)
-            if not hasObstacle and not isCurrentActor and not (hex.selectedQ == q and hex.selectedR == r) and not (hex.hoverQ == q and hex.hoverR == r) then
-                if terrain.name == "grass" then
+            -- Отрисовка текстур земли (без изменений, но адаптируем terrain.name)
+            if not hasEntity and not isCurrentActor and not (hex.selectedQ == q and hex.selectedR == r) and not (hex.hoverQ == q and hex.hoverR == r) then
+                if terrainType == "grass" then
                     love.graphics.setColor(0.2, 0.6, 0.1, 0.5)
                     for i = 0, 2 do
                         local angle = math.rad(60 * i + (q * 37 + r * 23) % 360)
@@ -757,7 +761,7 @@ function drawHexGrid()
                         love.graphics.line(x + math.cos(angle - 0.2) * 8, y + math.sin(angle - 0.2) * 8, 
                                          tx + math.cos(angle) * 5, ty + math.sin(angle) * 5)
                     end
-                elseif terrain.name == "sand" then
+                elseif terrainType == "sand" then
                     love.graphics.setColor(0.6, 0.5, 0.3, 0.5)
                     for i = 1, 5 do
                         local angle = math.rad(72 * i + (q * 31 + r * 19) % 360)
@@ -766,7 +770,7 @@ function drawHexGrid()
                         local ty = y + math.sin(angle) * rad
                         love.graphics.circle("fill", tx, ty, 1 + (q + r) % 2)
                     end
-                elseif terrain.name == "stone" then
+                elseif terrainType == "stone" then
                     love.graphics.setColor(0.3, 0.3, 0.35, 0.6)
                     for i = 1, 3 do
                         local startAngle = math.rad(120 * i + (q * 41 + r * 29) % 360)
@@ -777,7 +781,7 @@ function drawHexGrid()
                         local endY = y + math.sin(endAngle) * 18
                         love.graphics.line(startX, startY, endX, endY)
                     end
-                elseif terrain.name == "snow" then
+                elseif terrainType == "snow" then
                     love.graphics.setColor(0.8, 0.9, 1, 0.6)
                     for i = 1, 6 do
                         local angle = math.rad(60 * i + (q * 43 + r * 37) % 360)
@@ -785,7 +789,7 @@ function drawHexGrid()
                         local ty = y + math.sin(angle) * 10
                         love.graphics.circle("fill", tx, ty, 1.5)
                     end
-                elseif terrain.name == "swamp" then
+                elseif terrainType == "swamp" then
                     love.graphics.setColor(0.2, 0.4, 0.2, 0.6)
                     for i = 1, 4 do
                         local angle = math.rad(90 * i + (q * 29 + r * 17) % 360)
@@ -794,7 +798,7 @@ function drawHexGrid()
                         local ty = y + math.sin(angle) * rad
                         love.graphics.circle("line", tx, ty, 2)
                     end
-                elseif terrain.name == "lava" then
+                elseif terrainType == "lava" then
                     love.graphics.setColor(1, 0.5, 0.1, 0.7)
                     for i = 1, 3 do
                         local angle = math.rad(120 * i + love.timer.getTime() * 5)
@@ -811,52 +815,6 @@ function drawHexGrid()
         end
     end
     love.graphics.setColor(1, 1, 1, 1)
-end
-
-function drawObstacle(obstacle)
-    local x, y
-    
-    -- Проверяем глобальную очередь pushAnimations
-    local pushAnim = nil
-    if pushAnimations and pushAnimations.queue then
-        for _, anim in ipairs(pushAnimations.queue) do
-            if anim.obj == obstacle and anim.isMoving then
-                pushAnim = anim
-                break
-            end
-        end
-    end
-    
-    if pushAnim then
-        local t = math.min(1, pushAnim.timer / pushAnim.duration)
-        local easeOut = 1 - (1 - t) * (1 - t)
-        if pushAnim.startX and pushAnim.endX then
-            x = pushAnim.startX + (pushAnim.endX - pushAnim.startX) * easeOut
-            y = pushAnim.startY + (pushAnim.endY - pushAnim.startY) * easeOut
-        else
-            x, y = hex:hexToPixel(obstacle.q, obstacle.r)
-        end
-    else
-        x, y = hex:hexToPixel(obstacle.q, obstacle.r)
-    end
-    
-    love.graphics.draw(obstacle.sprite, x, y, 0, 1, 1, 16, 16)
-    
-    -- Отображаем здоровье препятствия
-    if obstacle.maxHealth > 1 then
-        local barWidth = 30
-        local barHeight = 4
-        local healthPercent = obstacle.health / obstacle.maxHealth
-        
-        love.graphics.setColor(0.3, 0.3, 0.3, 0.8)
-        love.graphics.rectangle("fill", x - barWidth/2, y - 22, barWidth, barHeight)
-        
-        love.graphics.setColor(0.3, 0.7, 0.3, 0.8)
-        love.graphics.rectangle("fill", x - barWidth/2, y - 22, barWidth * healthPercent, barHeight)
-        
-        love.graphics.setColor(1, 1, 1, 0.8)
-        love.graphics.rectangle("line", x - barWidth/2, y - 22, barWidth, barHeight)
-    end
 end
 
 function drawHealthBar(actor, x, y)
@@ -877,14 +835,15 @@ function drawHealthBar(actor, x, y)
     love.graphics.print(actor.health .. "/" .. actor.maxHealth, x - 15, y - 38)
 end
 
-function drawActor(actor)
-    local x, y
-    
-    -- Проверяем глобальную очередь pushAnimations
+
+
+-- Функция для получения позиции отрисовки сущности с учётом всех анимаций
+function getEntityDrawPosition(entity)
+    -- Проверяем глобальную очередь pushAnimations (отталкивания, ветер)
     local pushAnim = nil
     if pushAnimations and pushAnimations.queue then
         for _, anim in ipairs(pushAnimations.queue) do
-            if anim.obj == actor and anim.isMoving then
+            if anim.obj == entity and anim.isMoving then
                 pushAnim = anim
                 break
             end
@@ -892,45 +851,140 @@ function drawActor(actor)
     end
     
     if pushAnim then
-        -- Активная анимация смещения
+        -- Активная анимация смещения (push, wind, collision)
         local t = math.min(1, pushAnim.timer / pushAnim.duration)
+        -- Используем easing для плавности
         local easeOut = 1 - (1 - t) * (1 - t)
         if pushAnim.startX and pushAnim.endX then
-            x = pushAnim.startX + (pushAnim.endX - pushAnim.startX) * easeOut
-            y = pushAnim.startY + (pushAnim.endY - pushAnim.startY) * easeOut
+            local x = pushAnim.startX + (pushAnim.endX - pushAnim.startX) * easeOut
+            local y = pushAnim.startY + (pushAnim.endY - pushAnim.startY) * easeOut
+            return x, y
         else
-            x, y = hex:hexToPixel(actor.q, actor.r)
+            -- Fallback: просто координаты гекса
+            return hex:hexToPixel(entity.q, entity.r)
         end
-    elseif actor.isMoving then
-        -- Обычное движение по пути
-        local t = actor.timer / actor.speed
-        x = actor.startX + (actor.endX - actor.startX) * t
-        y = actor.startY + (actor.endY - actor.startY) * t
+    elseif entity.isMoving then
+        -- Обычное движение по пути (step-by-step movement)
+        local t = entity.timer / entity.speed
+        if t >= 1 then t = 1 end
+        -- Используем easing для плавного старта и остановки
+        local easeInOut = t < 0.5 and 2 * t * t or 1 - math.pow(-2 * t + 2, 2) / 2
+        local x = entity.startX + (entity.endX - entity.startX) * easeInOut
+        local y = entity.startY + (entity.endY - entity.startY) * easeInOut
+        return x, y
     else
-        x, y = hex:hexToPixel(actor.q, actor.r)
+        -- Статическое положение
+        return hex:hexToPixel(entity.q, entity.r)
+    end
+end
+
+-- Унифицированная отрисовка полоски здоровья для любых сущностей
+function drawHealthBar(entity, x, y)
+    -- Показываем полоску только если есть максимальное здоровье > 1
+    if not entity.maxHealth or entity.maxHealth <= 1 then
+        return
     end
     
-    local scale = 1 + math.sin(actor.pulse) * 0.05
-    love.graphics.draw(actor.sprite, x, y, 0, scale, scale, 16, 16)
+    local barWidth = 40
+    local barHeight = 6
+    local healthPercent = math.max(0, entity.health / entity.maxHealth)
     
-    if selectedActor == actor and turnState.turnPhase == "waiting" then
-        love.graphics.setColor(1, 1, 0, 0.8)
-        love.graphics.circle("line", x, y, 22)
+    -- Для зданий используем другой цвет
+    local bgColor, fgColor
+    if entity:isBuilding() then
+        bgColor = {0.5, 0.3, 0.1, 0.8}
+        fgColor = {0.9, 0.6, 0.2, 0.8}
+    elseif entity:isObstacle() then
+        bgColor = {0.4, 0.2, 0.1, 0.8}
+        fgColor = {0.6, 0.4, 0.2, 0.8}
+    else
+        bgColor = {0.5, 0, 0, 0.8}
+        fgColor = {0, 1, 0, 0.8}
+    end
+    
+    -- Фон
+    love.graphics.setColor(bgColor)
+    love.graphics.rectangle("fill", x - barWidth/2, y - 28, barWidth, barHeight, 2)
+    
+    -- Заполнение
+    love.graphics.setColor(fgColor)
+    love.graphics.rectangle("fill", x - barWidth/2, y - 28, barWidth * healthPercent, barHeight, 2)
+    
+    -- Рамка
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.rectangle("line", x - barWidth/2, y - 28, barWidth, barHeight, 2)
+    
+    -- Текст здоровья (только для персонажей и если достаточно места)
+    if entity:isCharacter() then
         love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print(entity.health .. "/" .. entity.maxHealth, x - 15, y - 40)
     end
-    
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print(actor.name, x - 20, y - 25)
-    
-    if actor.hasActedThisTurn then
+end
+
+-- Унифицированная отрисовка иконки "действие выполнено"
+function drawActionIndicator(entity, x, y)
+    if entity:isCharacter() and entity.hasActedThisTurn then
         love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
         love.graphics.circle("fill", x + 15, y - 15, 8)
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.print("✓", x + 11, y - 20)
     end
-
-    drawHealthBar(actor, x, y)
 end
+
+-- Унифицированная отрисовка любой сущности
+function drawEntity(entity)
+    local x, y = getEntityDrawPosition(entity)
+    
+    -- Отрисовка спрайта
+    if entity.sprite then
+        -- Пульсация для выбранных персонажей
+        local scale = 1
+        if selectedActor == entity and entity:isCharacter() then
+            scale = 1 + math.sin(entity.pulse) * 0.05
+        end
+        love.graphics.draw(entity.sprite, x, y, 0, scale, scale, 16, 16)
+    else
+        -- Fallback: цветной круг если нет спрайта
+        love.graphics.setColor(entity.color or {1, 1, 1, 1})
+        love.graphics.circle("fill", x, y, 14)
+    end
+    
+    -- Имя сущности (только для персонажей)
+    if entity:isCharacter() then
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print(entity.name, x - 20, y - 25)
+    end
+    
+    -- Полоска здоровья
+    drawHealthBar(entity, x, y)
+    
+    -- Индикатор действия
+    drawActionIndicator(entity, x, y)
+    
+    -- Рамка выделения для выбранного персонажа
+    if selectedActor == entity and entity:isCharacter() then
+        love.graphics.setColor(1, 1, 0, 0.8)
+        love.graphics.circle("line", x, y, 22)
+        love.graphics.setColor(1, 1, 1, 1)
+    end
+end
+
+-- Отрисовка всех сущностей
+function drawAllEntities()
+    for _, entity in ipairs(entities) do
+        drawEntity(entity)
+    end
+end
+
+-- Обновление анимаций всех сущностей (пульсация)
+function updateEntityAnimations(dt)
+    for _, entity in ipairs(entities) do
+        if entity.pulse then
+            entity.pulse = (entity.pulse or 0) + dt * (entity.pulseSpeed or 5)
+        end
+    end
+end
+
 
 function drawUndoButton()
     local canUndo = #actionHistory > 0
@@ -973,7 +1027,7 @@ function drawEndTurnButton()
     end
     
     local anyActorActed = false
-    for _, actor in ipairs(actors) do
+    for _, actor in ipairs(entities) do
         if actor.isPlayable and actor.hasActedThisTurn then
             anyActorActed = true
             break
@@ -1018,7 +1072,7 @@ function drawAttackIndicators()
     local neighbors = hex:getNeighbors(selectedActor.q, selectedActor.r)
     for _, neighbor in ipairs(neighbors) do
         if hex:isValidHex(neighbor.q, neighbor.r) then
-            local target = getActorAtHex(neighbor.q, neighbor.r) or getObstacleAtHex(neighbor.q, neighbor.r)
+            local target = getEntityAtHex(neighbor.q, neighbor.r)
             if target then
                 local x, y = hex:hexToPixel(neighbor.q, neighbor.r)
                 local vertices = hex:drawHexagon(x, y, hex.radius)
@@ -1038,11 +1092,9 @@ end
 
 function love.draw()
     drawHexGrid()
-    drawEdgeWarning() 
     
-    for _, obstacle in ipairs(obstacles) do
-        drawObstacle(obstacle)
-    end
+    drawEdgeWarning()
+    drawAllEntities()
 
     if selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving then
         drawMovementRange(selectedActor)
@@ -1053,13 +1105,9 @@ function love.draw()
         end
     end
     
-    for _, actor in ipairs(actors) do
-        drawActor(actor)
-    end
-    
     drawUndoButton()
     drawEndTurnButton()
-    drawWindTorrentUI()  -- <-- добавить сюда
+    drawWindTorrentUI()
     drawGlobalHealthBar()
     
     love.graphics.setColor(1, 1, 1, 1)
@@ -1113,16 +1161,13 @@ function love.draw()
     love.graphics.print("Press 'U' to undo last move (not attack)", 10, 170)
     
     if hex.hoverQ >= 0 and hex.hoverR >= 0 then
-        local obstacle = getObstacleAtHex(hex.hoverQ, hex.hoverR)
-        local actor = getActorAtHex(hex.hoverQ, hex.hoverR)
-        local terrain = terrainMap[hex.hoverQ][hex.hoverR]
+        local entity = getEntityAtHex(hex.hoverQ, hex.hoverR)
+        local terrainType = (terrainMap[hex.hoverQ] and terrainMap[hex.hoverQ][hex.hoverR]) or "grass"
         
-        if obstacle then
-            love.graphics.print("Obstacle: " .. obstacle.name .. " (" .. obstacle.health .. "/" .. obstacle.maxHealth .. " HP)", 10, 90)
-        elseif actor then
-            love.graphics.print("Actor: " .. actor.name .. " (" .. actor.health .. "/" .. actor.maxHealth .. " HP)", 10, 90)
+        if entity then
+            love.graphics.print("Obstacle: " .. entity.name .. " (" .. entity.health .. "/" .. entity.maxHealth .. " HP)", 10, 90)
         else
-            love.graphics.print("Terrain: " .. terrain.name, 10, 90)
+            love.graphics.print("Terrain: " .. terrainType, 10, 90)
         end
     end
 end
@@ -1148,7 +1193,7 @@ function love.mousepressed(x, y, button)
             -- Проверяем клик по кнопкам направлений
             for dirName, dir in pairs(windTorrentUI.directions) do
                 if x >= dir.x and x <= dir.x + 70 and y >= dir.y and y <= dir.y + 30 then
-                    windTorrent:executeGlobalWithAnimation(dirName, hex, actors, obstacles, sounds, function(success, message)
+                    windTorrent:executeGlobalWithAnimation(dirName, hex, entities, sounds, function(success, message)
                         if success then
                             -- Очищаем историю действий после использования глобальной атаки
                             actionHistory = {}
@@ -1190,7 +1235,7 @@ function love.mousepressed(x, y, button)
         if x >= endTurnButton.x and x <= endTurnButton.x + endTurnButton.width and
         y >= endTurnButton.y and y <= endTurnButton.y + endTurnButton.height then
             local anyActorActed = false
-            for _, actor in ipairs(actors) do
+            for _, actor in ipairs(entities) do
                 if actor.isPlayable and actor.hasActedThisTurn then
                     anyActorActed = true
                     break
@@ -1206,7 +1251,7 @@ function love.mousepressed(x, y, button)
         end
 
         local allAlliesActed = true
-        for _, actor in ipairs(actors) do
+        for _, actor in ipairs(entities) do
             if actor.isPlayable and not actor.hasActedThisTurn then
                 allAlliesActed = false
                 break
@@ -1221,7 +1266,7 @@ function love.mousepressed(x, y, button)
         -- Клик по гексу для движения
         local targetQ, targetR = hex:pixelToHex(x, y)
         if hex:isValidHex(targetQ, targetR) then
-            local clickedActor = getActorAtHex(targetQ, targetR)
+            local clickedActor = getEntityAtHex(targetQ, targetR)
             
             if clickedActor and clickedActor.isPlayable then
                 if clickedActor.hasActedThisTurn then
@@ -1246,7 +1291,7 @@ function love.mousepressed(x, y, button)
     elseif button == 2 then  -- Правая кнопка мыши (атака)
             -- Аналогичная проверка для атаки
         local allAlliesActed = true
-        for _, actor in ipairs(actors) do
+        for _, actor in ipairs(entities) do
             if actor.isPlayable and not actor.hasActedThisTurn then
                 allAlliesActed = false
                 break
@@ -1325,7 +1370,7 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR)
     if not attack then
         return false, "No attack available!"
     end
-    local success, message = combat.performAttack(attacker, targetQ, targetR, hex, actors, obstacles, sounds, attack)
+    local success, message = combat.performAttack(attacker, targetQ, targetR, hex, entities, sounds, attack)
     
     -- Очищаем историю после успешной атаки союзника
     if success and attacker.isPlayable then
@@ -1445,17 +1490,17 @@ function drawGlobalHealthBar()
 end
 
 -- Проверка, находится ли актер на краю карты
-function isAtEdge(actor)
-    return actor.q == 0 or actor.q == hex.gridWidth - 1 or actor.r == 0 or actor.r == hex.gridHeight - 1
+function isAtEdge(entity)
+    return entity.q == 0 or entity.q == hex.gridWidth - 1 or entity.r == 0 or entity.r == hex.gridHeight - 1
 end
 
 -- Убить союзного актера на краю карты
 function killPlayableAtEdge()
-    for i = #actors, 1, -1 do
-        local actor = actors[i]
+    for i = #entities, 1, -1 do
+        local actor = entities[i]
         if actor.isPlayable and isAtEdge(actor) then
             print(actor.name .. " is on the edge of the map and falls to their death!")
-            table.remove(actors, i)
+            table.remove(entities, i)
             if sounds.death then
                 sounds.death:play()
             end
@@ -1481,15 +1526,15 @@ function love.keypressed(key)
         print(selectedActor.name .. " took 1 damage! Health: " .. selectedActor.health)
         
         if selectedActor.health <= 0 then
-            for i, actor in ipairs(actors) do
+            for i, actor in ipairs(entities) do
                 if actor == selectedActor then
-                    table.remove(actors, i)
+                    table.remove(entities, i)
                     break
                 end
             end
             print(selectedActor.name .. " has been defeated!")
-            if #actors > 0 then
-                selectedActor = actors[1]
+            if #entities > 0 then
+                selectedActor = entities[1]
             else
                 selectedActor = nil
             end
