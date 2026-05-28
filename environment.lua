@@ -107,13 +107,13 @@ function environment.loadMapFromTiled(filePath)
     -- 1. Обработка слоя Ground
     local groundLayer = nil
     for _, layer in ipairs(map.layers) do
-        if layer.name == "Ground" and layer.type == "tilelayer" then
+        if layer.name == "terrain" and layer.type == "tilelayer" then
             groundLayer = layer
             break
         end
     end
     if not groundLayer then
-        error("Слой 'Ground' не найден в карте")
+        error("'terrain' layer not found!")
     end
 
     local rawData = groundLayer.data
