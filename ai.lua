@@ -18,6 +18,12 @@ function ai.performEnemyTurn(enemy, entities, hex, sounds)
     debugPrint("=== Starting turn for enemy:", enemy.name, "===")
     debugPrint("Enemy position: q=" .. enemy.q .. ", r=" .. enemy.r)
     
+    -- Проверяем, что это действительно враг (персонаж, не игрок)
+    if not enemy:isCharacter() or enemy.isPlayable then
+        debugPrint("ERROR: " .. (enemy.name or "Unknown") .. " is not an enemy character!")
+        return false, "Not an enemy"
+    end
+    
     if enemy.hasActedThisTurn then
         debugPrint(enemy.name .. " has already acted this turn")
         return false, "Already acted"
@@ -28,12 +34,13 @@ function ai.performEnemyTurn(enemy, entities, hex, sounds)
         return false, "Is moving"
     end
     
-    -- Find the nearest allied player
+    -- Find the nearest allied player (только персонажи-игроки)
     local nearestAlly = nil
     local nearestDistance = math.huge
     
     debugPrint("Searching for targets among", #entities, "actors")
     for _, e in ipairs(entities) do
+        -- Атакуем только играбельных персонажей (союзников)
         if e:isCharacter() and e.isPlayable and e.health > 0 then
             local dist = hex:getDistance(enemy.q, enemy.r, e.q, e.r)
             if dist < nearestDistance then
@@ -72,6 +79,12 @@ function ai.performMove(enemy, target, entities, hex)
     debugPrint("--- Planning movement for", enemy.name, "---")
     debugPrint("Target:", target.name, "position: q=" .. target.q .. ", r=" .. target.r)
     
+    -- Проверяем, что цель - персонаж
+    if not target:isCharacter() then
+        debugPrint("Target is not a character, cannot move towards it!")
+        return false
+    end
+    
     -- Find all cells at distance 1 from target
     local targetNeighbors = hex:getNeighbors(target.q, target.r)
     local bestCell = nil
@@ -82,7 +95,7 @@ function ai.performMove(enemy, target, entities, hex)
     -- Check each cell around the target
     for i, neighbor in ipairs(targetNeighbors) do
         if hex:isValidHex(neighbor.q, neighbor.r) then
-            -- Check if cell is occupied
+            -- Check if cell is occupied (by any entity - character, obstacle, or building)
             local isOccupied = false
             local occupiedBy = ""
             
@@ -91,16 +104,6 @@ function ai.performMove(enemy, target, entities, hex)
                     isOccupied = true
                     occupiedBy = actor.name
                     break
-                end
-            end
-            
-            if not isOccupied then
-                for _, obstacle in ipairs(entities) do
-                    if obstacle.q == neighbor.q and obstacle.r == neighbor.r then
-                        isOccupied = true
-                        occupiedBy = "obstacle"
-                        break
-                    end
                 end
             end
             
@@ -294,7 +297,8 @@ function ai.moveTowards(enemy, targetQ, targetR, entities, hex)
     
     if bestNeighbor then
         debugPrint("Moving to best neighbor: q=" .. bestNeighbor.q .. ", r=" .. bestNeighbor.r)
-        local moveResult = ai.moveToCell(enemy, bestNeighbor.q, bestNeighbor.r, entities, hex)
+        -- ИСПРАВЛЕНО: правильный порядок аргументов: enemy, q, r, hex, entities
+        local moveResult = ai.moveToCell(enemy, bestNeighbor.q, bestNeighbor.r, hex, entities)
         if not moveResult then
             debugPrint("Failed to move to neighbor cell, ending turn")
         end
@@ -365,6 +369,12 @@ end
 function ai.performAttack(enemy, target, entities, hex, sounds)
     debugPrint("---", enemy.name, "attacking", target.name, "---")
     
+    -- Проверяем, что цель - персонаж
+    if not target:isCharacter() then
+        debugPrint("Target is not a character, cannot attack!")
+        return false, "Target is not a character"
+    end
+    
     -- Simple attack with damage 1
     local damage = 1
     
@@ -407,11 +417,13 @@ function ai.performAttack(enemy, target, entities, hex, sounds)
     return true, nil
 end
 
--- Get list of all enemies (non-playable actors)
+-- Get list of all enemies (non-playable characters only, not obstacles/buildings)
 function ai.getEnemies(actors)
     local enemies = {}
     for _, actor in ipairs(actors) do
-        if not actor.isPlayable then
+        -- Только персонажи, которые НЕ играбельные (враги)
+        -- Исключаем препятствия и здания
+        if actor:isCharacter() and not actor.isPlayable then
             table.insert(enemies, actor)
         end
     end
@@ -423,7 +435,8 @@ end
 function ai.hasEnemiesToAct(actors)
     local count = 0
     for _, actor in ipairs(actors) do
-        if not actor.isPlayable and not actor.hasActedThisTurn and not actor.isMoving then
+        -- Только персонажи-враги, которые не ходили и не двигаются
+        if actor:isCharacter() and not actor.isPlayable and not actor.hasActedThisTurn and not actor.isMoving then
             count = count + 1
         end
     end
@@ -437,7 +450,8 @@ function ai.performAllEnemiesTurn(entities, hex, sounds)
     local anyActed = false
     
     for _, enemy in ipairs(entities) do
-        if not enemy.isPlayable and not enemy.hasActedThisTurn and not enemy.isMoving then
+        -- Только персонажи-враги, которые не ходили и не двигаются
+        if enemy:isCharacter() and not enemy.isPlayable and not enemy.hasActedThisTurn and not enemy.isMoving then
             debugPrint("Processing enemy:", enemy.name)
             ai.performEnemyTurn(enemy, entities, hex, sounds)
             anyActed = true

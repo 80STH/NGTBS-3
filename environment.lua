@@ -4,107 +4,219 @@ local sti = require("libraries.sti")
 
 local environment = {}
 
--- Соответствие GID тайлов из тайлсета "hex mini" → тип местности
 local gidToTerrain = {
-    [1] = "grass",
-    [2] = "dirt",
-    [0] = "sand",
-    [4] = "stone",
-    [5] = "mud",
-    [6] = "lava",
-    [7] = "snow",
-    [8] = "swamp",
-    [13] = "water",
+    [13] = "grass",
+    [2]  = "dirt",
+    [1]  = "sand",
+    [4]  = "stone",
+    [5]  = "emptiness",
+    [6]  = "lava",
+    [7]  = "snow",
+    [8]  = "swamp",
+    [14] = "water",
 }
 
--- Соответствие GID из второго тайлсета ("wxtctr615cw31") → сущность
--- (замените ID и параметры под ваш фактический тайлсет)
 local gidToEntity = {
-    [21] = { type = "character", name = "Warrior",  isPlayable = true,  maxHealth = 5, moveRange = 3, attacks = "warrior" },
-    [22] = { type = "character", name = "Mage",     isPlayable = true,  maxHealth = 3, moveRange = 4, attacks = "mage" },
-    [23] = { type = "character", name = "Rogue",    isPlayable = true,  maxHealth = 4, moveRange = 5, attacks = "rogue" },
-    [24] = { type = "character", name = "Goblin",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "enemy" },
-    [25] = { type = "obstacle",  name = "Rock",     health = 3 },
-    [26] = { type = "obstacle",  name = "Tree",     health = 2 },
-    [27] = { type = "building",  name = "Shrine",   health = 4, globalHealthCost = 1 },
+    [34] = { type = "character", name = "Warrior", isPlayable = true,  maxHealth = 5, moveRange = 3, attacks = "warrior" },
+    [31] = { type = "character", name = "Mage",    isPlayable = true,  maxHealth = 3, moveRange = 4, attacks = "mage" },
+    [30] = { type = "character", name = "Rogue",   isPlayable = true,  maxHealth = 4, moveRange = 5, attacks = "rogue" },
+    [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "enemy" },
+    [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "enemy" },
+    [11] = { type = "obstacle",  name = "SuperMountain", health = 999 },
+    [12] = { type = "building",  name = "SmallBuilding", health = 1, globalHealthCost = 1 },
+    [7] = { type = "building",  name = "BigBuilding",   health = 2, globalHealthCost = 2 },
 }
 
--- Преобразование тайловых (x,y) в осевые координаты (q,r) для карты с настройками:
--- orientation = "hexagonal", staggeraxis = "y", staggerindex = "odd"
-local function tileToAxial(x, y)
-    local r = y
-    local q = x - math.floor(y / 2)
-    return q, r
+local terrainSpriteCache = {}  -- Кэш для текстур terrain
+
+-- Загрузка текстуры terrain из GID
+local function loadTerrainSprite(map, gid, tileWidth, tileHeight)
+    if terrainSpriteCache[gid] then
+        return terrainSpriteCache[gid]
+    end
+    
+    local texture = nil
+    local quad = nil
+    
+    
+    -- Ищем нужный тайлсет
+    for _, tileset in ipairs(map.tilesets) do
+        local firstGid = tileset.firstgid
+        local lastGid = firstGid + (tileset.tilecount or 1) - 1
+        if gid >= firstGid and gid <= lastGid then
+            local localId = gid - firstGid
+            
+            texture = tileset.image or tileset.texture
+            if not texture then
+                print("Warning: No texture for tileset with firstgid", firstGid)
+                return nil
+            end
+            
+            local tw = tileset.tilewidth or tileWidth
+            local th = tileset.tileheight or tileHeight
+            local cols = tileset.columns or math.floor(tileset.imagewidth / tw)
+            local row = math.floor(localId / cols)
+            local col = localId % cols
+            
+            quad = love.graphics.newQuad(col * tw, row * th, tw, th, 
+                                         tileset.imagewidth, tileset.imageheight)
+            break
+        end
+    end
+    
+    if not texture or not quad then
+        return nil
+    end
+    
+    -- 👇 СМЕЩЕНИЯ ПРИ РИСОВАНИИ НА CANVAS
+    local drawOffsetX = 1   -- смещение по X при рисовании на canvas
+    local drawOffsetY = -4   -- смещение по Y при рисовании на canvas
+    
+    local canvas = love.graphics.newCanvas(tileWidth, tileHeight)
+    canvas:setFilter("nearest", "nearest")
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(texture, quad, drawOffsetX, drawOffsetY)  -- 👈 смещение здесь
+    love.graphics.setCanvas()
+    
+    terrainSpriteCache[gid] = canvas
+    return canvas
 end
 
--- Создание сущности по GID и координатам
-local function createEntityFromGID(gid, q, r)
+-- Кэш для загруженных текстур
+local spriteCache = {}
+
+-- Загрузка текстуры из тайлсета (без использования map:getTile)
+local function loadTileSprite(map, gid, tileWidth, tileHeight)
+    if spriteCache[gid] then
+        return spriteCache[gid]
+    end
+    
+    local texture = nil
+    local quad = nil
+    
+    -- Ищем нужный тайлсет
+    for _, tileset in ipairs(map.tilesets) do
+        local firstGid = tileset.firstgid
+        local lastGid = firstGid + (tileset.tilecount or 1) - 1
+        if gid >= firstGid and gid <= lastGid then
+            local localId = gid - firstGid
+            
+            -- Получаем текстуру (изображение тайлсета)
+            texture = tileset.image  -- В STI это уже объект love Image
+            if not texture then
+                texture = tileset.texture
+            end
+            
+            if not texture then
+                print("Warning: No texture for tileset with firstgid", firstGid)
+                return nil
+            end
+            
+            -- Вычисляем координаты тайла в тайлсете
+            local tw = tileset.tilewidth or tileWidth
+            local th = tileset.tileheight or tileHeight
+            local cols = tileset.columns or math.floor(tileset.imagewidth / tw)
+            local row = math.floor(localId / cols)
+            local col = localId % cols
+            
+            quad = love.graphics.newQuad(col * tw, row * th, tw, th, 
+                                         tileset.imagewidth, tileset.imageheight)
+            break
+        end
+    end
+    
+    if not texture or not quad then
+        print("Warning: Could not extract tile for GID", gid)
+        return nil
+    end
+    
+    -- Создаём canvas с тайлом
+    local canvas = love.graphics.newCanvas(tileWidth, tileHeight)
+    canvas:setFilter("nearest", "nearest")  -- ← Отключает сглаживание
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(texture, quad, 0, 0)
+    love.graphics.setCanvas()
+    
+    spriteCache[gid] = canvas
+    return canvas
+end
+
+-- Создание сущности с текстурой из тайлсета
+local function createEntityFromGID(map, gid, gridX, gridY)
     local def = gidToEntity[gid]
     if not def then return nil end
 
+    local tileWidth = map.tilewidth or 32
+    local tileHeight = map.tileheight or 32
+    local entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)
+    
+    -- Fallback, если не удалось загрузить спрайт
+    if not entitySprite then
+        local canvas = love.graphics.newCanvas(tileWidth, tileHeight)
+        love.graphics.setCanvas(canvas)
+        love.graphics.clear(0, 0, 0, 0)
+        -- Цвет для отладки
+        if def.isPlayable ~= nil then
+            love.graphics.setColor(def.isPlayable and {0.2, 0.6, 0.2, 1} or {0.8, 0.2, 0.2, 1})
+        else
+            love.graphics.setColor(0.5, 0.5, 0.5, 1)
+        end
+        love.graphics.circle("fill", tileWidth/2, tileHeight/2, tileWidth/2 - 2)
+        love.graphics.setCanvas()
+        entitySprite = canvas
+    end
+
     if def.type == "character" then
-        -- Получение списка атак (можно вынести в отдельные функции)
         local attacks = {}
         if def.attacks == "warrior" then
-            attacks = environment.getWarriorAttacks()  -- эти функции нужно определить
+            attacks = environment.getWarriorAttacks()
         elseif def.attacks == "mage" then
             attacks = environment.getMageAttacks()
         elseif def.attacks == "rogue" then
             attacks = environment.getRogueAttacks()
         else
-            attacks = {} -- враг без атак (будет использовать базовую атаку из ai)
+            attacks = {}
         end
 
         local actor = Entity.new(
-            def.name,
-            Entity.TYPES.CHARACTER,
-            q, r,
-            def.maxHealth,
-            def.isPlayable,
-            def.moveRange,
-            nil,  -- спрайт будет создан позже
-            nil,  -- цвет
-            attacks
+            def.name, Entity.TYPES.CHARACTER, gridX, gridY,
+            def.maxHealth, def.isPlayable, def.moveRange,
+            nil, nil, attacks
         )
-        -- Создаём простой спрайт (круг) для отладки, в реальности можно подгрузить изображение
-        local canvas = love.graphics.newCanvas(32, 32)
-        love.graphics.setCanvas(canvas)
-        love.graphics.clear(0, 0, 0, 0)
-        love.graphics.setColor(def.isPlayable and {0.2, 0.6, 0.2, 1} or {0.8, 0.2, 0.2, 1})
-        love.graphics.circle("fill", 16, 16, 14)
-        love.graphics.setCanvas()
-        actor.sprite = canvas
+        actor.sprite = entitySprite
         return actor
 
     elseif def.type == "obstacle" then
-        return Entity.new(
-            def.name,
-            Entity.TYPES.OBSTACLE,
-            q, r,
-            def.health,
-            false, 0, nil, nil, {}
-        )
+        local obstacle = Entity.new(def.name, Entity.TYPES.OBSTACLE, gridX, gridY, def.health, false, 0, nil, nil, {})
+        obstacle.sprite = entitySprite
+        return obstacle
     elseif def.type == "building" then
-        local building = Entity.new(
-            def.name,
-            Entity.TYPES.BUILDING,
-            q, r,
-            def.health,
-            false, 0, nil, nil, {}
-        )
+        local building = Entity.new(def.name, Entity.TYPES.BUILDING, gridX, gridY, def.health, false, 0, nil, nil, {})
         building.globalHealthCost = def.globalHealthCost
+        building.sprite = entitySprite
         return building
     end
     return nil
 end
 
--- Главная функция загрузки карты: возвращает terrainMap и список entities
 function environment.loadMapFromTiled(filePath)
+    print("\n=== LOADING MAP: " .. filePath .. " ===")
+    local file = love.filesystem.getInfo(filePath)
+    if not file then error("File not found: " .. filePath) end
+
     local map = sti(filePath)
+    local width, height = map.width, map.height
+
+    -- Создаём карту terrain в координатах сетки (x, y)
     local terrainMap = {}
+    local terrainTextures = {}  -- ← НОВОЕ: для хранения текстур terrain
     local entities = {}
 
-    -- 1. Обработка слоя Ground
+    -- Находим слой terrain
     local groundLayer = nil
     for _, layer in ipairs(map.layers) do
         if layer.name == "terrain" and layer.type == "tilelayer" then
@@ -112,64 +224,108 @@ function environment.loadMapFromTiled(filePath)
             break
         end
     end
-    if not groundLayer then
-        error("'terrain' layer not found!")
-    end
+    if not groundLayer then error("'terrain' layer not found!") end
 
+    -- Загружаем terrain и текстуры
     local rawData = groundLayer.data
-    local width = map.width
-    local height = map.height
-
     for y = 1, height do
         for x = 1, width do
-            local gid
-            if type(rawData[y]) == "table" and type(rawData[y][x]) == "table" and rawData[y][x].gid then
-                gid = rawData[y][x].gid
-            else
-                gid = rawData[y][x]
+            local gid = nil
+            if type(rawData) == "table" then
+                if rawData[y] then
+                    if type(rawData[y]) == "table" then
+                        if rawData[y][x] then
+                            if type(rawData[y][x]) == "table" and rawData[y][x].gid then
+                                gid = rawData[y][x].gid
+                            elseif type(rawData[y][x]) == "number" then
+                                gid = rawData[y][x]
+                            end
+                        end
+                    elseif type(rawData[y]) == "number" then
+                        local idx = (y-1) * width + x
+                        gid = rawData[idx]
+                    end
+                end
             end
+            
             if gid and gid > 0 then
-                local terrainType = gidToTerrain[gid] or "grass"
-                local q, r = tileToAxial(x - 1, y - 1)
-                if not terrainMap[q] then terrainMap[q] = {} end
-                terrainMap[q][r] = terrainType
+                local terrainType = gidToTerrain[gid]
+                local gridX = x - 1
+                local gridY = y - 1
+                
+                if not terrainMap[gridX] then terrainMap[gridX] = {} end
+                if not terrainTextures[gridX] then terrainTextures[gridX] = {} end
+                
+                terrainMap[gridX][gridY] = terrainType or "grass"
+                
+                -- ← НОВОЕ: загружаем текстуру для terrain
+                local tileWidth = map.tilewidth or 32
+                local tileHeight = map.tileheight or 32
+                local texture = loadTerrainSprite(map, gid, tileWidth, tileHeight)
+                terrainTextures[gridX][gridY] = texture
             end
         end
     end
 
-    -- 2. Обработка слоя objects (tilelayer)
+    -- Загружаем entities с текстурами из карты
     local objectsLayer = nil
     for _, layer in ipairs(map.layers) do
-        if layer.name == "objects" and layer.type == "tilelayer" then
+        if layer.name == "entities" and layer.type == "tilelayer" then
             objectsLayer = layer
             break
         end
     end
+    
     if objectsLayer then
         local objData = objectsLayer.data
         for y = 1, height do
             for x = 1, width do
-                local gid
-                if type(objData[y]) == "table" and type(objData[y][x]) == "table" and objData[y][x].gid then
-                    gid = objData[y][x].gid
-                else
-                    gid = objData[y][x]
+                local gid = nil
+                if type(objData) == "table" then
+                    if objData[y] then
+                        if type(objData[y]) == "table" then
+                            if objData[y][x] then
+                                if type(objData[y][x]) == "table" and objData[y][x].gid then
+                                    gid = objData[y][x].gid
+                                elseif type(objData[y][x]) == "number" then
+                                    gid = objData[y][x]
+                                end
+                            end
+                        elseif type(objData[y]) == "number" then
+                            local idx = (y-1) * width + x
+                            gid = objData[idx]
+                        end
+                    end
                 end
+                
                 if gid and gid > 0 then
-                    local q, r = tileToAxial(x - 1, y - 1)
-                    local entity = createEntityFromGID(gid, q, r)
+                    local gridX = x - 1  -- 0-based
+                    local gridY = y - 1  -- 0-based
+                    
+                    local entity = createEntityFromGID(map, gid, gridX, gridY)
                     if entity then
                         table.insert(entities, entity)
+                        print(string.format("  Created %s at grid(%d,%d)", entity.name, gridX, gridY))
+                    elseif not gidToEntity[gid] then
+                        print(string.format("  Warning: Unknown entity GID %d at grid(%d,%d)", gid, gridX, gridY))
                     end
                 end
             end
         end
     end
 
-    return terrainMap, entities
+    -- Сохраняем карту и текстуры для отрисовки
+    environment.loadedMap = map
+    environment.terrainTextures = terrainTextures  -- ← НОВОЕ
+
+    print("\n--- LOADING COMPLETE ---")
+    print(string.format("Terrain cells: %d", (function() local count = 0 for _,row in pairs(terrainMap) do for _ in pairs(row) do count = count + 1 end end return count end)()))
+    print(string.format("Entities loaded: %d", #entities))
+
+    return terrainMap, entities, width, height
 end
 
--- Вспомогательные функции для атак (пример – дополните по вашему желанию)
+-- Функции атак (без изменений)
 function environment.getWarriorAttacks()
     local combat = require("combat")
     return {

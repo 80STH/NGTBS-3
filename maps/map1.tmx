@@ -10,14 +10,14 @@
  <tileset firstgid="21" name="entities" tilewidth="16" tileheight="16" tilecount="72" columns="9">
   <image source="entities.png" width="159" height="142"/>
  </tileset>
- <layer id="1" name="terrain" width="11" height="11">
+ <layer id="1" name="terrain" width="11" height="11" visible="0">
   <data encoding="base64" compression="zlib">
-   eJyNzsEKACAIA1A9h/v/z61ASMYSB7s9h2YvOF2inOs8i2wMbOd509PExyrv5W4VVz3I1W22vDmx6t/OY2iVUx7Cbh6NA1Y=
+   eJyNziEOADAIQ1EQSHr/424C0TTdgvjurawioibc0lQSO0y9sD+vmzmmH9b5pHd8iz3E8bZa3dxY99+fx9I65zyMPQUVA1Y=
   </data>
  </layer>
  <layer id="2" name="entities" width="11" height="11">
   <data encoding="base64" compression="zlib">
-   eJxjYKA9kAJiHiCWRBKTo9BMHiSzGaBms0PF5fGox8XHBqSQ2EokuQ43gNkLcqskPoVUBABd0wFP
+   eJxzZWBgcEXC3FiwK5EYl1opIOYBYkkkMTkKzeZBMtsVajY7VFwej3psfHzuhrGVCKglNixg9rIjhQelZhJSCwDzxRnx
   </data>
  </layer>
 </map>

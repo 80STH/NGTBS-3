@@ -1,31 +1,24 @@
 -- combat.lua
--- Система боя: атаки, урон, эффекты
--- Переписана логика прямой линии и отталкивания с использованием кубических координат
-
+-- Система боя с кубическими координатами (pointy-top, odd-r)
 local combat = {}
 
-combat.axialToCube = axialToCube
-combat.cubeToAxial = cubeToAxial
-combat.applyCubeStep = applyCubeStep
-
 -- ============================================================
--- КОНВЕРТАЦИЯ КООРДИНАТ (кубические <-> осевые)
+-- ЕДИНЫЕ ПРЕОБРАЗОВАНИЯ ДЛЯ POINTY-TOP (углом вверх)
 -- ============================================================
-
 local function axialToCube(q, r)
-    local x = q
-    local z = r - (q - (q % 2)) / 2
+    -- pointy-top: x = q - (r - (r%2))/2, z = r
+    local x = q - (r - (r % 2)) / 2
+    local z = r
     local y = -x - z
     return x, y, z
 end
 
 local function cubeToAxial(x, y, z)
-    local q = x
-    local r = z + (x - (x % 2)) / 2
+    local q = x + (z - (z % 2)) / 2
+    local r = z
     return q, r
 end
 
--- Применение кубического шага к осевым координатам
 local function applyCubeStep(q, r, stepX, stepY, stepZ)
     local x, y, z = axialToCube(q, r)
     x = x + stepX
@@ -33,17 +26,11 @@ local function applyCubeStep(q, r, stepX, stepY, stepZ)
     z = z + stepZ
     return cubeToAxial(x, y, z)
 end
-
-local function debugPrint(...)
-    if _G.DEBUG_COMBAT then
-        print(...)
-    end
-end
-
--- ============================================================
--- БАЗОВЫЙ КЛАСС ДЛЯ АТАК
 -- ============================================================
 
+-- ============================================================
+-- БАЗОВЫЙ КЛАСС АТАКИ
+-- ============================================================
 combat.Attack = {}
 combat.Attack.__index = combat.Attack
 
@@ -57,91 +44,52 @@ function combat.Attack.new(name, description, range, damage, effects)
     return self
 end
 
--- ============================================================
--- ОПРЕДЕЛЕНИЕ ПРЯМОЙ ЛИНИИ (кубические координаты)
--- ============================================================
-
+-- Определение направления прямой линии (кубический шаг)
 function combat.Attack:getLineDirection(fromQ, fromR, toQ, toR, hex)
-    debugPrint("--- getLineDirection ---")
     local ax, ay, az = axialToCube(fromQ, fromR)
     local bx, by, bz = axialToCube(toQ, toR)
     local dx, dy, dz = bx - ax, by - ay, bz - az
 
     local function gcd(a, b)
-        a = math.abs(a)
-        b = math.abs(b)
-        while b ~= 0 do
-            a, b = b, a % b
-        end
+        a = math.abs(a); b = math.abs(b)
+        while b ~= 0 do a, b = b, a % b end
         return a
     end
 
     local g = gcd(gcd(dx, dy), dz)
-    if g == 0 then
-        debugPrint("Same point, no direction")
-        return nil
-    end
+    if g == 0 then return nil end
 
     local stepX, stepY, stepZ = dx / g, dy / g, dz / g
-
-    -- Направление должно быть единичным вектором в кубических координатах
-    if math.abs(stepX) > 1 or math.abs(stepY) > 1 or math.abs(stepZ) > 1 then
-        debugPrint("Not a unit direction")
-        return nil
-    end
-    if stepX + stepY + stepZ ~= 0 then
-        debugPrint("Invalid cube direction (sum != 0)")
-        return nil
-    end
-
-    debugPrint(string.format("Cube direction: (%d, %d, %d)", stepX, stepY, stepZ))
+    if math.abs(stepX) > 1 or math.abs(stepY) > 1 or math.abs(stepZ) > 1 then return nil end
+    if stepX + stepY + stepZ ~= 0 then return nil end
     return stepX, stepY, stepZ
 end
 
--- ============================================================
--- ПОИСК ЦЕЛЕЙ НА ЛИНИИ (с использованием кубического шага)
--- ============================================================
-local function getEntityAtHex(q, r, entities)
-    for _, e in ipairs(entities) do
-        if e.q == q and e.r == r then return e end
-    end
-    return nil
-end
-
+-- Поиск первой цели на линии
 function combat.Attack:findFirstTargetOnLine(startQ, startR, stepX, stepY, stepZ, hex, entities)
     local curQ, curR = startQ, startR
     while true do
         curQ, curR = applyCubeStep(curQ, curR, stepX, stepY, stepZ)
         if not hex:isValidHex(curQ, curR) then break end
-        local target = getEntityAtHex(curQ, curR, entities)
-        if target then
-            return target, {q = curQ, r = curR}
-        end
+        local target = combat.getEntityAtHex(curQ, curR, entities)
+        if target then return target, {q = curQ, r = curR} end
     end
     return nil, nil
 end
 
+-- Поиск первых двух целей на линии
 function combat.Attack:findFirstTwoTargetsOnLine(startQ, startR, stepX, stepY, stepZ, hex, entities)
-    debugPrint("--- findFirstTwoTargetsOnLine (cube step) ---")
     local curQ, curR = startQ, startR
-    local step = 0
-    local firstTarget, firstHex = nil, nil
-    local secondTarget, secondHex = nil, nil
+    local firstTarget, firstHex, secondTarget, secondHex = nil, nil, nil, nil
     while true do
         curQ, curR = applyCubeStep(curQ, curR, stepX, stepY, stepZ)
-        step = step + 1
         if not hex:isValidHex(curQ, curR) then break end
-        debugPrint(string.format("Step %d: checking (%d, %d)", step, curQ, curR))
         local target = combat.getEntityAtHex(curQ, curR, entities)
         if target then
             if not firstTarget then
-                firstTarget = target
-                firstHex = {q = curQ, r = curR}
-                debugPrint(string.format("First target at (%d, %d)", curQ, curR))
+                firstTarget, firstHex = target, {q = curQ, r = curR}
             elseif not secondTarget and target ~= firstTarget then
-                secondTarget = target
-                secondHex = {q = curQ, r = curR}
-                debugPrint(string.format("Second target at (%d, %d)", curQ, curR))
+                secondTarget, secondHex = target, {q = curQ, r = curR}
                 break
             end
         end
@@ -149,31 +97,21 @@ function combat.Attack:findFirstTwoTargetsOnLine(startQ, startR, stepX, stepY, s
     return firstTarget, firstHex, secondTarget, secondHex
 end
 
--- ============================================================
--- ОТТАЛКИВАНИЕ (с кубическим шагом)
--- ============================================================
-
--- Отталкивание цели в направлении (с анимацией)
+-- Отталкивание в направлении
 function combat.Attack:pushTargetInDirection(target, fromQ, fromR, stepX, stepY, stepZ, hex, entities, sounds, onComplete)
     local pushQ, pushR = applyCubeStep(fromQ, fromR, stepX, stepY, stepZ)
-    debugPrint(string.format("Pushing %s from (%d,%d) to (%d,%d)", target.name or target.type, fromQ, fromR, pushQ, pushR))
     self:pushTargetToHex(target, fromQ, fromR, pushQ, pushR, hex, entities, sounds, onComplete)
 end
 
--- Отталкивание цели на конкретную клетку (с анимацией)
+-- Отталкивание на конкретную клетку (с анимацией)
 function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, entities, sounds, onComplete)
-    local isActor = target.maxHealth ~= nil and target.isBuilding ~= true
     local wasDestroyed = false
-    
-    local function finishPush()
-        if onComplete then onComplete(wasDestroyed) end
-    end
-    
+    local function finishPush() if onComplete then onComplete(wasDestroyed) end end
+
     if not hex:isValidHex(toQ, toR) then
-        debugPrint("Target cell is outside map!")
-        if isActor then
+        if target:isCharacter() then
             target.health = target.health - 1
-            print(target.name .. " is slammed against the edge! Takes 1 additional damage!")
+            print(target.name .. " is slammed against the edge! Takes 1 damage!")
             if sounds and sounds.collision then sounds.collision:play() end
             if target.health <= 0 then
                 combat.removeEntity(target, entities)
@@ -184,13 +122,10 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         finishPush()
         return
     end
-    
-    local entityAtPush = combat.getEntityAtHex(toQ, toR, entities)
-    
-    if not entityAtPush then
-        debugPrint("Target cell is free, moving with animation")
-        if isActor then
-            -- Добавляем анимацию перемещения
+
+    local occupant = combat.getEntityAtHex(toQ, toR, entities)
+    if not occupant then
+        if target:isCharacter() then
             combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
                 print(target.name .. " is pushed back!")
                 finishPush()
@@ -198,19 +133,16 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         else
             finishPush()
         end
-    elseif entityAtPush then
-        debugPrint(string.format("Collision with obstacle: %s", entityAtPush.name))
-        if isActor then
-            -- Сначала добавляем анимацию к цели
+    else
+        if target:isCharacter() then
             combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
-                entityAtPush.health = entityAtPush.health - 1
+                occupant.health = occupant.health - 1
                 target.health = target.health - 1
-                print(target.name .. " crashes into " .. entityAtPush.name .. "! Both take 1 damage!")
+                print(target.name .. " crashes into " .. occupant.name .. "! Both take 1 damage!")
                 if sounds and sounds.collision then sounds.collision:play() end
-                
-                if entityAtPush.health <= 0 then
-                    combat.removeEntity(entityAtPush, entities)
-                    print(entityAtPush.name .. " has been destroyed!")
+                if occupant.health <= 0 then
+                    combat.removeEntity(occupant, entities)
+                    print(occupant.name .. " has been destroyed!")
                 end
                 if target.health <= 0 then
                     combat.removeEntity(target, entities)
@@ -222,45 +154,29 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         else
             finishPush()
         end
-    else
-        finishPush()
     end
 end
 
 -- ============================================================
--- НОВЫЕ ТИПЫ АТАК (обновлённые execute)
+-- ТИПЫ АТАК (коротко, только изменённые вызовы push)
 -- ============================================================
-
--- 1. РЫВОК ПО ПРЯМОЙ
 combat.DashAttack = setmetatable({}, combat.Attack)
 combat.DashAttack.__index = combat.DashAttack
-
 function combat.DashAttack.new()
-    local self = combat.Attack.new("Dash", "Charge forward in a straight line, pushing the first target hit", math.huge, 1, {})
+    local self = combat.Attack.new("Dash", "Charge forward, pushing first target", math.huge, 1, {})
     return setmetatable(self, combat.DashAttack)
 end
-
 function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    debugPrint("=== DashAttack ===")
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then
-        debugPrint("ERROR: Not a straight line!")
-        return false, "Not a straight line!"
-    end
+    if not stepX then return false, "Not a straight line!" end
     local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-    if not firstTarget then
-        debugPrint("ERROR: No target in that direction!")
-        return false, "No target in that direction!"
-    end
+    if not firstTarget then return false, "No target in that direction!" end
     self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds)
-        -- Вместо прямого вызова pushTargetInDirection, передаём колбэк
     self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds, function()
         attacker.hasActedThisTurn = true
-        debugPrint("=== DashAttack complete ===")
     end)
     attacker.hasActedThisTurn = true
-    debugPrint("=== DashAttack complete ===")
-    return true, nil
+    return true
 end
 
 -- 2. ПЕРЕВОРОТ ЦЕЛИ ЗА АТАКУЮЩЕГО
@@ -477,329 +393,159 @@ function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, en
     return true, nil
 end
 
--- ============================================================
--- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (без изменений)
--- ============================================================
-
--- Обновленные вспомогательные функции для работы с единым списком entities
+-- Вспомогательные функции
 function combat.getEntityAtHex(q, r, entities)
-    for _, entity in ipairs(entities) do
-        if entity.q == q and entity.r == r then
-            return entity
-        end
+    for _, e in ipairs(entities) do
+        if e.q == q and e.r == r then return e end
     end
     return nil
 end
 
 function combat.removeEntity(entity, entities)
     for i, e in ipairs(entities) do
-        if e == entity then
-            table.remove(entities, i)
-            return true
-        end
+        if e == entity then table.remove(entities, i); return true end
     end
     return false
 end
 
--- Обновленная функция нанесения урона
-function combat.Attack:dealDamageToEntity(target, attacker, damage, entities, globalHealth, sounds)
-    local wasDestroyed = target:takeDamage(damage, globalHealth)
-    
-    if sounds and sounds.attack then
-        sounds.attack:play()
-    end
-    
-    if wasDestroyed then
-        combat.removeEntity(target, entities)
-        print(string.format("%s has been destroyed!", target.name))
-    end
-    
+function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, sounds)
+    local wasDestroyed = target:takeDamage(damage)
+    if sounds and sounds.attack then sounds.attack:play() end
+    if wasDestroyed then combat.removeEntity(target, entities) end
     return wasDestroyed
 end
 
-function combat.Attack:getNeighborsInDirection(centerQ, centerR, dirQ, dirR, hex)
-    debugPrint("--- getNeighborsInDirection ---")
-    local neighbors = {}
-    local allNeighbors = hex:getNeighbors(centerQ, centerR)
-    local centerX, centerY, centerZ = axialToCube(centerQ, centerR)
-    local targetX = centerX + dirQ
-    local targetZ = centerR + dirR
-    local targetY = -targetX - targetZ
-    local function directionScore(q, r)
-        local nX, nY, nZ = axialToCube(q, r)
-        return (nX - centerX) * (targetX - centerX) +
-               (nY - centerY) * (targetY - centerY) +
-               (nZ - centerZ) * (targetZ - centerZ)
-    end
-    table.sort(allNeighbors, function(a, b)
-        return directionScore(a.q, a.r) > directionScore(b.q, b.r)
-    end)
-    for i = 1, math.min(3, #allNeighbors) do
-        if hex:isValidHex(allNeighbors[i].q, allNeighbors[i].r) then
-            table.insert(neighbors, allNeighbors[i])
-        end
-    end
-    return neighbors
-end
-
-function combat.handleBuildingDamage(building, damage, globalHealth)
-    local oldHealth = building.health
-    building.health = building.health - damage
-    local actualDamage = oldHealth - building.health
-    globalHealth.current = math.max(0, globalHealth.current - actualDamage)
-    print(string.format("%s takes %d damage! (%d/%d HP)", building.name, actualDamage, math.max(0, building.health), building.maxHealth))
-    print(string.format("⚔ Global health reduced by %d! (%d/%d)", actualDamage, globalHealth.current, globalHealth.max))
-    return building.health <= 0
-end
-
 -- ============================================================
--- 7. WIND TORRENT - ГЛОБАЛЬНЫЙ ВЕТЕР
+-- WIND TORRENT (исправлены внутренние преобразования)
 -- ============================================================
-
 combat.WindTorrentAttack = setmetatable({}, combat.Attack)
 combat.WindTorrentAttack.__index = combat.WindTorrentAttack
 
 function combat.WindTorrentAttack.new()
-    local self = combat.Attack.new(
-        "🌬️ Wind Torrent",
-        "Global wind pushes all actors and obstacles one step in chosen direction (once per game)",
-        999,  -- дальность не важна
-        0,    -- урон
-        {}
-    )
-    --self.hasBeenUsed = false
+    local self = combat.Attack.new("🌬️ Wind Torrent", "Global wind pushes everything one step", 999, 0, {})
+    self.hasBeenUsed = false
     return setmetatable(self, combat.WindTorrentAttack)
 end
 
--- Направления: "north", "northeast", "southeast", "south", "southwest", "northwest"
--- ============================================================
--- ОБНОВЛЁННЫЙ WIND TORRENT (с анимацией)
--- ============================================================
-
 function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, entities, sounds, onComplete)
-    -- if self.hasBeenUsed then
-    --     if onComplete then onComplete(false, "Already used") end
-    --     return false, "Already used"
-    -- end
-    
+    if self.hasBeenUsed then
+        if onComplete then onComplete(false, "Already used") end
+        return false
+    end
+
     local stepMap = {
-        north = {dx = 0, dy = 1, dz = -1},
-        northeast = {dx = 1, dy = 0, dz = -1},
-        southeast = {dx = 1, dy = -1, dz = 0},
-        south = {dx = 0, dy = -1, dz = 1},
-        southwest = {dx = -1, dy = 0, dz = 1},
-        northwest = {dx = -1, dy = 1, dz = 0},
+        north     = {dx = 0,  dy = 1,  dz = -1},
+        northeast = {dx = 1,  dy = 0,  dz = -1},
+        southeast = {dx = 1,  dy = -1, dz = 0},
+        south     = {dx = 0,  dy = -1, dz = 1},
+        southwest = {dx = -1, dy = 0,  dz = 1},
+        northwest = {dx = -1, dy = 1,  dz = 0},
     }
-    
     local step = stepMap[direction]
     if not step then
         if onComplete then onComplete(false, "Invalid direction") end
-        return false, "Invalid direction"
+        return false
     end
-    
+
     print(string.format("💨 WIND TORRENT: Pushing everything %s!", direction))
-    
-    local function applyCubeStep(q, r)
+
+    local function applyStep(q, r)
         local x, y, z = axialToCube(q, r)
-        x = x + step.dx
-        y = y + step.dy
-        z = z + step.dz
-        return cubeToAxial(x, y, z)
+        return cubeToAxial(x + step.dx, y + step.dy, z + step.dz)
     end
-    
-    local function isValid(q, r)
-        return hex:isValidHex(q, r)
-    end
-    
-    -- Собираем все объекты для перемещения
+
+    local function isValid(q, r) return hex:isValidHex(q, r) end
+
+    -- Сбор всех объектов
     local allObjects = {}
     for _, entity in ipairs(entities) do
         table.insert(allObjects, {obj = entity, type = "actor"})
     end
-    
-    -- Вычисляем новые позиции и обрабатываем коллизии
-    local pushes = {}  -- анимации для добавления
-    local damageEvents = {}  -- урон от столкновений/краёв
-    
+
+    local pushes, damageEvents = {}, {}
     for _, entry in ipairs(allObjects) do
         local obj = entry.obj
-        local newQ, newR = applyCubeStep(obj.q, obj.r)
-        
+        local newQ, newR = applyStep(obj.q, obj.r)
         if not isValid(newQ, newR) then
-            -- Вылет за край
             table.insert(damageEvents, {obj = obj, reason = "edge"})
         else
-            table.insert(pushes, {
-                obj = obj,
-                fromQ = obj.q,
-                fromR = obj.r,
-                toQ = newQ,
-                toR = newR
-            })
+            table.insert(pushes, {obj = obj, fromQ = obj.q, fromR = obj.r, toQ = newQ, toR = newR})
         end
     end
-    
-    -- Разрешаем коллизии (несколько объектов в одну клетку)
-    local targetMap = {}
-    local finalPushes = {}
-    local collisions = {}
-    
+
+    -- Разрешение коллизий
+    local targetMap, finalPushes, collisions = {}, {}, {}
     for _, push in ipairs(pushes) do
         local key = push.toQ .. "," .. push.toR
         if not targetMap[key] then
             targetMap[key] = push
             table.insert(finalPushes, push)
         else
-            -- Коллизия: оба получают урон
             local existing = targetMap[key]
             table.insert(collisions, {obj1 = existing.obj, obj2 = push.obj})
-            -- Оставляем только один объект (актёр приоритетнее препятствия)
             if push.obj.maxHealth ~= nil and existing.obj.maxHealth == nil then
                 targetMap[key] = push
-                -- Нужно обновить finalPushes
                 for i, fp in ipairs(finalPushes) do
-                    if fp.obj == existing.obj then
-                        finalPushes[i] = push
-                        break
-                    end
+                    if fp.obj == existing.obj then finalPushes[i] = push; break end
                 end
             end
         end
     end
-    
-    -- Добавляем анимации в глобальную очередь
+
     for _, push in ipairs(finalPushes) do
         combat.addPushAnimation(push.obj, push.fromQ, push.fromR, push.toQ, push.toR)
     end
-    
-    -- Обрабатываем урон от коллизий после анимаций
-    local function applyDamageAfterAnimations()
-        -- Урон от коллизий
+
+    local function applyDamage()
         for _, coll in ipairs(collisions) do
-            local dmg = 1
-            if coll.obj1.health then
-                coll.obj1.health = coll.obj1.health - dmg
-                print(string.format("💥 %s collides and takes %d damage!",
-                    coll.obj1.name or coll.obj1.type, dmg))
-            end
-            if coll.obj2.health then
-                coll.obj2.health = coll.obj2.health - dmg
-                print(string.format("💥 %s collides and takes %d damage!",
-                    coll.obj2.name or coll.obj2.type, dmg))
-            end
+            if coll.obj1.health then coll.obj1.health = coll.obj1.health - 1 end
+            if coll.obj2.health then coll.obj2.health = coll.obj2.health - 1 end
+            print(string.format("💥 %s collides with %s!", coll.obj1.name, coll.obj2.name))
             if sounds and sounds.collision then sounds.collision:play() end
         end
-        
-        -- Урон от вылета за край
         for _, dmg in ipairs(damageEvents) do
-            dmg.obj.health = dmg.obj.health - 1
-            print(string.format("💨 %s is blown off the map and takes 1 damage!",
-                dmg.obj.name or dmg.obj.type))
+            if dmg.obj.health then dmg.obj.health = dmg.obj.health - 1 end
+            print(string.format("💨 %s is blown off the map!", dmg.obj.name))
             if sounds and sounds.collision then sounds.collision:play() end
         end
-        
-        -- Удаляем уничтоженных
         for i = #entities, 1, -1 do
             if entities[i].health <= 0 then
                 print(string.format("💀 %s has been defeated!", entities[i].name))
                 table.remove(entities, i)
             end
         end
-        
         self.hasBeenUsed = true
         if sounds and sounds.wind then sounds.wind:play() end
-        print("🌪️ Wind Torrent used! No longer available this game.")
-        
         if onComplete then onComplete(true, nil) end
     end
-    
-    -- Запускаем анимации, затем применяем урон
-    combat.startPushAnimations(hex, applyDamageAfterAnimations)
-    
-    return true, nil
-end
 
-
--- ============================================================
--- ФАБРИКА АТАК
--- ============================================================
-
-combat.attackFactory = {
-    dash = function() return combat.DashAttack.new() end,
-    flip = function() return combat.FlipAttack.new() end,
-    shoot = function(range) return combat.ShootAttack.new(range or 5) end,
-    piercingShoot = function(range) return combat.PiercingShootAttack.new(range or 5) end,
-    aoePush = function() return combat.AoePushAttack.new() end,
-    aoeDirectional = function() return combat.AoeDirectionalAttack.new() end,
-}
-
--- Добавляем в фабрику
-combat.attackFactory.windTorrent = function() return combat.WindTorrentAttack.new() end
-
-function combat.createAttackForActor(attackType, params)
-    local factory = combat.attackFactory[attackType]
-    return factory and factory(params) or combat.DashAttack.new()
-end
-
-function combat.performAttack(attacker, targetQ, targetR, hex, entities, sounds, attackOverride)
-    debugPrint(string.format("\n========== PERFORM ATTACK =========="))
-    if attacker.isMoving then return false, "Cannot attack while moving!" end
-    if attacker.hasActedThisTurn then return false, attacker.name .. " has already acted this turn!" end
-    local attack = attackOverride or attacker.attack or combat.DashAttack.new()
-    local success, message = attack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    if not success then print(message); return false end
-    attacker.hasActedThisTurn = true
+    combat.startPushAnimations(hex, applyDamage)
     return true
 end
 
 -- ============================================================
--- СИСТЕМА АНИМАЦИИ СМЕЩЕНИЙ
+-- АНИМАЦИОННАЯ ОЧЕРЕДЬ (без изменений, но оставляем)
 -- ============================================================
-
--- Очередь анимаций для плавных перемещений
-pushAnimations = {
-    queue = {},  -- {obj, fromQ, fromR, toQ, toR, type, onComplete}
-    active = false
-}
+pushAnimations = { queue = {}, active = false }
 
 function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
     if not obj then return end
-    
-    -- Если это актёр и он уже двигается, отменяем его текущее движение
     if obj.isMoving then
         obj.isMoving = false
         obj.path = {}
         obj.currentPathIndex = 0
     end
-    
-    local anim = {
-        obj = obj,
-        fromQ = fromQ,
-        fromR = fromR,
-        toQ = toQ,
-        toR = toR,
-        startX = 0, startY = 0,
-        endX = 0, endY = 0,
-        timer = 0,
-        duration = 0.2,
-        isMoving = false,
-        onComplete = onComplete or function() end
-    }
-    
-    table.insert(pushAnimations.queue, anim)
+    table.insert(pushAnimations.queue, {
+        obj = obj, fromQ = fromQ, fromR = fromR, toQ = toQ, toR = toR,
+        startX = 0, startY = 0, endX = 0, endY = 0, timer = 0, duration = 0.2,
+        isMoving = false, onComplete = onComplete or function() end
+    })
 end
 
--- Функция для начала обработки очереди анимаций
 function combat.startPushAnimations(hex, callback)
-    if #pushAnimations.queue == 0 then
-        if callback then callback() end
-        return
-    end
-    
+    if #pushAnimations.queue == 0 then if callback then callback() end; return end
     pushAnimations.active = true
     pushAnimations.globalCallback = callback
-    
-    -- Инициализируем координаты для первой анимации
     combat.initNextPushAnimation(hex)
 end
 
@@ -812,69 +558,41 @@ function combat.initNextPushAnimation(hex)
         end
         return
     end
-    
     local anim = pushAnimations.queue[1]
     if not anim.isMoving then
-        -- Получаем пиксельные координаты
         anim.startX, anim.startY = hex:hexToPixel(anim.fromQ, anim.fromR)
         anim.endX, anim.endY = hex:hexToPixel(anim.toQ, anim.toR)
         anim.timer = 0
         anim.isMoving = true
-        
-        -- Логические координаты обновляем сразу
         if anim.obj then
             anim.obj.q = anim.toQ
             anim.obj.r = anim.toR
         end
-        
-        -- Для отладки
-        print(string.format("🎬 Animation started: %s from (%d,%d) to (%d,%d)",
-            anim.obj.name or anim.obj.type or "object",
-            anim.fromQ, anim.fromR, anim.toQ, anim.toR))
     end
 end
 
 function combat.updatePushAnimations(dt, hex)
-    if not pushAnimations.active or #pushAnimations.queue == 0 then
-        return
-    end
-    
+    if not pushAnimations.active or #pushAnimations.queue == 0 then return end
     local anim = pushAnimations.queue[1]
     if anim and anim.isMoving then
         anim.timer = anim.timer + dt
-        
         if anim.timer >= anim.duration then
-            -- Анимация завершена
-            if anim.obj then
-                anim.obj._isAnimating = false
-            end
-            
-            -- Вызываем колбэк
-            if anim.onComplete then
-                anim.onComplete(anim.obj)
-            end
-            
-            -- Удаляем завершённую анимацию
+            if anim.onComplete then anim.onComplete(anim.obj) end
             table.remove(pushAnimations.queue, 1)
-            
-            -- Запускаем следующую
             combat.initNextPushAnimation(hex)
         end
     end
 end
 
--- Функция для мгновенного применения всех отложенных анимаций
 function combat.flushPushAnimations()
     for _, anim in ipairs(pushAnimations.queue) do
         if anim.obj then
             anim.obj.q = anim.toQ
             anim.obj.r = anim.toR
-            anim.obj._isAnimating = false
         end
     end
     pushAnimations.queue = {}
     pushAnimations.active = false
 end
-
 
 return combat

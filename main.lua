@@ -2,7 +2,7 @@
 combat = require("combat") --почему для этого нужна переменная?
 ai = require("ai")
 require("hexgrid")
-require("environment")
+environment = require("environment")
 
 -- Делаем очередь анимаций доступной глобально для отрисовки
 pushAnimations = pushAnimations or { queue = {}, active = false }
@@ -33,7 +33,7 @@ function love.load()
     terrainMap, entities = env.loadMapFromTiled('maps/map1.lua')
 
     -- Инициализация гексагональной сетки (под размеры карты)
-    hex = require("hexgrid").new(60, 13, 11)   -- ширина=13, высота=11
+    hex = require("hexgrid").new(56, 11, 11)
     hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
 
     -- Глобальное здоровье (если нужно)
@@ -725,91 +725,51 @@ function love.update(dt)
 end
 
 function drawHexGrid()
+    -- Сначала рисуем terrain текстуры (под всеми сущностями)
+    if environment.terrainTextures then
+        for q = 0, hex.gridWidth - 1 do
+            for r = 0, hex.gridHeight - 1 do
+                local texture = environment.terrainTextures[q] and environment.terrainTextures[q][r]
+                if texture then
+                    local x, y = hex:hexToPixel(q, r)
+                    local sw, sh = texture:getDimensions()
+                    -- Масштабируем текстуру под размер гекса
+                    local scaleX = (hex.radius * 2) / sw
+                    local scaleY = (hex.radius * 2) / sh
+                    love.graphics.draw(texture, x, y, 0, scaleX, scaleY, sw/2, sh/2)
+                else
+                    -- Fallback: цвет для клеток без текстуры
+                    love.graphics.setColor(0.2, 0.2, 0.2, 0.5)
+                    local x, y = hex:hexToPixel(q, r)
+                    local vertices = hex:drawHexagon(x, y, hex.radius)
+                    love.graphics.polygon("fill", vertices)
+                end
+            end
+        end
+    end
+    
+    -- Затем рисуем выделения и границы
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
             local x, y = hex:hexToPixel(q, r)
             local vertices = hex:drawHexagon(x, y, hex.radius)
             
-            -- Получаем тип местности из terrainMap
-            local terrainType = (terrainMap[q] and terrainMap[q][r]) or "grass"
-            --local terrainColor = getTerrainColor(terrainType)
+            -- Выделения (выбранный, ховер, и т.д.)
             local hasEntity = getEntityAtHex(q, r) ~= nil
             local isCurrentActor = selectedActor and selectedActor.q == q and selectedActor.r == r
             
             if isCurrentActor then
-                love.graphics.setColor(0.2, 0.8, 0.2, 0.8)
+                love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
+                love.graphics.polygon("fill", vertices)
             elseif hex.selectedQ == q and hex.selectedR == r then
-                love.graphics.setColor(0.2, 0.4, 0.8, 0.8)
+                love.graphics.setColor(0.2, 0.4, 0.8, 0.5)
+                love.graphics.polygon("fill", vertices)
             elseif hex.hoverQ == q and hex.hoverR == r then
-                love.graphics.setColor(0.5, 0.8, 0.3, 0.8)
-            elseif hasEntity then
-                love.graphics.setColor(0.5, 0.3, 0.2, 0.8)
-            else
-                --love.graphics.setColor(terrainColor)
+                love.graphics.setColor(0.5, 0.8, 0.3, 0.5)
+                love.graphics.polygon("fill", vertices)
             end
             
-            love.graphics.polygon("fill", vertices)
-            
-            -- Отрисовка текстур земли (без изменений, но адаптируем terrain.name)
-            if not hasEntity and not isCurrentActor and not (hex.selectedQ == q and hex.selectedR == r) and not (hex.hoverQ == q and hex.hoverR == r) then
-                if terrainType == "grass" then
-                    love.graphics.setColor(0.2, 0.6, 0.1, 0.5)
-                    for i = 0, 2 do
-                        local angle = math.rad(60 * i + (q * 37 + r * 23) % 360)
-                        local tx = x + math.cos(angle) * 15
-                        local ty = y + math.sin(angle) * 15
-                        love.graphics.line(x + math.cos(angle - 0.2) * 8, y + math.sin(angle - 0.2) * 8, 
-                                         tx + math.cos(angle) * 5, ty + math.sin(angle) * 5)
-                    end
-                elseif terrainType == "sand" then
-                    love.graphics.setColor(0.6, 0.5, 0.3, 0.5)
-                    for i = 1, 5 do
-                        local angle = math.rad(72 * i + (q * 31 + r * 19) % 360)
-                        local rad = 8 + math.sin(q * 0.5 + r * 0.5) * 4
-                        local tx = x + math.cos(angle) * rad
-                        local ty = y + math.sin(angle) * rad
-                        love.graphics.circle("fill", tx, ty, 1 + (q + r) % 2)
-                    end
-                elseif terrainType == "stone" then
-                    love.graphics.setColor(0.3, 0.3, 0.35, 0.6)
-                    for i = 1, 3 do
-                        local startAngle = math.rad(120 * i + (q * 41 + r * 29) % 360)
-                        local endAngle = startAngle + math.rad(30)
-                        local startX = x + math.cos(startAngle) * 12
-                        local startY = y + math.sin(startAngle) * 12
-                        local endX = x + math.cos(endAngle) * 18
-                        local endY = y + math.sin(endAngle) * 18
-                        love.graphics.line(startX, startY, endX, endY)
-                    end
-                elseif terrainType == "snow" then
-                    love.graphics.setColor(0.8, 0.9, 1, 0.6)
-                    for i = 1, 6 do
-                        local angle = math.rad(60 * i + (q * 43 + r * 37) % 360)
-                        local tx = x + math.cos(angle) * 10
-                        local ty = y + math.sin(angle) * 10
-                        love.graphics.circle("fill", tx, ty, 1.5)
-                    end
-                elseif terrainType == "swamp" then
-                    love.graphics.setColor(0.2, 0.4, 0.2, 0.6)
-                    for i = 1, 4 do
-                        local angle = math.rad(90 * i + (q * 29 + r * 17) % 360)
-                        local rad = 7 + (q + r) % 3
-                        local tx = x + math.cos(angle) * rad
-                        local ty = y + math.sin(angle) * rad
-                        love.graphics.circle("line", tx, ty, 2)
-                    end
-                elseif terrainType == "lava" then
-                    love.graphics.setColor(1, 0.5, 0.1, 0.7)
-                    for i = 1, 3 do
-                        local angle = math.rad(120 * i + love.timer.getTime() * 5)
-                        local rad = 6 + math.sin(love.timer.getTime() * 3 + q + r) * 2
-                        local tx = x + math.cos(angle) * rad
-                        local ty = y + math.sin(angle) * rad
-                        love.graphics.circle("fill", tx, ty, 2)
-                    end
-                end
-            end
-            
+            -- Рамка
             love.graphics.setColor(0, 0, 0, 0.5)
             love.graphics.polygon("line", vertices)
         end
@@ -935,16 +895,16 @@ end
 function drawEntity(entity)
     local x, y = getEntityDrawPosition(entity)
     
-    -- Отрисовка спрайта
     if entity.sprite then
-        -- Пульсация для выбранных персонажей
-        local scale = 1
+        local sw, sh = entity.sprite:getDimensions()
+        local scale = 6
         if selectedActor == entity and entity:isCharacter() then
-            scale = 1 + math.sin(entity.pulse) * 0.05
+            scale = 6 + math.sin(entity.pulse) * 0.2
         end
-        love.graphics.draw(entity.sprite, x, y, 0, scale, scale, 16, 16)
+        -- pivot в центр спрайта
+        love.graphics.draw(entity.sprite, x, y, 0, scale, scale, sw/2, sh/2)
     else
-        -- Fallback: цветной круг если нет спрайта
+        -- fallback круг
         love.graphics.setColor(entity.color or {1, 1, 1, 1})
         love.graphics.circle("fill", x, y, 14)
     end
@@ -1120,7 +1080,6 @@ function love.draw()
     end
 
     function drawCurrentAttack()
-        -- Если враги ходят, показываем другой текст
         if turnState.waitingForEnemies then
             love.graphics.setColor(0.2, 0.2, 0.3, 0.8)
             love.graphics.rectangle("fill", 10, 280, 250, 60, 5)
@@ -1364,18 +1323,48 @@ function getCurrentAttack(actor)
     return actor.attacks[actor.currentAttackIndex].attack
 end
 
--- Обновить функцию performAttack для использования выбранной атаки
 function performAttackWithSelectedAttack(attacker, targetQ, targetR)
     local attack = getCurrentAttack(attacker)
     if not attack then
         return false, "No attack available!"
     end
-    local success, message = combat.performAttack(attacker, targetQ, targetR, hex, entities, sounds, attack)
+    
+    -- Проверяем, находится ли цель в радиусе атаки
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance > attack.range then
+        print(string.format("Target out of range! (%d > %d)", distance, attack.range))
+        return false, "Target out of range!"
+    end
+    
+    -- Проверяем, есть ли цель по указанным координатам
+    local target = combat.getEntityAtHex(targetQ, targetR, entities)
+    if not target then
+        print("No entity at target position!")
+        return false, "No target there!"
+    end
+    
+    -- Проверяем, не атакуем ли мы союзника
+    if attacker.isPlayable and target.isPlayable then
+        print("Cannot attack allies!")
+        return false, "Cannot attack allies!"
+    end
+    
+    if not attacker.isPlayable and not target.isPlayable then
+        print("Enemies don't attack each other!")
+        return false, "Enemies don't attack each other!"
+    end
+    
+    -- Выполняем атаку через метод execute
+    local success, message = attack:execute(attacker, targetQ, targetR, hex, entities, sounds)
     
     -- Очищаем историю после успешной атаки союзника
     if success and attacker.isPlayable then
         actionHistory = {}
         print("Action history cleared (attack by " .. attacker.name .. ")")
+    end
+    
+    if not success then
+        print("Attack failed: " .. (message or "unknown reason"))
     end
     
     return success, message
