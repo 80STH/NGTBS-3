@@ -115,7 +115,8 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
     local wasDestroyed = false
     local function finishPush() if onComplete then onComplete(wasDestroyed) end end
 
-    if not hex:isValidHex(toQ, toR) then
+    -- ИЗМЕНЕНО: проверяем не isValidHex, а isActiveHex
+    if not hex:isActiveHex(toQ, toR) then
         if target:isCharacter() then
             target.health = target.health - 1
             print(target.name .. " is slammed against the edge! Takes 1 damage!")
@@ -482,7 +483,7 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
         return cubeToAxial(x + step.dx, y + step.dy, z + step.dz)
     end
 
-    local function isValid(q, r) return hex:isValidHex(q, r) end
+    local function isValid(q, r) return hex:isActiveHex(q, r) end
 
     -- Собираем только подвижные объекты (isPushable == true)
     local movableObjects = {}

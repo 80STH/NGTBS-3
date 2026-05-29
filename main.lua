@@ -26,24 +26,15 @@ function love.load()
     local env = require("environment")
     local hexStatuses
     terrainMap, entities, width, height, hexStatuses = env.loadMapFromTiled('maps/map1.lua')
-    hex = require("hexgrid").new(56, 11, 11)
+    hex = require("hexgrid").new(56, width, height)  -- используем реальные ширину/высоту из карты
     hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
 
-    -- Удаляем неактивные клетки из terrainMap и terrainTextures
-    for q = 0, hex.gridWidth - 1 do
-        for r = 0, hex.gridHeight - 1 do
-            if not hex:isActiveHex(q, r) then
-                if terrainMap[q] then terrainMap[q][r] = nil end
-                if environment.terrainTextures and environment.terrainTextures[q] then
-                    environment.terrainTextures[q][r] = nil
-                end
-            end
-        end
-    end
     -- Инициализируем глобальную таблицу статусов:
     status.initHexStatuses(hexStatuses) -- добавить в status.lua функцию
     hex = require("hexgrid").new(56, 11, 11)
     hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
+    status.initHexStatuses(hexStatuses)
+
     globalHealth = { current = 5, max = 5, initial = 5 }
 
     -- Состояние игры
@@ -125,11 +116,8 @@ function love.load()
         }
         dirIndex = dirIndex + 1
     end
+    
     windTorrentUI.button = { x = 10, y = 240, width = 120, height = 30, isHovered = false }
-end
-
-function isCellActive(q, r)
-    return hex:isActiveHex(q, r)
 end
 
 -- Функция создания кнопок атак для выбранного персонажа
@@ -581,6 +569,7 @@ function getEntityAtHex(q, r)
     return nil
 end
 
+-- findPath (убрана проверка isEdgeCell)
 function findPath(startQ, startR, targetQ, targetR, movingActor)
     if startQ == targetQ and startR == targetR then return {} end
     local nodeInfo = {}
@@ -611,12 +600,9 @@ function findPath(startQ, startR, targetQ, targetR, movingActor)
         closedSet[currentKey] = true
         local neighbors = hex:getNeighbors(current.q, current.r)
         for _, neighbor in ipairs(neighbors) do
-            if not hex:isValidHex(neighbor.q, neighbor.r) or not hex:isActiveHex(neighbor.q, neighbor.r) then
-                goto continue
-            end
+            if not hex:isValidHex(neighbor.q, neighbor.r) then goto continue end
             local neighborKey = neighbor.q .. "," .. neighbor.r
-            if not closedSet[neighborKey] and hex:isValidHex(neighbor.q, neighbor.r) then
-                if movingActor.isPlayable and isEdgeCell(neighbor.q, neighbor.r) then goto continue end
+            if not closedSet[neighborKey] then
                 if not isPositionOccupied(neighbor.q, neighbor.r, movingActor) then
                     local tentativeG = current.g + 1
                     if not nodeInfo[neighborKey] then
@@ -634,11 +620,11 @@ function findPath(startQ, startR, targetQ, targetR, movingActor)
     return nil
 end
 
--- Движение (добавляет в историю)
+-- performMove (убрана проверка isEdgeCell)
 function performMove(actor, targetQ, targetR)
     if not actor.isPlayable then return false end
-    if not hex:isActiveHex(targetQ, targetR) then
-        print("Cannot move outside playable area")
+    if not hex:isActiveHex(targetQ, targetR) then  -- используем isActiveHex
+        print("Target cell is outside the playable hexagon")
         return false
     end
     if actor.isMoving or actor.hasActedThisTurn then return false end
@@ -647,10 +633,6 @@ function performMove(actor, targetQ, targetR)
         return false
     end
     if actor.q == targetQ and actor.r == targetR then return false end
-    if isEdgeCell(targetQ, targetR) then
-        print("Cannot move to edge cell")
-        return false
-    end
     local distance = hex:getDistance(actor.q, actor.r, targetQ, targetR)
     if distance > actor.moveRange then
         print("Too far")
@@ -665,7 +647,6 @@ function performMove(actor, targetQ, targetR)
         print("No valid path")
         return false
     end
-    -- Запоминаем начало движения
     addToHistory(actor, actor.q, actor.r, targetQ, targetR)
     actor.hasMovedThisTurn = true
     actor.path = path
@@ -673,48 +654,32 @@ function performMove(actor, targetQ, targetR)
     startNextMove(actor)
     return true
 end
--- Функция для отображения доступной дистанции движения с учетом препятствий
+-- drawMovementRange (упрощена, убрана обработка края)
 function drawMovementRange(actor)
     if not actor or actor.isMoving or actor.hasActedThisTurn then return end
-    if actor.hasMovedThisTurn then return end   -- уже двигался – не показываем зелёные клетки
-    
+    if actor.hasMovedThisTurn then return end
+
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
             if not hex:isActiveHex(q, r) then goto continue end
-            -- Пропускаем текущую позицию актера
-            if not (q == actor.q and r == actor.r) then
-                -- Союзники не могут ходить на край
-                if actor.isPlayable and isEdgeCell(q, r) then
-                    -- Показываем как запрещенную зону
-                    local x, y = hex:hexToPixel(q, r)
-                    local vertices = hex:drawHexagon(x, y, hex.radius)
-                    love.graphics.setColor(0.5, 0.2, 0.2, 0.3)
+            if q == actor.q and r == actor.r then goto continue end
+
+            local path = findPath(actor.q, actor.r, q, r, actor)
+            if path and #path > 0 and #path <= actor.moveRange then
+                local isOccupied = isPositionOccupied(q, r, actor)
+                local x, y = hex:hexToPixel(q, r)
+                local vertices = hex:drawHexagon(x, y, hex.radius)
+
+                if isOccupied then
+                    love.graphics.setColor(0.8, 0.2, 0.2, 0.3)
                     love.graphics.polygon("fill", vertices)
-                    love.graphics.setColor(1, 0.5, 0.5, 0.8)
-                    love.graphics.print("⚠", x - 5, y - 8)
-                    goto continue
-                end
-                
-                -- Ищем путь до клетки
-                local path = findPath(actor.q, actor.r, q, r, actor)
-                
-                if path and #path > 0 and #path <= actor.moveRange then
-                    local isOccupied = isPositionOccupied(q, r, actor)
-                    
-                    local x, y = hex:hexToPixel(q, r)
-                    local vertices = hex:drawHexagon(x, y, hex.radius)
-                    
-                    if isOccupied then
-                        love.graphics.setColor(0.8, 0.2, 0.2, 0.3)
-                        love.graphics.polygon("fill", vertices)
-                        love.graphics.setColor(1, 1, 1, 0.5)
-                        love.graphics.print("🚫", x - 5, y - 8)
-                    else
-                        love.graphics.setColor(0.3, 0.8, 0.3, 0.35)
-                        love.graphics.polygon("fill", vertices)
-                        love.graphics.setColor(1, 1, 1, 0.8)
-                        love.graphics.print(#path, x - 5, y - 5)
-                    end
+                    love.graphics.setColor(1, 1, 1, 0.5)
+                    love.graphics.print("🚫", x - 5, y - 8)
+                else
+                    love.graphics.setColor(0.3, 0.8, 0.3, 0.35)
+                    love.graphics.polygon("fill", vertices)
+                    love.graphics.setColor(1, 1, 1, 0.8)
+                    love.graphics.print(#path, x - 5, y - 5)
                 end
             end
             ::continue::
@@ -724,16 +689,12 @@ end
 
 -- Функция для отображения пути к выбранной клетке (вызывать при наведении)
 function drawPathPreview(actor, targetQ, targetR)
-    if not actor or actor.isMoving or actor.hasActedThisTurn then
-        return
-    end
-    
-    -- Проверяем, можно ли дойти до клетки
+    if not actor or actor.isMoving or actor.hasActedThisTurn then return end
+    if not hex:isActiveHex(targetQ, targetR) then return end
+
     local distance = hex:getDistance(actor.q, actor.r, targetQ, targetR)
-    if distance > actor.moveRange then
-        return
-    end
-    
+    if distance > actor.moveRange then return end
+
     local path = findPath(actor.q, actor.r, targetQ, targetR, actor)
     if path and #path > 0 and #path <= actor.moveRange then
         
@@ -905,7 +866,6 @@ function love.update(dt)
         end
     end
     combat.updatePushAnimations(dt, hex)
-    killPlayableAtEdge()
 
     if turnState.phase == "enemy_prepare" and turnState.currentPreparingEnemy then
         local enemy = turnState.currentPreparingEnemy
@@ -951,7 +911,13 @@ function love.update(dt)
 
     -- Ховер для мыши
     local mx, my = love.mouse.getPosition()
-    hex.hoverQ, hex.hoverR = hex:pixelToHex(mx, my)
+    local hq, hr = hex:pixelToHex(mx, my)
+    -- Устанавливаем ховер только если клетка активна (внутри шестиугольника)
+    if hex:isActiveHex(hq, hr) then
+        hex.hoverQ, hex.hoverR = hq, hr
+    else
+        hex.hoverQ, hex.hoverR = -1, -1
+    end
 
     -- Ховер кнопок
     undoButton = undoButton or {}
@@ -972,12 +938,13 @@ function drawHexGrid()
                 if texture then
                     local x, y = hex:hexToPixel(q, r)
                     local sw, sh = texture:getDimensions()
-                    -- Масштабируем текстуру под размер гекса
                     local scaleX = (hex.radius * 2) / sw
                     local scaleY = (hex.radius * 2) / sh
+                    -- 👇 ВАЖНО: сбрасываем цвет на белый перед рисованием текстуры
+                    love.graphics.setColor(1, 1, 1, 1)
                     love.graphics.draw(texture, x, y, 0, scaleX, scaleY, sw/2, sh/2)
                 else
-                    -- Fallback: цвет для клеток без текстуры
+                    -- fallback цвет для клеток без текстуры (только если нужно)
                     love.graphics.setColor(0.2, 0.2, 0.2, 0.5)
                     local x, y = hex:hexToPixel(q, r)
                     local vertices = hex:drawHexagon(x, y, hex.radius)
@@ -1357,7 +1324,6 @@ end
 -- В love.draw добавить вызовы:
 function love.draw()
     drawHexGrid()
-    drawEdgeWarning()
     drawAllEntities()
     drawPreparedAttacks()
     if attackMode and selectedAttack and selectedActor and not selectedActor.hasActedThisTurn and hex.hoverQ >= 0 and hex.hoverR >= 0 then

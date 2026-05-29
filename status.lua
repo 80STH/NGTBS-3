@@ -13,13 +13,14 @@ status.gidToStatus = {
 }
 
 -- Применить статус к гексу
-function status.applyToHex(q, r, statusType)
+function status.applyToHex(q, r, statusType, hex)  -- добавлен параметр hex (опционально)
+    if hex and not hex:isActiveHex(q, r) then return end  -- не накладываем статус на неактивные клетки
     local key = q .. "," .. r
     if not status.hexStatuses[key] then
         status.hexStatuses[key] = {}
     end
     for _, st in ipairs(status.hexStatuses[key]) do
-        if st == statusType then return end -- уже есть
+        if st == statusType then return end
     end
     table.insert(status.hexStatuses[key], statusType)
 end

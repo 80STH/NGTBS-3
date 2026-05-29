@@ -205,7 +205,7 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
     local bestDist = math.huge
 
     for _, neighbor in ipairs(neighbors) do
-        if hex:isValidHex(neighbor.q, neighbor.r) then
+        if hex:isValidHex(neighbor.q, neighbor.r) and hex:isActiveHex(neighbor.q, neighbor.r) then  -- добавлено
             local occupied = false
             for _, e in ipairs(entities) do
                 if e ~= enemy and e.q == neighbor.q and e.r == neighbor.r then
@@ -228,7 +228,6 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
     end
     return false
 end
-
 -- Перемещение на конкретную клетку с анимацией
 function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
     if enemy.isMoving then return false end
@@ -265,7 +264,7 @@ function ai.findSimplePath(startQ, startR, targetQ, targetR, enemy, entities, he
         local neighbors = hex:getNeighbors(current.q, current.r)
         for _, nb in ipairs(neighbors) do
             local key = nb.q .. "," .. nb.r
-            if not visited[key] and hex:isValidHex(nb.q, nb.r) then
+            if not visited[key] and hex:isValidHex(nb.q, nb.r) and hex:isActiveHex(nb.q, nb.r) then  -- ДОБАВЛЕНО isActiveHex
                 local occupied = false
                 for _, e in ipairs(entities) do
                     if e ~= enemy and e.q == nb.q and e.r == nb.r then

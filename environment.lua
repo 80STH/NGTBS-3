@@ -203,6 +203,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
     return nil
 end
 
+-- environment.lua (фрагмент loadMapFromTiled)
 function environment.loadMapFromTiled(filePath)
     print("\n=== LOADING MAP: " .. filePath .. " ===")
     local file = love.filesystem.getInfo(filePath)
@@ -211,11 +212,18 @@ function environment.loadMapFromTiled(filePath)
     local map = sti(filePath)
     local width, height = map.width, map.height
 
-    -- Создаём карту terrain в координатах сетки (x, y)
+    -- Создаём карту terrain и текстур только для активных клеток шестиугольника
     local terrainMap = {}
-    local terrainTextures = {}  -- ← НОВОЕ: для хранения текстур terrain
+    local terrainTextures = {}
     local entities = {}
     local walkable = {}
+
+    -- Временно создаём hex-объект для проверки isActiveHex (позже он будет пересоздан в main)
+    -- Но нам нужны координаты, поэтому используем временный hex с теми же размерами
+    local tempHex = require("hexgrid").new(56, width, height)
+    -- Центр шестиугольника предполагается в (5,5) при width=11, height=11
+    -- Функция isActiveHex использует жёстко заданный центр 5,5, что корректно только для карты 11x11.
+    -- Если карта другого размера, нужно вычислять центр динамически. Оставим как есть, т.к. в проекте 11x11.
 
     -- Находим слой terrain
     local groundLayer = nil
@@ -227,7 +235,6 @@ function environment.loadMapFromTiled(filePath)
     end
     if not groundLayer then error("'terrain' layer not found!") end
 
-    -- Загружаем terrain и текстуры
     local rawData = groundLayer.data
     for y = 1, height do
         for x = 1, width do
@@ -250,25 +257,26 @@ function environment.loadMapFromTiled(filePath)
             end
             
             if gid and gid > 0 then
-                local terrainType = gidToTerrain[gid]
                 local gridX = x - 1
                 local gridY = y - 1
-                
-                if not terrainMap[gridX] then terrainMap[gridX] = {} end
-                if not terrainTextures[gridX] then terrainTextures[gridX] = {} end
-                
-                terrainMap[gridX][gridY] = terrainType or "grass"
-                
-                -- ← НОВОЕ: загружаем текстуру для terrain
-                local tileWidth = map.tilewidth or 32
-                local tileHeight = map.tileheight or 32
-                local texture = loadTerrainSprite(map, gid, tileWidth, tileHeight)
-                terrainTextures[gridX][gridY] = texture
+                -- ИЗМЕНЕНО: проверяем, активна ли клетка в шестиугольнике
+                if tempHex:isActiveHex(gridX, gridY) then
+                    local terrainType = gidToTerrain[gid] or "grass"
+                    if not terrainMap[gridX] then terrainMap[gridX] = {} end
+                    if not terrainTextures[gridX] then terrainTextures[gridX] = {} end
+                    
+                    terrainMap[gridX][gridY] = terrainType
+                    
+                    local tileWidth = map.tilewidth or 32
+                    local tileHeight = map.tileheight or 32
+                    local texture = loadTerrainSprite(map, gid, tileWidth, tileHeight)
+                    terrainTextures[gridX][gridY] = texture
+                end
             end
         end
     end
 
-    -- Загружаем entities с текстурами из карты
+    -- Загружаем entities только на активных клетках
     local objectsLayer = nil
     for _, layer in ipairs(map.layers) do
         if layer.name == "entities" and layer.type == "tilelayer" then
@@ -300,22 +308,24 @@ function environment.loadMapFromTiled(filePath)
                 end
                 
                 if gid and gid > 0 then
-                    local gridX = x - 1  -- 0-based
-                    local gridY = y - 1  -- 0-based
-                    
-                    local entity = createEntityFromGID(map, gid, gridX, gridY)
-                    if entity then
-                        table.insert(entities, entity)
-                        print(string.format("  Created %s at grid(%d,%d)", entity.name, gridX, gridY))
-                    elseif not gidToEntity[gid] then
-                        print(string.format("  Warning: Unknown entity GID %d at grid(%d,%d)", gid, gridX, gridY))
+                    local gridX = x - 1
+                    local gridY = y - 1
+                    -- ИЗМЕНЕНО: создаём сущность только на активной клетке
+                    if tempHex:isActiveHex(gridX, gridY) then
+                        local entity = createEntityFromGID(map, gid, gridX, gridY)
+                        if entity then
+                            table.insert(entities, entity)
+                            print(string.format("  Created %s at grid(%d,%d)", entity.name, gridX, gridY))
+                        elseif not gidToEntity[gid] then
+                            print(string.format("  Warning: Unknown entity GID %d at grid(%d,%d)", gid, gridX, gridY))
+                        end
                     end
                 end
             end
         end
     end
 
-    -- Загрузка статусов со слоя "status"
+    -- Загрузка статусов со слоя "status" (аналогично фильтруем по isActiveHex)
     local statusLayer = nil
     for _, layer in ipairs(map.layers) do
         if layer.name == "status" and layer.type == "tilelayer" then
@@ -347,14 +357,16 @@ function environment.loadMapFromTiled(filePath)
                     end
                 end
                 if gid and gid > 0 then
-                    local statusType = status.gidToStatus[gid]
-                    if statusType then
-                        local gridX = x - 1
-                        local gridY = y - 1
-                        local key = gridX .. "," .. gridY
-                        if not hexStatuses[key] then hexStatuses[key] = {} end
-                        table.insert(hexStatuses[key], statusType)
-                        print(string.format("  Status %s at (%d,%d)", statusType, gridX, gridY))
+                    local gridX = x - 1
+                    local gridY = y - 1
+                    if tempHex:isActiveHex(gridX, gridY) then
+                        local statusType = status.gidToStatus[gid]
+                        if statusType then
+                            local key = gridX .. "," .. gridY
+                            if not hexStatuses[key] then hexStatuses[key] = {} end
+                            table.insert(hexStatuses[key], statusType)
+                            print(string.format("  Status %s at (%d,%d)", statusType, gridX, gridY))
+                        end
                     end
                 end
             end
@@ -363,13 +375,12 @@ function environment.loadMapFromTiled(filePath)
 
     -- Сохраняем карту и текстуры для отрисовки
     environment.loadedMap = map
-    environment.terrainTextures = terrainTextures  -- ← НОВОЕ
+    environment.terrainTextures = terrainTextures
 
     print("\n--- LOADING COMPLETE ---")
-    print(string.format("Terrain cells: %d", (function() local count = 0 for _,row in pairs(terrainMap) do for _ in pairs(row) do count = count + 1 end end return count end)()))
+    print(string.format("Active terrain cells: %d", (function() local count = 0 for _,row in pairs(terrainMap) do for _ in pairs(row) do count = count + 1 end end return count end)()))
     print(string.format("Entities loaded: %d", #entities))
 
-    -- Возвращаем hexStatuses как четвертый параметр
     return terrainMap, entities, width, height, hexStatuses, walkable
 end
 
