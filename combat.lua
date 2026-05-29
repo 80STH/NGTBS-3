@@ -185,6 +185,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds, function()
         attacker.hasActedThisTurn = true
     end)
+    combat.startPushAnimations(hex)   -- <-- добавить
     attacker.hasActedThisTurn = true
     return true
 end
@@ -260,6 +261,7 @@ function combat.ShootAttack:execute(attacker, targetQ, targetR, hex, entities, s
     if distance > self.range then return false, "Target out of range!" end
     self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds)
     self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+    combat.startPushAnimations(hex)   -- <-- добавить
     attacker.hasActedThisTurn = true
     return true
 end
@@ -293,8 +295,10 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     if secondTarget then
         self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds)
         self:pushTargetInDirection(secondTarget, secondHex.q, secondHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+        combat.startPushAnimations(hex)   -- <-- добавить
     end
     self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+    combat.startPushAnimations(hex)   -- <-- добавить
     attacker.hasActedThisTurn = true
     return true
 end
@@ -359,7 +363,7 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
             end
         end
     end
-
+    combat.startPushAnimations(hex)   -- <-- добавить
     attacker.hasActedThisTurn = true
     return true
 end
@@ -410,6 +414,7 @@ function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, en
             self:pushTargetToHex(target, neighbor.q, neighbor.r, pushQ, pushR, hex, entities, sounds)
         end
     end
+    combat.startPushAnimations(hex)   -- <-- добавить
     attacker.hasActedThisTurn = true
     return true
 end

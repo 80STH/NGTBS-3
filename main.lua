@@ -4,6 +4,7 @@ ai = require("ai")
 require("hexgrid")
 environment = require("environment")
 status = require("status")
+ui = require("ui")
 
 -- Делаем очередь анимаций доступной глобально для отрисовки
 pushAnimations = pushAnimations or { queue = {}, active = false }
@@ -1365,21 +1366,21 @@ end
 function love.draw()
     drawHexGrid()
     drawAllEntities()
-    drawPreparedAttacks()
+    ui.drawPreparedAttacks(hex, entities)
     if attackMode and selectedAttack and selectedActor and not selectedActor.hasActedThisTurn and hex.hoverQ >= 0 and hex.hoverR >= 0 then
-        drawAttackPreview(selectedActor, selectedAttack, hex.hoverQ, hex.hoverR)
+        ui.drawAttackPreview(hex, selectedActor, selectedAttack, attackMode, hex.hoverQ, hex.hoverR, entities)
     end
     if selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and turnState.phase == "player" then
-        drawMovementRange(selectedActor)
+        ui.drawMovementRange(hex, selectedActor, entities, terrainMap)
         if not attackMode and hex.hoverQ >= 0 and hex.hoverR >= 0 then
-            drawPathPreview(selectedActor, hex.hoverQ, hex.hoverR)
+            ui.drawPathPreview(hex, selectedActor, hex.hoverQ, hex.hoverR, entities, terrainMap)
         end
     end
-    drawUndoButton()
-    drawEndTurnButton()
-    drawWindTorrentUI()
-    drawGlobalHealthBar()
-    drawAttackPanel()   -- новая панель атак
+    ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
+    ui.drawEndTurnButton(turnState, entities)
+    ui.drawWindTorrentUI(windTorrent, windTorrentUI, turnState)
+    ui.drawGlobalHealthBar(globalHealth)
+    ui.drawAttackPanel(selectedActor, attackButtons, selectedAttack, attackMode)
     love.graphics.setColor(1,1,1,1)
     love.graphics.print("Phase: " .. turnState.phase, 10, 10)
     if selectedActor then

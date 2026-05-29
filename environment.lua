@@ -404,7 +404,7 @@ end
 function environment.getRogueAttacks()
     local combat = require("combat")
     return {
-        { attack = combat.DashAttack.new(), name = "Dash", description = "Charge and push first enemy" },
+        { attack = combat.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
         { attack = combat.PiercingShootAttack.new(5), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
     }
 end
