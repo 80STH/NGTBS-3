@@ -215,6 +215,7 @@ function environment.loadMapFromTiled(filePath)
     local terrainMap = {}
     local terrainTextures = {}  -- ← НОВОЕ: для хранения текстур terrain
     local entities = {}
+    local walkable = {}
 
     -- Находим слой terrain
     local groundLayer = nil
@@ -314,6 +315,52 @@ function environment.loadMapFromTiled(filePath)
         end
     end
 
+    -- Загрузка статусов со слоя "status"
+    local statusLayer = nil
+    for _, layer in ipairs(map.layers) do
+        if layer.name == "status" and layer.type == "tilelayer" then
+            statusLayer = layer
+            break
+        end
+    end
+
+    local hexStatuses = {}
+    if statusLayer then
+        local statusData = statusLayer.data
+        for y = 1, height do
+            for x = 1, width do
+                local gid = nil
+                if type(statusData) == "table" then
+                    if statusData[y] then
+                        if type(statusData[y]) == "table" then
+                            if statusData[y][x] then
+                                if type(statusData[y][x]) == "table" and statusData[y][x].gid then
+                                    gid = statusData[y][x].gid
+                                elseif type(statusData[y][x]) == "number" then
+                                    gid = statusData[y][x]
+                                end
+                            end
+                        elseif type(statusData[y]) == "number" then
+                            local idx = (y-1) * width + x
+                            gid = statusData[idx]
+                        end
+                    end
+                end
+                if gid and gid > 0 then
+                    local statusType = status.gidToStatus[gid]
+                    if statusType then
+                        local gridX = x - 1
+                        local gridY = y - 1
+                        local key = gridX .. "," .. gridY
+                        if not hexStatuses[key] then hexStatuses[key] = {} end
+                        table.insert(hexStatuses[key], statusType)
+                        print(string.format("  Status %s at (%d,%d)", statusType, gridX, gridY))
+                    end
+                end
+            end
+        end
+    end
+
     -- Сохраняем карту и текстуры для отрисовки
     environment.loadedMap = map
     environment.terrainTextures = terrainTextures  -- ← НОВОЕ
@@ -322,7 +369,8 @@ function environment.loadMapFromTiled(filePath)
     print(string.format("Terrain cells: %d", (function() local count = 0 for _,row in pairs(terrainMap) do for _ in pairs(row) do count = count + 1 end end return count end)()))
     print(string.format("Entities loaded: %d", #entities))
 
-    return terrainMap, entities, width, height
+    -- Возвращаем hexStatuses как четвертый параметр
+    return terrainMap, entities, width, height, hexStatuses, walkable
 end
 
 -- Функции атак (без изменений)
@@ -337,16 +385,16 @@ end
 function environment.getMageAttacks()
     local combat = require("combat")
     return {
-        { attack = combat.ShootAttack.new(5), name = "Shoot", description = "Push from distance" },
-        { attack = combat.PiercingShootAttack.new(5), name = "Piercing Shot", description = "Hit two enemies" },
+        { attack = combat.AoePushAttack.new(), name = "Stone Throw", description = "Throw a stone that pushes enemies around" },
+        { attack = combat.AoeDirectionalAttack.new(), name = "Shockwave", description = "Deals 1 damage and pushes 3 enemies in a cone" },
     }
 end
 
 function environment.getRogueAttacks()
     local combat = require("combat")
     return {
-        { attack = combat.DashAttack.new(), name = "Dash", description = "Charge and push" },
-        { attack = combat.AoePushAttack.new(), name = "Shockwave", description = "Push all around" },
+        { attack = combat.DashAttack.new(), name = "Dash", description = "Charge and push first enemy" },
+        { attack = combat.PiercingShootAttack.new(5), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
     }
 end
 

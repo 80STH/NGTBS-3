@@ -9,7 +9,7 @@ return {
   height = 11,
   tilewidth = 14,
   tileheight = 12,
-  nextlayerid = 3,
+  nextlayerid = 4,
   nextobjectid = 2,
   hexsidelength = 6,
   staggeraxis = "y",
@@ -85,7 +85,7 @@ return {
       id = 1,
       name = "terrain",
       class = "",
-      visible = true,
+      visible = false,
       opacity = 1,
       offsetx = 0,
       offsety = 0,
@@ -115,6 +115,26 @@ return {
       encoding = "base64",
       compression = "zlib",
       data = "eJxzZWBgcEXC3FiwK5EYl1opIOYBYkkkMTkKzeZBMtsVajY7VFwej3psfHzuhrGVCKglNixg9rIjhQelZhJSCwDzxRnx"
+    },
+    {
+      type = "tilelayer",
+      x = 0,
+      y = 0,
+      width = 11,
+      height = 11,
+      id = 3,
+      name = "status",
+      class = "",
+      visible = true,
+      opacity = 1,
+      offsetx = 0,
+      offsety = 0,
+      parallaxx = 1,
+      parallaxy = 1,
+      properties = {},
+      encoding = "base64",
+      compression = "zlib",
+      data = "eJxjYBh8QHMImk1LN1MKAHfEAHw="
     }
   }
 }

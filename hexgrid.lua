@@ -137,4 +137,19 @@ function HexGrid:centerOnScreen(screenWidth, screenHeight)
     self.offsetY = (screenHeight - mapHeight) / 2
 end
 
+function HexGrid:isActiveHex(q, r)
+    if not self:isValidHex(q, r) then return false end
+    -- Преобразуем в кубические координаты для проверки расстояния от центра
+    local function axialToCube(q, r)
+        local x = q - (r - (r % 2)) / 2
+        local z = r
+        local y = -x - z
+        return x, y, z
+    end
+    local cx, cy, cz = axialToCube(5, 5)   -- центр карты
+    local x, y, z = axialToCube(q, r)
+    local dist = (math.abs(x - cx) + math.abs(y - cy) + math.abs(z - cz)) / 2
+    return dist <= 5   -- радиус шестиугольника 5 -> сторона 6
+end
+
 return HexGrid

@@ -44,6 +44,9 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     -- Для строительных объектов
     self.globalHealthCost = nil
     
+    -- 🧱 НЕПОДВИЖНОСТЬ: препятствия и здания не отталкиваются
+    self.isPushable = (type == Entity.TYPES.CHARACTER)
+    
     return self
 end
 
@@ -60,6 +63,11 @@ end
 -- Проверка, является ли сущность зданием
 function Entity:isBuilding()
     return self.type == Entity.TYPES.BUILDING
+end
+
+-- Можно ли оттолкнуть сущность
+function Entity:isPushable()
+    return self.isPushable
 end
 
 -- Получить текущую атаку

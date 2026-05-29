@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.1" orientation="hexagonal" renderorder="right-down" width="11" height="11" tilewidth="14" tileheight="12" infinite="0" hexsidelength="6" staggeraxis="y" staggerindex="odd" nextlayerid="3" nextobjectid="2">
+<map version="1.10" tiledversion="1.12.1" orientation="hexagonal" renderorder="right-down" width="11" height="11" tilewidth="14" tileheight="12" infinite="0" hexsidelength="6" staggeraxis="y" staggerindex="odd" nextlayerid="4" nextobjectid="2">
  <editorsettings>
   <export target="map1.lua" format="lua"/>
  </editorsettings>
@@ -18,6 +18,11 @@
  <layer id="2" name="entities" width="11" height="11">
   <data encoding="base64" compression="zlib">
    eJxzZWBgcEXC3FiwK5EYl1opIOYBYkkkMTkKzeZBMtsVajY7VFwej3psfHzuhrGVCKglNixg9rIjhQelZhJSCwDzxRnx
+  </data>
+ </layer>
+ <layer id="3" name="status" width="11" height="11">
+  <data encoding="base64" compression="zlib">
+   eJxjYBh8QHMImk1LN1MKAHfEAHw=
   </data>
  </layer>
 </map>
