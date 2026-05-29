@@ -205,7 +205,8 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
     local bestDist = math.huge
 
     for _, neighbor in ipairs(neighbors) do
-        if hex:isValidHex(neighbor.q, neighbor.r) and hex:isActiveHex(neighbor.q, neighbor.r) then  -- добавлено
+        if hex:isValidHex(neighbor.q, neighbor.r) and hex:isActiveHex(neighbor.q, neighbor.r) then
+            if not isPositionOccupied(neighbor.q, neighbor.r, enemy) then
             local occupied = false
             for _, e in ipairs(entities) do
                 if e ~= enemy and e.q == neighbor.q and e.r == neighbor.r then
@@ -220,6 +221,7 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
                     bestNeighbor = neighbor
                 end
             end
+        end
         end
     end
 
@@ -264,22 +266,24 @@ function ai.findSimplePath(startQ, startR, targetQ, targetR, enemy, entities, he
         local neighbors = hex:getNeighbors(current.q, current.r)
         for _, nb in ipairs(neighbors) do
             local key = nb.q .. "," .. nb.r
-            if not visited[key] and hex:isValidHex(nb.q, nb.r) and hex:isActiveHex(nb.q, nb.r) then  -- ДОБАВЛЕНО isActiveHex
-                local occupied = false
-                for _, e in ipairs(entities) do
-                    if e ~= enemy and e.q == nb.q and e.r == nb.r then
-                        occupied = true
-                        break
+            if not visited[key] and hex:isValidHex(nb.q, nb.r) and hex:isActiveHex(nb.q, nb.r) then
+                if not isPositionOccupied(nb.q, nb.r, enemy) then
+                    local occupied = false
+                    for _, e in ipairs(entities) do
+                        if e ~= enemy and e.q == nb.q and e.r == nb.r then
+                            occupied = true
+                            break
+                        end
                     end
-                end
-                if not occupied then
-                    visited[key] = true
-                    local newPath = {}
-                    for _, step in ipairs(current.path) do
-                        table.insert(newPath, step)
+                    if not occupied then
+                        visited[key] = true
+                        local newPath = {}
+                        for _, step in ipairs(current.path) do
+                            table.insert(newPath, step)
+                        end
+                        table.insert(newPath, {q = nb.q, r = nb.r})
+                        table.insert(queue, {q = nb.q, r = nb.r, path = newPath})
                     end
-                    table.insert(newPath, {q = nb.q, r = nb.r})
-                    table.insert(queue, {q = nb.q, r = nb.r, path = newPath})
                 end
             end
         end

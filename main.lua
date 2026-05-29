@@ -520,11 +520,23 @@ function undoLastAction()
 end
 
 function isPositionOccupied(q, r, movingEntity)
-    for _, entity in ipairs(entities) do
-        if entity ~= movingEntity and entity.q == q and entity.r == r then
+    -- 1. Неактивная клетка (вне шестиугольника) считается занятой
+    if not hex:isActiveHex(q, r) then
+        return true
+    end
+
+    -- 2. Вода – непроходима
+    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
+        return true
+    end
+
+    -- 3. Занятость другой сущностью
+    for _, e in ipairs(entities) do
+        if e ~= movingEntity and e.q == q and e.r == r then
             return true
         end
     end
+
     return false
 end
 
@@ -551,13 +563,37 @@ function addToHistory(actor, fromQ, fromR, toQ, toR)
 end
 
 -- Проверка занятости (для движения)
+-- main.lua
 function isPositionOccupied(q, r, movingEntity)
+    -- Неактивная клетка (вне шестиугольника) считается занятой
+    if not hex:isActiveHex(q, r) then
+        return true
+    end
+    -- Вода непроходима
+    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
+        return true
+    end
+    -- Занятость другими сущностями
     for _, e in ipairs(entities) do
         if e ~= movingEntity and e.q == q and e.r == r then
             return true
         end
     end
     return false
+end
+
+function killEntitiesOnWater()
+    for i = #entities, 1, -1 do
+        local e = entities[i]
+        if e:isCharacter() then    -- только живые существа
+            local isWater = terrainMap and terrainMap[e.q] and terrainMap[e.q][e.r] == "water"
+            if isWater then
+                print(string.format("💧 %s stands on water and dies!", e.name))
+                if sounds and sounds.collision then sounds.collision:play() end
+                table.remove(entities, i)
+            end
+        end
+    end
 end
 
 function getEntityAtHex(q, r)
@@ -926,6 +962,10 @@ function love.update(dt)
                                my >= endTurnButton.y and my <= endTurnButton.y + endTurnButton.height)
     windTorrentUI.button.isHovered = (mx >= windTorrentUI.button.x and mx <= windTorrentUI.button.x + windTorrentUI.button.width and
                                       my >= windTorrentUI.button.y and my <= windTorrentUI.button.y + windTorrentUI.button.height)
+
+                                          -- После того как все анимации завершились (или даже во время, но после перемещения)
+    -- Проверяем, не оказался ли кто на воде
+    killEntitiesOnWater()
 end
 
 function drawHexGrid()
