@@ -2,6 +2,7 @@
 -- ИИ: враги двигаются к цели, затем подготавливают удар
 
 local ai = {}
+local pathfinding = require("pathfinding")
 
 ai.DEBUG = true
 
@@ -230,21 +231,21 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
     end
     return false
 end
--- Перемещение на конкретную клетку с анимацией
+
 function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
     if enemy.isMoving then return false end
     local distance = hex:getDistance(enemy.q, enemy.r, targetQ, targetR)
     if distance > enemy.moveRange then return false end
 
-    -- Проверка занятости
-    for _, e in ipairs(entities) do
-        if e ~= enemy and e.q == targetQ and e.r == targetR then
-            return false
-        end
+    -- Проверяем, свободна ли целевая клетка (вода, занятость, активность)
+    if isPositionOccupied(targetQ, targetR, enemy) then
+        return false
     end
 
-    -- Поиск пути
-    local path = ai.findSimplePath(enemy.q, enemy.r, targetQ, targetR, enemy, entities, hex)
+    -- Поиск пути с единой проверкой проходимости
+    local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, enemy.moveRange,
+        function(q, r) return isPositionOccupied(q, r, enemy) end, hex)
+
     if path and #path > 0 and #path <= enemy.moveRange then
         enemy.path = path
         enemy.currentPathIndex = 1
@@ -252,43 +253,6 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
         return true
     end
     return false
-end
-
--- Поиск пути BFS
-function ai.findSimplePath(startQ, startR, targetQ, targetR, enemy, entities, hex)
-    local queue = {{q = startQ, r = startR, path = {}}}
-    local visited = { [startQ .. "," .. startR] = true }
-    while #queue > 0 do
-        local current = table.remove(queue, 1)
-        if current.q == targetQ and current.r == targetR then
-            return current.path
-        end
-        local neighbors = hex:getNeighbors(current.q, current.r)
-        for _, nb in ipairs(neighbors) do
-            local key = nb.q .. "," .. nb.r
-            if not visited[key] and hex:isValidHex(nb.q, nb.r) and hex:isActiveHex(nb.q, nb.r) then
-                if not isPositionOccupied(nb.q, nb.r, enemy) then
-                    local occupied = false
-                    for _, e in ipairs(entities) do
-                        if e ~= enemy and e.q == nb.q and e.r == nb.r then
-                            occupied = true
-                            break
-                        end
-                    end
-                    if not occupied then
-                        visited[key] = true
-                        local newPath = {}
-                        for _, step in ipairs(current.path) do
-                            table.insert(newPath, step)
-                        end
-                        table.insert(newPath, {q = nb.q, r = nb.r})
-                        table.insert(queue, {q = nb.q, r = nb.r, path = newPath})
-                    end
-                end
-            end
-        end
-    end
-    return nil
 end
 
 -- Запуск анимации движения

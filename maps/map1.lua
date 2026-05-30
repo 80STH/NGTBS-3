@@ -105,7 +105,7 @@ return {
       id = 2,
       name = "entities",
       class = "",
-      visible = true,
+      visible = false,
       opacity = 1,
       offsetx = 0,
       offsety = 0,
@@ -134,7 +134,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJxjYBh8QHMImk1LN1MKAHfEAHw="
+      data = "eJwLYmBgCBpkWHMImk1LN1OKAX8IJkg="
     }
   }
 }

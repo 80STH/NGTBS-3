@@ -8,7 +8,7 @@ status.entityStatuses = {}   -- entity -> список статусов
 
 -- Сопоставление GID из Tiled с типами статусов
 status.gidToStatus = {
-    [15] = "fire",   -- GID для огня
+    [41] = "fire",   -- GID для огня
     [16] = "acid",   -- GID для кислоты
 }
 

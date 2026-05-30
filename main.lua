@@ -5,6 +5,7 @@ require("hexgrid")
 environment = require("environment")
 status = require("status")
 ui = require("ui")
+pathfinding = require("pathfinding")
 
 -- Делаем очередь анимаций доступной глобально для отрисовки
 pushAnimations = pushAnimations or { queue = {}, active = false }
@@ -19,6 +20,10 @@ windTorrentUI = {
 }
 
 function love.load()
+    -- Загружаем шрифт с поддержкой эмодзи (размер 16px)
+    local emojiFont = love.graphics.newFont("unifont-15.1.04.otf", 16)
+    love.graphics.setFont(emojiFont)
+
     selectedAttack = nil   -- текущая выбранная атака (объект)
     attackMode = false
     attackButtons = {}     -- кнопки атак для текущего персонажа
@@ -140,72 +145,6 @@ function updateAttackButtons(actor)
             desc = attackInfo.description
         }
         table.insert(attackButtons, btn)
-    end
-end
-
--- Отрисовка панели атак
-function drawAttackPanel()
-    if not selectedActor or selectedActor.hasActedThisTurn or selectedActor.isMoving then
-        return
-    end
-    love.graphics.setColor(0, 0, 0, 0.7)
-    love.graphics.rectangle("fill", love.graphics.getWidth() - 170, 80, 160, #attackButtons * 35 + 10, 5)
-    love.graphics.setColor(1,1,1,0.8)
-    love.graphics.rectangle("line", love.graphics.getWidth() - 170, 80, 160, #attackButtons * 35 + 10, 5)
-    love.graphics.print("Attacks:", love.graphics.getWidth() - 160, 85)
-    for i, btn in ipairs(attackButtons) do
-        local mx, my = love.mouse.getPosition()
-        local hover = (mx >= btn.x and mx <= btn.x + btn.width and my >= btn.y and my <= btn.y + btn.height)
-        if selectedAttack == btn.attack and attackMode then
-            love.graphics.setColor(0.3, 0.8, 0.3, 0.9)
-        elseif hover then
-            love.graphics.setColor(0.4, 0.6, 1, 0.9)
-        else
-            love.graphics.setColor(0.2, 0.4, 0.6, 0.8)
-        end
-        love.graphics.rectangle("fill", btn.x, btn.y, btn.width, btn.height, 5)
-        love.graphics.setColor(1,1,1,0.9)
-        love.graphics.rectangle("line", btn.x, btn.y, btn.width, btn.height, 5)
-        love.graphics.setColor(1,1,1,1)
-        love.graphics.print(btn.name, btn.x + 5, btn.y + 8)
-        if hover then
-            love.graphics.setColor(1,1,0.8,1)
-            love.graphics.print(btn.desc, btn.x + 5, btn.y - 15)
-        end
-    end
-end
-
--- Предпросмотр атаки при наведении
-function drawAttackPreview(attacker, attack, targetQ, targetR)
-    if not attacker or not attack then return end
-    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    if distance > attack.range then return end
-
-    -- Если у атаки есть специальный метод визуализации
-    if attack.getPreviewCells then
-        local cells = attack:getPreviewCells(attacker, targetQ, targetR, hex, entities)
-        for _, cell in ipairs(cells) do
-            if hex:isValidHex(cell.q, cell.r) then
-                local x, y = hex:hexToPixel(cell.q, cell.r)
-                local vertices = hex:drawHexagon(x, y, hex.radius)
-                love.graphics.setColor(1, 0.5, 0, 0.4)
-                love.graphics.polygon("fill", vertices)
-                love.graphics.setColor(1, 0.8, 0, 0.8)
-                love.graphics.polygon("line", vertices)
-            end
-        end
-    else
-        -- Упрощённая проверка: есть ли цель в клетке под курсором
-        local target = combat.getEntityAtHex(targetQ, targetR, entities)
-        if target and (attacker.isPlayable ~= target.isPlayable) then
-            local x, y = hex:hexToPixel(targetQ, targetR)
-            local vertices = hex:drawHexagon(x, y, hex.radius)
-            love.graphics.setColor(1, 0.2, 0.2, 0.5)
-            love.graphics.polygon("fill", vertices)
-            love.graphics.setColor(1, 0.5, 0.5, 0.9)
-            love.graphics.polygon("line", vertices)
-            love.graphics.print("⚔", x-5, y-10)
-        end
     end
 end
 
@@ -520,27 +459,6 @@ function undoLastAction()
     return true
 end
 
-function isPositionOccupied(q, r, movingEntity)
-    -- 1. Неактивная клетка (вне шестиугольника) считается занятой
-    if not hex:isActiveHex(q, r) then
-        return true
-    end
-
-    -- 2. Вода – непроходима
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
-        return true
-    end
-
-    -- 3. Занятость другой сущностью
-    for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r then
-            return true
-        end
-    end
-
-    return false
-end
-
 function countPlayableActors()
     local count = 0
     for _, actor in ipairs(entities) do
@@ -549,6 +467,13 @@ function countPlayableActors()
         end
     end
     return count
+end
+
+function isAlly(entityA, entityB)
+    if not entityA or not entityB then return false end
+    -- Если оба игровые персонажи (isPlayable) – союзники
+    -- Если оба враги (not isPlayable) – тоже союзники (между собой)
+    return entityA.isPlayable == entityB.isPlayable
 end
 
 -- Добавление движения в историю
@@ -566,7 +491,7 @@ end
 -- Проверка занятости (для движения)
 -- main.lua
 function isPositionOccupied(q, r, movingEntity)
-    -- Неактивная клетка (вне шестиугольника) считается занятой
+    -- Неактивная клетка – занята
     if not hex:isActiveHex(q, r) then
         return true
     end
@@ -574,10 +499,15 @@ function isPositionOccupied(q, r, movingEntity)
     if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
         return true
     end
-    -- Занятость другими сущностями
+    -- Проверяем, есть ли сущность на клетке
     for _, e in ipairs(entities) do
         if e ~= movingEntity and e.q == q and e.r == r then
-            return true
+            -- Если сущность – союзник, то проходим (не блокируем)
+            if isAlly(movingEntity, e) then
+                return false   -- союзник не мешает
+            else
+                return true    -- враг или препятствие блокирует
+            end
         end
     end
     return false
@@ -606,57 +536,6 @@ function getEntityAtHex(q, r)
     return nil
 end
 
--- findPath (убрана проверка isEdgeCell)
-function findPath(startQ, startR, targetQ, targetR, movingActor)
-    if startQ == targetQ and startR == targetR then return {} end
-    local nodeInfo = {}
-    local startKey = startQ .. "," .. startR
-    nodeInfo[startKey] = { q = startQ, r = startR, g = 0, parent = nil }
-    local openSet = {startKey}
-    local closedSet = {}
-    while #openSet > 0 do
-        local currentKey = openSet[1]
-        local currentIndex = 1
-        for i, key in ipairs(openSet) do
-            if nodeInfo[key].g < nodeInfo[currentKey].g then
-                currentKey = key
-                currentIndex = i
-            end
-        end
-        table.remove(openSet, currentIndex)
-        local current = nodeInfo[currentKey]
-        if current.q == targetQ and current.r == targetR then
-            local path = {}
-            local node = current
-            while node.parent do
-                table.insert(path, 1, {q = node.q, r = node.r})
-                node = node.parent
-            end
-            return path
-        end
-        closedSet[currentKey] = true
-        local neighbors = hex:getNeighbors(current.q, current.r)
-        for _, neighbor in ipairs(neighbors) do
-            if not hex:isValidHex(neighbor.q, neighbor.r) then goto continue end
-            local neighborKey = neighbor.q .. "," .. neighbor.r
-            if not closedSet[neighborKey] then
-                if not isPositionOccupied(neighbor.q, neighbor.r, movingActor) then
-                    local tentativeG = current.g + 1
-                    if not nodeInfo[neighborKey] then
-                        nodeInfo[neighborKey] = { q = neighbor.q, r = neighbor.r, g = tentativeG, parent = current }
-                        table.insert(openSet, neighborKey)
-                    elseif tentativeG < nodeInfo[neighborKey].g then
-                        nodeInfo[neighborKey].g = tentativeG
-                        nodeInfo[neighborKey].parent = current
-                    end
-                end
-            end
-            ::continue::
-        end
-    end
-    return nil
-end
-
 -- performMove (убрана проверка isEdgeCell)
 function performMove(actor, targetQ, targetR)
     if not actor.isPlayable then return false end
@@ -679,8 +558,9 @@ function performMove(actor, targetQ, targetR)
         print("Cell occupied")
         return false
     end
-    local path = findPath(actor.q, actor.r, targetQ, targetR, actor)
-    if not path or #path == 0 or #path > actor.moveRange then
+    local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, actor.moveRange,
+        function(q, r) return isPositionOccupied(q, r, actor) end, hex)
+    if not path or #path == 0 then
         print("No valid path")
         return false
     end
@@ -690,109 +570,6 @@ function performMove(actor, targetQ, targetR)
     actor.currentPathIndex = 1
     startNextMove(actor)
     return true
-end
--- drawMovementRange (упрощена, убрана обработка края)
-function drawMovementRange(actor)
-    if not actor or actor.isMoving or actor.hasActedThisTurn then return end
-    if actor.hasMovedThisTurn then return end
-
-    for q = 0, hex.gridWidth - 1 do
-        for r = 0, hex.gridHeight - 1 do
-            if not hex:isActiveHex(q, r) then goto continue end
-            if q == actor.q and r == actor.r then goto continue end
-
-            local path = findPath(actor.q, actor.r, q, r, actor)
-            if path and #path > 0 and #path <= actor.moveRange then
-                local isOccupied = isPositionOccupied(q, r, actor)
-                local x, y = hex:hexToPixel(q, r)
-                local vertices = hex:drawHexagon(x, y, hex.radius)
-
-                if isOccupied then
-                    love.graphics.setColor(0.8, 0.2, 0.2, 0.3)
-                    love.graphics.polygon("fill", vertices)
-                    love.graphics.setColor(1, 1, 1, 0.5)
-                    love.graphics.print("🚫", x - 5, y - 8)
-                else
-                    love.graphics.setColor(0.3, 0.8, 0.3, 0.35)
-                    love.graphics.polygon("fill", vertices)
-                    love.graphics.setColor(1, 1, 1, 0.8)
-                    love.graphics.print(#path, x - 5, y - 5)
-                end
-            end
-            ::continue::
-        end
-    end
-end
-
--- Функция для отображения пути к выбранной клетке (вызывать при наведении)
-function drawPathPreview(actor, targetQ, targetR)
-    if not actor or actor.isMoving or actor.hasActedThisTurn then return end
-    if not hex:isActiveHex(targetQ, targetR) then return end
-
-    local distance = hex:getDistance(actor.q, actor.r, targetQ, targetR)
-    if distance > actor.moveRange then return end
-
-    local path = findPath(actor.q, actor.r, targetQ, targetR, actor)
-    if path and #path > 0 and #path <= actor.moveRange then
-        
-        -- Получаем начальную позицию актера
-        local startX, startY = hex:hexToPixel(actor.q, actor.r)
-        
-        -- Отрисовываем весь путь и стрелки
-        local prevX, prevY = startX, startY
-        
-        for i = 1, #path do
-            local step = path[i]
-            local x, y = hex:hexToPixel(step.q, step.r)
-            
-            -- Подсвечиваем клетки пути
-            local vertices = hex:drawHexagon(x, y, hex.radius)
-            love.graphics.setColor(1, 1, 0, 0.3)
-            love.graphics.polygon("fill", vertices)
-            
-            -- Рисуем стрелку от предыдущей клетки к текущей
-            love.graphics.setColor(1, 0.8, 0, 0.8)
-            love.graphics.setLineWidth(3)
-            
-            -- Вычисляем направление стрелки
-            local angle = math.atan2(y - prevY, x - prevX)
-            local arrowLength = 15
-            local arrowSize = 8
-            
-            -- Рисуем линию
-            love.graphics.line(prevX, prevY, x, y)
-            
-            -- Рисуем наконечник стрелки (на клетке, не в центре, а ближе к концу)
-            local arrowX = x - math.cos(angle) * 12
-            local arrowY = y - math.sin(angle) * 12
-            
-            -- Левое крыло стрелки
-            local leftAngle = angle + math.pi * 0.8
-            local leftX = arrowX + math.cos(leftAngle) * arrowSize
-            local leftY = arrowY + math.sin(leftAngle) * arrowSize
-            
-            -- Правое крыло стрелки
-            local rightAngle = angle - math.pi * 0.8
-            local rightX = arrowX + math.cos(rightAngle) * arrowSize
-            local rightY = arrowY + math.sin(rightAngle) * arrowSize
-            
-            love.graphics.line(arrowX, arrowY, leftX, leftY)
-            love.graphics.line(arrowX, arrowY, rightX, rightY)
-            
-            -- Обновляем предыдущую позицию
-            prevX, prevY = x, y
-        end
-        
-        love.graphics.setLineWidth(1)
-        
-        -- Дополнительно подсвечиваем целевую клетку ярче
-        local targetX, targetY = hex:hexToPixel(targetQ, targetR)
-        local targetVertices = hex:drawHexagon(targetX, targetY, hex.radius)
-        love.graphics.setColor(1, 0.8, 0, 0.4)
-        love.graphics.polygon("fill", targetVertices)
-        love.graphics.setColor(1, 1, 0, 0.8)
-        love.graphics.polygon("line", targetVertices)
-    end
 end
 
 function startNextMove(actor)
@@ -1047,26 +824,6 @@ function drawHexGrid()
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function drawHealthBar(actor, x, y)
-    local barWidth = 40
-    local barHeight = 6
-    local healthPercent = actor.health / actor.maxHealth
-    
-    love.graphics.setColor(0.5, 0, 0, 0.8)
-    love.graphics.rectangle("fill", x - barWidth/2, y - 28, barWidth, barHeight)
-    
-    love.graphics.setColor(0, 1, 0, 0.8)
-    love.graphics.rectangle("fill", x - barWidth/2, y - 28, barWidth * healthPercent, barHeight)
-    
-    love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.rectangle("line", x - barWidth/2, y - 28, barWidth, barHeight)
-    
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print(actor.health .. "/" .. actor.maxHealth, x - 15, y - 38)
-end
-
-
-
 -- Функция для получения позиции отрисовки сущности с учётом всех анимаций
 function getEntityDrawPosition(entity)
     -- Проверяем глобальную очередь pushAnimations (отталкивания, ветер)
@@ -1233,84 +990,6 @@ function updateEntityAnimations(dt)
     end
 end
 
-
-function drawUndoButton()
-    local canUndo = #actionHistory > 0
-    
-    if not selectedActor then
-        love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
-    elseif canUndo and undoButton.isHovered then
-        love.graphics.setColor(0.3, 0.6, 0.9, 0.9)
-    elseif canUndo then
-        love.graphics.setColor(0.2, 0.4, 0.7, 0.8)
-    else
-        love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
-    end
-    
-    love.graphics.rectangle("fill", 10, 200, 120, 30, 5)
-    love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.rectangle("line", 10, 200, 120, 30, 5)
-    
-    love.graphics.setColor(1, 1, 1, 1)
-    local text = "Undo (" .. #actionHistory .. "/" .. maxUndoCount .. ")"
-    if #actionHistory == 0 then
-        text = "Nothing to Undo"
-    end
-    
-    local font = love.graphics.getFont()
-    local textWidth = font:getWidth(text)
-    love.graphics.print(text, 10 + (120 - textWidth) / 2, 208)
-end
-
-function drawEndTurnButton()
-    -- Если враги ходят, кнопка неактивна
-    if turnState.waitingForEnemies then
-        love.graphics.setColor(0.4, 0.3, 0.1, 0.5)
-        love.graphics.rectangle("fill", endTurnButton.x, endTurnButton.y, endTurnButton.width, endTurnButton.height, 5)
-        love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
-        love.graphics.rectangle("line", endTurnButton.x, endTurnButton.y, endTurnButton.width, endTurnButton.height, 5)
-        love.graphics.setColor(0.7, 0.7, 0.7, 0.7)
-        love.graphics.print("Enemies turn...", endTurnButton.x + 15, endTurnButton.y + 8)
-        return
-    end
-    
-    local anyActorActed = false
-    for _, actor in ipairs(entities) do
-        if actor.isPlayable and actor.hasActedThisTurn then
-            anyActorActed = true
-            break
-        end
-    end
-    
-    if endTurnButton.isHovered then
-        if anyActorActed then
-            love.graphics.setColor(0.9, 0.6, 0.2, 0.9)
-        else
-            love.graphics.setColor(0.7, 0.5, 0.2, 0.6)
-        end
-    else
-        if anyActorActed then
-            love.graphics.setColor(0.7, 0.5, 0.2, 0.8)
-        else
-            love.graphics.setColor(0.5, 0.3, 0.1, 0.5)
-        end
-    end
-    
-    love.graphics.rectangle("fill", endTurnButton.x, endTurnButton.y, endTurnButton.width, endTurnButton.height, 5)
-    love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.rectangle("line", endTurnButton.x, endTurnButton.y, endTurnButton.width, endTurnButton.height, 5)
-    
-    love.graphics.setColor(1, 1, 1, 1)
-    local text = "End Turn"
-    if not anyActorActed then
-        text = "End Turn (no actions)"
-    end
-    
-    local font = love.graphics.getFont()
-    local textWidth = font:getWidth(text)
-    love.graphics.print(text, endTurnButton.x + (endTurnButton.width - textWidth) / 2, endTurnButton.y + 8)
-end
-
 function drawAttackIndicators()
     if not selectedActor or selectedActor.hasActedThisTurn or selectedActor.isMoving then
         return
@@ -1333,29 +1012,6 @@ function drawAttackIndicators()
                 -- Отображаем иконку атаки
                 love.graphics.setColor(1, 1, 1, 1)
                 love.graphics.print("⚔", x - 5, y - 10)
-            end
-        end
-    end
-end
-
-function drawPreparedAttacks()
-    for _, enemy in ipairs(entities) do
-        if enemy:isCharacter() and not enemy.isPlayable and enemy.hasPreparedAttack then
-            -- Вычисляем прогнозируемую цель с учётом текущего смещения врага
-            local deltaQ = enemy.q - enemy.preparePos.q
-            local deltaR = enemy.r - enemy.preparePos.r
-            local targetQ = enemy.preparedTarget.q + deltaQ
-            local targetR = enemy.preparedTarget.r + deltaR
-            if hex:isValidHex(targetQ, targetR) then
-                local x, y = hex:hexToPixel(targetQ, targetR)
-                local vertices = hex:drawHexagon(x, y, hex.radius)
-                love.graphics.setColor(1, 0, 0, 0.5)
-                love.graphics.polygon("fill", vertices)
-                love.graphics.setColor(1, 0.2, 0.2, 0.9)
-                love.graphics.setLineWidth(3)
-                love.graphics.polygon("line", vertices)
-                love.graphics.setLineWidth(1)
-                love.graphics.print("⚔", x-6, y-10)
             end
         end
     end
@@ -1482,104 +1138,6 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
         print("Attack failed: " .. (message or "unknown"))
     end
     return success, message
-end
-
-
-function drawWindTorrentUI()
-    local canUse = windTorrent and not windTorrent.hasBeenUsed and turnState.phase == "player"
-    local isHover = (windTorrentUI.button.isHovered or false)
-    
-    if windTorrentUI.active then
-        love.graphics.setColor(0.3, 0.5, 0.8, 0.9)
-    elseif canUse and isHover then
-        love.graphics.setColor(0.2, 0.6, 0.9, 0.9)
-    elseif canUse then
-        love.graphics.setColor(0.1, 0.4, 0.7, 0.8)
-    else
-        love.graphics.setColor(0.4, 0.4, 0.4, 0.6)
-    end
-    love.graphics.rectangle("fill", windTorrentUI.button.x, windTorrentUI.button.y,
-                           windTorrentUI.button.width, windTorrentUI.button.height, 5)
-    love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.rectangle("line", windTorrentUI.button.x, windTorrentUI.button.y,
-                           windTorrentUI.button.width, windTorrentUI.button.height, 5)
-    love.graphics.setColor(1, 1, 1, 1)
-    local text = "🌬️ Wind Torrent"
-    if windTorrent and windTorrent.hasBeenUsed then
-        text = "❌ Wind Torrent (used)"
-    end
-    local font = love.graphics.getFont()
-    local textWidth = font:getWidth(text)
-    love.graphics.print(text, windTorrentUI.button.x + (windTorrentUI.button.width - textWidth) / 2,
-                       windTorrentUI.button.y + 8)
-
-    -- Режим выбора направления
-    if windTorrentUI.active then
-        love.graphics.setColor(0, 0, 0, 0.7)
-        love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
-        love.graphics.setColor(1, 1, 0.5, 1)
-        love.graphics.print("Choose wind direction:", love.graphics.getWidth() / 2 - 100, 40)
-        love.graphics.print("(Click on a direction button)", love.graphics.getWidth() / 2 - 90, 65)
-        for dirName, dir in pairs(windTorrentUI.directions) do
-            local mx, my = love.mouse.getPosition()
-            local hover = mx >= dir.x and mx <= dir.x + 70 and my >= dir.y and my <= dir.y + 30
-            if hover then
-                love.graphics.setColor(0.4, 0.7, 1, 0.9)
-            else
-                love.graphics.setColor(0.2, 0.4, 0.6, 0.8)
-            end
-            love.graphics.rectangle("fill", dir.x, dir.y, 70, 30, 5)
-            love.graphics.setColor(1, 1, 1, 0.9)
-            love.graphics.rectangle("line", dir.x, dir.y, 70, 30, 5)
-            love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.print(dir.name, dir.x + 5, dir.y + 8)
-        end
-        local cancelX = love.graphics.getWidth() / 2 - 40
-        local cancelY = love.graphics.getHeight() - 80
-        local mx, my = love.mouse.getPosition()
-        local cancelHover = mx >= cancelX and mx <= cancelX + 80 and my >= cancelY and my <= cancelY + 30
-        if cancelHover then
-            love.graphics.setColor(0.8, 0.3, 0.3, 0.9)
-        else
-            love.graphics.setColor(0.6, 0.2, 0.2, 0.8)
-        end
-        love.graphics.rectangle("fill", cancelX, cancelY, 80, 30, 5)
-        love.graphics.setColor(1, 1, 1, 0.9)
-        love.graphics.rectangle("line", cancelX, cancelY, 80, 30, 5)
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print("Cancel", cancelX + 15, cancelY + 8)
-    end
-end
-
-function drawGlobalHealthBar()
-    local barWidth = 200
-    local barHeight = 20
-    local x = love.graphics.getWidth() - barWidth - 10
-    local y = 10
-    local healthPercent = globalHealth.current / globalHealth.max
-    
-    -- Фон
-    love.graphics.setColor(0.3, 0.3, 0.3, 0.8)
-    love.graphics.rectangle("fill", x, y, barWidth, barHeight, 5)
-    
-    -- Заполнение
-    if healthPercent > 0.6 then
-        love.graphics.setColor(0.2, 0.8, 0.2, 0.8)
-    elseif healthPercent > 0.3 then
-        love.graphics.setColor(0.8, 0.8, 0.2, 0.8)
-    else
-        love.graphics.setColor(0.8, 0.2, 0.2, 0.8)
-    end
-    love.graphics.rectangle("fill", x, y, barWidth * healthPercent, barHeight, 5)
-    
-    -- Рамка
-    love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.rectangle("line", x, y, barWidth, barHeight, 5)
-    
-    -- Текст
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("Global Health: " .. globalHealth.current .. "/" .. globalHealth.max, 
-                       x + 10, y + 3)
 end
 
 -- Проверка, находится ли актер на краю карты
