@@ -114,4 +114,24 @@ function status.initHexStatuses(loadedStatuses)
     status.hexStatuses = loadedStatuses or {}
 end
 
+-- Копирование статусов сущности
+function status.copyEntityStatuses(entity)
+    local copy = {}
+    local sts = status.entityStatuses[entity]
+    if sts then
+        for _, v in ipairs(sts) do
+            table.insert(copy, v)
+        end
+    end
+    return copy
+end
+
+-- Установка статусов сущности (очищает текущие)
+function status.setEntityStatuses(entity, statuses)
+    status.entityStatuses[entity] = nil
+    for _, st in ipairs(statuses) do
+        status.applyToEntity(entity, st)
+    end
+end
+
 return status

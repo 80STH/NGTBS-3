@@ -602,8 +602,7 @@ end
 
 -- ui.lua (новая функция)
 
-function ui.drawUnitTooltip(entity, x, y)
-    -- Определяем цвета в зависимости от типа юнита (союзник / враг)
+function ui.drawUnitTooltip(entity, x, y, terrainMap)
     local bgColor = {0.1, 0.1, 0.2, 0.9}
     local borderColor = {0.8, 0.8, 0.8, 1}
     if entity.isPlayable then
@@ -614,31 +613,26 @@ function ui.drawUnitTooltip(entity, x, y)
         borderColor = {0.9, 0.4, 0.4, 1}
     end
 
-    -- Получаем статусы с помощью глобального модуля status
     local statuses = status.getEntityStatuses(entity)
     local lineHeight = 16
     local titleHeight = 40
     local debuffsHeight = #statuses > 0 and (20 + #statuses * lineHeight) or 30
+    local terrainHeight = 20
     local panelWidth = 200
-    local panelHeight = titleHeight + debuffsHeight
+    local panelHeight = titleHeight + debuffsHeight + terrainHeight
 
-    -- Фон панели
     love.graphics.setColor(bgColor)
     love.graphics.rectangle("fill", x, y, panelWidth, panelHeight, 8)
-    -- Рамка
     love.graphics.setColor(borderColor)
     love.graphics.rectangle("line", x, y, panelWidth, panelHeight, 8)
 
-    -- Имя и здоровье
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.print(entity.name, x + 8, y + 6)
     love.graphics.print("❤️ " .. entity.health .. "/" .. entity.maxHealth, x + 8, y + 24)
 
-    -- Заголовок "Debuffs"
     love.graphics.setColor(1, 0.8, 0.4, 1)
     love.graphics.print("💀 Debuffs:", x + 8, y + 40)
 
-    -- Список дебаффов
     if #statuses == 0 then
         love.graphics.setColor(0.7, 0.7, 0.7, 1)
         love.graphics.print("None", x + 18, y + 58)
@@ -653,6 +647,25 @@ function ui.drawUnitTooltip(entity, x, y)
             love.graphics.print(text, x + 18, y + 58 + (i-1) * lineHeight)
         end
     end
+
+    -- Тип земли под юнитом
+    local terrain = "grass"
+    if terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] then
+        terrain = terrainMap[entity.q][entity.r]
+    end
+    love.graphics.setColor(0.9, 0.9, 0.7, 1)
+    love.graphics.print("Terrain: " .. terrain, x + 8, y + 40 + debuffsHeight)
+end
+
+function ui.drawTerrainOnlyTooltip(terrain, x, y)
+    local panelWidth = 120
+    local panelHeight = 30
+    love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
+    love.graphics.rectangle("fill", x, y, panelWidth, panelHeight, 5)
+    love.graphics.setColor(0.8, 0.8, 0.8, 1)
+    love.graphics.rectangle("line", x, y, panelWidth, panelHeight, 5)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print("Terrain: " .. terrain, x + 8, y + 8)
 end
 
 return ui

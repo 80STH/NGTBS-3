@@ -426,7 +426,6 @@ function updateEnemyTurn(dt)
     end
 end
 
--- Отмена последнего движения (работает только если не было атаки)
 function undoLastAction()
     if #actionHistory == 0 then
         print("No moves to undo!")
@@ -436,7 +435,7 @@ function undoLastAction()
     local action = actionHistory[#actionHistory]
     local actor = action.actor
     
-    if not actor or actor.health <= 0 then
+    if not actor then
         table.remove(actionHistory)
         return undoLastAction()
     end
@@ -446,14 +445,38 @@ function undoLastAction()
         return false
     end
     
-    -- Откатываем позицию
+    -- Откат позиции
     actor.q = action.fromQ
     actor.r = action.fromR
-    actor.hasActedThisTurn = false   -- разрешаем атаковать снова
-    actor.hasMovedThisTurn = false   -- разрешаем двигаться снова
+    actor.hasActedThisTurn = false
+    actor.hasMovedThisTurn = false
     actor.isMoving = false
     actor.path = {}
     actor.currentPathIndex = 0
+    
+    -- Откат здоровья и статусов
+    if action.healthBefore ~= nil then
+        actor.health = action.healthBefore
+    end
+    if action.statusesBefore then
+        status.setEntityStatuses(actor, action.statusesBefore)
+    end
+    
+    -- Если персонаж был мёртв (health <= 0), но в истории здоровье > 0 – воскрешаем
+    -- и добавляем обратно в entities, если был удалён
+    if actor.health > 0 then
+        local found = false
+        for _, e in ipairs(entities) do
+            if e == actor then
+                found = true
+                break
+            end
+        end
+        if not found then
+            table.insert(entities, actor)
+            print(actor.name .. " was resurrected by undo!")
+        end
+    end
     
     if selectedActor == actor then
         hex.selectedQ = actor.q
@@ -485,14 +508,15 @@ function isAlly(entityA, entityB)
     return entityA.isPlayable == entityB.isPlayable
 end
 
--- Добавление движения в историю
 function addToHistory(actor, fromQ, fromR, toQ, toR)
     if not actor.isPlayable then return end
     table.insert(actionHistory, {
         actor = actor,
         fromQ = fromQ, fromR = fromR,
         toQ = toQ, toR = toR,
-        type = "move"
+        type = "move",
+        healthBefore = actor.health,
+        statusesBefore = status.copyEntityStatuses(actor),
     })
     print("Move recorded. History size: " .. #actionHistory)
 end
@@ -1037,14 +1061,18 @@ function love.draw()
         end
     end
 
-        -- ===== ПОДСКАЗКА ПРИ НАВЕДЕНИИ НА ЮНИТА =====
+    -- ===== ПОДСКАЗКА ПРИ НАВЕДЕНИИ НА ЮНИТА =====
     if hex.hoverQ and hex.hoverQ >= 0 and hex.hoverR and hex.hoverR >= 0 then
         local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
         if hoverEntity and hoverEntity.health > 0 then
-            -- Рисуем панель в левом нижнем углу
             local panelX = 10
             local panelY = love.graphics.getHeight() - 140
-            ui.drawUnitTooltip(hoverEntity, panelX, panelY)
+            ui.drawUnitTooltip(hoverEntity, panelX, panelY, terrainMap)
+        else
+            local terrain = terrainMap and terrainMap[hex.hoverQ] and terrainMap[hex.hoverQ][hex.hoverR] or "grass"
+            local panelX = 10
+            local panelY = love.graphics.getHeight() - 60
+            ui.drawTerrainOnlyTooltip(terrain, panelX, panelY)
         end
     end
 end
