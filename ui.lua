@@ -99,7 +99,8 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     if actor.sprite then
         love.graphics.setColor(1, 1, 1, alpha)
         local sw, sh = actor.sprite:getDimensions()
-        love.graphics.draw(actor.sprite, targetX, targetY, 0, 0.9, 0.9, sw/2, sh/2)
+        local scale = 5.9  -- чуть меньше оригинала
+        love.graphics.draw(actor.sprite, targetX, targetY, 0, scale, scale, sw/2, sh/2)
         love.graphics.setColor(1, 1, 1, 1)
     else
         love.graphics.setColor(0.2, 0.8, 0.2, alpha)
