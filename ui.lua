@@ -7,6 +7,26 @@ local pathfinding = require("pathfinding")
 -- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПРЕДПРОСМОТРА АТАК
 -- ============================================================
 
+local hazardTexture = nil
+
+local function getHazardTexture()
+    if hazardTexture then return hazardTexture end
+    local size = 64
+    local canvas = love.graphics.newCanvas(size, size)
+    canvas:setFilter("nearest", "nearest")
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setColor(1, 0.2, 0.2, 0.85)
+    love.graphics.setLineWidth(2)
+    for i = -size, size, 10 do
+        love.graphics.line(i, 0, i + size, size)
+        love.graphics.line(0, i, size, i + size)
+    end
+    love.graphics.setCanvas()
+    hazardTexture = canvas
+    return hazardTexture
+end
+
 -- Получить сущность на гексе (глобальная функция из main.lua, дублируем для безопасности)
 local function getEntityAtHex(q, r, entities)
     for _, e in ipairs(entities) do
@@ -17,30 +37,28 @@ local function getEntityAtHex(q, r, entities)
     return nil
 end
 
-
--- Вспомогательная функция: являются ли две сущности союзниками
-local function isAlly(entityA, entityB)
-    if not entityA or not entityB then return false end
-    return entityA.isPlayable == entityB.isPlayable
-end
-
-local function isCellBlockedForPath(q, r, actor, entities, terrainMap, hex)
-    if not hex:isActiveHex(q, r) then return true end
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then return true end
-    for _, e in ipairs(entities) do
-        if e ~= actor and e.q == q and e.r == r then
-            if not isAlly(actor, e) then
-                return true   -- враг или препятствие блокирует
-            end
-            -- союзник – не блокирует, продолжаем проверку? Но на клетке уже есть союзник,
-            -- однако путь через союзника возможен. Возвращаем false (свободно).
-            return false
-        end
+-- Проверка, может ли актор дойти до клетки (с учётом препятствий и длины пути)
+function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
+    if not hex:isActiveHex(targetQ, targetR) then return false end
+    
+    -- Вода непроходима
+    if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
+        return false
     end
-    return false
+    
+    -- Клетка не должна быть занята (врагом или препятствием)
+    -- isPositionOccupied - глобальная функция из main.lua
+    if isPositionOccupied(targetQ, targetR, actor) then
+        return false
+    end
+    
+    -- Поиск пути с ограничением по дальности и блокировками
+    local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, actor.moveRange,
+        function(q, r) return isPositionOccupied(q, r, actor) end, hex)
+    
+    return path ~= nil and #path > 0
 end
 
--- Отрисовка пути стрелками
 function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     if actor.hasMovedThisTurn or actor.hasActedThisTurn then return end
     if not hex:isActiveHex(hoverQ, hoverR) then return end
@@ -48,43 +66,49 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     local dist = hex:getDistance(actor.q, actor.r, hoverQ, hoverR)
     if dist > actor.moveRange then return end
 
-    if isCellBlockedForPath(hoverQ, hoverR, actor, entities, terrainMap, hex) then
+    -- Не показываем путь, если клетка занята (союзником или врагом)
+    if isCellOccupiedForStop(hoverQ, hoverR, actor) then
         return
     end
 
-    -- Построение пути
-    local path = pathfinding.findPath(
-        actor.q, actor.r, hoverQ, hoverR, actor.moveRange,
-        function(q, r) return isCellBlockedForPath(q, r, actor, entities, terrainMap, hex) end,
-        hex
-    )
+    local path = pathfinding.findPath(actor.q, actor.r, hoverQ, hoverR, actor.moveRange,
+        function(q, r) return not isCellPassable(q, r, actor) end, hex)
 
     if not path or #path == 0 then return end
 
-    -- Добавляем начальную позицию в начало пути (для отрисовки первого сегмента)
-    local fullPath = {{q = actor.q, r = actor.r}}
+    -- Рисуем линию и силуэт (как было ранее)
+    local points = {}
+    local startX, startY = hex:hexToPixel(actor.q, actor.r)
+    table.insert(points, {x = startX, y = startY})
     for _, step in ipairs(path) do
-        table.insert(fullPath, step)
+        local x, y = hex:hexToPixel(step.q, step.r)
+        table.insert(points, {x = x, y = y})
     end
 
-    -- Рисуем стрелки между последовательными клетками
-    for i = 1, #fullPath - 1 do
-        local from = fullPath[i]
-        local to = fullPath[i+1]
-        local fromX, fromY = hex:hexToPixel(from.q, from.r)
-        local toX, toY = hex:hexToPixel(to.q, to.r)
-        
-        -- Используем существующую функцию отрисовки стрелки
-        ui.drawPushArrow(fromX, fromY, toX, toY)
+    love.graphics.setLineWidth(3)
+    love.graphics.setColor(0.2, 0.8, 0.2, 0.8)
+    for i = 1, #points - 1 do
+        love.graphics.line(points[i].x, points[i].y, points[i+1].x, points[i+1].y)
     end
 
-    -- Дополнительно подсветим конечную клетку
-    local x, y = hex:hexToPixel(hoverQ, hoverR)
-    local vertices = hex:drawHexagon(x, y, hex.radius)
-    love.graphics.setColor(0.2, 0.8, 0.2, 0.4)
-    love.graphics.polygon("fill", vertices)
-    love.graphics.setColor(0.2, 0.8, 0.2, 0.9)
+    local targetX, targetY = points[#points].x, points[#points].y
+    local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
+    local alpha = 0.3 + 0.4 * pulse
+    if actor.sprite then
+        love.graphics.setColor(1, 1, 1, alpha)
+        local sw, sh = actor.sprite:getDimensions()
+        love.graphics.draw(actor.sprite, targetX, targetY, 0, 0.9, 0.9, sw/2, sh/2)
+        love.graphics.setColor(1, 1, 1, 1)
+    else
+        love.graphics.setColor(0.2, 0.8, 0.2, alpha)
+        love.graphics.circle("fill", targetX, targetY, hex.radius * 0.5)
+    end
+
+    local vertices = hex:drawHexagon(targetX, targetY, hex.radius)
+    love.graphics.setColor(0.2, 0.8, 0.2, 0.6)
     love.graphics.polygon("line", vertices)
+
+    love.graphics.setLineWidth(1)
 end
 
 -- Проверить, получит ли отталкиваемая сущность урон от столкновения
@@ -118,30 +142,37 @@ function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
     return 0, nil, nil
 end
 
--- Нарисовать стрелку отталкивания
+-- Отрисовка стрелки отталкивания (с отступом от центров)
 function ui.drawPushArrow(fromX, fromY, toX, toY)
-    -- Направление
     local angle = math.atan2(toY - fromY, toX - fromX)
-    local arrowSize = 12
-    local arrowX = toX - math.cos(angle) * 15
-    local arrowY = toY - math.sin(angle) * 15
-
+    local arrowSize = 18          -- размер наконечника
+    local lineWidth = 4           -- толщина линии
+    
+    -- Смещаем начало и конец стрелки внутрь от центров (на 20% радиуса гекса)
+    local radius = hex.radius      -- радиус гекса (56)
+    local offset = radius * 0.3    -- отступ от центра (16.8)
+    local startX = fromX + math.cos(angle) * offset
+    local startY = fromY + math.sin(angle) * offset
+    local endX = toX - math.cos(angle) * offset
+    local endY = toY - math.sin(angle) * offset
+    
+    love.graphics.setLineWidth(lineWidth)
     love.graphics.setColor(1, 0.8, 0.2, 0.9)
-    love.graphics.setLineWidth(3)
-    love.graphics.line(fromX, fromY, arrowX, arrowY)
-
-    -- Наконечник стрелки
+    
+    -- Линия
+    love.graphics.line(startX, startY, endX, endY)
+    
+    -- Наконечник
     local leftAngle = angle + math.pi * 0.7
     local rightAngle = angle - math.pi * 0.7
-    local tipX = toX
-    local tipY = toY
-    love.graphics.line(tipX, tipY,
-        tipX + math.cos(leftAngle) * arrowSize,
-        tipY + math.sin(leftAngle) * arrowSize)
-    love.graphics.line(tipX, tipY,
-        tipX + math.cos(rightAngle) * arrowSize,
-        tipY + math.sin(rightAngle) * arrowSize)
-    love.graphics.setLineWidth(1)
+    love.graphics.line(endX, endY,
+        endX + math.cos(leftAngle) * arrowSize,
+        endY + math.sin(leftAngle) * arrowSize)
+    love.graphics.line(endX, endY,
+        endX + math.cos(rightAngle) * arrowSize,
+        endY + math.sin(rightAngle) * arrowSize)
+    
+    love.graphics.setLineWidth(1)  -- сброс
 end
 
 -- Нарисовать значок урона
@@ -173,8 +204,24 @@ function ui.drawPreparedAttacks(hex, entities)
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.preparedTarget then
             local x, y = hex:hexToPixel(e.preparedTarget.q, e.preparedTarget.r)
-            love.graphics.setColor(1, 0, 0, 0.6)
-            love.graphics.circle("fill", x, y, 20)
+            local radius = hex.radius
+            local vertices = hex:drawHexagon(x, y, radius)
+            
+            -- Обрезаем текстуру по форме гекса
+            love.graphics.stencil(function()
+                love.graphics.polygon("fill", vertices)
+            end, "replace", 1)
+            love.graphics.setStencilTest("greater", 0)
+            
+            local tex = getHazardTexture()
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.draw(tex, x - radius, y - radius, 0, 
+                               radius * 2 / tex:getWidth(), 
+                               radius * 2 / tex:getHeight())
+            
+            love.graphics.setStencilTest()
+            
+            -- Иконка атаки поверх
             love.graphics.setColor(1, 1, 1, 1)
             love.graphics.print("⚔", x - 6, y - 8)
         end
@@ -401,24 +448,15 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
     end
 end
 
--- Отрисовка диапазона движения
 function ui.drawMovementRange(hex, actor, entities, terrainMap)
     if actor.hasMovedThisTurn or actor.hasActedThisTurn then return end
-    local range = actor.moveRange
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) then
                 local dist = hex:getDistance(actor.q, actor.r, q, r)
-                if dist <= range and dist > 0 then
-                    local occupied = false
-                    for _, e in ipairs(entities) do
-                        if e ~= actor and e.q == q and e.r == r then
-                            occupied = true
-                            break
-                        end
-                    end
-                    local isWater = terrainMap and terrainMap[q] and terrainMap[q][r] == "water"
-                    if not occupied and not isWater then
+                if dist <= actor.moveRange and dist > 0 then
+                    -- Подсвечиваем только свободные клетки (не занятые никем)
+                    if not isCellOccupiedForStop(q, r, actor) and isCellPassable(q, r, actor) then
                         local x, y = hex:hexToPixel(q, r)
                         local vertices = hex:drawHexagon(x, y, hex.radius)
                         love.graphics.setColor(0.2, 0.8, 0.2, 0.2)
@@ -648,13 +686,32 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
         end
     end
 
-    -- Тип земли под юнитом
+    local terrainHeight = 20
+    local prepareHeight = 0
+    local prepareText = nil
+    
+    if entity.hasPreparedAttack and entity.preparePos and entity.preparedTarget then
+        prepareHeight = 20
+        local fromQ, fromR = entity.preparePos.q, entity.preparePos.r
+        local toQ, toR = entity.preparedTarget.q, entity.preparedTarget.r
+        prepareText = string.format("⚔ Prepares: (%d,%d) → (%d,%d) for 1 dmg", fromQ, fromR, toQ, toR)
+    end
+    
+    local panelHeight = titleHeight + debuffsHeight + terrainHeight + prepareHeight
+
+    -- Тип земли (как было)
     local terrain = "grass"
     if terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] then
         terrain = terrainMap[entity.q][entity.r]
     end
     love.graphics.setColor(0.9, 0.9, 0.7, 1)
     love.graphics.print("Terrain: " .. terrain, x + 8, y + 40 + debuffsHeight)
+    
+    -- Информация о подготовленной атаке
+    if prepareText then
+        love.graphics.setColor(1, 0.5, 0, 1)
+        love.graphics.print(prepareText, x + 8, y + 40 + debuffsHeight + terrainHeight)
+    end
 end
 
 function ui.drawTerrainOnlyTooltip(terrain, x, y)
@@ -666,6 +723,45 @@ function ui.drawTerrainOnlyTooltip(terrain, x, y)
     love.graphics.rectangle("line", x, y, panelWidth, panelHeight, 5)
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.print("Terrain: " .. terrain, x + 8, y + 8)
+end
+
+-- Отрисовка стрелки подготовленной атаки (при ховере)
+function ui.drawPreparedAttackDirection(hex, enemy, time)
+    if not enemy.hasPreparedAttack or not enemy.preparePos or not enemy.preparedTarget then
+        return
+    end
+    
+    local fromX, fromY = hex:hexToPixel(enemy.preparePos.q, enemy.preparePos.r)
+    local toX, toY = hex:hexToPixel(enemy.preparedTarget.q, enemy.preparedTarget.r)
+    
+    local angle = math.atan2(toY - fromY, toX - fromX)
+    local arrowSize = 18
+    local lineWidth = 4
+    local radius = hex.radius
+    local offset = radius * 0.3
+    
+    local startX = fromX + math.cos(angle) * offset
+    local startY = fromY + math.sin(angle) * offset
+    local endX = toX - math.cos(angle) * offset
+    local endY = toY - math.sin(angle) * offset
+    
+    local pulse = 0.5 + 0.5 * math.sin(time * 8)
+    local alpha = 0.5 + 0.3 * pulse
+    
+    love.graphics.setLineWidth(lineWidth)
+    love.graphics.setColor(1, 0.2, 0.2, alpha)
+    love.graphics.line(startX, startY, endX, endY)
+    
+    local leftAngle = angle + math.pi * 0.7
+    local rightAngle = angle - math.pi * 0.7
+    love.graphics.line(endX, endY,
+        endX + math.cos(leftAngle) * arrowSize,
+        endY + math.sin(leftAngle) * arrowSize)
+    love.graphics.line(endX, endY,
+        endX + math.cos(rightAngle) * arrowSize,
+        endY + math.sin(rightAngle) * arrowSize)
+    
+    love.graphics.setLineWidth(1)
 end
 
 return ui

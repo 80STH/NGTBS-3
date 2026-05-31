@@ -532,15 +532,10 @@ function isPositionOccupied(q, r, movingEntity)
     if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
         return true
     end
-    -- Проверяем, есть ли сущность на клетке
+    -- Любая сущность (союзник, враг, препятствие) блокирует клетку
     for _, e in ipairs(entities) do
         if e ~= movingEntity and e.q == q and e.r == r then
-            -- Если сущность – союзник, то проходим (не блокируем)
-            if isAlly(movingEntity, e) then
-                return false   -- союзник не мешает
-            else
-                return true    -- враг или препятствие блокирует
-            end
+            return true
         end
     end
     return false
@@ -555,16 +550,15 @@ function getEntityAtHex(q, r)
     return nil
 end
 
--- performMove (убрана проверка isEdgeCell)
 function performMove(actor, targetQ, targetR)
     if not actor.isPlayable then return false end
-    if not hex:isActiveHex(targetQ, targetR) then  -- используем isActiveHex
+    if not hex:isActiveHex(targetQ, targetR) then
         print("Target cell is outside the playable hexagon")
         return false
     end
     if actor.isMoving or actor.hasActedThisTurn then return false end
     if actor.hasMovedThisTurn then
-        print(actor.name .. " has already moved this turn! You can still attack.")
+        print(actor.name .. " has already moved this turn!")
         return false
     end
     if actor.q == targetQ and actor.r == targetR then return false end
@@ -573,12 +567,14 @@ function performMove(actor, targetQ, targetR)
         print("Too far")
         return false
     end
-    if isPositionOccupied(targetQ, targetR, actor) then
+    -- Проверяем, не занята ли целевая клетка (союзник или враг)
+    if isCellOccupiedForStop(targetQ, targetR, actor) then
         print("Cell occupied")
         return false
     end
+    -- Поиск пути с использованием isCellPassable (союзники не блокируют)
     local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, actor.moveRange,
-        function(q, r) return isPositionOccupied(q, r, actor) end, hex)
+        function(q, r) return not isCellPassable(q, r, actor) end, hex)
     if not path or #path == 0 then
         print("No valid path")
         return false
@@ -765,6 +761,7 @@ function love.update(dt)
 end
 
 function drawHexGrid()
+    love.graphics.setLineWidth(1)   -- <-- добавить эту строку
     local gridW = hex.gridWidth
     local gridH = hex.gridHeight
     if not gridW or not gridH then return end
@@ -1016,9 +1013,9 @@ end
 -- main.love.draw (добавить вызов)
 function love.draw()
     drawHexGrid()
+    ui.drawPreparedAttacks(hex, entities)
     drawAllEntities()
     visual.draw()
-    ui.drawPreparedAttacks(hex, entities)
     if attackMode and selectedAttack and selectedActor and not selectedActor.hasActedThisTurn and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         ui.drawAttackPreview(hex, selectedActor, selectedAttack, attackMode, hex.hoverQ, hex.hoverR, entities)
     end
@@ -1066,13 +1063,21 @@ function love.draw()
         local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
         if hoverEntity and hoverEntity.health > 0 then
             local panelX = 10
-            local panelY = love.graphics.getHeight() - 140
-            ui.drawUnitTooltip(hoverEntity, panelX, panelY, terrainMap)
-        else
+            local panelY = love.graphics.getHeight() - 180  -- немного выше, чтобы поместилась дополнительная строка
+            ui.drawUnitTooltip(hoverEntity, panelX, panelY, terrainMap, hex)
+        elseif hex:isActiveHex(hex.hoverQ, hex.hoverR) then
             local terrain = terrainMap and terrainMap[hex.hoverQ] and terrainMap[hex.hoverQ][hex.hoverR] or "grass"
             local panelX = 10
             local panelY = love.graphics.getHeight() - 60
             ui.drawTerrainOnlyTooltip(terrain, panelX, panelY)
+        end
+    end
+
+    -- Стрелка направления подготовленной атаки (при наведении на врага)
+    if hex.hoverQ and hex.hoverQ >= 0 and hex.hoverR and hex.hoverR >= 0 then
+        local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
+        if hoverEntity and hoverEntity:isCharacter() and not hoverEntity.isPlayable and hoverEntity.hasPreparedAttack then
+            ui.drawPreparedAttackDirection(hex, hoverEntity, love.timer.getTime())
         end
     end
 end
@@ -1196,6 +1201,33 @@ function getEnemyAttackOrder(entities, turnState)
         order[enemy] = i
     end
     return order
+end
+
+-- Проверка, можно ли пройти через клетку (для построения пути)
+function isCellPassable(q, r, movingEntity)
+    if not hex:isActiveHex(q, r) then return false end
+    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then return false end
+    for _, e in ipairs(entities) do
+        if e ~= movingEntity and e.q == q and e.r == r then
+            -- Враг или препятствие – непроходимо
+            if not e.isPlayable then
+                return false
+            end
+            -- Союзник – проходимо
+        end
+    end
+    return true
+end
+
+-- Проверка, занята ли клетка для остановки (нельзя заканчивать движение на занятой клетке)
+function isCellOccupiedForStop(q, r, movingEntity)
+    if not hex:isActiveHex(q, r) then return true end
+    for _, e in ipairs(entities) do
+        if e ~= movingEntity and e.q == q and e.r == r then
+            return true
+        end
+    end
+    return false
 end
 
 -- Убить союзного актера на краю карты
