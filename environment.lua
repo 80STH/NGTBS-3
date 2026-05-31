@@ -1,6 +1,7 @@
 -- environment.lua
 local Entity = require("entity")
 local sti = require("libraries.sti")
+local config = require("config")
 
 local environment = {}
 
@@ -206,6 +207,7 @@ end
 -- environment.lua (фрагмент loadMapFromTiled)
 function environment.loadMapFromTiled(filePath)
     print("\n=== LOADING MAP: " .. filePath .. " ===")
+
     local file = love.filesystem.getInfo(filePath)
     if not file then error("File not found: " .. filePath) end
 
@@ -220,7 +222,13 @@ function environment.loadMapFromTiled(filePath)
 
     -- Временно создаём hex-объект для проверки isActiveHex (позже он будет пересоздан в main)
     -- Но нам нужны координаты, поэтому используем временный hex с теми же размерами
-    local tempHex = require("hexgrid").new(56, width, height)
+    local tempHex = require("hexgrid").new(
+        config.HEX_RADIUS,
+        width, height,
+        config.ACTIVE_RADIUS,
+        config.CENTER_Q,
+        config.CENTER_R
+    )
     -- Центр шестиугольника предполагается в (5,5) при width=11, height=11
     -- Функция isActiveHex использует жёстко заданный центр 5,5, что корректно только для карты 11x11.
     -- Если карта другого размера, нужно вычислять центр динамически. Оставим как есть, т.к. в проекте 11x11.

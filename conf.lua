@@ -3,10 +3,10 @@ function love.conf(t)
     t.author = "80STH"
     t.version = "11.4"
     
-    t.window.width = 1400
+    t.window.highdpi = true
+    t.window.width = 1500
     t.window.height = 1100
     t.window.resizable = true
-    t.window.highdpi = false
     
     -- Включаем доступ к файловой системе
     t.identity = "HexTacticsGame"  -- Создает папку для сохранений

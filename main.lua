@@ -8,6 +8,7 @@ ui = require("ui")
 pathfinding = require("pathfinding")
 effects = require("effects")
 visual = require("visual_effects")
+config = require("config")
 
 -- Делаем очередь анимаций доступной глобально для отрисовки
 pushAnimations = pushAnimations or { queue = {}, active = false }
@@ -27,17 +28,19 @@ function love.load()
     attackButtons = {}     -- кнопки атак для текущего персонажа
 
     sti = require 'libraries/sti'
-    local env = require("environment")
     local hexStatuses
-    terrainMap, entities, width, height, hexStatuses = env.loadMapFromTiled('maps/map1.lua')
-    hex = require("hexgrid").new(56, width, height)  -- используем реальные ширину/высоту из карты
+    terrainMap, entities, width, height, hexStatuses = environment.loadMapFromTiled('maps/map1.lua')
+    hex = require("hexgrid").new(
+        config.HEX_RADIUS,
+        width, height,
+        config.ACTIVE_RADIUS,
+        config.CENTER_Q,
+        config.CENTER_R
+    )
     hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
 
     -- Инициализируем глобальную таблицу статусов:
     status.initHexStatuses(hexStatuses) -- добавить в status.lua функцию
-    hex = require("hexgrid").new(56, 11, 11)
-    hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
-    status.initHexStatuses(hexStatuses)
 
     globalHealth = { current = 5, max = 5, initial = 5 }
 

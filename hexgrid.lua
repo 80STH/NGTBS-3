@@ -3,15 +3,16 @@
 
 local HexGrid = {}
 
-function HexGrid.new(radius, gridWidth, gridHeight)
+function HexGrid.new(radius, gridWidth, gridHeight, activeRadius, centerQ, centerR)
     local self = setmetatable({}, {__index = HexGrid})
-    
     self.radius = radius
     self.hexWidth = radius * 1.732
     self.hexHeight = radius * 1.5
-    
     self.gridWidth = gridWidth
     self.gridHeight = gridHeight
+    self.activeRadius = activeRadius or 5
+    self.centerQ = centerQ or math.floor(gridWidth / 2)
+    self.centerR = centerR or math.floor(gridHeight / 2)
     
     self.offsetX = 0
     self.offsetY = 0
@@ -94,17 +95,16 @@ end
 -- Проверка, принадлежит ли клетка правильному шестиугольнику (радиус 5, центр 5,5)
 function HexGrid:isActiveHex(q, r)
     if not self:isValidHex(q, r) then return false end
-    -- Преобразуем в кубические координаты для pointy-top (odd-r)
     local function axialToCube(q, r)
         local x = q - (r - (r % 2)) / 2
         local z = r
         local y = -x - z
         return x, y, z
     end
-    local cx, cy, cz = axialToCube(5, 5)   -- центр карты (при width=11, height=11)
+    local cx, cy, cz = axialToCube(self.centerQ, self.centerR)
     local x, y, z = axialToCube(q, r)
     local dist = (math.abs(x - cx) + math.abs(y - cy) + math.abs(z - cz)) / 2
-    return dist <= 5   -- радиус шестиугольника = 5 (сторона 6)
+    return dist <= self.activeRadius
 end
 
 function HexGrid:getDistance(q1, r1, q2, r2)
@@ -133,6 +133,7 @@ function HexGrid:drawHexagon(x, y, radius)
     return vertices
 end
 
+-- hexgrid.lua
 function HexGrid:centerOnScreen(screenWidth, screenHeight)
     local mapWidth = (self.gridWidth + 0.5) * self.hexWidth
     local mapHeight = self.gridHeight * self.hexHeight
