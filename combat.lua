@@ -1,6 +1,7 @@
 -- combat.lua
 -- Система боя с кубическими координатами (pointy-top, odd-r)
 local combat = {}
+local visual = require("visual_effects")
 status = require("status")
 local Entity = require("entity")
 
@@ -106,14 +107,15 @@ function combat.Attack:pushTargetInDirection(target, fromQ, fromR, stepX, stepY,
 end
 
 function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, entities, sounds, onComplete)
-    -- 🚫 Неподвижные объекты (здания, препятствия) не отталкиваются
     if target.isPushable == false then
         if onComplete then onComplete(false) end
         return
     end
 
     local wasDestroyed = false
-    local function finishPush() if onComplete then onComplete(wasDestroyed) end end
+    local function finishPush()
+        if onComplete then onComplete(wasDestroyed) end
+    end
 
     -- ИЗМЕНЕНО: проверяем не isValidHex, а isActiveHex
     if not hex:isActiveHex(toQ, toR) then
@@ -127,41 +129,47 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
                 wasDestroyed = true
             end
         end
+        local effectX, effectY = hex:hexToPixel(fromQ, fromR)
+        visual.addEffect(effectX, effectY, "slam")
         finishPush()
         return
     end
 
     local occupant = combat.getEntityAtHex(toQ, toR, entities)
     if not occupant then
-        if target:isCharacter() then
-            combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
-                print(target.name .. " is pushed back!")
-                finishPush()
-            end)
-        else
-            finishPush()
-        end
+        combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function() finishPush() end)
     else
+        -- Наносим урон обоим (сразу)
         if target:isCharacter() then
-            combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
-                occupant.health = occupant.health - 1
-                target.health = target.health - 1
-                print(target.name .. " crashes into " .. occupant.name .. "! Both take 1 damage!")
-                if sounds and sounds.collision then sounds.collision:play() end
-                if occupant.health <= 0 then
-                    combat.removeEntity(occupant, entities)
-                    print(occupant.name .. " has been destroyed!")
-                end
-                if target.health <= 0 then
-                    combat.removeEntity(target, entities)
-                    print(target.name .. " has been defeated!")
-                    wasDestroyed = true
-                end
-                finishPush()
-            end)
-        else
-            finishPush()
+            target.health = target.health - 1
+            occupant.health = occupant.health - 1
+            print(string.format("%s crashes into %s! Both take 1 damage!", target.name, occupant.name))
+            if sounds and sounds.collision then sounds.collision:play() end
+
+            if target.health <= 0 then
+                combat.removeEntity(target, entities)
+                wasDestroyed = true
+            end
+            if occupant.health <= 0 then
+                combat.removeEntity(occupant, entities)
+            end
         end
+
+        -- Анимация отталкивания для target
+        combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function() end)
+
+        -- Анимация отдачи для occupant (bounce или shake)
+        local dirQ = toQ - fromQ
+        local dirR = toR - fromR
+        local bounceQ = toQ + dirQ
+        local bounceR = toR + dirR
+        if hex:isValidHex(bounceQ, bounceR) then
+            combat.addBounceAnimation(occupant, toQ, toR, bounceQ, bounceR, 0.1)
+        else
+            combat.addShakeAnimation(occupant, toQ, toR)
+        end
+
+        finishPush()
     end
 end
 
@@ -498,6 +506,25 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
         end
     end
 
+    -- Сортировка: сначала те, кто дальше по направлению ветра (максимальная проекция)
+    -- Направление ветра задаётся вектором (step.dx, step.dy, step.dz)
+    table.sort(movableObjects, function(a, b)
+        local function getProjection(obj)
+            local x, y, z = axialToCube(obj.q, obj.r)
+            return x * step.dx + y * step.dy + z * step.dz
+        end
+        return getProjection(a) > getProjection(b)
+    end)
+
+    -- Построение карты неподвижных объектов для быстрой проверки
+    local immovableMap = {}
+    for _, entity in ipairs(entities) do
+        if not entity.isPushable then
+            local key = entity.q .. "," .. entity.r
+            immovableMap[key] = entity
+        end
+    end
+
     -- Построение карты неподвижных объектов для быстрой проверки
     local immovableMap = {}
     for _, entity in ipairs(entities) do
@@ -552,7 +579,7 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
         combat.addPushAnimation(push.obj, push.fromQ, push.fromR, push.toQ, push.toR)
     end
 
-    local function applyDamage()
+    local function finalize()
         -- Урон от столкновений подвижных друг с другом
         for _, coll in ipairs(collisions) do
             if coll.obj1.health then coll.obj1.health = coll.obj1.health - 1 end
@@ -584,7 +611,7 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
         if onComplete then onComplete(true, nil) end
     end
 
-    combat.startPushAnimations(hex, applyDamage)
+    combat.startPushAnimations(hex, finalize)
     return true
 end
 
@@ -594,23 +621,50 @@ end
 pushAnimations = { queue = {}, active = false }
 
 function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
-    if not obj then return end
-    if obj.isMoving then
-        obj.isMoving = false
-        obj.path = {}
-        obj.currentPathIndex = 0
+    -- Добавляем эффект в точке старта
+    local x, y = hex:hexToPixel(fromQ, fromR)
+    visual.addEffect(x, y, "hit", 0.3)
+
+    if hex and visual then
+        local x, y = hex:hexToPixel(fromQ, fromR)
+        visual.addEffect(x, y, "hit", 0.3)
     end
+    
     table.insert(pushAnimations.queue, {
         obj = obj, fromQ = fromQ, fromR = fromR, toQ = toQ, toR = toR,
         startX = 0, startY = 0, endX = 0, endY = 0, timer = 0, duration = 0.2,
-        isMoving = false, onComplete = onComplete or function() end
+        isMoving = false,
+        onComplete = function(pushedObj)
+            -- Применяем ВСЕ эффекты клетки (огонь, кислота, вода) после перемещения
+            if pushedObj and terrainMap then
+                local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities, globalHealth)
+                if died then
+                    -- Удаляем из entities (но осторожно: может быть в итерации)
+                    for i = #entities, 1, -1 do
+                        if entities[i] == pushedObj then
+                            table.remove(entities, i)
+                            break
+                        end
+                    end
+                end
+            end
+            if onComplete then onComplete(pushedObj) end
+        end
     })
 end
 
 function combat.startPushAnimations(hex, callback)
     if #pushAnimations.queue == 0 then if callback then callback() end; return end
     pushAnimations.active = true
-    pushAnimations.globalCallback = callback
+    pushAnimations.globalCallback = function()
+        if callback then callback() end
+        -- Здесь применить эффекты ко всем объектам, участвовавшим в анимациях
+        for _, anim in ipairs(pushAnimations.queue) do
+            if anim.obj then
+                -- но очередь уже очищена? Лучше сохранять список перемещённых объектов
+            end
+        end
+    end
     combat.initNextPushAnimation(hex)
 end
 
@@ -625,14 +679,12 @@ function combat.initNextPushAnimation(hex)
     end
     local anim = pushAnimations.queue[1]
     if not anim.isMoving then
-        anim.startX, anim.startY = hex:hexToPixel(anim.fromQ, anim.fromR)
-        anim.endX, anim.endY = hex:hexToPixel(anim.toQ, anim.toR)
+        if not anim.isShake then
+            anim.startX, anim.startY = hex:hexToPixel(anim.fromQ, anim.fromR)
+            anim.endX, anim.endY = hex:hexToPixel(anim.toQ, anim.toR)
+        end
         anim.timer = 0
         anim.isMoving = true
-        if anim.obj then
-            anim.obj.q = anim.toQ
-            anim.obj.r = anim.toR
-        end
     end
 end
 
@@ -641,7 +693,43 @@ function combat.updatePushAnimations(dt, hex)
     local anim = pushAnimations.queue[1]
     if anim and anim.isMoving then
         anim.timer = anim.timer + dt
-        if anim.timer >= anim.duration then
+        local t = math.min(1, anim.timer / anim.duration)
+        local ease = t < 0.5 and 2 * t * t or 1 - math.pow(-2 * t + 2, 2) / 2
+
+        if anim.isShake then
+            local x, y = hex:hexToPixel(anim.obj.q, anim.obj.r)
+            anim.obj.currentDrawX = x + anim.offsetX * (1 - ease)
+            anim.obj.currentDrawY = y + anim.offsetY * (1 - ease)
+        else
+            local x = anim.startX + (anim.endX - anim.startX) * ease
+            local y = anim.startY + (anim.endY - anim.startY) * ease
+            anim.obj.currentDrawX = x
+            anim.obj.currentDrawY = y
+        end
+
+        if t >= 1 then
+            if anim.isShake then
+                anim.obj.currentDrawX = nil
+                anim.obj.currentDrawY = nil
+            elseif anim.bounceBack then
+                if not anim.returnPhase then
+                    anim.returnPhase = true
+                    anim.startX, anim.startY = anim.endX, anim.endY
+                    anim.endX, anim.endY = hex:hexToPixel(anim.fromQ, anim.fromR)
+                    anim.timer = 0
+                    return
+                else
+                    anim.obj.q = anim.fromQ
+                    anim.obj.r = anim.fromR
+                    anim.obj.currentDrawX = nil
+                    anim.obj.currentDrawY = nil
+                end
+            else
+                anim.obj.q = anim.toQ
+                anim.obj.r = anim.toR
+                anim.obj.currentDrawX = nil
+                anim.obj.currentDrawY = nil
+            end
             if anim.onComplete then anim.onComplete(anim.obj) end
             table.remove(pushAnimations.queue, 1)
             combat.initNextPushAnimation(hex)
@@ -682,8 +770,45 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
     local finalDamage = math.floor(damage * multiplier)
     local wasDestroyed = target:takeDamage(finalDamage)
     if sounds and sounds.attack then sounds.attack:play() end
+    
+    -- 🔥 Добавляем визуальный эффект удара в координатах цели
+    if hex and visual then
+        local x, y = hex:hexToPixel(target.q, target.r)
+        visual.addEffect(x, y, "hit", 0.4)
+    end
+    
     if wasDestroyed then combat.removeEntity(target, entities) end
     return wasDestroyed
+end
+
+function combat.addBounceAnimation(obj, fromQ, fromR, toQ, toR, duration)
+    table.insert(pushAnimations.queue, {
+        obj = obj,
+        fromQ = fromQ, fromR = fromR,
+        toQ = toQ, toR = toR,
+        bounceBack = true,
+        startX = 0, startY = 0,
+        endX = 0, endY = 0,
+        timer = 0,
+        duration = duration or 0.2,
+        isMoving = false,
+        onComplete = function() end
+    })
+end
+
+function combat.addShakeAnimation(obj, q, r)
+    local offsetX = (math.random() - 0.5) * 10
+    local offsetY = (math.random() - 0.5) * 10
+    table.insert(pushAnimations.queue, {
+        obj = obj,
+        isShake = true,
+        offsetX = offsetX,
+        offsetY = offsetY,
+        timer = 0,
+        duration = 0.1,
+        startX = 0, startY = 0,
+        onComplete = function() end
+    })
 end
 
 return combat

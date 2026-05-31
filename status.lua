@@ -9,7 +9,7 @@ status.entityStatuses = {}   -- entity -> список статусов
 -- Сопоставление GID из Tiled с типами статусов
 status.gidToStatus = {
     [41] = "fire",   -- GID для огня
-    [16] = "acid",   -- GID для кислоты
+    [32] = "acid",   -- GID для кислоты
 }
 
 -- Применить статус к гексу
@@ -43,6 +43,10 @@ end
 
 -- Получить статусы на гексе
 function status.getAtHex(q, r)
+    if q == nil or r == nil then
+        print("ERROR: getAtHex called with nil q or r", q, r, debug.traceback())
+        return {}
+    end
     local key = q .. "," .. r
     return status.hexStatuses[key] or {}
 end
@@ -104,62 +108,6 @@ function status.getDamageMultiplier(entity)
         return 2.0
     end
     return 1.0
-end
-
--- Применить урон от огня в начале хода
-function status.applyFireDamage(entities, hexGrid, terrainMap, globalHealth)
-    local damaged = false
-    for i = #entities, 1, -1 do
-        local entity = entities[i]
-        if entity.health and entity.health > 0 then
-            if status.hasEntityStatus(entity, "fire") then
-                local q, r = entity.q, entity.r
-                local terrain = terrainMap[q] and terrainMap[q][r] or "grass"
-                -- Если на воде, огонь тушится (это уже сделано при движении, но на всякий случай проверим)
-                if terrain == "water" then
-                    status.removeFromEntity(entity, "fire")
-                else
-                    local damage = 1
-                    print(string.format("🔥 %s burns for %d damage!", entity.name, damage))
-                    local wasDestroyed = entity:takeDamage(damage, globalHealth)
-                    if sounds and sounds.fire then sounds.fire:play() end
-                    if wasDestroyed then
-                        table.remove(entities, i)
-                    end
-                    damaged = true
-                end
-            end
-        end
-    end
-    return damaged
-end
-
--- Обработка эффектов при завершении движения на гексе
-function status.onMoveFinished(entity, newQ, newR, terrainMap, globalHealth)
-    -- Сначала проверим, не наступил ли на воду – тушим огонь
-    local terrain = terrainMap[newQ] and terrainMap[newQ][newR] or "grass"
-    if terrain == "water" then
-        if status.hasEntityStatus(entity, "fire") then
-            status.removeFromEntity(entity, "fire")
-            print(string.format("💧 %s steps into water, fire extinguished!", entity.name))
-        end
-    end
-
-    -- Применить эффекты от гекса (огонь / кислота)
-    local hexStatuses = status.getAtHex(newQ, newR)
-    for _, st in ipairs(hexStatuses) do
-        if st == "fire" then
-            if not status.hasEntityStatus(entity, "fire") then
-                status.applyToEntity(entity, "fire")
-                print(string.format("🔥 %s caught fire!", entity.name))
-            end
-        elseif st == "acid" then
-            if not status.hasEntityStatus(entity, "acid") then
-                status.applyToEntity(entity, "acid")
-                print(string.format("🧪 %s covered in acid! Damage will be doubled.", entity.name))
-            end
-        end
-    end
 end
 
 function status.initHexStatuses(loadedStatuses)

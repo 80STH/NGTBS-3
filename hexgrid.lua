@@ -140,4 +140,71 @@ function HexGrid:centerOnScreen(screenWidth, screenHeight)
     self.offsetY = (screenHeight - mapHeight) / 2
 end
 
+function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
+    local radius = self.radius
+    local extrude = 1  -- высота "бортика" вниз
+
+    -- Цвета в зависимости от типа местности
+    local topColor, sideColor
+    if terrainType == "grass" then
+        topColor = {0.4, 0.7, 0.2, 1}
+        sideColor = {0.2, 0.5, 0.1, 1}
+    elseif terrainType == "water" then
+        topColor = {0.2, 0.5, 0.8, 1}
+        sideColor = {0.1, 0.3, 0.6, 1}
+    elseif terrainType == "lava" then
+        topColor = {0.9, 0.4, 0.1, 1}
+        sideColor = {0.6, 0.2, 0.05, 1}
+    elseif terrainType == "stone" then
+        topColor = {0.5, 0.5, 0.5, 1}
+        sideColor = {0.3, 0.3, 0.3, 1}
+    elseif terrainType == "sand" then
+        topColor = {0.9, 0.8, 0.6, 1}
+        sideColor = {0.7, 0.6, 0.4, 1}
+    elseif terrainType == "dirt" then
+        topColor = {0.6, 0.4, 0.2, 1}
+        sideColor = {0.4, 0.3, 0.1, 1}
+    elseif terrainType == "snow" then
+        topColor = {0.9, 0.95, 1, 1}
+        sideColor = {0.7, 0.75, 0.8, 1}
+    elseif terrainType == "swamp" then
+        topColor = {0.4, 0.6, 0.3, 1}
+        sideColor = {0.3, 0.5, 0.2, 1}
+    else -- emptiness или дефолт
+        topColor = {0.3, 0.3, 0.3, 1}
+        sideColor = {0.2, 0.2, 0.2, 1}
+    end
+
+    -- Верхняя грань (основание)
+    local topVertices = self:drawHexagon(x, y, radius)
+
+    -- Нижние вершины (сдвинуты вниз)
+    local bottomVertices = {}
+    for i = 1, #topVertices, 2 do
+        bottomVertices[i] = topVertices[i]
+        bottomVertices[i+1] = topVertices[i+1] + extrude
+    end
+
+    -- 1. Боковые грани (от основания вниз)
+    love.graphics.setColor(sideColor)
+    local n = #topVertices / 2
+    for i = 1, n do
+        local next_i = i % n + 1
+        local x1, y1 = topVertices[(i-1)*2+1], topVertices[(i-1)*2+2]
+        local x2, y2 = topVertices[(next_i-1)*2+1], topVertices[(next_i-1)*2+2]
+        local x3, y3 = bottomVertices[(next_i-1)*2+1], bottomVertices[(next_i-1)*2+2]
+        local x4, y4 = bottomVertices[(i-1)*2+1], bottomVertices[(i-1)*2+2]
+
+        love.graphics.polygon("fill", x1, y1, x2, y2, x3, y3)
+        love.graphics.polygon("fill", x1, y1, x3, y3, x4, y4)
+    end
+
+    -- 2. Верхняя грань (основание) – рисуем поверх боковых граней
+    love.graphics.setColor(topColor)
+    love.graphics.polygon("fill", topVertices)
+
+    -- 3. Обводка (опционально)
+    love.graphics.setColor(0, 0, 0, 0.6)
+    love.graphics.polygon("line", topVertices)
+end
 return HexGrid

@@ -169,11 +169,10 @@ end
 -- ОСНОВНЫЕ UI-ФУНКЦИИ, ВЫЗЫВАЕМЫЕ ИЗ MAIN.LUA
 -- ============================================================
 
--- Отрисовать подготовленные атаки врагов
 function ui.drawPreparedAttacks(hex, entities)
     for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack then
-            local x, y = hex:hexToPixel(e.q, e.r)
+        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.preparedTarget then
+            local x, y = hex:hexToPixel(e.preparedTarget.q, e.preparedTarget.r)
             love.graphics.setColor(1, 0, 0, 0.6)
             love.graphics.circle("fill", x, y, 20)
             love.graphics.setColor(1, 1, 1, 1)
@@ -487,6 +486,143 @@ function ui.drawAttackPanel(selectedActor, attackButtons, selectedAttack, attack
         if isSelected then
             love.graphics.setColor(1, 1, 0.5, 0.9)
             love.graphics.print(btn.desc, btn.x + 5, btn.y - 18)
+        end
+    end
+end
+
+function ui.drawEnemyOrderButton(mouseX, mouseY)
+    local btnW, btnH = 100, 30
+    local x = love.graphics.getWidth() - btnW - 10
+    local y = love.graphics.getHeight() - btnH - 10
+    local isHover = mouseX >= x and mouseX <= x + btnW and mouseY >= y and mouseY <= y + btnH
+
+    love.graphics.setColor(isHover and 0.6 or 0.3, 0.4, 0.6, 0.8)
+    love.graphics.rectangle("fill", x, y, btnW, btnH, 5)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print("Order (hover)", x + 8, y + 8)
+
+    return isHover
+end
+
+-- ui.lua (добавить в конец)
+
+local function getTime()
+    return love.timer.getTime()
+end
+
+function ui.drawFireOnHex(x, y, radius, time)
+    local t = time * 5
+    love.graphics.setBlendMode("add")
+    for i = 1, 5 do
+        local angle = (i / 5) * math.pi * 2 + t * 2
+        local lenVar = 0.5 + 0.3 * math.sin(t * 3 + i)
+        local height = radius * 0.6 * lenVar
+        local width = radius * 0.3 * (0.7 + 0.3 * math.sin(t * 5 + i))
+        
+        local tipX = x + math.cos(angle) * width * 0.5
+        local tipY = y - height * 0.8
+        local baseLeftX = x + math.cos(angle - 0.3) * width
+        local baseLeftY = y + math.sin(angle - 0.3) * width * 0.5
+        local baseRightX = x + math.cos(angle + 0.3) * width
+        local baseRightY = y + math.sin(angle + 0.3) * width * 0.5
+        
+        local rCol = 1
+        local gCol = 0.3 + 0.7 * (lenVar - 0.5) * 2
+        love.graphics.setColor(rCol, gCol, 0, 0.8)
+        love.graphics.polygon("fill", tipX, tipY, baseLeftX, baseLeftY, baseRightX, baseRightY)
+    end
+    love.graphics.setBlendMode("alpha")
+    love.graphics.setColor(1, 0.6, 0, 0.9)
+    love.graphics.circle("fill", x, y, radius * 0.2)
+end
+
+function ui.drawAcidOnHex(x, y, radius, time)
+    local t = time * 2
+    love.graphics.setColor(0.3, 0.8, 0.2, 0.7 + 0.3 * math.sin(t))
+    love.graphics.circle("fill", x, y, radius * 0.4)
+    for i = 1, 4 do
+        local angle = (i * 1.5 + t) % (math.pi * 2)
+        local bx = x + math.cos(angle) * radius * 0.5
+        local by = y + math.sin(angle) * radius * 0.6
+        local size = radius * 0.15 * (0.7 + 0.3 * math.sin(t * 3 + i))
+        love.graphics.setColor(0.5, 0.9, 0.3, 0.8)
+        love.graphics.circle("fill", bx, by, size)
+    end
+end
+
+function ui.drawCellStatusEffects(x, y, radius, statuses, time)
+    for _, st in ipairs(statuses) do
+        if st == "fire" then
+            ui.drawFireOnHex(x, y, radius, time)
+        elseif st == "acid" then
+            ui.drawAcidOnHex(x, y, radius, time)
+        end
+    end
+end
+
+function ui.drawEntityStatusEffects(x, y, statuses, baseSize, time)
+    for i, st in ipairs(statuses) do
+        local offsetX = -baseSize * 0.6 + i * baseSize * 0.4
+        local offsetY = -baseSize * 0.8
+        if st == "fire" then
+            ui.drawFireOnHex(x + offsetX, y + offsetY, baseSize * 0.4, time)
+        elseif st == "acid" then
+            ui.drawAcidOnHex(x + offsetX, y + offsetY, baseSize * 0.35, time)
+        end
+    end
+end
+
+-- ui.lua (новая функция)
+
+function ui.drawUnitTooltip(entity, x, y)
+    -- Определяем цвета в зависимости от типа юнита (союзник / враг)
+    local bgColor = {0.1, 0.1, 0.2, 0.9}
+    local borderColor = {0.8, 0.8, 0.8, 1}
+    if entity.isPlayable then
+        bgColor = {0.1, 0.2, 0.1, 0.9}
+        borderColor = {0.4, 0.9, 0.4, 1}
+    else
+        bgColor = {0.2, 0.1, 0.1, 0.9}
+        borderColor = {0.9, 0.4, 0.4, 1}
+    end
+
+    -- Получаем статусы с помощью глобального модуля status
+    local statuses = status.getEntityStatuses(entity)
+    local lineHeight = 16
+    local titleHeight = 40
+    local debuffsHeight = #statuses > 0 and (20 + #statuses * lineHeight) or 30
+    local panelWidth = 200
+    local panelHeight = titleHeight + debuffsHeight
+
+    -- Фон панели
+    love.graphics.setColor(bgColor)
+    love.graphics.rectangle("fill", x, y, panelWidth, panelHeight, 8)
+    -- Рамка
+    love.graphics.setColor(borderColor)
+    love.graphics.rectangle("line", x, y, panelWidth, panelHeight, 8)
+
+    -- Имя и здоровье
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(entity.name, x + 8, y + 6)
+    love.graphics.print("❤️ " .. entity.health .. "/" .. entity.maxHealth, x + 8, y + 24)
+
+    -- Заголовок "Debuffs"
+    love.graphics.setColor(1, 0.8, 0.4, 1)
+    love.graphics.print("💀 Debuffs:", x + 8, y + 40)
+
+    -- Список дебаффов
+    if #statuses == 0 then
+        love.graphics.setColor(0.7, 0.7, 0.7, 1)
+        love.graphics.print("None", x + 18, y + 58)
+    else
+        local iconMap = {
+            fire = "🔥 Fire",
+            acid = "🧪 Acid",
+        }
+        love.graphics.setColor(1, 0.9, 0.6, 1)
+        for i, st in ipairs(statuses) do
+            local text = iconMap[st] or st
+            love.graphics.print(text, x + 18, y + 58 + (i-1) * lineHeight)
         end
     end
 end

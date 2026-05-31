@@ -10,19 +10,19 @@
  <tileset firstgid="21" name="entities" tilewidth="16" tileheight="16" tilecount="72" columns="9">
   <image source="entities.png" width="159" height="142"/>
  </tileset>
- <layer id="1" name="terrain" width="11" height="11" visible="0">
+ <layer id="1" name="terrain" width="11" height="11">
   <data encoding="base64" compression="zlib">
    eJyNziEOADAIQ1EQSHr/424C0TTdgvjurawioibc0lQSO0y9sD+vmzmmH9b5pHd8iz3E8bZa3dxY99+fx9I65zyMPQUVA1Y=
   </data>
  </layer>
- <layer id="2" name="entities" width="11" height="11" visible="0">
+ <layer id="2" name="entities" width="11" height="11">
   <data encoding="base64" compression="zlib">
-   eJxzZWBgcEXC3FiwK5EYl1opIOYBYkkkMTkKzeZBMtsVajY7VFwej3psfHzuhrGVCKglNixg9rIjhQelZhJSCwDzxRnx
+   eJxzZWBgcEXC3FiwK5EYl1opIOYBYkkkMTkKzeZBMtsVajY7VFwej3psfHzuBtFKDBCATy2xYQGzlx0pPCg1k5BaAMCNGaw=
   </data>
  </layer>
  <layer id="3" name="status" width="11" height="11">
   <data encoding="base64" compression="zlib">
-   eJwLYmBgCBpkWHMImk1LN1OKAX8IJkg=
+   eJwLYmBgCBpkmAFKK9DQbGpjTSgmxd2aVLKbEAYAnOUlQA==
   </data>
  </layer>
 </map>

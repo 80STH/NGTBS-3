@@ -85,7 +85,7 @@ return {
       id = 1,
       name = "terrain",
       class = "",
-      visible = false,
+      visible = true,
       opacity = 1,
       offsetx = 0,
       offsety = 0,
@@ -105,7 +105,7 @@ return {
       id = 2,
       name = "entities",
       class = "",
-      visible = false,
+      visible = true,
       opacity = 1,
       offsetx = 0,
       offsety = 0,
@@ -114,7 +114,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJxzZWBgcEXC3FiwK5EYl1opIOYBYkkkMTkKzeZBMtsVajY7VFwej3psfHzuhrGVCKglNixg9rIjhQelZhJSCwDzxRnx"
+      data = "eJxzZWBgcEXC3FiwK5EYl1opIOYBYkkkMTkKzeZBMtsVajY7VFwej3psfHzuBtFKDBCATy2xYQGzlx0pPCg1k5BaAMCNGaw="
     },
     {
       type = "tilelayer",
@@ -134,7 +134,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJwLYmBgCBpkWHMImk1LN1OKAX8IJkg="
+      data = "eJwLYmBgCBpkmAFKK9DQbGpjTSgmxd2aVLKbEAYAnOUlQA=="
     }
   }
 }

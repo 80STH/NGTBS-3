@@ -6,6 +6,8 @@ environment = require("environment")
 status = require("status")
 ui = require("ui")
 pathfinding = require("pathfinding")
+effects = require("effects")
+visual = require("visual_effects")
 
 -- Делаем очередь анимаций доступной глобально для отрисовки
 pushAnimations = pushAnimations or { queue = {}, active = false }
@@ -20,10 +22,6 @@ windTorrentUI = {
 }
 
 function love.load()
-    -- Загружаем шрифт с поддержкой эмодзи (размер 16px)
-    local emojiFont = love.graphics.newFont("unifont-15.1.04.otf", 16)
-    love.graphics.setFont(emojiFont)
-
     selectedAttack = nil   -- текущая выбранная атака (объект)
     attackMode = false
     attackButtons = {}     -- кнопки атак для текущего персонажа
@@ -316,16 +314,13 @@ function executeAllEnemyAttacks()
     print("=== ENEMY ATTACK PHASE ===")
 end
 
--- Обновление фазы атаки врагов (по очереди)
 function updateEnemyAttacks(dt)
-    if turnState.phase ~= "enemy_attack" then
-        return
-    end
+    if turnState.phase ~= "enemy_attack" then return end
 
     if #turnState.enemyAttackQueue == 0 then
-        -- Все враги атаковали → переходим к следующей подготовке
         turnState.phase = "enemy_prepare"
         prepareAllEnemies()
+        turnState.currentAttackingEnemy = nil
         return
     end
 
@@ -333,13 +328,16 @@ function updateEnemyAttacks(dt)
     if turnState.enemyAttackTimer >= turnState.delayBetweenAttacks then
         turnState.enemyAttackTimer = 0
         local enemy = table.remove(turnState.enemyAttackQueue, 1)
+        turnState.currentAttackingEnemy = enemy   -- <-- установить текущего атакующего
         if enemy and enemy.health > 0 then
             ai.executePreparedAttack(enemy, entities, hex, sounds)
         end
+        -- Сбросить после завершения атаки? Нет, лучше сбросить перед удалением из очереди следующего,
+        -- но анимация атаки мгновенная, можно сбросить после вызова executePreparedAttack
+        turnState.currentAttackingEnemy = nil
     end
 end
 
--- Функция завершения хода игрока
 function endTurn()
     if turnState.phase ~= "player" then
         print("Cannot end turn now")
@@ -352,6 +350,17 @@ function endTurn()
             print(a.name .. " did not attack, turn ended.")
         end
     end
+
+    -- ПРИМЕНЯЕМ ЭФФЕКТЫ КОНЦА ХОДА (горение, утопление) до атак врагов
+    effects.applyEndOfTurnEffects(entities, hex, terrainMap, globalHealth)
+
+    local drownedList = effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
+    for _, dead in ipairs(drownedList) do
+        local x, y = hex:hexToPixel(dead.q, dead.r)
+        print("Adding effect at", effectX, effectY, "type", "slam")
+        visual.addEffect(x, y, "drown")
+    end
+
     -- Собираем врагов для атаки
     local attackers = {}
     for _, e in ipairs(entities) do
@@ -513,20 +522,6 @@ function isPositionOccupied(q, r, movingEntity)
     return false
 end
 
-function killEntitiesOnWater()
-    for i = #entities, 1, -1 do
-        local e = entities[i]
-        if e:isCharacter() then    -- только живые существа
-            local isWater = terrainMap and terrainMap[e.q] and terrainMap[e.q][e.r] == "water"
-            if isWater then
-                print(string.format("💧 %s stands on water and dies!", e.name))
-                if sounds and sounds.collision then sounds.collision:play() end
-                table.remove(entities, i)
-            end
-        end
-    end
-end
-
 function getEntityAtHex(q, r)
     for _, e in ipairs(entities) do
         if e.q == q and e.r == r then
@@ -600,8 +595,12 @@ function updateActorMovement(actor, dt)
         if t >= 1 then
             actor.q = actor.targetQ
             actor.r = actor.targetR
-            if not actor.isMoving and actor.currentPathIndex > #actor.path then
-                status.onMoveFinished(actor, actor.q, actor.r, terrainMap, globalHealth)
+            if actor.currentPathIndex >= #actor.path then
+                local died = effects.applyAllCellEffects(actor, actor.q, actor.r, terrainMap, entities, globalHealth)
+                if died then
+                    local x, y = hex:hexToPixel(actor.q, actor.r)
+                    visual.addEffect(x, y, "drown")
+                end
             end
             actor.isMoving = false
             actor.currentPathIndex = actor.currentPathIndex + 1
@@ -617,10 +616,6 @@ function updateActorMovement(actor, dt)
             end
         end
     end
-end
-
-function applyFireDamageToAll()
-    status.applyFireDamage(entities, hex, terrainMap, globalHealth)
 end
 
 function startEnemyPreparePhase()
@@ -671,6 +666,7 @@ function processNextEnemyPrepare()
 end
 
 function love.update(dt)
+    visual.update(dt)
     -- Обновление анимаций движения всех сущностей (включая врагов)
     for _, actor in ipairs(entities) do
         updateActorMovement(actor, dt)
@@ -742,127 +738,110 @@ function love.update(dt)
                                       my >= windTorrentUI.button.y and my <= windTorrentUI.button.y + windTorrentUI.button.height)
 
                                           -- После того как все анимации завершились (или даже во время, но после перемещения)
-    -- Проверяем, не оказался ли кто на воде
-    killEntitiesOnWater()
 end
 
 function drawHexGrid()
-    -- Сначала рисуем terrain текстуры (под всеми сущностями)
-    if environment.terrainTextures then
-        for q = 0, hex.gridWidth - 1 do
-            for r = 0, hex.gridHeight - 1 do
-                if not hex:isActiveHex(q, r) then goto continue end
-                local texture = environment.terrainTextures[q] and environment.terrainTextures[q][r]
-                if texture then
-                    local x, y = hex:hexToPixel(q, r)
-                    local sw, sh = texture:getDimensions()
-                    local scaleX = (hex.radius * 2) / sw
-                    local scaleY = (hex.radius * 2) / sh
-                    -- 👇 ВАЖНО: сбрасываем цвет на белый перед рисованием текстуры
-                    love.graphics.setColor(1, 1, 1, 1)
-                    love.graphics.draw(texture, x, y, 0, scaleX, scaleY, sw/2, sh/2)
-                else
-                    -- fallback цвет для клеток без текстуры (только если нужно)
-                    love.graphics.setColor(0.2, 0.2, 0.2, 0.5)
-                    local x, y = hex:hexToPixel(q, r)
-                    local vertices = hex:drawHexagon(x, y, hex.radius)
-                    love.graphics.polygon("fill", vertices)
-                end
-                ::continue::
+    local gridW = hex.gridWidth
+    local gridH = hex.gridHeight
+    if not gridW or not gridH then return end
+
+    -- 1. Рисуем terrain и эффекты на клетках
+    for col = 0, gridW - 1 do
+        for row = 0, gridH - 1 do
+            if not hex:isActiveHex(col, row) then goto continue end
+
+            local terrainType = terrainMap and terrainMap[col] and terrainMap[col][row] or "grass"
+            local cellX, cellY = hex:hexToPixel(col, row)
+            hex:drawTerrainHex(col, row, terrainType, cellX, cellY)
+
+            local hexStatuses = status.getAtHex(col, row)
+            if #hexStatuses > 0 then
+                ui.drawCellStatusEffects(cellX, cellY, hex.radius, hexStatuses, love.timer.getTime())
             end
+            ::continue::
         end
     end
 
-    for q = 0, hex.gridWidth - 1 do
-        for r = 0, hex.gridHeight - 1 do
-            local hexStatuses = status.getAtHex(q, r)
-            if #hexStatuses > 0 then
-                local x, y = hex:hexToPixel(q, r)
-                for i, st in ipairs(hexStatuses) do
-                    if st == "fire" then
-                        love.graphics.setColor(1, 0.5, 0, 0.8)
-                        love.graphics.circle("fill", x - 15 + i*10, y - 15, 6)
-                        love.graphics.setColor(1, 1, 1, 1)
-                        love.graphics.print("🔥", x - 18 + i*10, y - 22)
-                    elseif st == "acid" then
-                        love.graphics.setColor(0.5, 1, 0, 0.8)
-                        love.graphics.circle("fill", x - 15 + i*10, y - 15, 6)
-                        love.graphics.setColor(1, 1, 1, 1)
-                        love.graphics.print("🧪", x - 18 + i*10, y - 22)
+    -- 2. Рисуем рамки и выделения (чтобы они были поверх terrain)
+    for col = 0, gridW - 1 do
+        for row = 0, gridH - 1 do
+            if not hex:isActiveHex(col, row) then goto continue2 end
+            local cellX, cellY = hex:hexToPixel(col, row)
+            local vertices = hex:drawHexagon(cellX, cellY, hex.radius)
+
+            local isCurrentActor = selectedActor and selectedActor.q == col and selectedActor.r == row
+            local isSelected = (hex.selectedQ == col and hex.selectedR == row)
+            local isHovered = (hex.hoverQ == col and hex.hoverR == row)
+
+            if isCurrentActor then
+                love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
+                love.graphics.polygon("fill", vertices)
+            elseif isSelected then
+                love.graphics.setColor(0.2, 0.4, 0.8, 0.5)
+                love.graphics.polygon("fill", vertices)
+            elseif isHovered then
+                love.graphics.setColor(0.5, 0.8, 0.3, 0.5)
+                love.graphics.polygon("fill", vertices)
+            end
+
+            love.graphics.setColor(0, 0, 0, 0.5)
+            love.graphics.polygon("line", vertices)
+            ::continue2::
+        end
+    end
+    love.graphics.setColor(1, 1, 1, 1)
+end
+function getEntityDrawPosition(entity)
+    -- 1. Проверяем, есть ли у сущности временные координаты, установленные shake-анимацией
+    if entity.currentDrawX and entity.currentDrawY then
+        return entity.currentDrawX, entity.currentDrawY
+    end
+
+    -- 2. Проверяем глобальную очередь push-анимаций (отталкивания, bounce, collisions)
+    if pushAnimations and pushAnimations.queue then
+        for _, anim in ipairs(pushAnimations.queue) do
+            if anim.obj == entity and anim.isMoving then
+                local t = math.min(1, anim.timer / anim.duration)
+                -- Easing для плавности (ease out)
+                local ease = 1 - (1 - t) * (1 - t)
+                
+                if anim.isShake then
+                    -- shake-анимация: возвращаем смещённые координаты, если они заданы в анимации
+                    if anim.offsetX and anim.offsetY then
+                        local x, y = hex:hexToPixel(anim.obj.q, anim.obj.r)
+                        local curX = x + anim.offsetX * (1 - ease)
+                        local curY = y + anim.offsetY * (1 - ease)
+                        return curX, curY
+                    else
+                        return hex:hexToPixel(entity.q, entity.r)
+                    end
+                else
+                    -- Обычный push или bounce
+                    if anim.startX and anim.endX then
+                        local x = anim.startX + (anim.endX - anim.startX) * ease
+                        local y = anim.startY + (anim.endY - anim.startY) * ease
+                        return x, y
+                    else
+                        return hex:hexToPixel(entity.q, entity.r)
                     end
                 end
             end
         end
     end
-    
-    -- Затем рисуем выделения и границы
-    for q = 0, hex.gridWidth - 1 do
-        for r = 0, hex.gridHeight - 1 do
-            local x, y = hex:hexToPixel(q, r)
-            local vertices = hex:drawHexagon(x, y, hex.radius)
-            
-            -- Выделения (выбранный, ховер, и т.д.)
-            local hasEntity = getEntityAtHex(q, r) ~= nil
-            local isCurrentActor = selectedActor and selectedActor.q == q and selectedActor.r == r
-            
-            if isCurrentActor then
-                love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
-                love.graphics.polygon("fill", vertices)
-            elseif hex.selectedQ == q and hex.selectedR == r then
-                love.graphics.setColor(0.2, 0.4, 0.8, 0.5)
-                love.graphics.polygon("fill", vertices)
-            elseif hex.hoverQ == q and hex.hoverR == r then
-                love.graphics.setColor(0.5, 0.8, 0.3, 0.5)
-                love.graphics.polygon("fill", vertices)
-            end
-            
-            -- Рамка
-            love.graphics.setColor(0, 0, 0, 0.5)
-            love.graphics.polygon("line", vertices)
-        end
-    end
-    love.graphics.setColor(1, 1, 1, 1)
-end
 
--- Функция для получения позиции отрисовки сущности с учётом всех анимаций
-function getEntityDrawPosition(entity)
-    -- Проверяем глобальную очередь pushAnimations (отталкивания, ветер)
-    local pushAnim = nil
-    if pushAnimations and pushAnimations.queue then
-        for _, anim in ipairs(pushAnimations.queue) do
-            if anim.obj == entity and anim.isMoving then
-                pushAnim = anim
-                break
-            end
-        end
-    end
-    
-    if pushAnim then
-        -- Активная анимация смещения (push, wind, collision)
-        local t = math.min(1, pushAnim.timer / pushAnim.duration)
-        -- Используем easing для плавности
-        local easeOut = 1 - (1 - t) * (1 - t)
-        if pushAnim.startX and pushAnim.endX then
-            local x = pushAnim.startX + (pushAnim.endX - pushAnim.startX) * easeOut
-            local y = pushAnim.startY + (pushAnim.endY - pushAnim.startY) * easeOut
-            return x, y
-        else
-            -- Fallback: просто координаты гекса
-            return hex:hexToPixel(entity.q, entity.r)
-        end
-    elseif entity.isMoving then
-        -- Обычное движение по пути (step-by-step movement)
+    -- 3. Обычное движение по пути (step-by-step)
+    if entity.isMoving then
         local t = entity.timer / entity.speed
-        if t >= 1 then t = 1 end
-        -- Используем easing для плавного старта и остановки
-        local easeInOut = t < 0.5 and 2 * t * t or 1 - math.pow(-2 * t + 2, 2) / 2
-        local x = entity.startX + (entity.endX - entity.startX) * easeInOut
-        local y = entity.startY + (entity.endY - entity.startY) * easeInOut
+        if t > 1 then t = 1 end
+        -- Плавное ускорение/замедление (ease in-out)
+        local ease = t < 0.5 and 2 * t * t or 1 - math.pow(-2 * t + 2, 2) / 2
+        local x = entity.startX + (entity.endX - entity.startX) * ease
+        local y = entity.startY + (entity.endY - entity.startY) * ease
         return x, y
-    else
-        -- Статическое положение
-        return hex:hexToPixel(entity.q, entity.r)
     end
+
+    -- 4. Статическое положение
+    return hex:hexToPixel(entity.q, entity.r)
 end
 
 -- Унифицированная отрисовка полоски здоровья для любых сущностей
@@ -949,15 +928,7 @@ function drawEntity(entity)
 
     local entityStatuses = status.getEntityStatuses(entity)
     if #entityStatuses > 0 then
-        for i, st in ipairs(entityStatuses) do
-            if st == "fire" then
-                love.graphics.setColor(1, 0.5, 0, 1)
-                love.graphics.print("🔥", x - 25 + i*10, y - 25)
-            elseif st == "acid" then
-                love.graphics.setColor(0.5, 1, 0, 1)
-                love.graphics.print("🧪", x - 25 + i*10, y - 25)
-            end
-        end
+        ui.drawEntityStatusEffects(x, y, entityStatuses, 20, love.timer.getTime())
     end
     
     -- Полоска здоровья
@@ -1018,10 +989,11 @@ function drawAttackIndicators()
 end
 
 
--- В love.draw добавить вызовы:
+-- main.love.draw (добавить вызов)
 function love.draw()
     drawHexGrid()
     drawAllEntities()
+    visual.draw()
     ui.drawPreparedAttacks(hex, entities)
     if attackMode and selectedAttack and selectedActor and not selectedActor.hasActedThisTurn and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         ui.drawAttackPreview(hex, selectedActor, selectedAttack, attackMode, hex.hoverQ, hex.hoverR, entities)
@@ -1036,13 +1008,45 @@ function love.draw()
     ui.drawEndTurnButton(turnState, entities)
     ui.drawWindTorrentUI(windTorrent, windTorrentUI, turnState)
     ui.drawGlobalHealthBar(globalHealth)
-    ui.drawAttackPanel(selectedActor, attackButtons, selectedAttack, attackMode)
+    ui.drawAttackPanel(selectedActor, attackButtons, selectedAttack, attackMode) -- <-- добавлено
     love.graphics.setColor(1,1,1,1)
     love.graphics.print("Phase: " .. turnState.phase, 10, 10)
     if selectedActor then
         love.graphics.print("Selected: " .. selectedActor.name .. (selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 30)
     end
     love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 130)
+
+    local mx, my = love.mouse.getPosition()
+    local showOrder = ui.drawEnemyOrderButton(mx, my)
+
+    if showOrder then
+        local orderMap = getEnemyAttackOrder(entities, turnState)
+        for _, enemy in ipairs(entities) do
+            if enemy:isCharacter() and not enemy.isPlayable and enemy.health > 0 then
+                local num = orderMap[enemy]
+                if num then
+                    local x, y = hex:hexToPixel(enemy.q, enemy.r)
+                    -- фон кружка
+                    love.graphics.setColor(1, 0.8, 0.2, 0.9)
+                    love.graphics.circle("fill", x + 15, y - 20, 12)
+                    -- цифра
+                    love.graphics.setColor(0, 0, 0, 1)
+                    love.graphics.print(tostring(num), x + 11, y - 28)
+                end
+            end
+        end
+    end
+
+        -- ===== ПОДСКАЗКА ПРИ НАВЕДЕНИИ НА ЮНИТА =====
+    if hex.hoverQ and hex.hoverQ >= 0 and hex.hoverR and hex.hoverR >= 0 then
+        local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
+        if hoverEntity and hoverEntity.health > 0 then
+            -- Рисуем панель в левом нижнем углу
+            local panelX = 10
+            local panelY = love.graphics.getHeight() - 140
+            ui.drawUnitTooltip(hoverEntity, panelX, panelY)
+        end
+    end
 end
 
 -- Проверка, является ли клетка краем карты
@@ -1143,6 +1147,27 @@ end
 -- Проверка, находится ли актер на краю карты
 function isAtEdge(entity)
     return entity.q == 0 or entity.q == hex.gridWidth - 1 or entity.r == 0 or entity.r == hex.gridHeight - 1
+end
+
+function getEnemyAttackOrder(entities, turnState)
+    local order = {}
+    local queue = {}
+
+    if turnState.phase == "enemy_attack" then
+        queue = turnState.enemyAttackQueue or {}
+    else
+        -- фаза player / enemy_prepare: порядок такой же, как при формировании очереди в endTurn()
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 then
+                table.insert(queue, e)
+            end
+        end
+    end
+
+    for i, enemy in ipairs(queue) do
+        order[enemy] = i
+    end
+    return order
 end
 
 -- Убить союзного актера на краю карты

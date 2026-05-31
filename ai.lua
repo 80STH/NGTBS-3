@@ -274,7 +274,6 @@ function ai.startEnemyMove(enemy, hex)
     end
 end
 
--- Обновление анимации движения
 function ai.updateEnemyMovement(enemy, dt, hex)
     if enemy.isMoving then
         enemy.timer = enemy.timer + dt
@@ -290,7 +289,10 @@ function ai.updateEnemyMovement(enemy, dt, hex)
                 else
                     enemy.path = {}
                     enemy.currentPathIndex = 0
-                    -- движение завершено – сигнал для main
+                    -- движение завершено – применяем эффекты клетки
+                    if enemy.health > 0 then
+                        effects.applyAllCellEffects(enemy, enemy.q, enemy.r, terrainMap, entities, globalHealth)
+                    end
                     enemy.movementFinished = true
                 end
             end
