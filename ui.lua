@@ -245,6 +245,34 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
         end
     end
 
+    -- Piercing Shot (две цели на линии)
+    if attack.getPushCells and not previewData and attack.name == "Piercing Shot" then
+        local pushCells = attack:getPushCells(attacker, hoverQ, hoverR, hex, entities)
+        if pushCells and #pushCells > 0 then
+            local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+            if stepX then
+                local firstTarget, firstHex, secondTarget, secondHex = attack:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+                previewData = {}
+                if firstTarget and firstHex then
+                    table.insert(previewData, {
+                        target = firstTarget,
+                        fromCell = {q = firstHex.q, r = firstHex.r},
+                        pushTo = pushCells[1],
+                        attackDamage = 0,      -- Piercing не наносит урон первой цели
+                    })
+                end
+                if secondTarget and secondHex and #pushCells >= 2 then
+                    table.insert(previewData, {
+                        target = secondTarget,
+                        fromCell = {q = secondHex.q, r = secondHex.r},
+                        pushTo = pushCells[2],
+                        attackDamage = 1,      -- вторая цель получает 1 урон
+                    })
+                end
+            end
+        end
+    end
+
     -- AoePushAttack (Stone Throw) – отталкивает всех врагов вокруг целевой клетки
     if attack.getPushCells and not previewData then
         local pushCells = attack:getPushCells(attacker, hoverQ, hoverR, hex, entities)
