@@ -112,20 +112,31 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         return
     end
 
+    -- Проверяем, свободна ли целевая клетка на момент вызова
+    local occupant = combat.getEntityAtHex(toQ, toR, entities)
+    if occupant and occupant ~= target then
+        -- Немедленное столкновение: урон обоим, без перемещения
+        if target.health then target.health = target.health - 1 end
+        if occupant.health then occupant.health = occupant.health - 1 end
+        print(string.format("💥 %s crashes into %s! Both take 1 damage!", target.name, occupant.name))
+        if sounds and sounds.collision then sounds.collision:play() end
+        if onComplete then onComplete(true) end
+        return
+    end
+
     local wasDestroyed = false
     local function finishPush()
         if onComplete then onComplete(wasDestroyed) end
     end
 
-    -- ИЗМЕНЕНО: проверяем не isValidHex, а isActiveHex
     if not hex:isActiveHex(toQ, toR) then
+        -- урон от края
         if target:isCharacter() then
             target.health = target.health - 1
             print(target.name .. " is slammed against the edge! Takes 1 damage!")
             if sounds and sounds.collision then sounds.collision:play() end
             if target.health <= 0 then
                 combat.removeEntity(target, entities)
-                print(target.name .. " has been defeated!")
                 wasDestroyed = true
             end
         end
@@ -135,42 +146,8 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         return
     end
 
-    local occupant = combat.getEntityAtHex(toQ, toR, entities)
-    if not occupant then
-        combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function() finishPush() end)
-    else
-        -- Наносим урон обоим (сразу)
-        if target:isCharacter() then
-            target.health = target.health - 1
-            occupant.health = occupant.health - 1
-            print(string.format("%s crashes into %s! Both take 1 damage!", target.name, occupant.name))
-            if sounds and sounds.collision then sounds.collision:play() end
-
-            if target.health <= 0 then
-                combat.removeEntity(target, entities)
-                wasDestroyed = true
-            end
-            if occupant.health <= 0 then
-                combat.removeEntity(occupant, entities)
-            end
-        end
-
-        -- Анимация отталкивания для target
-        combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function() end)
-
-        -- Анимация отдачи для occupant (bounce или shake)
-        local dirQ = toQ - fromQ
-        local dirR = toR - fromR
-        local bounceQ = toQ + dirQ
-        local bounceR = toR + dirR
-        if hex:isValidHex(bounceQ, bounceR) then
-            combat.addBounceAnimation(occupant, toQ, toR, bounceQ, bounceR, 0.1)
-        else
-            combat.addShakeAnimation(occupant, toQ, toR)
-        end
-
-        finishPush()
-    end
+    -- если клетка свободна – запускаем анимацию
+    combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function() finishPush() end)
 end
 
 -- ============================================================
@@ -491,14 +468,24 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
 
     print(string.format("💨 WIND TORRENT: Pushing everything %s!", direction))
 
+    local function axialToCube(q, r)
+        local x = q - (r - (r % 2)) / 2
+        local z = r
+        local y = -x - z
+        return x, y, z
+    end
+    local function cubeToAxial(x, y, z)
+        local q = x + (z - (z % 2)) / 2
+        local r = z
+        return q, r
+    end
     local function applyStep(q, r)
         local x, y, z = axialToCube(q, r)
         return cubeToAxial(x + step.dx, y + step.dy, z + step.dz)
     end
-
     local function isValid(q, r) return hex:isActiveHex(q, r) end
 
-    -- Собираем только подвижные объекты (isPushable == true)
+    -- Собираем только подвижные объекты
     local movableObjects = {}
     for _, entity in ipairs(entities) do
         if entity.isPushable then
@@ -507,7 +494,6 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
     end
 
     -- Сортировка: сначала те, кто дальше по направлению ветра (максимальная проекция)
-    -- Направление ветра задаётся вектором (step.dx, step.dy, step.dz)
     table.sort(movableObjects, function(a, b)
         local function getProjection(obj)
             local x, y, z = axialToCube(obj.q, obj.r)
@@ -516,7 +502,7 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
         return getProjection(a) > getProjection(b)
     end)
 
-    -- Построение карты неподвижных объектов для быстрой проверки
+    -- Карта неподвижных объектов
     local immovableMap = {}
     for _, entity in ipairs(entities) do
         if not entity.isPushable then
@@ -525,93 +511,102 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
         end
     end
 
-    -- Построение карты неподвижных объектов для быстрой проверки
-    local immovableMap = {}
-    for _, entity in ipairs(entities) do
-        if not entity.isPushable then
-            local key = entity.q .. "," .. entity.r
-            immovableMap[key] = entity
-        end
-    end
-
+    -- Результаты
     local pushes = {}       -- успешные перемещения
-    local damageEvents = {} -- урон от вылета за край или столкновения с неподвижным
+    local damageEvents = {} -- урон без перемещения (с указанием причины и дополнительной цели)
 
+    -- Карта занятости клеток после обработки (чтобы избежать наложений)
+    local occupied = {}     -- key "q,r" -> объект, который займёт клетку
+
+    -- Обрабатываем объекты в порядке сортировки
     for _, obj in ipairs(movableObjects) do
+        local fromKey = obj.q .. "," .. obj.r
+        -- Если клетка, на которой стоит obj, уже занята кем-то другим (не им) – такого быть не должно, но на всякий случай
+        if occupied[fromKey] and occupied[fromKey] ~= obj then
+            -- Конфликт: кто-то уже занял его позицию – obj получает урон и не двигается
+            table.insert(damageEvents, {obj = obj, reason = "collision", with = occupied[fromKey]})
+            -- Помечаем его клетку как занятую им же (он остаётся)
+            occupied[fromKey] = obj
+            goto continue
+        end
+
         local newQ, newR = applyStep(obj.q, obj.r)
         if not isValid(newQ, newR) then
             -- Вылет за край
             table.insert(damageEvents, {obj = obj, reason = "edge"})
+            occupied[fromKey] = obj   -- он остаётся на месте
         else
-            -- Проверяем, не занята ли клетка неподвижным объектом
             local immovableKey = newQ .. "," .. newR
             if immovableMap[immovableKey] then
-                -- Столкновение с неподвижным препятствием: только урон, без движения
-                table.insert(damageEvents, {obj = obj, reason = "immovable"})
+                -- Столкновение с неподвижным препятствием
+                table.insert(damageEvents, {obj = obj, reason = "immovable", obstacle = immovableMap[immovableKey]})
+                occupied[fromKey] = obj
             else
-                table.insert(pushes, {obj = obj, fromQ = obj.q, fromR = obj.r, toQ = newQ, toR = newR})
+                -- Проверяем, не занята ли целевая клетка уже кем-то (кто уже обработан и останется/переместится)
+                local targetOcc = occupied[newQ .. "," .. newR]
+                if targetOcc then
+                    -- Столкновение с другим подвижным объектом (уже обработанным)
+                    table.insert(damageEvents, {obj = obj, reason = "collision", with = targetOcc})
+                    -- Добавляем урон и для targetOcc (он уже получит урон при своей обработке? Если он уже переместился, то у него не было столкновения. Нужно добавить урон и ему)
+                    -- Найдём, не было ли уже damageEvents для targetOcc
+                    local found = false
+                    for _, de in ipairs(damageEvents) do
+                        if de.obj == targetOcc then
+                            found = true
+                            break
+                        end
+                    end
+                    if not found then
+                        table.insert(damageEvents, {obj = targetOcc, reason = "collision", with = obj})
+                    end
+                    occupied[fromKey] = obj   -- obj остаётся на месте
+                else
+                    -- Всё свободно – перемещаем
+                    table.insert(pushes, {obj = obj, fromQ = obj.q, fromR = obj.r, toQ = newQ, toR = newR})
+                    occupied[newQ .. "," .. newR] = obj
+                    -- Если obj перемещается, его исходная клетка освобождается, поэтому не помечаем occupied[fromKey]
+                end
             end
+        end
+        ::continue::
+    end
+
+    -- Применяем урон от damageEvents (без анимации перемещения)
+    for _, dmg in ipairs(damageEvents) do
+        if dmg.obj.health then
+            dmg.obj.health = dmg.obj.health - 1
+            if dmg.reason == "edge" then
+                print(string.format("💨 %s is blown off the map!", dmg.obj.name))
+            elseif dmg.reason == "immovable" then
+                print(string.format("💥 %s crashes into an obstacle!", dmg.obj.name))
+            elseif dmg.reason == "collision" and dmg.with then
+                print(string.format("💥 %s collides with %s!", dmg.obj.name, dmg.with.name))
+                -- Второй объект уже получил урон при своей обработке, но если его нет в damageEvents, добавим?
+                -- Уже добавили выше, повторно не надо
+            end
+            if sounds and sounds.collision then sounds.collision:play() end
         end
     end
 
-    -- Разрешение коллизий между подвижными объектами (клетка может быть занята другим подвижным)
-    local targetMap, finalPushes, collisions = {}, {}, {}
-    for _, push in ipairs(pushes) do
-        local key = push.toQ .. "," .. push.toR
-        if not targetMap[key] then
-            targetMap[key] = push
-            table.insert(finalPushes, push)
-        else
-            local existing = targetMap[key]
-            table.insert(collisions, {obj1 = existing.obj, obj2 = push.obj})
-            -- Если один из объектов имеет больше здоровья, он вытесняет другого (опционально)
-            if push.obj.maxHealth and existing.obj.maxHealth and push.obj.maxHealth > existing.obj.maxHealth then
-                targetMap[key] = push
-                for i, fp in ipairs(finalPushes) do
-                    if fp.obj == existing.obj then finalPushes[i] = push; break end
-                end
-            end
+    -- Удаляем погибших после всех уронов
+    for i = #entities, 1, -1 do
+        if entities[i].health <= 0 then
+            print(string.format("💀 %s has been defeated!", entities[i].name))
+            table.remove(entities, i)
         end
     end
 
     -- Запускаем анимации для успешных перемещений
-    for _, push in ipairs(finalPushes) do
+    for _, push in ipairs(pushes) do
         combat.addPushAnimation(push.obj, push.fromQ, push.fromR, push.toQ, push.toR)
     end
 
-    local function finalize()
-        -- Урон от столкновений подвижных друг с другом
-        for _, coll in ipairs(collisions) do
-            if coll.obj1.health then coll.obj1.health = coll.obj1.health - 1 end
-            if coll.obj2.health then coll.obj2.health = coll.obj2.health - 1 end
-            print(string.format("💥 %s collides with %s!", coll.obj1.name, coll.obj2.name))
-            if sounds and sounds.collision then sounds.collision:play() end
-        end
-        -- Урон от вылета за край или столкновения с неподвижным
-        for _, dmg in ipairs(damageEvents) do
-            if dmg.obj.health then
-                dmg.obj.health = dmg.obj.health - 1
-                if dmg.reason == "edge" then
-                    print(string.format("💨 %s is blown off the map!", dmg.obj.name))
-                else
-                    print(string.format("💥 %s crashes into an obstacle!", dmg.obj.name))
-                end
-                if sounds and sounds.collision then sounds.collision:play() end
-            end
-        end
-        -- Удаляем погибших
-        for i = #entities, 1, -1 do
-            if entities[i].health <= 0 then
-                print(string.format("💀 %s has been defeated!", entities[i].name))
-                table.remove(entities, i)
-            end
-        end
+    -- Запускаем очередь анимаций
+    combat.startPushAnimations(hex, function()
         self.hasBeenUsed = true
         if sounds and sounds.wind then sounds.wind:play() end
         if onComplete then onComplete(true, nil) end
-    end
-
-    combat.startPushAnimations(hex, finalize)
+    end)
     return true
 end
 
@@ -625,26 +620,47 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
     local x, y = hex:hexToPixel(fromQ, fromR)
     visual.addEffect(x, y, "hit", 0.3)
 
-    if hex and visual then
-        local x, y = hex:hexToPixel(fromQ, fromR)
-        visual.addEffect(x, y, "hit", 0.3)
-    end
-    
     table.insert(pushAnimations.queue, {
         obj = obj, fromQ = fromQ, fromR = fromR, toQ = toQ, toR = toR,
         startX = 0, startY = 0, endX = 0, endY = 0, timer = 0, duration = 0.2,
         isMoving = false,
         onComplete = function(pushedObj)
-            -- Применяем ВСЕ эффекты клетки (огонь, кислота, вода) после перемещения
-            if pushedObj and terrainMap then
-                local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities, globalHealth)
-                if died then
-                    -- Удаляем из entities (но осторожно: может быть в итерации)
-                    for i = #entities, 1, -1 do
-                        if entities[i] == pushedObj then
-                            table.remove(entities, i)
-                            break
-                        end
+            -- Проверяем, свободна ли целевая клетка
+            local occupant = combat.getEntityAtHex(toQ, toR, entities)
+            if occupant and occupant ~= pushedObj and occupant.health > 0 then
+                -- Столкновение: урон обоим, перемещение отменяется
+                if pushedObj.health and pushedObj.health > 0 then
+                    pushedObj.health = pushedObj.health - 1
+                    print(string.format("💥 %s collides with %s! Both take 1 damage!", pushedObj.name, occupant.name))
+                    if sounds and sounds.collision then sounds.collision:play() end
+                end
+                if occupant.health then
+                    occupant.health = occupant.health - 1
+                    if occupant.health <= 0 then
+                        combat.removeEntity(occupant, entities)
+                    end
+                end
+                if pushedObj.health <= 0 then
+                    combat.removeEntity(pushedObj, entities)
+                end
+                -- Не перемещаем объект, остаётся на месте
+                if pushedObj.health <= 0 then
+                    -- Если умер, эффекты клетки не применяем
+                else
+                    -- Применяем эффекты клетки (огонь, вода) на исходной позиции
+                    if terrainMap then
+                        effects.applyAllCellEffects(pushedObj, fromQ, fromR, terrainMap, entities, globalHealth)
+                    end
+                end
+            else
+                -- Клетка свободна – выполняем перемещение
+                pushedObj.q = toQ
+                pushedObj.r = toR
+                -- Применяем эффекты клетки после перемещения
+                if pushedObj and terrainMap then
+                    local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities, globalHealth)
+                    if died then
+                        combat.removeEntity(pushedObj, entities)
                     end
                 end
             end
