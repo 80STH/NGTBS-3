@@ -106,31 +106,32 @@ function combat.Attack:pushTargetInDirection(target, fromQ, fromR, stepX, stepY,
     self:pushTargetToHex(target, fromQ, fromR, pushQ, pushR, hex, entities, sounds, onComplete)
 end
 
+-- В классе Attack (замените существующую функцию)
 function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, entities, sounds, onComplete)
     if target.isPushable == false then
         if onComplete then onComplete(false) end
         return
     end
 
-    -- Проверяем, свободна ли целевая клетка на момент вызова
+    -- Проверяем, свободна ли клетка назначения
     local occupant = combat.getEntityAtHex(toQ, toR, entities)
     if occupant and occupant ~= target then
-        -- Немедленное столкновение: урон обоим, без перемещения
+        -- Столкновение: урон обоим, цель не перемещается
         if target.health then target.health = target.health - 1 end
         if occupant.health then occupant.health = occupant.health - 1 end
         print(string.format("💥 %s crashes into %s! Both take 1 damage!", target.name, occupant.name))
         if sounds and sounds.collision then sounds.collision:play() end
-        if onComplete then onComplete(true) end
+        if onComplete then onComplete(false) end
         return
     end
 
     local wasDestroyed = false
     local function finishPush()
-        if onComplete then onComplete(wasDestroyed) end
+        if onComplete then onComplete(not wasDestroyed) end
     end
 
+    -- Вылет за край
     if not hex:isActiveHex(toQ, toR) then
-        -- урон от края
         if target:isCharacter() then
             target.health = target.health - 1
             print(target.name .. " is slammed against the edge! Takes 1 damage!")
@@ -146,48 +147,101 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         return
     end
 
-    -- если клетка свободна – запускаем анимацию
-    combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function() finishPush() end)
+    -- Успешное перемещение
+    combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
+        finishPush()
+    end)
 end
 
 -- ============================================================
 -- ТИПЫ АТАК (с поддержкой предпросмотра отталкивания)
 -- ============================================================
-
--- 1. РЫВОК (Dash)
+-- Замените существующий класс DashAttack на этот
 combat.DashAttack = setmetatable({}, combat.Attack)
 combat.DashAttack.__index = combat.DashAttack
+
 function combat.DashAttack.new()
-    local self = combat.Attack.new("Dash", "Charge forward, pushing first target", math.huge, 1, {})
+    local self = combat.Attack.new("Dash", "Charge forward, stop before first entity", math.huge, 1, {})
     return setmetatable(self, combat.DashAttack)
 end
+
+-- Возвращает первую цель, её клетку и последнюю свободную клетку перед целью
+function combat.DashAttack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+    local curQ, curR = attacker.q, attacker.r
+    local lastFreeQ, lastFreeR = curQ, curR
+    local firstTarget = nil
+    local targetHex = nil
+
+    while true do
+        local nextQ, nextR = combat.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if not hex:isActiveHex(nextQ, nextR) then
+            -- Достигли края, последняя свободная клетка – текущая
+            break
+        end
+
+        local occupant = combat.getEntityAtHex(nextQ, nextR, entities)
+        if occupant and occupant ~= attacker then
+            firstTarget = occupant
+            targetHex = {q = nextQ, r = nextR}
+            -- lastFree уже установлена как curQ,curR (клетка перед целью)
+            break
+        end
+
+        -- Клетка свободна, обновляем последнюю свободную
+        lastFreeQ, lastFreeR = nextQ, nextR
+        curQ, curR = nextQ, nextR
+    end
+
+    local lastFree = nil
+    if not (lastFreeQ == attacker.q and lastFreeR == attacker.r) then
+        lastFree = {q = lastFreeQ, r = lastFreeR}
+    end
+
+    return firstTarget, targetHex, lastFree
+end
+
 function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
-    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-    if not firstTarget then return false, "No target in that direction!" end
-    self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds)
-    self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds, function()
-        attacker.hasActedThisTurn = true
-    end)
-    combat.startPushAnimations(hex)   -- <-- добавить
-    attacker.hasActedThisTurn = true
-    return true
-end
--- Предпросмотр: возвращает клетку, куда будет оттолкнут первый враг
-function combat.DashAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then return nil end
-    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+
+    local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+
+    -- Наносим урон первой цели, если она есть
+    if firstTarget then
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds)
+    end
+
+    -- В DashAttack:execute после нахождения firstTarget и targetHex
     if firstTarget and targetHex then
-        local pushQ, pushR = applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-        if hex:isValidHex(pushQ, pushR) then
-            return {q = pushQ, r = pushR}
+        local pushQ, pushR = combat.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+        local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
+        local isEdge = not hex:isActiveHex(pushQ, pushR)
+        if isEdge or occupant then
+            -- Наносим урон немедленно
+            if firstTarget.health > 0 then
+                firstTarget.health = firstTarget.health - 1
+                print(firstTarget.name .. " takes 1 collision damage!")
+                if sounds and sounds.collision then sounds.collision:play() end
+            end
+            if occupant and occupant.health > 0 then
+                occupant.health = occupant.health - 1
+                print(occupant.name .. " takes 1 collision damage!")
+                if sounds and sounds.collision then sounds.collision:play() end
+            end
+            if firstTarget.health <= 0 then combat.removeEntity(firstTarget, entities) end
+            if occupant and occupant.health <= 0 then combat.removeEntity(occupant, entities) end
+            -- Визуальный эффект
+            local effectX, effectY = hex:hexToPixel(targetHex.q, targetHex.r)
+            visual.addEffect(effectX, effectY, "slam")
+            -- Не перемещаем цель
         else
-            return {q = pushQ, r = pushR, edge = true} -- за край
+            -- Безопасное отталкивание
+            self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
         end
     end
-    return nil
+
+    combat.startPushAnimations(hex)
+    return true
 end
 
 -- 2. ПЕРЕВОРОТ (Flip) – без урона, но с перемещением
@@ -324,8 +378,8 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
     if not centerEntity then
         -- Создаём камень (препятствие с 1 HP)
         local stone = Entity.new("Stone", Entity.TYPES.OBSTACLE, targetQ, targetR, 1, false, 0, nil, nil, {})
-        stone.isPushable = false  -- камень не двигается от отталкиваний
-        stone.color = {0.5, 0.5, 0.5, 1}  -- серый цвет (спрайт будет нарисован как круг)
+        stone.isPushable = true  -- камень не двигается от отталкиваний
+        stone.color = {0.5, 0.5, 0.5, 1}
         table.insert(entities, stone)
         print("[Stone] A stone appears at (" .. targetQ .. "," .. targetR .. ")")
     else
@@ -348,25 +402,30 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
             end
         end
     end
-    combat.startPushAnimations(hex)   -- <-- добавить
+    combat.startPushAnimations(hex)
     attacker.hasActedThisTurn = true
     return true
 end
 
--- Предпросмотр: показывает, куда будут отброшены враги
+-- Предпросмотр: возвращает таблицу с pushCell и направлением для каждого врага
 function combat.AoePushAttack:getPushCells(attacker, targetQ, targetR, hex, entities)
     local cells = {}
     local neighbors = hex:getNeighbors(targetQ, targetR)
     for _, neighbor in ipairs(neighbors) do
         if hex:isValidHex(neighbor.q, neighbor.r) then
             local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
-            if target and target:isCharacter() and not target.isPlayable then
+            if target and target:isCharacter() and not target.isPlayable and target.health > 0 then
                 local cX, cY, cZ = axialToCube(targetQ, targetR)
                 local nX, nY, nZ = axialToCube(neighbor.q, neighbor.r)
                 local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
                 local pushQ, pushR = applyCubeStep(neighbor.q, neighbor.r, dirX, dirY, dirZ)
                 local isValid = hex:isValidHex(pushQ, pushR)
-                table.insert(cells, {q = pushQ, r = pushR, edge = not isValid})
+                table.insert(cells, {
+                    target = target,
+                    fromCell = {q = neighbor.q, r = neighbor.r},
+                    pushTo = {q = pushQ, r = pushR, edge = not isValid},
+                    direction = {dx = dirX, dy = dirY, dz = dirZ}
+                })
             end
         end
     end
@@ -423,12 +482,16 @@ function combat.AoeDirectionalAttack:getPushCells(attacker, targetQ, targetR, he
     local neighbors = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
     for _, neighbor in ipairs(neighbors) do
         local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
-        if target then
+        if target and target:isCharacter() and not target.isPlayable then
             local cX, cY, cZ = axialToCube(targetQ, targetR)
             local nX, nY, nZ = axialToCube(neighbor.q, neighbor.r)
             local dX, dY, dZ = nX - cX, nY - cY, nZ - cZ
             local pushQ, pushR = applyCubeStep(neighbor.q, neighbor.r, dX, dY, dZ)
-            table.insert(cells, {q = pushQ, r = pushR, edge = not hex:isValidHex(pushQ, pushR)})
+            table.insert(cells, {
+                target = target,
+                fromCell = {q = neighbor.q, r = neighbor.r},
+                pushTo = {q = pushQ, r = pushR, edge = not hex:isValidHex(pushQ, pushR)}
+            })
         end
     end
     return cells
@@ -826,5 +889,7 @@ function combat.addShakeAnimation(obj, q, r)
         onComplete = function() end
     })
 end
+
+combat.applyCubeStep = applyCubeStep
 
 return combat

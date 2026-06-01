@@ -3,6 +3,9 @@
 
 local ui = {}
 local pathfinding = require("pathfinding")
+local combat = require("combat")
+local applyCubeStep = combat.applyCubeStep   -- получаем функцию из combat.lua
+local visual = require("visual_effects")    -- если ещё нет
 -- Преобразования для pointy-top (как в combat.lua)
 local function axialToCube(q, r)
     local x = q - (r - (r % 2)) / 2
@@ -262,6 +265,82 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
     -- Анализируем тип атаки и получаем детали предпросмотра
     local previewData = nil
 
+    -- Flip обрабатываем отдельно, чтобы не было ложных срабатываний
+if attack.name == "Flip" then
+    local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+    if distance == 1 then
+        local target = getEntityAtHex(hoverQ, hoverR, entities)
+        if target then
+            local pushCell = attack:getPushCell(attacker, hoverQ, hoverR, hex, entities)
+            if pushCell then
+                -- Подсветка цели
+                local fromX, fromY = hex:hexToPixel(target.q, target.r)
+                local vertices = hex:drawHexagon(fromX, fromY, hex.radius)
+                love.graphics.setColor(1, 0.5, 0, 0.3)
+                love.graphics.polygon("fill", vertices)
+                love.graphics.setColor(1, 0.7, 0, 0.8)
+                love.graphics.polygon("line", vertices)
+                -- Стрелка переворота
+                local toX, toY = hex:hexToPixel(pushCell.q, pushCell.r)
+                ui.drawPushArrow(fromX, fromY, toX, toY)
+                return
+            end
+        end
+    end
+    -- Если цель вне радиуса 1 – ничего не рисуем
+    return
+end
+
+
+if attack.name == "Dash" then
+    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+    if stepX then
+        local firstTarget, targetHex, lastFree = attack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+        
+        -- Рисуем путь (стрелку) от атакующего до lastFree
+        if lastFree then
+            local fromX, fromY = hex:hexToPixel(attacker.q, attacker.r)
+            local toX, toY = hex:hexToPixel(lastFree.q, lastFree.r)
+            ui.drawPushArrow(fromX, fromY, toX, toY)
+            -- Силуэт атакующего на целевой клетке
+            local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
+            local alpha = 0.3 + 0.4 * pulse
+            if attacker.sprite then
+                love.graphics.setColor(1, 1, 1, alpha)
+                local sw, sh = attacker.sprite:getDimensions()
+                local scale = 5.9
+                love.graphics.draw(attacker.sprite, toX, toY, 0, scale, scale, sw/2, sh/2)
+            else
+                love.graphics.setColor(0.2, 0.8, 0.2, alpha)
+                love.graphics.circle("fill", toX, toY, hex.radius * 0.5)
+            end
+        end
+
+        -- Урон по первой цели
+        if firstTarget then
+            local targetX, targetY = hex:hexToPixel(firstTarget.q, firstTarget.r)
+            ui.drawDamageIcon(targetX + 20, targetY - 20, attack.damage or 1)
+            
+            -- Проверяем возможность отталкивания
+            if targetHex then
+                local pushQ, pushR = combat.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+                if hex:isActiveHex(pushQ, pushR) and not combat.getEntityAtHex(pushQ, pushR, entities) then
+                    local pushX, pushY = hex:hexToPixel(pushQ, pushR)
+                    ui.drawPushArrow(targetX, targetY, pushX, pushY)
+                else
+                    -- Отображаем, что отталкивание невозможно
+                    local blockX, blockY = hex:hexToPixel(pushQ, pushR)
+                    love.graphics.setColor(1, 0, 0, 0.8)
+                    love.graphics.circle("fill", blockX, blockY, hex.radius * 0.3)
+                    love.graphics.setColor(1, 1, 1, 1)
+                    love.graphics.print("✗", blockX - 4, blockY - 6)
+                end
+            end
+        end
+        return
+    end
+end
+
     -- Dash, Shoot, Flip (одиночные цели с одним отталкиванием)
     if attack.getPushCell then
         local pushCell = attack:getPushCell(attacker, hoverQ, hoverR, hex, entities)
@@ -393,23 +472,6 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
             end
         end
     end
-
-    -- Flip – перемещение без урона
-    if not previewData and attack.name == "Flip" then
-        local target = getEntityAtHex(hoverQ, hoverR, entities)
-        if target and hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR) == 1 then
-            local pushCell = attack:getPushCell(attacker, hoverQ, hoverR, hex, entities)
-            if pushCell then
-                previewData = {{
-                    target = target,
-                    fromCell = {q = target.q, r = target.r},
-                    pushTo = pushCell,
-                    attackDamage = 0,
-                }}
-            end
-        end
-    end
-
     -- Если нет данных превью, выходим
     if not previewData or #previewData == 0 then
         return
@@ -920,6 +982,14 @@ function ui.drawWindTorrentButton(windTorrent, windTorrentUI, turnState)
     love.graphics.rectangle("fill", windTorrentUI.button.x, windTorrentUI.button.y, windTorrentUI.button.width, windTorrentUI.button.height, 5)
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.print("🌬️ Wind Torrent", windTorrentUI.button.x + 5, windTorrentUI.button.y + 8)
+end
+
+function ui.drawRestartButton(button, turnState)
+    local canRestart = (turnState.phase == "player") or true  -- можно в любой момент
+    love.graphics.setColor(0.4, 0.2, 0.6, 0.8)
+    love.graphics.rectangle("fill", button.x, button.y, button.width, button.height, 5)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(button.text, button.x + 15, button.y + 8)
 end
 
 return ui

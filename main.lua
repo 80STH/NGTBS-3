@@ -1,4 +1,4 @@
--- main.lua
+﻿-- main.lua
 combat = require("combat") --почему для этого нужна переменная?
 ai = require("ai")
 require("hexgrid")
@@ -21,7 +21,10 @@ function love.load()
     selectedAttack = nil   -- текущая выбранная атака (объект)
     attackMode = false
     attackButtons = {}     -- кнопки атак для текущего персонажа
-
+    restartButton = {
+        x = 10, y = 320, width = 120, height = 30,
+        text = "Restart Game", isHovered = false
+    }
     sti = require 'libraries/sti'
     local hexStatuses
     terrainMap, entities, width, height, hexStatuses = environment.loadMapFromTiled('maps/map1.lua')
@@ -214,6 +217,13 @@ function love.mousepressed(x, y, button)
         else
             print("Wind Torrent not available")
         end
+        return
+    end
+
+        -- Кнопка Restart
+    if x >= restartButton.x and x <= restartButton.x + restartButton.width and
+       y >= restartButton.y and y <= restartButton.y + restartButton.height then
+        restartGame()
         return
     end
 
@@ -1078,6 +1088,7 @@ function love.draw()
     end
     ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
     ui.drawEndTurnButton(turnState, entities)
+    ui.drawRestartButton(restartButton, turnState)
     ui.drawWindTorrentButton(windTorrent, windTorrentUI, turnState)
     ui.drawGlobalHealthBar(globalHealth)
     ui.drawAttackPanel(selectedActor, attackButtons, selectedAttack, attackMode) -- <-- добавлено
@@ -1188,6 +1199,90 @@ function getCurrentAttack(actor)
         return nil
     end
     return actor.attacks[actor.currentAttackIndex].attack
+end
+
+function restartGame()
+    print("=== RESTARTING GAME ===")
+    
+    -- Загружаем карту заново
+    local hexStatuses
+    terrainMap, entities, width, height, hexStatuses = environment.loadMapFromTiled('maps/map1.lua')
+    
+    -- Пересоздаём hex-сетку (размеры могли не измениться, но лучше пересоздать)
+    hex = require("hexgrid").new(
+        config.HEX_RADIUS,
+        width, height,
+        config.ACTIVE_RADIUS,
+        config.CENTER_Q,
+        config.CENTER_R
+    )
+    hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
+    
+    -- Сбрасываем статусы на карте
+    status.initHexStatuses(hexStatuses)
+    
+    -- Сброс глобального здоровья
+    globalHealth = { current = 5, max = 5, initial = 5 }
+    
+    -- Сброс состояния игры
+    turnState = {
+        phase = "enemy_prepare",
+        enemyPrepareQueue = {},
+        currentPreparingEnemy = nil,
+        enemyAttackQueue = {},
+        enemyAttackTimer = 0,
+        delayBetweenAttacks = 0.4
+    }
+    
+    -- Инициализация врагов (сброс флагов)
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable then
+            e.hasPreparedAttack = false
+            e.preparePos = nil
+            e.preparedTarget = nil
+            e.movementFinished = false
+            e.isMoving = false
+            e.path = {}
+            e.currentPathIndex = 0
+        end
+    end
+    
+    -- Выбираем первого союзника
+    selectedActor = nil
+    for _, a in ipairs(entities) do
+        if a.isPlayable and a.health > 0 then
+            selectedActor = a
+            hex.selectedQ, hex.selectedR = a.q, a.r
+            break
+        end
+    end
+    
+    -- Сброс флагов действий для союзников
+    for _, a in ipairs(entities) do
+        if a.isPlayable then
+            a.hasActedThisTurn = false
+            a.hasMovedThisTurn = false
+        end
+    end
+    
+    -- Сброс глобального заклинания ветра
+    windTorrent = combat.WindTorrentAttack.new()
+    
+    -- Сброс UI
+    attackMode = false
+    selectedAttack = nil
+    attackButtons = {}
+    actionHistory = {}
+    pushAnimations = { queue = {}, active = false }
+    visual.effects = {}  -- очищаем визуальные эффекты
+    
+    -- Обновляем кнопки атак для выбранного персонажа
+    updateAttackButtons(selectedActor)
+    
+    -- Запускаем фазу подготовки врагов
+    startEnemyPreparePhase()
+    
+    print("=== GAME RESTARTED ===")
 end
 
 -- Атака очищает историю движений
