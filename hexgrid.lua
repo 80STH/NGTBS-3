@@ -141,39 +141,49 @@ function HexGrid:centerOnScreen(screenWidth, screenHeight)
     self.offsetY = (screenHeight - mapHeight) / 2
 end
 
+-- hexgrid.lua (заменить функцию drawTerrainHex)
 function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
     local radius = self.radius
-    local extrude = 1  -- высота "бортика" вниз
+    local extrude = 24  -- высота "бортика" (увеличена для лучшего 3D-эффекта)
 
     -- Цвета в зависимости от типа местности
-    local topColor, sideColor
+    local topColor, sideColor, edgeColor
     if terrainType == "grass" then
-        topColor = {0.4, 0.7, 0.2, 1}
-        sideColor = {0.2, 0.5, 0.1, 1}
+        topColor = {0.35, 0.65, 0.2, 1}
+        sideColor = {0.2, 0.45, 0.1, 1}
+        edgeColor = {0.15, 0.4, 0.05, 1}
     elseif terrainType == "water" then
-        topColor = {0.2, 0.5, 0.8, 1}
-        sideColor = {0.1, 0.3, 0.6, 1}
+        topColor = {0.2, 0.5, 0.85, 1}
+        sideColor = {0.1, 0.35, 0.65, 1}
+        edgeColor = {0.05, 0.25, 0.5, 1}
     elseif terrainType == "lava" then
-        topColor = {0.9, 0.4, 0.1, 1}
-        sideColor = {0.6, 0.2, 0.05, 1}
+        topColor = {0.95, 0.45, 0.1, 1}
+        sideColor = {0.7, 0.3, 0.05, 1}
+        edgeColor = {0.5, 0.2, 0.0, 1}
     elseif terrainType == "stone" then
-        topColor = {0.5, 0.5, 0.5, 1}
-        sideColor = {0.3, 0.3, 0.3, 1}
+        topColor = {0.55, 0.55, 0.55, 1}
+        sideColor = {0.4, 0.4, 0.4, 1}
+        edgeColor = {0.3, 0.3, 0.3, 1}
     elseif terrainType == "sand" then
-        topColor = {0.9, 0.8, 0.6, 1}
-        sideColor = {0.7, 0.6, 0.4, 1}
+        topColor = {0.9, 0.85, 0.6, 1}
+        sideColor = {0.7, 0.65, 0.4, 1}
+        edgeColor = {0.5, 0.45, 0.25, 1}
     elseif terrainType == "dirt" then
-        topColor = {0.6, 0.4, 0.2, 1}
-        sideColor = {0.4, 0.3, 0.1, 1}
+        topColor = {0.65, 0.45, 0.25, 1}
+        sideColor = {0.5, 0.35, 0.15, 1}
+        edgeColor = {0.35, 0.25, 0.1, 1}
     elseif terrainType == "snow" then
         topColor = {0.9, 0.95, 1, 1}
-        sideColor = {0.7, 0.75, 0.8, 1}
+        sideColor = {0.7, 0.75, 0.85, 1}
+        edgeColor = {0.55, 0.6, 0.7, 1}
     elseif terrainType == "swamp" then
-        topColor = {0.4, 0.6, 0.3, 1}
+        topColor = {0.45, 0.65, 0.35, 1}
         sideColor = {0.3, 0.5, 0.2, 1}
+        edgeColor = {0.2, 0.4, 0.15, 1}
     else -- emptiness или дефолт
-        topColor = {0.3, 0.3, 0.3, 1}
-        sideColor = {0.2, 0.2, 0.2, 1}
+        topColor = {0.35, 0.35, 0.35, 1}
+        sideColor = {0.25, 0.25, 0.25, 1}
+        edgeColor = {0.15, 0.15, 0.15, 1}
     end
 
     -- Верхняя грань (основание)
@@ -186,7 +196,7 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
         bottomVertices[i+1] = topVertices[i+1] + extrude
     end
 
-    -- 1. Боковые грани (от основания вниз)
+    -- 1. Боковые грани (от основания вниз) с затемнением к низу
     love.graphics.setColor(sideColor)
     local n = #topVertices / 2
     for i = 1, n do
@@ -200,12 +210,38 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
         love.graphics.polygon("fill", x1, y1, x3, y3, x4, y4)
     end
 
-    -- 2. Верхняя грань (основание) – рисуем поверх боковых граней
+    -- 2. Боковые грани – добавим тёмную обводку для резкости
+    love.graphics.setColor(edgeColor)
+    love.graphics.setLineWidth(1.5)
+    for i = 1, n do
+        local next_i = i % n + 1
+        local x1, y1 = bottomVertices[(i-1)*2+1], bottomVertices[(i-1)*2+2]
+        local x2, y2 = bottomVertices[(next_i-1)*2+1], bottomVertices[(next_i-1)*2+2]
+        love.graphics.line(x1, y1, x2, y2)
+    end
+
+    -- 3. Верхняя грань – рисуем поверх боковых граней, добавляем свечение сверху
     love.graphics.setColor(topColor)
     love.graphics.polygon("fill", topVertices)
 
-    -- 3. Обводка (опционально)
-    love.graphics.setColor(0, 0, 0, 0.6)
+    -- 4. Лёгкий градиент на верхней грани (полупрозрачная заливка от центра)
+    love.graphics.setColor(1, 1, 1, 0.15)
+    love.graphics.polygon("fill", topVertices)
+
+    -- 5. Обводка верхней грани
+    love.graphics.setColor(0, 0, 0, 0.5)
+    love.graphics.setLineWidth(1.2)
     love.graphics.polygon("line", topVertices)
+
+    -- 6. Тень под клеткой (чёрный полупрозрачный многоугольник, смещённый вниз)
+    love.graphics.setColor(0, 0, 0, 0.25)
+    local shadowVertices = {}
+    for i = 1, #topVertices, 2 do
+        shadowVertices[i] = topVertices[i] + 2
+        shadowVertices[i+1] = topVertices[i+1]
+    end
+    love.graphics.polygon("fill", shadowVertices)
+
+    love.graphics.setLineWidth(1)
 end
 return HexGrid

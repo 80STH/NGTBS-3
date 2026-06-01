@@ -4,7 +4,50 @@
 local ai = {}
 local pathfinding = require("pathfinding")
 
+-- Преобразования для pointy-top (как в combat.lua)
+local function axialToCube(q, r)
+    local x = q - (r - (r % 2)) / 2
+    local z = r
+    local y = -x - z
+    return x, y, z
+end
+
+local function cubeToAxial(x, y, z)
+    local q = x + (z - (z % 2)) / 2
+    local r = z
+    return q, r
+end
+
 ai.DEBUG = true
+
+-- Проверка, лежит ли цель на одной из шести прямых от источника (включая любую дистанцию)
+local function isOnStraightLine(fromQ, fromR, toQ, toR, hex)
+    local fx, fy, fz = axialToCube(fromQ, fromR)
+    local tx, ty, tz = axialToCube(toQ, toR)
+    local dx, dy, dz = tx - fx, ty - fy, tz - fz
+
+    -- Нормализация до единичного шага (одно из направлений)
+    local function gcd(a, b)
+        a = math.abs(a); b = math.abs(b)
+        while b ~= 0 do a, b = b, a % b end
+        return a
+    end
+    local g = gcd(gcd(dx, dy), dz)
+    if g == 0 then return false end
+    local stepX, stepY, stepZ = dx / g, dy / g, dz / g
+
+    -- Проверяем, что это один из шести базовых векторов
+    local validDirections = {
+        {1, -1, 0}, {1, 0, -1}, {0, 1, -1},
+        {-1, 1, 0}, {-1, 0, 1}, {0, -1, 1}
+    }
+    for _, dir in ipairs(validDirections) do
+        if stepX == dir[1] and stepY == dir[2] and stepZ == dir[3] then
+            return true
+        end
+    end
+    return false
+end
 
 local function debugPrint(...)
     if ai.DEBUG then
@@ -32,7 +75,7 @@ function ai.getDistanceToNearestPlayer(enemy, entities, hex)
     end
     return best
 end
--- Подготовка удара для одного врага (вызывается после движения или если уже рядом)
+-- Подготовка удара (теперь с проверкой прямой линии)
 function ai.prepareAttackForEnemy(enemy, entities, hex)
     if not enemy:isCharacter() or enemy.isPlayable or enemy.health <= 0 then
         return false
@@ -41,39 +84,63 @@ function ai.prepareAttackForEnemy(enemy, entities, hex)
         return false
     end
 
-    local nearestAlly = nil
-    local nearestDist = math.huge
+    -- Ищем ближайшего живого игрока, лежащего на прямой линии от врага
+    local bestTarget = nil
+    local bestDist = math.huge
     for _, e in ipairs(entities) do
         if e:isCharacter() and e.isPlayable and e.health > 0 then
             local dist = hex:getDistance(enemy.q, enemy.r, e.q, e.r)
-            if dist < nearestDist then
-                nearestDist = dist
-                nearestAlly = e
+            if dist < bestDist and isOnStraightLine(enemy.q, enemy.r, e.q, e.r, hex) then
+                bestDist = dist
+                bestTarget = e
             end
         end
     end
 
-    if not nearestAlly then
+    if not bestTarget then
+        debugPrint(string.format("%s cannot prepare: no valid target on straight line", enemy.name))
         return false
     end
 
-    enemy.preparePos = { q = enemy.q, r = enemy.r }
-    enemy.preparedTarget = { q = nearestAlly.q, r = nearestAlly.r }
+    -- Вычисляем направление в кубических координатах
+    local ex, ey, ez = axialToCube(enemy.q, enemy.r)
+    local tx, ty, tz = axialToCube(bestTarget.q, bestTarget.r)
+    local dx, dy, dz = tx - ex, ty - ey, tz - ez
+
+    -- Нормализуем до единичного шага
+    local function gcd(a, b)
+        a = math.abs(a); b = math.abs(b)
+        while b ~= 0 do a, b = b, a % b end
+        return a
+    end
+    local g = gcd(gcd(dx, dy), dz)
+    dx, dy, dz = dx / g, dy / g, dz / g
+
+    enemy.attackDirection = { dx = dx, dy = dy, dz = dz }
     enemy.hasPreparedAttack = true
-    debugPrint(string.format("%s prepared attack on (%d,%d)", enemy.name, nearestAlly.q, nearestAlly.r))
+
+    debugPrint(string.format("%s prepared attack in direction (%d,%d,%d)", enemy.name, dx, dy, dz))
     return true
 end
 
--- Выполнить подготовленный удар (фаза enemy_attack)
+-- Выполнить подготовленный удар
 function ai.executePreparedAttack(enemy, entities, hex, sounds)
     if not enemy.hasPreparedAttack or enemy.health <= 0 then
         return false
     end
 
-    local deltaQ = enemy.q - enemy.preparePos.q
-    local deltaR = enemy.r - enemy.preparePos.r
-    local targetQ = enemy.preparedTarget.q + deltaQ
-    local targetR = enemy.preparedTarget.r + deltaR
+    local dir = enemy.attackDirection
+    if not dir then
+        enemy.hasPreparedAttack = false
+        return false
+    end
+
+    -- Текущие кубические координаты врага
+    local curX, curY, curZ = axialToCube(enemy.q, enemy.r)
+    local targetX = curX + dir.dx
+    local targetY = curY + dir.dy
+    local targetZ = curZ + dir.dz
+    local targetQ, targetR = cubeToAxial(targetX, targetY, targetZ)
 
     if not hex:isValidHex(targetQ, targetR) then
         debugPrint(enemy.name .. " attack misses (outside map)")
@@ -83,14 +150,10 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
 
     local victim = nil
     for _, e in ipairs(entities) do
-        if e.q == targetQ and e.r == targetR then
+        if e.q == targetQ and e.r == targetR and e:isCharacter() and e.isPlayable and e.health > 0 then
             victim = e
             break
         end
-    end
-
-    if victim and victim:isCharacter() and not victim.isPlayable then
-        victim = nil
     end
 
     if victim then
@@ -110,8 +173,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
     end
 
     enemy.hasPreparedAttack = false
-    enemy.preparePos = nil
-    enemy.preparedTarget = nil
+    enemy.attackDirection = nil
     return true
 end
 

@@ -3,7 +3,19 @@
 
 local ui = {}
 local pathfinding = require("pathfinding")
+-- Преобразования для pointy-top (как в combat.lua)
+local function axialToCube(q, r)
+    local x = q - (r - (r % 2)) / 2
+    local z = r
+    local y = -x - z
+    return x, y, z
+end
 
+local function cubeToAxial(x, y, z)
+    local q = x + (z - (z % 2)) / 2
+    local r = z
+    return q, r
+end
 
 -- ============================================================
 -- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПРЕДПРОСМОТРА АТАК
@@ -205,12 +217,19 @@ end
 
 function ui.drawPreparedAttacks(hex, entities)
     for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.preparedTarget then
-            local x, y = hex:hexToPixel(e.preparedTarget.q, e.preparedTarget.r)
+        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.attackDirection then
+            local dir = e.attackDirection
+            local curX, curY, curZ = axialToCube(e.q, e.r)
+            local targetX = curX + dir.dx
+            local targetY = curY + dir.dy
+            local targetZ = curZ + dir.dz
+            local targetQ, targetR = cubeToAxial(targetX, targetY, targetZ)
+            if not hex:isValidHex(targetQ, targetR) then goto continue end
+            
+            local x, y = hex:hexToPixel(targetQ, targetR)
             local radius = hex.radius
             local vertices = hex:drawHexagon(x, y, radius)
             
-            -- Обрезаем текстуру по форме гекса
             love.graphics.stencil(function()
                 love.graphics.polygon("fill", vertices)
             end, "replace", 1)
@@ -224,9 +243,9 @@ function ui.drawPreparedAttacks(hex, entities)
             
             love.graphics.setStencilTest()
             
-            -- Иконка атаки поверх
             love.graphics.setColor(1, 1, 1, 1)
             love.graphics.print("⚔", x - 6, y - 8)
+            ::continue::
         end
     end
 end
@@ -456,17 +475,14 @@ function ui.drawMovementRange(hex, actor, entities, terrainMap)
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) then
-                local dist = hex:getDistance(actor.q, actor.r, q, r)
-                if dist <= actor.moveRange and dist > 0 then
-                    -- Подсвечиваем только свободные клетки (не занятые никем)
-                    if not isCellOccupiedForStop(q, r, actor) and isCellPassable(q, r, actor) then
-                        local x, y = hex:hexToPixel(q, r)
-                        local vertices = hex:drawHexagon(x, y, hex.radius)
-                        love.graphics.setColor(0.2, 0.8, 0.2, 0.2)
-                        love.graphics.polygon("fill", vertices)
-                        love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
-                        love.graphics.polygon("line", vertices)
-                    end
+                -- Используем isCellReachable для проверки достижимости
+                if ui.isCellReachable(actor, q, r, entities, terrainMap, hex) then
+                    local x, y = hex:hexToPixel(q, r)
+                    local vertices = hex:drawHexagon(x, y, hex.radius)
+                    love.graphics.setColor(0.2, 0.8, 0.2, 0.2)
+                    love.graphics.polygon("fill", vertices)
+                    love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
+                    love.graphics.polygon("line", vertices)
                 end
             end
         end
@@ -693,11 +709,17 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
     local prepareHeight = 0
     local prepareText = nil
     
-    if entity.hasPreparedAttack and entity.preparePos and entity.preparedTarget then
+    if entity.hasPreparedAttack and entity.preparePosCube and entity.preparedTargetCube then
         prepareHeight = 20
-        local fromQ, fromR = entity.preparePos.q, entity.preparePos.r
-        local toQ, toR = entity.preparedTarget.q, entity.preparedTarget.r
-        prepareText = string.format("⚔ Prepares: (%d,%d) → (%d,%d) for 1 dmg", fromQ, fromR, toQ, toR)
+        local curX, curY, curZ = axialToCube(entity.q, entity.r)
+        local deltaX = curX - entity.preparePosCube.x
+        local deltaY = curY - entity.preparePosCube.y
+        local deltaZ = curZ - entity.preparePosCube.z
+        local targetX = entity.preparedTargetCube.x + deltaX
+        local targetY = entity.preparedTargetCube.y + deltaY
+        local targetZ = entity.preparedTargetCube.z + deltaZ
+        local targetQ, targetR = cubeToAxial(targetX, targetY, targetZ)
+        prepareText = string.format("⚔ Prepares: (%d,%d) → (%d,%d) for 1 dmg", entity.q, entity.r, targetQ, targetR)
     end
     
     local panelHeight = titleHeight + debuffsHeight + terrainHeight + prepareHeight
@@ -728,14 +750,18 @@ function ui.drawTerrainOnlyTooltip(terrain, x, y)
     love.graphics.print("Terrain: " .. terrain, x + 8, y + 8)
 end
 
--- Отрисовка стрелки подготовленной атаки (при ховере)
 function ui.drawPreparedAttackDirection(hex, enemy, time)
-    if not enemy.hasPreparedAttack or not enemy.preparePos or not enemy.preparedTarget then
-        return
-    end
+    if not enemy.hasPreparedAttack or not enemy.attackDirection then return end
+    local dir = enemy.attackDirection
+    local curX, curY, curZ = axialToCube(enemy.q, enemy.r)
+    local targetX = curX + dir.dx
+    local targetY = curY + dir.dy
+    local targetZ = curZ + dir.dz
+    local targetQ, targetR = cubeToAxial(targetX, targetY, targetZ)
+    if not hex:isValidHex(targetQ, targetR) then return end
     
-    local fromX, fromY = hex:hexToPixel(enemy.preparePos.q, enemy.preparePos.r)
-    local toX, toY = hex:hexToPixel(enemy.preparedTarget.q, enemy.preparedTarget.r)
+    local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
+    local toX, toY = hex:hexToPixel(targetQ, targetR)
     
     local angle = math.atan2(toY - fromY, toX - fromX)
     local arrowSize = 18
@@ -765,6 +791,135 @@ function ui.drawPreparedAttackDirection(hex, enemy, time)
         endY + math.sin(rightAngle) * arrowSize)
     
     love.graphics.setLineWidth(1)
+end
+
+-- Предпросмотр Wind Torrent: рисует стрелки от каждого подвижного объекта к его новому положению
+function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
+    -- Копируем логику из combat.WindTorrentAttack:executeGlobalWithAnimation
+    local stepMap = {
+        E  = {dx = 1, dy = -1, dz = 0},
+        NE = {dx = 1, dy = 0, dz = -1},
+        NW = {dx = 0, dy = 1, dz = -1},
+        W  = {dx = -1, dy = 1, dz = 0},
+        SW = {dx = -1, dy = 0, dz = 1},
+        SE = {dx = 0, dy = -1, dz = 1},
+    }
+    local step = stepMap[direction]
+    if not step then return end
+
+    local function axialToCube(q, r)
+        local x = q - (r - (r % 2)) / 2
+        local z = r
+        local y = -x - z
+        return x, y, z
+    end
+    local function cubeToAxial(x, y, z)
+        local q = x + (z - (z % 2)) / 2
+        local r = z
+        return q, r
+    end
+    local function applyStep(q, r)
+        local x, y, z = axialToCube(q, r)
+        return cubeToAxial(x + step.dx, y + step.dy, z + step.dz)
+    end
+    local function isValid(q, r) return hex:isActiveHex(q, r) end
+
+    -- Собираем подвижные объекты
+    local movableObjects = {}
+    for _, entity in ipairs(entities) do
+        if entity.isPushable then
+            table.insert(movableObjects, entity)
+        end
+    end
+
+    -- Сортировка по дальности вдоль направления (чтобы имитировать порядок обработки)
+    table.sort(movableObjects, function(a, b)
+        local function getProjection(obj)
+            local x, y, z = axialToCube(obj.q, obj.r)
+            return x * step.dx + y * step.dy + z * step.dz
+        end
+        return getProjection(a) > getProjection(b)
+    end)
+
+    -- Карта неподвижных объектов
+    local immovableMap = {}
+    for _, entity in ipairs(entities) do
+        if not entity.isPushable then
+            local key = entity.q .. "," .. entity.r
+            immovableMap[key] = entity
+        end
+    end
+
+    -- Карта занятости для предпросмотра
+    local targetMap = {}
+    local previewData = {} -- { fromX, fromY, toX, toY, damage, collisionWith }
+
+    for _, obj in ipairs(movableObjects) do
+        local newQ, newR = applyStep(obj.q, obj.r)
+        local fromX, fromY = hex:hexToPixel(obj.q, obj.r)
+        local toX, toY = hex:hexToPixel(newQ, newR)
+        local damage = 0
+        local collisionTarget = nil
+
+        if not isValid(newQ, newR) then
+            -- Вылет за край
+            damage = 1
+            -- рисуем стрелку до края (toX,toY) уже за пределами? можно до границы карты, но проще нарисовать стрелку до ближайшей точки
+            table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isEdge=true})
+        else
+            -- Проверка неподвижного объекта
+            local immovableKey = newQ .. "," .. newR
+            if immovableMap[immovableKey] then
+                damage = 1
+                table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true})
+            else
+                -- Проверка коллизии с другим подвижным (уже обработанным)
+                local key = newQ .. "," .. newR
+                if targetMap[key] then
+                    -- Столкновение двух подвижных
+                    damage = 1
+                    collisionTarget = targetMap[key]
+                    table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true, doubleDamage=true})
+                    -- Добавляем также урон для уже записанного объекта (добавим позже)
+                else
+                    targetMap[key] = obj
+                    table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=0})
+                end
+            end
+        end
+    end
+
+    -- Рисуем стрелки и иконки урона
+    for _, pd in ipairs(previewData) do
+        ui.drawPushArrow(pd.fromX, pd.fromY, pd.toX, pd.toY)
+        if pd.damage > 0 then
+            if pd.isEdge then
+                ui.drawCollisionIcon(pd.toX, pd.toY, 1, false)
+            elseif pd.isCollision then
+                ui.drawCollisionIcon(pd.toX, pd.toY, 1, pd.doubleDamage or false)
+            end
+        end
+    end
+
+        -- Подсветка клеток назначения
+    for _, pd in ipairs(previewData) do
+        local q, r = hex:pixelToHex(pd.toX, pd.toY)
+        if hex:isValidHex(q, r) then
+            local vertices = hex:drawHexagon(pd.toX, pd.toY, hex.radius)
+            love.graphics.setColor(0.3, 0.6, 1, 0.4)
+            love.graphics.polygon("fill", vertices)
+            love.graphics.setColor(0.3, 0.6, 1, 0.8)
+            love.graphics.polygon("line", vertices)
+        end
+    end
+end
+
+function ui.drawWindTorrentButton(windTorrent, windTorrentUI, turnState)
+    local available = (turnState.phase == "player" and windTorrent and not windTorrent.hasBeenUsed)
+    love.graphics.setColor(available and 0.2 or 0.5, 0.6, 0.8, 0.8)
+    love.graphics.rectangle("fill", windTorrentUI.button.x, windTorrentUI.button.y, windTorrentUI.button.width, windTorrentUI.button.height, 5)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print("🌬️ Wind Torrent", windTorrentUI.button.x + 5, windTorrentUI.button.y + 8)
 end
 
 return ui

@@ -16,11 +16,6 @@ pushAnimations = pushAnimations or { queue = {}, active = false }
 DEBUG_COMBAT = true
 
 windTorrent = nil
-windTorrentUI = {
-    active = false,
-    button = { x = 10, y = 240, width = 120, height = 30 },
-    directions = {}
-}
 
 function love.load()
     selectedAttack = nil   -- текущая выбранная атака (объект)
@@ -37,6 +32,11 @@ function love.load()
         config.CENTER_Q,
         config.CENTER_R
     )
+
+    windTorrentUI = {
+        active = false,
+        button = { x = 10, y = 240, width = 120, height = 30 }
+    }
     hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
 
     -- Инициализируем глобальную таблицу статусов:
@@ -107,22 +107,22 @@ function love.load()
     -- Создаём глобальное заклинание ветра
     windTorrent = combat.WindTorrentAttack.new()
 
-    -- Инициализация UI ветра (позиции кнопок направлений)
-    local startX = love.graphics.getWidth() - 160
-    local startY = 100
-    local dirIndex = 1
-    -- Новый порядок для flat-top: восток, северо-восток, северо-запад, запад, юго-запад, юго-восток
-    local dirOrder = {"E", "NE", "NW", "W", "SW", "SE"}
-    for _, dirName in ipairs(dirOrder) do
-        local row = math.floor((dirIndex - 1) / 2)
-        local col = (dirIndex - 1) % 2
-        windTorrentUI.directions[dirName] = {
-            x = startX + col * 75,
-            y = startY + row * 35,
-            name = dirName
-        }
-        dirIndex = dirIndex + 1
-    end
+    -- -- Инициализация UI ветра (позиции кнопок направлений)
+    -- local startX = love.graphics.getWidth() - 160
+    -- local startY = 100
+    -- local dirIndex = 1
+    -- -- Новый порядок для flat-top: восток, северо-восток, северо-запад, запад, юго-запад, юго-восток
+    -- local dirOrder = {"E", "NE", "NW", "W", "SW", "SE"}
+    -- for _, dirName in ipairs(dirOrder) do
+    --     local row = math.floor((dirIndex - 1) / 2)
+    --     local col = (dirIndex - 1) % 2
+    --     windTorrentUI.directions[dirName] = {
+    --         x = startX + col * 75,
+    --         y = startY + row * 35,
+    --         name = dirName
+    --     }
+    --     dirIndex = dirIndex + 1
+    -- end
     
     windTorrentUI.button = { x = 10, y = 240, width = 120, height = 30, isHovered = false }
 end
@@ -149,6 +149,50 @@ function updateAttackButtons(actor)
     end
 end
 
+-- Определяет направление ветра по координатам клетки относительно центра (5,5)
+function getWindDirectionFromHex(q, r, centerQ, centerR, hex)
+    local function axialToCube(q, r)
+        local x = q - (r - (r % 2)) / 2
+        local z = r
+        local y = -x - z
+        return x, y, z
+    end
+    
+    local cx, cy, cz = axialToCube(centerQ, centerR)
+    local x, y, z = axialToCube(q, r)
+    local dx, dy, dz = x - cx, y - cy, z - cz
+    
+    if dx == 0 and dy == 0 and dz == 0 then
+        return nil
+    end
+    
+    local absDx, absDy, absDz = math.abs(dx), math.abs(dy), math.abs(dz)
+    local maxVal = math.max(absDx, absDy, absDz)
+    
+    local ndx = math.floor(dx / maxVal + 0.5)
+    local ndy = math.floor(dy / maxVal + 0.5)
+    local ndz = math.floor(dz / maxVal + 0.5)
+    
+    if ndx + ndy + ndz ~= 0 then
+        return nil
+    end
+    
+    local directionMap = {
+        {dx=1, dy=-1, dz=0, name="E"},
+        {dx=1, dy=0, dz=-1, name="NE"},
+        {dx=0, dy=1, dz=-1, name="NW"},
+        {dx=-1, dy=1, dz=0, name="W"},
+        {dx=-1, dy=0, dz=1, name="SW"},
+        {dx=0, dy=-1, dz=1, name="SE"},
+    }
+    for _, dir in ipairs(directionMap) do
+        if dir.dx == ndx and dir.dy == ndy and dir.dz == ndz then
+            return dir.name
+        end
+    end
+    return nil
+end
+
 -- Изменить love.mousepressed (удалить button == 2, добавить обработку кнопок атак и режима атаки)
 function love.mousepressed(x, y, button)
     if button == 1 then
@@ -156,49 +200,53 @@ function love.mousepressed(x, y, button)
         -- 1. СНАЧАЛА проверяем ВСЕ UI-кнопки (не зависят от гексов)
         -- ======================================================
 
-        -- Кнопка Wind Torrent
-        if x >= windTorrentUI.button.x and x <= windTorrentUI.button.x + windTorrentUI.button.width and
-           y >= windTorrentUI.button.y and y <= windTorrentUI.button.y + windTorrentUI.button.height then
-            if turnState.phase == "player" and windTorrent and not windTorrent.hasBeenUsed then
-                windTorrentUI.active = true
-                print("Select wind direction...")
-            elseif windTorrent and windTorrent.hasBeenUsed then
-                print("Wind Torrent has already been used this game!")
-            elseif turnState.phase ~= "player" then
-                print("Can only use Wind Torrent during your turn!")
-            else
-                print("Wind Torrent not available")
-            end
-            return
+    -- Кнопка Wind Torrent
+    if x >= windTorrentUI.button.x and x <= windTorrentUI.button.x + windTorrentUI.button.width and
+    y >= windTorrentUI.button.y and y <= windTorrentUI.button.y + windTorrentUI.button.height then
+        if turnState.phase == "player" and windTorrent and not windTorrent.hasBeenUsed then
+            windTorrentUI.active = true
+            clearSelectedActor()  -- <-- снимаем выделение
+            print("Click on any hex to choose wind direction, or press ESC to cancel")
+        elseif windTorrent and windTorrent.hasBeenUsed then
+            print("Wind Torrent has already been used this game!")
+        elseif turnState.phase ~= "player" then
+            print("Can only use Wind Torrent during your turn!")
+        else
+            print("Wind Torrent not available")
         end
+        return
+    end
 
-        -- Режим выбора направления ветра
-        if windTorrentUI.active then
-            for dirName, dir in pairs(windTorrentUI.directions) do
-                if x >= dir.x and x <= dir.x + 70 and y >= dir.y and y <= dir.y + 30 then
-                    windTorrent:executeGlobalWithAnimation(dirName, hex, entities, sounds, function(success, message)
-                        if success then
-                            actionHistory = {}
-                            print("Wind Torrent used! History cleared.")
-                        else
-                            print("Wind Torrent failed: " .. (message or "unknown error"))
-                        end
-                    end)
-                    windTorrentUI.active = false
-                    return
-                end
-            end
-            local cancelX = love.graphics.getWidth() / 2 - 40
-            local cancelY = love.graphics.getHeight() - 80
-            if x >= cancelX and x <= cancelX + 80 and y >= cancelY and y <= cancelY + 30 then
+    -- Если активен режим выбора направления и клик по гексу
+    if windTorrentUI.active then
+        local tq, tr = hex:pixelToHex(x, y)
+        if hex:isActiveHex(tq, tr) then
+            local direction = getWindDirectionFromHex(tq, tr, hex.centerQ, hex.centerR, hex)
+            if direction then
+                windTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds, function(success, message)
+                    if success then
+                        actionHistory = {}
+                        print("Wind Torrent used! History cleared.")
+                    else
+                        print("Wind Torrent failed: " .. (message or "unknown error"))
+                    end
+                    restoreSelectedActor()  -- <-- восстанавливаем выделение
+                end)
                 windTorrentUI.active = false
-                print("Wind Torrent cancelled")
-                return
+            else
+                print("Cannot determine direction from center")
+                restoreSelectedActor()  -- <-- восстанавливаем выделение при ошибке
             end
+            return
+        else
+            -- Клик вне активной клетки – отмена
             windTorrentUI.active = false
-            print("Wind Torrent cancelled (click outside)")
+            restoreSelectedActor()  -- <-- восстанавливаем выделение
+            print("Wind Torrent cancelled")
             return
         end
+    end
+
 
         -- Кнопка Undo
         if x >= 10 and x <= 130 and y >= 200 and y <= 230 then
@@ -764,32 +812,31 @@ function love.update(dt)
 end
 
 function drawHexGrid()
-    love.graphics.setLineWidth(1)   -- <-- добавить эту строку
+    love.graphics.setLineWidth(1)
     local gridW = hex.gridWidth
     local gridH = hex.gridHeight
     if not gridW or not gridH then return end
 
-    -- 1. Рисуем terrain и эффекты на клетках
-    for col = 0, gridW - 1 do
-        for row = 0, gridH - 1 do
-            if not hex:isActiveHex(col, row) then goto continue end
+    -- 1. Рисуем terrain и эффекты сверху вниз (по возрастанию r)
+    for row = 0, gridH - 1 do
+        for col = 0, gridW - 1 do
+            if hex:isActiveHex(col, row) then
+                local terrainType = terrainMap and terrainMap[col] and terrainMap[col][row] or "grass"
+                local cellX, cellY = hex:hexToPixel(col, row)
+                hex:drawTerrainHex(col, row, terrainType, cellX, cellY)
 
-            local terrainType = terrainMap and terrainMap[col] and terrainMap[col][row] or "grass"
-            local cellX, cellY = hex:hexToPixel(col, row)
-            hex:drawTerrainHex(col, row, terrainType, cellX, cellY)
-
-            local hexStatuses = status.getAtHex(col, row)
-            if #hexStatuses > 0 then
-                ui.drawCellStatusEffects(cellX, cellY, hex.radius, hexStatuses, love.timer.getTime())
+                local hexStatuses = status.getAtHex(col, row)
+                if #hexStatuses > 0 then
+                    ui.drawCellStatusEffects(cellX, cellY, hex.radius, hexStatuses, love.timer.getTime())
+                end
             end
-            ::continue::
         end
     end
 
-    -- 2. Рисуем рамки и выделения (чтобы они были поверх terrain)
-    for col = 0, gridW - 1 do
-        for row = 0, gridH - 1 do
-            if not hex:isActiveHex(col, row) then goto continue2 end
+    -- 2. Рисуем рамки и выделения (также сверху вниз)
+    for row = 0, gridH - 1 do
+        for col = 0, gridW - 1 do
+            if not hex:isActiveHex(col, row) then goto continue end
             local cellX, cellY = hex:hexToPixel(col, row)
             local vertices = hex:drawHexagon(cellX, cellY, hex.radius)
 
@@ -810,11 +857,12 @@ function drawHexGrid()
 
             love.graphics.setColor(0, 0, 0, 0.5)
             love.graphics.polygon("line", vertices)
-            ::continue2::
+            ::continue::
         end
     end
     love.graphics.setColor(1, 1, 1, 1)
 end
+
 function getEntityDrawPosition(entity)
     -- 1. Проверяем, есть ли у сущности временные координаты, установленные shake-анимацией
     if entity.currentDrawX and entity.currentDrawY then
@@ -1030,7 +1078,7 @@ function love.draw()
     end
     ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
     ui.drawEndTurnButton(turnState, entities)
-    ui.drawWindTorrentUI(windTorrent, windTorrentUI, turnState)
+    ui.drawWindTorrentButton(windTorrent, windTorrentUI, turnState)
     ui.drawGlobalHealthBar(globalHealth)
     ui.drawAttackPanel(selectedActor, attackButtons, selectedAttack, attackMode) -- <-- добавлено
     love.graphics.setColor(1,1,1,1)
@@ -1081,6 +1129,14 @@ function love.draw()
         local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
         if hoverEntity and hoverEntity:isCharacter() and not hoverEntity.isPlayable and hoverEntity.hasPreparedAttack then
             ui.drawPreparedAttackDirection(hex, hoverEntity, love.timer.getTime())
+        end
+    end
+
+    -- После отрисовки остального интерфейса, перед выводом фаз
+    if windTorrentUI.active and hex.hoverQ >= 0 and hex.hoverR >= 0 then
+        local direction = getWindDirectionFromHex(hex.hoverQ, hex.hoverR, hex.centerQ, hex.centerR, hex)
+        if direction then
+            ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
         end
     end
 end
@@ -1247,6 +1303,25 @@ function killPlayableAtEdge()
     end
 end
 
+function clearSelectedActor()
+    selectedActor = nil
+    hex.selectedQ = -1
+    hex.selectedR = -1
+    attackMode = false
+    selectedAttack = nil
+    attackButtons = {}
+end
+
+function restoreSelectedActor()
+    for _, a in ipairs(entities) do
+        if a.isPlayable and a.health > 0 then
+            selectedActor = a
+            hex.selectedQ, hex.selectedR = a.q, a.r
+            updateAttackButtons(selectedActor)
+            break
+        end
+    end
+end
 -- Удалить любые упоминания drawAttackIndicators и обработку правой кнопки
 -- В love.keypressed убрать обработку tab
 function love.keypressed(key)
@@ -1254,6 +1329,13 @@ function love.keypressed(key)
         if #actionHistory > 0 then undoLastAction() end
     elseif key == "e" or key == "E" then
         if turnState.phase == "player" then endTurn() end
+    elseif key == "escape" then
+        if windTorrentUI.active then
+            windTorrentUI.active = false
+            restoreSelectedActor()  -- <-- восстанавливаем выделение
+            print("Wind Torrent cancelled")
+            return
+        end
     end
-    -- Tab больше не переключает атаку
 end
+    -- Tab больше не переключает атаку
