@@ -206,18 +206,23 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
 
     local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
+    -- 🏃‍♂️ Перемещение атакующего в последнюю свободную клетку
+    if lastFree and (lastFree.q ~= attacker.q or lastFree.r ~= attacker.r) then
+        combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
+    end
+
     -- Наносим урон первой цели, если она есть
     if firstTarget then
         self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds)
     end
 
-    -- В DashAttack:execute после нахождения firstTarget и targetHex
+    -- Отталкивание цели (как было)
     if firstTarget and targetHex then
         local pushQ, pushR = combat.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
         local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
         local isEdge = not hex:isActiveHex(pushQ, pushR)
         if isEdge or occupant then
-            -- Наносим урон немедленно
+            -- урон от столкновения
             if firstTarget.health > 0 then
                 firstTarget.health = firstTarget.health - 1
                 print(firstTarget.name .. " takes 1 collision damage!")
@@ -230,12 +235,9 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
             end
             if firstTarget.health <= 0 then combat.removeEntity(firstTarget, entities) end
             if occupant and occupant.health <= 0 then combat.removeEntity(occupant, entities) end
-            -- Визуальный эффект
             local effectX, effectY = hex:hexToPixel(targetHex.q, targetHex.r)
             visual.addEffect(effectX, effectY, "slam")
-            -- Не перемещаем цель
         else
-            -- Безопасное отталкивание
             self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
         end
     end
