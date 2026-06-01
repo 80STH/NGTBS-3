@@ -4,21 +4,8 @@
 local ui = {}
 local pathfinding = require("pathfinding")
 local combat = require("combat")
-local applyCubeStep = combat.applyCubeStep   -- получаем функцию из combat.lua
 local visual = require("visual_effects")    -- если ещё нет
--- Преобразования для pointy-top (как в combat.lua)
-local function axialToCube(q, r)
-    local x = q - (r - (r % 2)) / 2
-    local z = r
-    local y = -x - z
-    return x, y, z
-end
-
-local function cubeToAxial(x, y, z)
-    local q = x + (z - (z % 2)) / 2
-    local r = z
-    return q, r
-end
+local hex_utils = require("hex_utils")
 
 -- ============================================================
 -- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПРЕДПРОСМОТРА АТАК
@@ -222,11 +209,11 @@ function ui.drawPreparedAttacks(hex, entities)
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.attackDirection then
             local dir = e.attackDirection
-            local curX, curY, curZ = axialToCube(e.q, e.r)
+            local curX, curY, curZ = hex_utils.axialToCube(e.q, e.r)
             local targetX = curX + dir.dx
             local targetY = curY + dir.dy
             local targetZ = curZ + dir.dz
-            local targetQ, targetR = cubeToAxial(targetX, targetY, targetZ)
+            local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
             if not hex:isValidHex(targetQ, targetR) then goto continue end
             
             local x, y = hex:hexToPixel(targetQ, targetR)
@@ -323,7 +310,7 @@ if attack.name == "Dash" then
             
             -- Проверяем возможность отталкивания
             if targetHex then
-                local pushQ, pushR = combat.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+                local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
                 if hex:isActiveHex(pushQ, pushR) and not combat.getEntityAtHex(pushQ, pushR, entities) then
                     local pushX, pushY = hex:hexToPixel(pushQ, pushR)
                     ui.drawPushArrow(targetX, targetY, pushX, pushY)
@@ -773,14 +760,14 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
     
     if entity.hasPreparedAttack and entity.preparePosCube and entity.preparedTargetCube then
         prepareHeight = 20
-        local curX, curY, curZ = axialToCube(entity.q, entity.r)
+        local curX, curY, curZ = hex_utils.axialToCube(entity.q, entity.r)
         local deltaX = curX - entity.preparePosCube.x
         local deltaY = curY - entity.preparePosCube.y
         local deltaZ = curZ - entity.preparePosCube.z
         local targetX = entity.preparedTargetCube.x + deltaX
         local targetY = entity.preparedTargetCube.y + deltaY
         local targetZ = entity.preparedTargetCube.z + deltaZ
-        local targetQ, targetR = cubeToAxial(targetX, targetY, targetZ)
+        local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
         prepareText = string.format("⚔ Prepares: (%d,%d) → (%d,%d) for 1 dmg", entity.q, entity.r, targetQ, targetR)
     end
     
@@ -815,11 +802,11 @@ end
 function ui.drawPreparedAttackDirection(hex, enemy, time)
     if not enemy.hasPreparedAttack or not enemy.attackDirection then return end
     local dir = enemy.attackDirection
-    local curX, curY, curZ = axialToCube(enemy.q, enemy.r)
+    local curX, curY, curZ = hex_utils.axialToCube(enemy.q, enemy.r)
     local targetX = curX + dir.dx
     local targetY = curY + dir.dy
     local targetZ = curZ + dir.dz
-    local targetQ, targetR = cubeToAxial(targetX, targetY, targetZ)
+    local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
     if not hex:isValidHex(targetQ, targetR) then return end
     
     local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)

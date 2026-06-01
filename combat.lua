@@ -5,32 +5,7 @@ local visual = require("visual_effects")
 status = require("status")
 local Entity = require("entity")
 
--- ============================================================
--- ЕДИНЫЕ ПРЕОБРАЗОВАНИЯ ДЛЯ POINTY-TOP (углом вверх)
--- ============================================================
-local function axialToCube(q, r)
-    -- pointy-top: x = q - (r - (r%2))/2, z = r
-    local x = q - (r - (r % 2)) / 2
-    local z = r
-    local y = -x - z
-    return x, y, z
-end
-
-local function cubeToAxial(x, y, z)
-    local q = x + (z - (z % 2)) / 2
-    local r = z
-    return q, r
-end
-
-local function applyCubeStep(q, r, stepX, stepY, stepZ)
-    local x, y, z = axialToCube(q, r)
-    x = x + stepX
-    y = y + stepY
-    z = z + stepZ
-    return cubeToAxial(x, y, z)
-end
--- ============================================================
-
+local hex_utils = require("hex_utils")
 -- ============================================================
 -- БАЗОВЫЙ КЛАСС АТАКИ
 -- ============================================================
@@ -49,8 +24,8 @@ end
 
 -- Определение направления прямой линии (кубический шаг)
 function combat.Attack:getLineDirection(fromQ, fromR, toQ, toR, hex)
-    local ax, ay, az = axialToCube(fromQ, fromR)
-    local bx, by, bz = axialToCube(toQ, toR)
+    local ax, ay, az = hex_utils.axialToCube(fromQ, fromR)
+    local bx, by, bz = hex_utils.axialToCube(toQ, toR)
     local dx, dy, dz = bx - ax, by - ay, bz - az
 
     local function gcd(a, b)
@@ -72,7 +47,7 @@ end
 function combat.Attack:findFirstTargetOnLine(startQ, startR, stepX, stepY, stepZ, hex, entities)
     local curQ, curR = startQ, startR
     while true do
-        curQ, curR = applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        curQ, curR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
         if not hex:isValidHex(curQ, curR) then break end
         local target = combat.getEntityAtHex(curQ, curR, entities)
         if target then return target, {q = curQ, r = curR} end
@@ -85,7 +60,7 @@ function combat.Attack:findFirstTwoTargetsOnLine(startQ, startR, stepX, stepY, s
     local curQ, curR = startQ, startR
     local firstTarget, firstHex, secondTarget, secondHex = nil, nil, nil, nil
     while true do
-        curQ, curR = applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        curQ, curR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
         if not hex:isValidHex(curQ, curR) then break end
         local target = combat.getEntityAtHex(curQ, curR, entities)
         if target then
@@ -102,7 +77,7 @@ end
 
 -- Отталкивание в направлении (с анимацией)
 function combat.Attack:pushTargetInDirection(target, fromQ, fromR, stepX, stepY, stepZ, hex, entities, sounds, onComplete)
-    local pushQ, pushR = applyCubeStep(fromQ, fromR, stepX, stepY, stepZ)
+    local pushQ, pushR = hex_utils.applyCubeStep(fromQ, fromR, stepX, stepY, stepZ)
     self:pushTargetToHex(target, fromQ, fromR, pushQ, pushR, hex, entities, sounds, onComplete)
 end
 
@@ -173,7 +148,7 @@ function combat.DashAttack:getFirstTargetAndLastFree(attacker, stepX, stepY, ste
     local targetHex = nil
 
     while true do
-        local nextQ, nextR = combat.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
         if not hex:isActiveHex(nextQ, nextR) then
             -- Достигли края, последняя свободная клетка – текущая
             break
@@ -206,18 +181,23 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
 
     local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
+    -- 🏃‍♂️ Перемещение атакующего в последнюю свободную клетку
+    if lastFree and (lastFree.q ~= attacker.q or lastFree.r ~= attacker.r) then
+        combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
+    end
+
     -- Наносим урон первой цели, если она есть
     if firstTarget then
         self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds)
     end
 
-    -- В DashAttack:execute после нахождения firstTarget и targetHex
+    -- Отталкивание цели (как было)
     if firstTarget and targetHex then
-        local pushQ, pushR = combat.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
         local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
         local isEdge = not hex:isActiveHex(pushQ, pushR)
         if isEdge or occupant then
-            -- Наносим урон немедленно
+            -- урон от столкновения
             if firstTarget.health > 0 then
                 firstTarget.health = firstTarget.health - 1
                 print(firstTarget.name .. " takes 1 collision damage!")
@@ -230,12 +210,9 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
             end
             if firstTarget.health <= 0 then combat.removeEntity(firstTarget, entities) end
             if occupant and occupant.health <= 0 then combat.removeEntity(occupant, entities) end
-            -- Визуальный эффект
             local effectX, effectY = hex:hexToPixel(targetHex.q, targetHex.r)
             visual.addEffect(effectX, effectY, "slam")
-            -- Не перемещаем цель
         else
-            -- Безопасное отталкивание
             self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
         end
     end
@@ -256,11 +233,11 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     if distance ~= 1 then return false, "Target must be adjacent!" end
     local targetActor = combat.getEntityAtHex(targetQ, targetR, entities)
     if not targetActor then return false, "No enemy at that hex!" end
-    local aX, aY, aZ = axialToCube(attacker.q, attacker.r)
-    local tX, tY, tZ = axialToCube(targetQ, targetR)
+    local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
+    local tX, tY, tZ = hex_utils.axialToCube(targetQ, targetR)
     local dirX, dirY, dirZ = aX - tX, aY - tY, aZ - tZ
     local behindX, behindY, behindZ = aX + dirX, aY + dirY, aZ + dirZ
-    local behindQ, behindR = cubeToAxial(behindX, behindY, behindZ)
+    local behindQ, behindR = hex_utils.cubeToAxial(behindX, behindY, behindZ)
     if not hex:isValidHex(behindQ, behindR) then return false, "No free space behind the attacker!" end
     if combat.getEntityAtHex(behindQ, behindR, entities) then return false, "No free space behind the attacker!" end
     targetActor.q = behindQ
@@ -273,11 +250,11 @@ end
 -- Предпросмотр переворота: куда переместится цель
 function combat.FlipAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
     if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) ~= 1 then return nil end
-    local aX, aY, aZ = axialToCube(attacker.q, attacker.r)
-    local tX, tY, tZ = axialToCube(targetQ, targetR)
+    local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
+    local tX, tY, tZ = hex_utils.axialToCube(targetQ, targetR)
     local dirX, dirY, dirZ = aX - tX, aY - tY, aZ - tZ
     local behindX, behindY, behindZ = aX + dirX, aY + dirY, aZ + dirZ
-    local behindQ, behindR = cubeToAxial(behindX, behindY, behindZ)
+    local behindQ, behindR = hex_utils.cubeToAxial(behindX, behindY, behindZ)
     if hex:isValidHex(behindQ, behindR) then
         return {q = behindQ, r = behindR}
     end
@@ -309,7 +286,7 @@ function combat.ShootAttack:getPushCell(attacker, targetQ, targetR, hex, entitie
     if not stepX then return nil end
     local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     if firstTarget and targetHex then
-        local pushQ, pushR = applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
         if hex:isValidHex(pushQ, pushR) then
             return {q = pushQ, r = pushR}
         else
@@ -348,11 +325,11 @@ function combat.PiercingShootAttack:getPushCells(attacker, targetQ, targetR, hex
     local firstTarget, firstHex, secondTarget, secondHex = self:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     local cells = {}
     if firstTarget and firstHex then
-        local pushQ, pushR = applyCubeStep(firstHex.q, firstHex.r, stepX, stepY, stepZ)
+        local pushQ, pushR = hex_utils.applyCubeStep(firstHex.q, firstHex.r, stepX, stepY, stepZ)
         table.insert(cells, {q = pushQ, r = pushR, edge = not hex:isValidHex(pushQ, pushR)})
     end
     if secondTarget and secondHex then
-        local pushQ, pushR = applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
+        local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
         table.insert(cells, {q = pushQ, r = pushR, edge = not hex:isValidHex(pushQ, pushR)})
     end
     return cells
@@ -395,9 +372,9 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
             if target and target:isCharacter() and not target.isPlayable and target.health > 0 then
                 -- Направление от центра к соседу в кубических координатах
                 local cX, cY, cZ = axialToCube(targetQ, targetR)
-                local nX, nY, nZ = axialToCube(neighbor.q, neighbor.r)
+                local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
                 local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
-                local pushQ, pushR = applyCubeStep(neighbor.q, neighbor.r, dirX, dirY, dirZ)
+                local pushQ, pushR = hex_utils.applyCubeStep(neighbor.q, neighbor.r, dirX, dirY, dirZ)
                 self:pushTargetToHex(target, neighbor.q, neighbor.r, pushQ, pushR, hex, entities, sounds)
             end
         end
@@ -415,10 +392,10 @@ function combat.AoePushAttack:getPushCells(attacker, targetQ, targetR, hex, enti
         if hex:isValidHex(neighbor.q, neighbor.r) then
             local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
             if target and target:isCharacter() and not target.isPlayable and target.health > 0 then
-                local cX, cY, cZ = axialToCube(targetQ, targetR)
-                local nX, nY, nZ = axialToCube(neighbor.q, neighbor.r)
+                local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
+                local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
                 local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
-                local pushQ, pushR = applyCubeStep(neighbor.q, neighbor.r, dirX, dirY, dirZ)
+                local pushQ, pushR = hex_utils.applyCubeStep(neighbor.q, neighbor.r, dirX, dirY, dirZ)
                 local isValid = hex:isValidHex(pushQ, pushR)
                 table.insert(cells, {
                     target = target,
@@ -451,10 +428,10 @@ function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, en
     for _, neighbor in ipairs(neighborsInDirection) do
         local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
         if target then
-            local cX, cY, cZ = axialToCube(targetQ, targetR)
-            local nX, nY, nZ = axialToCube(neighbor.q, neighbor.r)
+            local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
+            local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
             local dX, dY, dZ = nX - cX, nY - cY, nZ - cZ
-            local pushQ, pushR = applyCubeStep(neighbor.q, neighbor.r, dX, dY, dZ)
+            local pushQ, pushR = hex_utils.applyCubeStep(neighbor.q, neighbor.r, dX, dY, dZ)
             self:pushTargetToHex(target, neighbor.q, neighbor.r, pushQ, pushR, hex, entities, sounds)
         end
     end
@@ -483,10 +460,10 @@ function combat.AoeDirectionalAttack:getPushCells(attacker, targetQ, targetR, he
     for _, neighbor in ipairs(neighbors) do
         local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
         if target and target:isCharacter() and not target.isPlayable then
-            local cX, cY, cZ = axialToCube(targetQ, targetR)
-            local nX, nY, nZ = axialToCube(neighbor.q, neighbor.r)
+            local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
+            local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
             local dX, dY, dZ = nX - cX, nY - cY, nZ - cZ
-            local pushQ, pushR = applyCubeStep(neighbor.q, neighbor.r, dX, dY, dZ)
+            local pushQ, pushR = hex_utils.applyCubeStep(neighbor.q, neighbor.r, dX, dY, dZ)
             table.insert(cells, {
                 target = target,
                 fromCell = {q = neighbor.q, r = neighbor.r},
@@ -531,20 +508,9 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
 
     print(string.format("💨 WIND TORRENT: Pushing everything %s!", direction))
 
-    local function axialToCube(q, r)
-        local x = q - (r - (r % 2)) / 2
-        local z = r
-        local y = -x - z
-        return x, y, z
-    end
-    local function cubeToAxial(x, y, z)
-        local q = x + (z - (z % 2)) / 2
-        local r = z
-        return q, r
-    end
     local function applyStep(q, r)
-        local x, y, z = axialToCube(q, r)
-        return cubeToAxial(x + step.dx, y + step.dy, z + step.dz)
+        local x, y, z = hex_utils.axialToCube(q, r)
+        return hex_utils.cubeToAxial(x + step.dx, y + step.dy, z + step.dz)
     end
     local function isValid(q, r) return hex:isActiveHex(q, r) end
 
@@ -559,7 +525,7 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
     -- Сортировка: сначала те, кто дальше по направлению ветра (максимальная проекция)
     table.sort(movableObjects, function(a, b)
         local function getProjection(obj)
-            local x, y, z = axialToCube(obj.q, obj.r)
+            local x, y, z = hex_utils.axialToCube(obj.q, obj.r)
             return x * step.dx + y * step.dy + z * step.dz
         end
         return getProjection(a) > getProjection(b)
@@ -889,7 +855,5 @@ function combat.addShakeAnimation(obj, q, r)
         onComplete = function() end
     })
 end
-
-combat.applyCubeStep = applyCubeStep
 
 return combat

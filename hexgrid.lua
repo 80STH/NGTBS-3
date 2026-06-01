@@ -2,6 +2,7 @@
 -- Система гексагональной сетки (flat-top, углом вверх)
 
 local HexGrid = {}
+local hex_utils = require("hex_utils")
 
 function HexGrid.new(radius, gridWidth, gridHeight, activeRadius, centerQ, centerR)
     local self = setmetatable({}, {__index = HexGrid})
@@ -95,29 +96,14 @@ end
 -- Проверка, принадлежит ли клетка правильному шестиугольнику (радиус 5, центр 5,5)
 function HexGrid:isActiveHex(q, r)
     if not self:isValidHex(q, r) then return false end
-    local function axialToCube(q, r)
-        local x = q - (r - (r % 2)) / 2
-        local z = r
-        local y = -x - z
-        return x, y, z
-    end
-    local cx, cy, cz = axialToCube(self.centerQ, self.centerR)
-    local x, y, z = axialToCube(q, r)
+    local cx, cy, cz = hex_utils.axialToCube(self.centerQ, self.centerR)
+    local x, y, z = hex_utils.axialToCube(q, r)
     local dist = (math.abs(x - cx) + math.abs(y - cy) + math.abs(z - cz)) / 2
     return dist <= self.activeRadius
 end
 
 function HexGrid:getDistance(q1, r1, q2, r2)
-    local function axialToCube(q, r)
-        local x = q - (r - (r % 2)) / 2
-        local z = r
-        local y = -x - z
-        return x, y, z
-    end
-    
-    local x1, y1, z1 = axialToCube(q1, r1)
-    local x2, y2, z2 = axialToCube(q2, r2)
-    return (math.abs(x1 - x2) + math.abs(y1 - y2) + math.abs(z1 - z2)) / 2
+    return hex_utils.getDistance(q1, r1, q2, r2)
 end
 
 function HexGrid:drawHexagon(x, y, radius)

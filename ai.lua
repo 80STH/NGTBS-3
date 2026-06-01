@@ -3,27 +3,14 @@
 
 local ai = {}
 local pathfinding = require("pathfinding")
-
--- Преобразования для pointy-top (как в combat.lua)
-local function axialToCube(q, r)
-    local x = q - (r - (r % 2)) / 2
-    local z = r
-    local y = -x - z
-    return x, y, z
-end
-
-local function cubeToAxial(x, y, z)
-    local q = x + (z - (z % 2)) / 2
-    local r = z
-    return q, r
-end
+local hex_utils = require("hex_utils")
 
 ai.DEBUG = true
 
 -- Проверка, лежит ли цель на одной из шести прямых от источника (включая любую дистанцию)
 local function isOnStraightLine(fromQ, fromR, toQ, toR, hex)
-    local fx, fy, fz = axialToCube(fromQ, fromR)
-    local tx, ty, tz = axialToCube(toQ, toR)
+    local fx, fy, fz = hex_utils.axialToCube(fromQ, fromR)
+    local tx, ty, tz = hex_utils.axialToCube(toQ, toR)
     local dx, dy, dz = tx - fx, ty - fy, tz - fz
 
     -- Нормализация до единичного шага (одно из направлений)
@@ -103,8 +90,8 @@ function ai.prepareAttackForEnemy(enemy, entities, hex)
     end
 
     -- Вычисляем направление в кубических координатах
-    local ex, ey, ez = axialToCube(enemy.q, enemy.r)
-    local tx, ty, tz = axialToCube(bestTarget.q, bestTarget.r)
+    local ex, ey, ez = hex_utils.axialToCube(enemy.q, enemy.r)
+    local tx, ty, tz = hex_utils.axialToCube(bestTarget.q, bestTarget.r)
     local dx, dy, dz = tx - ex, ty - ey, tz - ez
 
     -- Нормализуем до единичного шага
@@ -136,11 +123,11 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
     end
 
     -- Текущие кубические координаты врага
-    local curX, curY, curZ = axialToCube(enemy.q, enemy.r)
+    local curX, curY, curZ = hex_utils.axialToCube(enemy.q, enemy.r)
     local targetX = curX + dir.dx
     local targetY = curY + dir.dy
     local targetZ = curZ + dir.dz
-    local targetQ, targetR = cubeToAxial(targetX, targetY, targetZ)
+    local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
 
     if not hex:isValidHex(targetQ, targetR) then
         debugPrint(enemy.name .. " attack misses (outside map)")

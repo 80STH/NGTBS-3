@@ -9,6 +9,7 @@ pathfinding = require("pathfinding")
 effects = require("effects")
 visual = require("visual_effects")
 config = require("config")
+local hex_utils = require("hex_utils")
 
 -- Делаем очередь анимаций доступной глобально для отрисовки
 pushAnimations = pushAnimations or { queue = {}, active = false }
@@ -154,15 +155,8 @@ end
 
 -- Определяет направление ветра по координатам клетки относительно центра (5,5)
 function getWindDirectionFromHex(q, r, centerQ, centerR, hex)
-    local function axialToCube(q, r)
-        local x = q - (r - (r % 2)) / 2
-        local z = r
-        local y = -x - z
-        return x, y, z
-    end
-    
-    local cx, cy, cz = axialToCube(centerQ, centerR)
-    local x, y, z = axialToCube(q, r)
+    local cx, cy, cz = hex_utils.axialToCube(centerQ, centerR)
+    local x, y, z = hex_utils.axialToCube(q, r)
     local dx, dy, dz = x - cx, y - cy, z - cz
     
     if dx == 0 and dy == 0 and dz == 0 then
