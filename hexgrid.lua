@@ -230,4 +230,53 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
 
     love.graphics.setLineWidth(1)
 end
+
+function HexGrid:drawArmorWeaknessSectors(x, y, radius, entity)
+    if not entity then return end
+    local angles = {}
+    for i = 0, 5 do
+        local angle = math.rad(60 * i + 30)
+        table.insert(angles, angle)
+    end
+    table.insert(angles, angles[1] + 2*math.pi)
+    
+    for i = 1, 6 do
+        local side = i - 1
+        local color = nil
+        if entity.weakPointDirection == side then
+            color = {1, 0.2, 0.2, 0.7}      -- красный – уязвимость
+        elseif entity:hasArmorOnSide(side) then
+            color = {0.2, 0.8, 0.2, 0.7}    -- зелёный – броня
+        else
+            color = {0.5, 0.5, 0.5, 0.3}    -- серый – нейтрально
+        end
+        
+        love.graphics.setColor(color)
+        local startAngle = angles[i]
+        local endAngle = angles[i+1]
+        local vertices = {x, y}
+        local x1 = x + math.cos(startAngle) * radius * 0.85
+        local y1 = y + math.sin(startAngle) * radius * 0.85
+        local x2 = x + math.cos(endAngle) * radius * 0.85
+        local y2 = y + math.sin(endAngle) * radius * 0.85
+        table.insert(vertices, x1); table.insert(vertices, y1)
+        table.insert(vertices, x2); table.insert(vertices, y2)
+        love.graphics.polygon("fill", vertices)
+    end
+    
+    -- Обводка
+    love.graphics.setColor(1,1,1,0.5)
+    love.graphics.setLineWidth(1.5)
+    for i = 1, 6 do
+        local startAngle = angles[i]
+        local endAngle = angles[i+1]
+        local x1 = x + math.cos(startAngle) * radius * 0.85
+        local y1 = y + math.sin(startAngle) * radius * 0.85
+        local x2 = x + math.cos(endAngle) * radius * 0.85
+        local y2 = y + math.sin(endAngle) * radius * 0.85
+        love.graphics.line(x, y, x1, y1)
+        love.graphics.line(x1, y1, x2, y2)
+    end
+    love.graphics.setLineWidth(1)
+end
 return HexGrid

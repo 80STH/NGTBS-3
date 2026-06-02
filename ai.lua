@@ -144,8 +144,14 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
     end
 
     if victim then
-        victim.health = victim.health - 1
-        print(string.format("%s attacks %s for 1 damage!", enemy.name, victim.name))
+        local dirIndex = hex_utils.getDirectionIndex(enemy.q, enemy.r, victim.q, victim.r)
+        local damage = 1
+        if dirIndex ~= nil then
+            if victim.weakPointDirection == dirIndex then damage = damage + 1 end
+            if victim:hasArmorOnSide(dirIndex) then damage = math.max(1, damage - 1) end
+        end
+        victim.health = victim.health - damage
+        print(string.format("%s attacks %s for %d damage!", enemy.name, victim.name, damage))
         if sounds and sounds.attack then sounds.attack:play() end
         if victim.health <= 0 then
             for i = #entities, 1, -1 do

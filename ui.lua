@@ -770,8 +770,23 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
         local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
         prepareText = string.format("⚔ Prepares: (%d,%d) → (%d,%d) for 1 dmg", entity.q, entity.r, targetQ, targetR)
     end
+
+    -- В ui.drawUnitTooltip, после строки с Armor:
+    local dirNames = {"E", "NE", "NW", "W", "SW", "SE"}
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.print("Armor sides:", x+8, y+42)
+    local armorList = {}
+    for i=0,5 do
+        if entity:hasArmorOnSide(i) then
+            table.insert(armorList, dirNames[i+1])
+        end
+    end
+    love.graphics.print(table.concat(armorList, ", ") or "none", x+8, y+58)
     
-    local panelHeight = titleHeight + debuffsHeight + terrainHeight + prepareHeight
+    if entity.weakPointDirection then
+        love.graphics.setColor(1,0.5,0.5,1)
+        love.graphics.print("Weak side: " .. dirNames[entity.weakPointDirection+1], x+8, y+74)
+    end
 
     -- Тип земли (как было)
     local terrain = "grass"
@@ -977,6 +992,49 @@ function ui.drawRestartButton(button, turnState)
     love.graphics.rectangle("fill", button.x, button.y, button.width, button.height, 5)
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.print(button.text, button.x + 15, button.y + 8)
+end
+
+function ui.drawArmorWeaknessIndicators(hex, entity)
+    if not entity or not entity.armor then return end
+    
+    local x, y = hex:hexToPixel(entity.q, entity.r)
+    local radius = hex.radius
+    local offset = radius * 0.85  -- расстояние от центра
+    local angles = {
+        0,          -- E (восток)
+        math.pi/3,  -- NE
+        2*math.pi/3,-- NW
+        math.pi,    -- W
+        4*math.pi/3,-- SW
+        5*math.pi/3 -- SE
+    }
+    
+    for side = 0, 5 do
+        local armorVal = entity.armor[side+1]
+        local angle = angles[side+1]
+        local ix = x + math.cos(angle) * offset
+        local iy = y + math.sin(angle) * offset
+        
+        -- Если есть уязвимая точка на этой стороне
+        if entity.weakPoint == side then
+            love.graphics.setColor(1, 0.3, 0.3, 0.9)
+            love.graphics.circle("fill", ix, iy, 12)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print("🎯", ix-6, iy-8)
+        -- Иначе если броня < 1 (защита)
+        elseif armorVal < 1 then
+            love.graphics.setColor(0.3, 0.5, 0.9, 0.9)
+            love.graphics.circle("fill", ix, iy, 10)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print("🛡", ix-5, iy-7)
+        -- Если броня > 1 (уязвимость)
+        elseif armorVal > 1 then
+            love.graphics.setColor(1, 0.5, 0.1, 0.9)
+            love.graphics.circle("fill", ix, iy, 10)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print("⚠", ix-5, iy-7)
+        end
+    end
 end
 
 return ui

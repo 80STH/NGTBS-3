@@ -188,7 +188,8 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
 
     -- Наносим урон первой цели, если она есть
     if firstTarget then
-        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds)
+        local dirIndex = hex_utils.getDirectionIndex(attacker.q, attacker.r, firstTarget.q, firstTarget.r)
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, dirIndex)
     end
 
     -- Отталкивание цели (как было)
@@ -275,7 +276,8 @@ function combat.ShootAttack:execute(attacker, targetQ, targetR, hex, entities, s
     if not firstTarget then return false, "No target in that direction!" end
     local distance = hex:getDistance(attacker.q, attacker.r, targetHex.q, targetHex.r)
     if distance > self.range then return false, "Target out of range!" end
-    self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds)
+    local dirIndex = hex_utils.getDirectionIndex(attacker.q, attacker.r, firstTarget.q, firstTarget.r)
+    self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, dirIndex)
     self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
     combat.startPushAnimations(hex)   -- <-- добавить
     attacker.hasActedThisTurn = true
@@ -309,7 +311,8 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     local firstTarget, firstHex, secondTarget, secondHex = self:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     if not firstTarget then return false, "No target in that direction!" end
     if secondTarget then
-        self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds)
+        local dirIndex = hex_utils.getDirectionIndex(attacker.q, attacker.r, firstTarget.q, firstTarget.r)
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, dirIndex)
         self:pushTargetInDirection(secondTarget, secondHex.q, secondHex.r, stepX, stepY, stepZ, hex, entities, sounds)
         combat.startPushAnimations(hex)   -- <-- добавить
     end
@@ -810,37 +813,37 @@ function combat.removeEntity(entity, entities)
     return false
 end
 
--- combat.lua (заменить существующий метод)
 function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, sounds, directionIndex)
-    -- Базовый множитель = 1.0
-    local multiplier = 1.0
-
-    if target.armor and directionIndex and target.armor[directionIndex+1] then
-        multiplier = multiplier * target.armor[directionIndex+1]
+    local finalDamage = damage
+    local messages = {}
+    
+    if directionIndex ~= nil then
+        -- Уязвимая точка: +1 урон
+        if target.weakPointDirection == directionIndex then
+            finalDamage = finalDamage + 1
+            table.insert(messages, "weak point! +1 damage")
+        end
+        -- Броня: -1 урон (но не меньше 1)
+        if target:hasArmorOnSide(directionIndex) then
+            finalDamage = math.max(1, finalDamage - 1)
+            table.insert(messages, "armor blocks 1 damage")
+        end
     end
-
-    -- Уязвимая точка (если совпадает с направлением атаки)
-    if target.weakPoint ~= nil and directionIndex == target.weakPoint then
-        multiplier = multiplier * 2.0   -- двойной урон по уязвимой точке
-        print(string.format("💥 Critical hit! %s hits %s's weak point!", attacker.name, target.name))
-    end
-
-    -- Учитываем эффект кислоты и других статусов (уже есть status.getDamageMultiplier)
-    local statusMultiplier = status.getDamageMultiplier(target)
-    multiplier = multiplier * statusMultiplier
-
-    local finalDamage = math.floor(damage * multiplier)
-    if finalDamage < 1 and damage > 0 then finalDamage = 1 end   -- хотя бы 1 урон
-
+    
     local wasDestroyed = target:takeDamage(finalDamage)
     if sounds and sounds.attack then sounds.attack:play() end
-
-    -- Визуальный эффект удара
+    
     if hex and visual then
         local x, y = hex:hexToPixel(target.q, target.r)
         visual.addEffect(x, y, "hit", 0.4)
     end
-
+    
+    if #messages > 0 then
+        print(string.format("%s hits %s for %d damage (%s)", attacker.name, target.name, finalDamage, table.concat(messages, ", ")))
+    else
+        print(string.format("%s hits %s for %d damage", attacker.name, target.name, finalDamage))
+    end
+    
     if wasDestroyed then combat.removeEntity(target, entities) end
     return wasDestroyed
 end
