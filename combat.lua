@@ -810,18 +810,37 @@ function combat.removeEntity(entity, entities)
     return false
 end
 
-function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, sounds)
-    local multiplier = status.getDamageMultiplier(target)
+-- combat.lua (заменить существующий метод)
+function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, sounds, directionIndex)
+    -- Базовый множитель = 1.0
+    local multiplier = 1.0
+
+    if target.armor and directionIndex and target.armor[directionIndex+1] then
+        multiplier = multiplier * target.armor[directionIndex+1]
+    end
+
+    -- Уязвимая точка (если совпадает с направлением атаки)
+    if target.weakPoint ~= nil and directionIndex == target.weakPoint then
+        multiplier = multiplier * 2.0   -- двойной урон по уязвимой точке
+        print(string.format("💥 Critical hit! %s hits %s's weak point!", attacker.name, target.name))
+    end
+
+    -- Учитываем эффект кислоты и других статусов (уже есть status.getDamageMultiplier)
+    local statusMultiplier = status.getDamageMultiplier(target)
+    multiplier = multiplier * statusMultiplier
+
     local finalDamage = math.floor(damage * multiplier)
+    if finalDamage < 1 and damage > 0 then finalDamage = 1 end   -- хотя бы 1 урон
+
     local wasDestroyed = target:takeDamage(finalDamage)
     if sounds and sounds.attack then sounds.attack:play() end
-    
-    -- 🔥 Добавляем визуальный эффект удара в координатах цели
+
+    -- Визуальный эффект удара
     if hex and visual then
         local x, y = hex:hexToPixel(target.q, target.r)
         visual.addEffect(x, y, "hit", 0.4)
     end
-    
+
     if wasDestroyed then combat.removeEntity(target, entities) end
     return wasDestroyed
 end
