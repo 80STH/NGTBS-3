@@ -1073,4 +1073,57 @@ function ui.drawCellTooltip(q, r, terrain, hex)
     end
 end
 
+-- ui.lua
+function ui.drawEnemyMovementRange(hex, enemy, entities, terrainMap)
+    if not enemy or enemy.isPlayable or not enemy:isCharacter() or enemy.health <= 0 then
+        return
+    end
+    if enemy.hasActedThisTurn or enemy.isMoving then
+        return
+    end
+
+    for q = 0, hex.gridWidth - 1 do
+        for r = 0, hex.gridHeight - 1 do
+            if hex:isActiveHex(q, r) then
+                -- Проверяем, может ли враг дойти до клетки
+                if ui.isCellReachableForEnemy(enemy, q, r, entities, terrainMap, hex) then
+                    local x, y = hex:hexToPixel(q, r)
+                    local vertices = hex:drawHexagon(x, y, hex.radius)
+                    love.graphics.setColor(0.8, 0.2, 0.2, 0.2)  -- красноватая подсветка
+                    love.graphics.polygon("fill", vertices)
+                    love.graphics.setColor(0.8, 0.2, 0.2, 0.5)
+                    love.graphics.polygon("line", vertices)
+                end
+            end
+        end
+    end
+end
+
+function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMap, hex)
+    if not hex:isActiveHex(targetQ, targetR) then return false end
+    if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
+        return false
+    end
+    -- Клетка не должна быть занята (союзником или врагом)
+    for _, e in ipairs(entities) do
+        if e ~= enemy and e.q == targetQ and e.r == targetR then
+            return false
+        end
+    end
+    local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, enemy.moveRange,
+        function(q, r) return not isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex) end, hex)
+    return path ~= nil and #path > 0
+end
+
+function isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
+    if not hex:isActiveHex(q, r) then return false end
+    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then return false end
+    for _, e in ipairs(entities) do
+        if e ~= enemy and e.q == q and e.r == r then
+            return false  -- любые сущности (союзники, другие враги, здания) блокируют путь
+        end
+    end
+    return true
+end
+
 return ui

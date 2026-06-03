@@ -1132,6 +1132,17 @@ function love.draw()
     ui.drawPreparedAttacks(hex, entities)
     drawAllEntities()
     visual.draw()
+
+    -- Подсветка дальности движения врага при наведении
+    if hex.hoverQ and hex.hoverQ >= 0 and hex.hoverR and hex.hoverR >= 0 then
+        local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
+        if hoverEntity and hoverEntity:isCharacter() and not hoverEntity.isPlayable and hoverEntity.health > 0 then
+            if not attackMode and turnState.phase == "player" then
+                ui.drawEnemyMovementRange(hex, hoverEntity, entities, terrainMap)
+            end
+        end
+    end
+
     if attackMode and selectedAttack and selectedActor and not selectedActor.hasActedThisTurn and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         ui.drawAttackPreview(hex, selectedActor, selectedAttack, attackMode, hex.hoverQ, hex.hoverR, entities)
     end
