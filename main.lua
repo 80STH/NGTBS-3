@@ -55,6 +55,7 @@ function love.load()
     status.initHexStatuses(hexStatuses) -- добавить в status.lua функцию
 
     globalHealth = { current = 5, max = 5, initial = 5 }
+    combat.globalHealth = globalHealth
 
     -- Состояние игры
     turnState = {
