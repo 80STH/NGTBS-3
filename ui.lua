@@ -278,6 +278,59 @@ if attack.name == "Flip" then
     return
 end
 
+-- Ghost Bolt
+if attack.name == "Ghost Bolt" then
+    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+    if stepX then
+        local firstTarget, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+        if firstTarget and targetHex then
+            local x, y = hex:hexToPixel(targetHex.q, targetHex.r)
+            local vertices = hex:drawHexagon(x, y, hex.radius)
+            love.graphics.setColor(0.6, 0.2, 0.8, 0.3)
+            love.graphics.polygon("fill", vertices)
+            love.graphics.setColor(0.8, 0.4, 1, 0.8)
+            love.graphics.polygon("line", vertices)
+            ui.drawDamageIcon(x + 20, y - 20, attack.damage)
+        end
+    end
+    return
+end
+
+-- Zombie Bite
+if attack.name == "Bite" then
+    local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+    if distance == 1 then
+        local target = getEntityAtHex(hoverQ, hoverR, entities)
+        if target then
+            local x, y = hex:hexToPixel(hoverQ, hoverR)
+            local vertices = hex:drawHexagon(x, y, hex.radius)
+            love.graphics.setColor(0.8, 0.2, 0.2, 0.3)
+            love.graphics.polygon("fill", vertices)
+            love.graphics.setColor(1, 0.4, 0.4, 0.8)
+            love.graphics.polygon("line", vertices)
+            ui.drawDamageIcon(x + 20, y - 20, attack.damage)
+        end
+    end
+    return
+end
+
+if attack.name == "Magic Bolt" then
+    local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+    if distance <= attack.range then
+        local target = getEntityAtHex(hoverQ, hoverR, entities)
+        if target then
+            local x, y = hex:hexToPixel(hoverQ, hoverR)
+            local vertices = hex:drawHexagon(x, y, hex.radius)
+            love.graphics.setColor(0.8, 0.2, 0.8, 0.3)  -- фиолетовая подсветка
+            love.graphics.polygon("fill", vertices)
+            love.graphics.setColor(0.9, 0.3, 0.9, 0.8)
+            love.graphics.polygon("line", vertices)
+            ui.drawDamageIcon(x + 20, y - 20, attack.damage or 1)
+        end
+    end
+    return
+end
+
 
 if attack.name == "Dash" then
     local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
@@ -724,29 +777,51 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
     local titleHeight = 40
     local debuffsHeight = #statuses > 0 and (20 + #statuses * lineHeight) or 30
     local terrainHeight = 20
+    local attackHeight = 0
+    local attackText = nil
+    
+    -- Для врагов берём первую атаку
+    if not entity.isPlayable and entity.attacks and #entity.attacks > 0 then
+        attackHeight = 36  -- название + описание
+        attackText = entity.attacks[1]
+    end
+
+    local prepareHeight = 0
+    local prepareText = nil
+    if entity.hasPreparedAttack and entity.preparePosCube and entity.preparedTargetCube then
+        prepareHeight = 20
+        local curX, curY, curZ = hex_utils.axialToCube(entity.q, entity.r)
+        local deltaX = curX - entity.preparePosCube.x
+        local deltaY = curY - entity.preparePosCube.y
+        local deltaZ = curZ - entity.preparePosCube.z
+        local targetX = entity.preparedTargetCube.x + deltaX
+        local targetY = entity.preparedTargetCube.y + deltaY
+        local targetZ = entity.preparedTargetCube.z + deltaZ
+        local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
+        prepareText = string.format("⚔ Prepares: (%d,%d) → (%d,%d) for 1 dmg", entity.q, entity.r, targetQ, targetR)
+    end
+
     local panelWidth = 200
-    local panelHeight = titleHeight + debuffsHeight + terrainHeight
+    local panelHeight = titleHeight + debuffsHeight + terrainHeight + attackHeight + prepareHeight
 
     love.graphics.setColor(bgColor)
     love.graphics.rectangle("fill", x, y, panelWidth, panelHeight, 8)
     love.graphics.setColor(borderColor)
     love.graphics.rectangle("line", x, y, panelWidth, panelHeight, 8)
 
+    -- Имя и здоровье
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.print(entity.name, x + 8, y + 6)
     love.graphics.print("❤️ " .. entity.health .. "/" .. entity.maxHealth, x + 8, y + 24)
 
+    -- Дебаффы
     love.graphics.setColor(1, 0.8, 0.4, 1)
     love.graphics.print("💀 Debuffs:", x + 8, y + 40)
-
     if #statuses == 0 then
         love.graphics.setColor(0.7, 0.7, 0.7, 1)
         love.graphics.print("None", x + 18, y + 58)
     else
-        local iconMap = {
-            fire = "🔥 Fire",
-            acid = "🧪 Acid",
-        }
+        local iconMap = { fire = "🔥 Fire", acid = "🧪 Acid" }
         love.graphics.setColor(1, 0.9, 0.6, 1)
         for i, st in ipairs(statuses) do
             local text = iconMap[st] or st
@@ -795,14 +870,21 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
     end
     love.graphics.setColor(0.9, 0.9, 0.7, 1)
     love.graphics.print("Terrain: " .. terrain, x + 8, y + 40 + debuffsHeight)
-    
-    -- Информация о подготовленной атаке
+
+    -- Атака врага (если есть)
+    if attackText then
+        love.graphics.setColor(0.9, 0.6, 0.3, 1)
+        love.graphics.print("⚔ " .. attackText.name, x + 8, y + 40 + debuffsHeight + terrainHeight)
+        love.graphics.setColor(0.8, 0.8, 0.7, 1)
+        love.graphics.print(attackText.description, x + 12, y + 56 + debuffsHeight + terrainHeight)
+    end
+
+    -- Подготовленная атака (если есть)
     if prepareText then
         love.graphics.setColor(1, 0.5, 0, 1)
-        love.graphics.print(prepareText, x + 8, y + 40 + debuffsHeight + terrainHeight)
+        love.graphics.print(prepareText, x + 8, y + 40 + debuffsHeight + terrainHeight + attackHeight)
     end
 end
-
 function ui.drawTerrainOnlyTooltip(terrain, x, y)
     local panelWidth = 120
     local panelHeight = 30
