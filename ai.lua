@@ -249,15 +249,22 @@ function ai.getDistanceToNearestTarget(enemy, entities, hex)
     return best
 end
 
--- Найти первую живую цель на линии от (q,r) в направлении (dx,dy,dz)
-function findFirstTargetInDirection(startQ, startR, dx, dy, dz, hex, entities)
-    local curQ, curR = startQ, startR
-    while true do
-        curQ, curR = hex_utils.applyCubeStep(curQ, curR, dx, dy, dz)
-        if not hex:isValidHex(curQ, curR) then break end
-        for _, e in ipairs(entities) do
-            if e.q == curQ and e.r == curR and e.health > 0 then
-                    return e, curQ, curR
+    if victim then
+        local dirIndex = hex_utils.getDirectionIndex(enemy.q, enemy.r, victim.q, victim.r)
+        local damage = 1
+        if dirIndex ~= nil then
+            if victim.weakPointDirection == dirIndex then damage = damage + 1 end
+            if victim:hasArmorOnSide(dirIndex) then damage = math.max(1, damage - 1) end
+        end
+        victim.health = victim.health - damage
+        print(string.format("%s attacks %s for %d damage!", enemy.name, victim.name, damage))
+        if sounds and sounds.attack then sounds.attack:play() end
+        if victim.health <= 0 then
+            for i = #entities, 1, -1 do
+                if entities[i] == victim then
+                    table.remove(entities, i)
+                    break
+                end
             end
         end
     end

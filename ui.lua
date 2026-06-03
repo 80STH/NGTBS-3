@@ -829,7 +829,41 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
         end
     end
 
-    -- Террейн
+    local terrainHeight = 20
+    local prepareHeight = 0
+    local prepareText = nil
+    
+    if entity.hasPreparedAttack and entity.preparePosCube and entity.preparedTargetCube then
+        prepareHeight = 20
+        local curX, curY, curZ = hex_utils.axialToCube(entity.q, entity.r)
+        local deltaX = curX - entity.preparePosCube.x
+        local deltaY = curY - entity.preparePosCube.y
+        local deltaZ = curZ - entity.preparePosCube.z
+        local targetX = entity.preparedTargetCube.x + deltaX
+        local targetY = entity.preparedTargetCube.y + deltaY
+        local targetZ = entity.preparedTargetCube.z + deltaZ
+        local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
+        prepareText = string.format("⚔ Prepares: (%d,%d) → (%d,%d) for 1 dmg", entity.q, entity.r, targetQ, targetR)
+    end
+
+    -- В ui.drawUnitTooltip, после строки с Armor:
+    local dirNames = {"E", "NE", "NW", "W", "SW", "SE"}
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.print("Armor sides:", x+8, y+42)
+    local armorList = {}
+    for i=0,5 do
+        if entity:hasArmorOnSide(i) then
+            table.insert(armorList, dirNames[i+1])
+        end
+    end
+    love.graphics.print(table.concat(armorList, ", ") or "none", x+8, y+58)
+    
+    if entity.weakPointDirection then
+        love.graphics.setColor(1,0.5,0.5,1)
+        love.graphics.print("Weak side: " .. dirNames[entity.weakPointDirection+1], x+8, y+74)
+    end
+
+    -- Тип земли (как было)
     local terrain = "grass"
     if terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] then
         terrain = terrainMap[entity.q][entity.r]
@@ -1042,88 +1076,47 @@ function ui.drawRestartButton(button, turnState)
     love.graphics.print(button.text, button.x + 15, button.y + 8)
 end
 
--- ui.lua
-function ui.drawCellTooltip(q, r, terrain, hex)
-    local panelX = 10
-    local panelY = love.graphics.getHeight() - 100  -- немного выше, чтобы вместить статусы
-    local statuses = status.getAtHex(q, r)
-    local lineHeight = 16
-    local titleHeight = 30
-    local statusHeight = #statuses > 0 and (20 + #statuses * lineHeight) or 0
-    local panelWidth = 180
-    local panelHeight = titleHeight + statusHeight
-
-    love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
-    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 5)
-    love.graphics.setColor(0.8, 0.8, 0.8, 1)
-    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 5)
-
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("Terrain: " .. terrain, panelX + 8, panelY + 6)
-
-    if #statuses > 0 then
-        love.graphics.setColor(1, 0.8, 0.4, 1)
-        love.graphics.print("Statuses:", panelX + 8, panelY + 28)
-        local iconMap = { fire = "🔥 Fire", acid = "🧪 Acid" }
-        love.graphics.setColor(1, 0.9, 0.6, 1)
-        for i, st in ipairs(statuses) do
-            local text = iconMap[st] or st
-            love.graphics.print(text, panelX + 18, panelY + 28 + i * lineHeight)
+function ui.drawArmorWeaknessIndicators(hex, entity)
+    if not entity or not entity.armor then return end
+    
+    local x, y = hex:hexToPixel(entity.q, entity.r)
+    local radius = hex.radius
+    local offset = radius * 0.85  -- расстояние от центра
+    local angles = {
+        0,          -- E (восток)
+        math.pi/3,  -- NE
+        2*math.pi/3,-- NW
+        math.pi,    -- W
+        4*math.pi/3,-- SW
+        5*math.pi/3 -- SE
+    }
+    
+    for side = 0, 5 do
+        local armorVal = entity.armor[side+1]
+        local angle = angles[side+1]
+        local ix = x + math.cos(angle) * offset
+        local iy = y + math.sin(angle) * offset
+        
+        -- Если есть уязвимая точка на этой стороне
+        if entity.weakPoint == side then
+            love.graphics.setColor(1, 0.3, 0.3, 0.9)
+            love.graphics.circle("fill", ix, iy, 12)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print("🎯", ix-6, iy-8)
+        -- Иначе если броня < 1 (защита)
+        elseif armorVal < 1 then
+            love.graphics.setColor(0.3, 0.5, 0.9, 0.9)
+            love.graphics.circle("fill", ix, iy, 10)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print("🛡", ix-5, iy-7)
+        -- Если броня > 1 (уязвимость)
+        elseif armorVal > 1 then
+            love.graphics.setColor(1, 0.5, 0.1, 0.9)
+            love.graphics.circle("fill", ix, iy, 10)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print("⚠", ix-5, iy-7)
         end
     end
-end
-
--- ui.lua
-function ui.drawEnemyMovementRange(hex, enemy, entities, terrainMap)
-    if not enemy or enemy.isPlayable or not enemy:isCharacter() or enemy.health <= 0 then
-        return
-    end
-    if enemy.hasActedThisTurn or enemy.isMoving then
-        return
-    end
-
-    for q = 0, hex.gridWidth - 1 do
-        for r = 0, hex.gridHeight - 1 do
-            if hex:isActiveHex(q, r) then
-                -- Проверяем, может ли враг дойти до клетки
-                if ui.isCellReachableForEnemy(enemy, q, r, entities, terrainMap, hex) then
-                    local x, y = hex:hexToPixel(q, r)
-                    local vertices = hex:drawHexagon(x, y, hex.radius)
-                    love.graphics.setColor(0.8, 0.2, 0.2, 0.2)  -- красноватая подсветка
-                    love.graphics.polygon("fill", vertices)
-                    love.graphics.setColor(0.8, 0.2, 0.2, 0.5)
-                    love.graphics.polygon("line", vertices)
-                end
-            end
-        end
-    end
-end
-
-function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMap, hex)
-    if not hex:isActiveHex(targetQ, targetR) then return false end
-    if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
-        return false
-    end
-    -- Клетка не должна быть занята (союзником или врагом)
-    for _, e in ipairs(entities) do
-        if e ~= enemy and e.q == targetQ and e.r == targetR then
-            return false
-        end
-    end
-    local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, enemy.moveRange,
-        function(q, r) return not isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex) end, hex)
-    return path ~= nil and #path > 0
-end
-
-function isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
-    if not hex:isActiveHex(q, r) then return false end
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then return false end
-    for _, e in ipairs(entities) do
-        if e ~= enemy and e.q == q and e.r == r then
-            return false  -- любые сущности (союзники, другие враги, здания) блокируют путь
-        end
-    end
-    return true
 end
 
 return ui

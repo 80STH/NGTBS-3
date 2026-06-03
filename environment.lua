@@ -195,6 +195,17 @@ local function createEntityFromGID(map, gid, gridX, gridY)
             def.maxHealth, def.isPlayable, def.moveRange,
             nil, nil, attacks
         )
+        if def.attacks == "warrior" then
+            actor:setArmorDirection(0)   -- защита с востока
+            actor:setArmorDirection(2)   -- защита с северо-запада
+            actor:setWeakPointDirection(3) -- уязвим с запада
+        elseif def.attacks == "mage" then
+            actor:setArmorDirection(5)   -- защита с юго-востока
+            actor:setWeakPointDirection(1) -- уязвим с северо-востока
+        elseif def.attacks == "rogue" then
+            actor:setArmorDirection(4)   -- защита с юго-запада
+            actor:setWeakPointDirection(2) -- уязвим с северо-запада
+        end
         actor.sprite = entitySprite
         return actor
 
