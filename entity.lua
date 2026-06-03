@@ -37,10 +37,6 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     -- Атаки (только для персонажей)
     self.attacks = attacks or {}
     self.currentAttackIndex = 1
-
-    --это временно!
-    self.armorDirections = {}   -- список индексов сторон (0-5), где броня уменьшает урон на 1
-    self.weakPointDirection = nil -- индекс стороны (0-5), где урон увеличивается на 1
     
     -- Флаги
     self.hasActedThisTurn = false
@@ -72,20 +68,6 @@ end
 -- Можно ли оттолкнуть сущность
 function Entity:isPushable()
     return self.isPushable
-end
-
-function Entity:setArmorDirection(sideIndex)
-    if sideIndex >= 0 and sideIndex <= 5 then
-        self.armorDirections[sideIndex] = true
-    end
-end
-
-function Entity:setWeakPointDirection(sideIndex)
-    self.weakPointDirection = sideIndex
-end
-
-function Entity:hasArmorOnSide(sideIndex)
-    return self.armorDirections[sideIndex] == true
 end
 
 -- Получить текущую атаку

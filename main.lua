@@ -1063,11 +1063,6 @@ function drawEntity(entity)
         love.graphics.print(entity.name, x - 20, y - 25)
     end
 
-    -- Показать броню/уязвимость только для союзников (или для всех, если нужно)
-    if entity.isPlayable and entity.armor then
-        ui.drawArmorWeaknessIndicators(hex, entity)
-    end
-
     local entityStatuses = status.getEntityStatuses(entity)
     if #entityStatuses > 0 then
         ui.drawEntityStatusEffects(x, y, entityStatuses, 20, love.timer.getTime())
@@ -1084,11 +1079,6 @@ function drawEntity(entity)
         love.graphics.setColor(1, 1, 0, 0.8)
         love.graphics.circle("line", x, y, 22)
         love.graphics.setColor(1, 1, 1, 1)
-    end
-
-    -- Показываем сектора только для выбранного союзника (или при наведении)
-    if selectedActor == entity and entity.isPlayable then
-        hex:drawArmorWeaknessSectors(x, y, hex.radius, entity)
     end
 end
 
@@ -1203,10 +1193,6 @@ function love.draw()
             local panelX = 10
             local panelY = love.graphics.getHeight() - 180  -- немного выше, чтобы поместилась дополнительная строка
             ui.drawUnitTooltip(hoverEntity, panelX, panelY, terrainMap, hex)
-            -- дополнительно рисуем индикаторы на гексе вокруг юнита
-            if hoverEntity.isPlayable and hoverEntity.armor then
-                ui.drawArmorWeaknessIndicators(hex, hoverEntity)
-            end
         elseif hex:isActiveHex(hex.hoverQ, hex.hoverR) then
             local terrain = terrainMap and terrainMap[hex.hoverQ] and terrainMap[hex.hoverQ][hex.hoverR] or "grass"
             ui.drawCellTooltip(hex.hoverQ, hex.hoverR, terrain, hex)
