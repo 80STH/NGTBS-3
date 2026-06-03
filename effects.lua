@@ -4,7 +4,7 @@ local effects = {}
 local status = require("status")
 
 -- Применить ВСЕ эффекты клетки к сущности (статусы + утопление)
--- Возвращает: true, если сущность погибла (удалять из entities НЕ нужно, это делает вызывающий код)
+-- Возвращает: true, если сущность погибла (анимация запущена)
 function effects.applyAllCellEffects(entity, q, r, terrainMap, entities, globalHealth)
     if not entity or not entity.health or entity.health <= 0 then
         return false
@@ -36,18 +36,18 @@ function effects.applyAllCellEffects(entity, q, r, terrainMap, entities, globalH
         print(string.format("💧 %s drowns in water!", entity.name))
         if sounds and sounds.collision then sounds.collision:play() end
         entity.health = 0
+        entity:startDeath()
         died = true
     end
 
     return died
 end
 
--- Применить конец хода: урон от огня, повторное утопление (на случай, если кто-то остался на воде)
--- Возвращает список погибших (чтобы удалить из entities)
+-- Применить конец хода: урон от огня, повторное утопление
+-- Теперь сразу запускает анимацию смерти, ничего не возвращает
 function effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
-    local toRemove = {}
     for _, entity in ipairs(entities) do
-        if entity.health and entity.health > 0 then
+        if entity.health and entity.health > 0 and not entity.isDying then
             -- Огонь наносит урон в конце хода (если не на воде)
             if status.hasEntityStatus(entity, "fire") then
                 local terrain = terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] or "grass"
@@ -57,7 +57,7 @@ function effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
                     local wasDestroyed = entity:takeDamage(damage, globalHealth)
                     if sounds and sounds.fire then sounds.fire:play() end
                     if wasDestroyed then
-                        table.insert(toRemove, entity)
+                        entity:startDeath()
                     end
                 else
                     -- на воде огонь должен был быть потушен, но на всякий случай снимем
@@ -72,12 +72,11 @@ function effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
                     print(string.format("💧 %s drowns at end of turn!", entity.name))
                     if sounds and sounds.collision then sounds.collision:play() end
                     entity.health = 0
-                    table.insert(toRemove, entity)
+                    entity:startDeath()
                 end
             end
         end
     end
-    return toRemove
 end
 
 return effects

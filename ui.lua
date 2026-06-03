@@ -13,6 +13,15 @@ local hex_utils = require("hex_utils")
 
 local hazardTexture = nil
 
+-- Возвращает реальные координаты для отрисовки сущности (с учётом анимаций)
+local function getEntityDisplayPosition(entity, hex)
+    if not entity then return nil, nil end
+    if entity.currentDrawX and entity.currentDrawY then
+        return entity.currentDrawX, entity.currentDrawY
+    end
+    return hex:hexToPixel(entity.q, entity.r)
+end
+
 local function getHazardTexture()
     if hazardTexture then return hazardTexture end
     local size = 64
@@ -862,8 +871,42 @@ function ui.drawTerrainOnlyTooltip(terrain, x, y)
     love.graphics.print("Terrain: " .. terrain, x + 8, y + 8)
 end
 
+
+
 function ui.drawPreparedAttackDirection(hex, enemy, time)
-    if not enemy.hasPreparedAttack or not enemy.attackDirection then return end
+    if not enemy.hasPreparedAttack then return end
+    local attack = enemy.preparedAttack
+    if not attack then return end
+
+    local fromX, fromY = getEntityDisplayPosition(enemy, hex)
+    if not fromX then return end
+
+    -- Ghost Bolt: пунктирная линия до цели
+    if attack.name == "Ghost Bolt" then
+        local target = enemy.preparedTargetEntity
+        if target and target.health > 0 then
+            local toX, toY = getEntityDisplayPosition(target, hex)
+            if toX then
+                ui.drawDottedLine(fromX, fromY, toX, toY, 6, 25, time)
+            end
+        end
+        return
+    end
+
+    -- Magic Bolt (Лич): двойная дуга с выныриванием и заныриванием
+    if attack.name == "Magic Bolt" then
+        local target = enemy.preparedTargetEntity
+        if target and target.health > 0 then
+            local toX, toY = getEntityDisplayPosition(target, hex)
+            if toX then
+                ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
+            end
+        end
+        return
+    end
+
+    -- Для атак с направлением (Dash, Shoot, Piercing и т.д.)
+    if not enemy.attackDirection then return end
     local dir = enemy.attackDirection
     local curX, curY, curZ = hex_utils.axialToCube(enemy.q, enemy.r)
     local targetX = curX + dir.dx
@@ -871,28 +914,27 @@ function ui.drawPreparedAttackDirection(hex, enemy, time)
     local targetZ = curZ + dir.dz
     local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
     if not hex:isValidHex(targetQ, targetR) then return end
-    
-    local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
+
     local toX, toY = hex:hexToPixel(targetQ, targetR)
-    
+
     local angle = math.atan2(toY - fromY, toX - fromX)
     local arrowSize = 18
     local lineWidth = 4
     local radius = hex.radius
     local offset = radius * 0.3
-    
+
     local startX = fromX + math.cos(angle) * offset
     local startY = fromY + math.sin(angle) * offset
     local endX = toX - math.cos(angle) * offset
     local endY = toY - math.sin(angle) * offset
-    
+
     local pulse = 0.5 + 0.5 * math.sin(time * 8)
     local alpha = 0.5 + 0.3 * pulse
-    
+
     love.graphics.setLineWidth(lineWidth)
     love.graphics.setColor(1, 0.2, 0.2, alpha)
     love.graphics.line(startX, startY, endX, endY)
-    
+
     local leftAngle = angle + math.pi * 0.7
     local rightAngle = angle - math.pi * 0.7
     love.graphics.line(endX, endY,
@@ -901,8 +943,35 @@ function ui.drawPreparedAttackDirection(hex, enemy, time)
     love.graphics.line(endX, endY,
         endX + math.cos(rightAngle) * arrowSize,
         endY + math.sin(rightAngle) * arrowSize)
-    
+
     love.graphics.setLineWidth(1)
+end
+
+-- ui.lua (добавить в конец файла, перед return ui)
+
+-- Рисует пунктирную линию из больших пульсирующих кружков
+function ui.drawDottedLine(x1, y1, x2, y2, dotRadius, step, time)
+    local dx = x2 - x1
+    local dy = y2 - y1
+    local length = math.sqrt(dx*dx + dy*dy)
+    if length < 0.1 then return end
+    local dirX = dx / length
+    local dirY = dy / length
+
+    local numDots = math.floor(length / step)
+    if numDots < 1 then numDots = 1 end
+
+    for i = 0, numDots do
+        local t = i / numDots
+        local px = x1 + dx * t
+        local py = y1 + dy * t
+        local pulse = 0.6 + 0.4 * math.sin(time * 8 + i)
+        local r = dotRadius * (0.7 + 0.3 * pulse)
+        love.graphics.setColor(0.7, 0.3, 1, 0.85 * pulse)
+        love.graphics.circle("fill", px, py, r)
+        love.graphics.setColor(1, 0.8, 1, 0.9)
+        love.graphics.circle("line", px, py, r + 2)
+    end
 end
 
 -- Предпросмотр Wind Torrent: рисует стрелки от каждого подвижного объекта к его новому положению
@@ -1124,6 +1193,85 @@ function isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
         end
     end
     return true
+end
+
+function ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
+    local dx = toX - fromX
+    local dy = toY - fromY
+    local length = math.sqrt(dx * dx + dy * dy)
+    if length < 0.1 then return end
+
+    local diveX = fromX + dx * 0.33
+    local diveY = fromY + dy * 0.33 + 35
+    local riseX = fromX + dx * 0.66
+    local riseY = fromY + dy * 0.66 - 35
+    local pulse = 0.6 + 0.4 * math.sin(time * 6)
+    local alpha = 0.6 + 0.4 * pulse
+
+    -- ===== 1. Стрелка от Лича к точке заныривания =====
+    local function drawArrow(ax, ay, bx, by, a)
+        local angle = math.atan2(by - ay, bx - ax)
+        love.graphics.setLineWidth(4)
+        love.graphics.setColor(0.7, 0.2, 1, a)
+        love.graphics.line(ax, ay, bx, by)
+
+        local arrowSize = 18
+        local leftAngle = angle + math.pi * 0.7
+        local rightAngle = angle - math.pi * 0.7
+        love.graphics.line(bx, by,
+            bx + math.cos(leftAngle) * arrowSize,
+            by + math.sin(leftAngle) * arrowSize)
+        love.graphics.line(bx, by,
+            bx + math.cos(rightAngle) * arrowSize,
+            by + math.sin(rightAngle) * arrowSize)
+    end
+
+    drawArrow(fromX, fromY, diveX, diveY, alpha)
+
+    -- ===== 2. Эффект "заныривания" (земля разрывается) =====
+    love.graphics.setColor(0.5, 0.2, 0.8, alpha * 0.9)
+    love.graphics.circle("fill", diveX, diveY, 14)
+    love.graphics.setColor(0.9, 0.4, 1, alpha)
+    love.graphics.circle("line", diveX, diveY, 18)
+    -- Искры
+    for i = 1, 5 do
+        local angleOff = time * 12 + i
+        local offX = math.cos(angleOff) * 12 * pulse
+        local offY = math.sin(angleOff) * 8 * pulse
+        love.graphics.setColor(1, 0.5, 1, alpha)
+        love.graphics.circle("fill", diveX + offX, diveY + offY, 3)
+    end
+
+    -- ===== 3. Подземный путь (волнообразные точки) =====
+    local numDots = 10
+    for i = 1, numDots do
+        local t = i / numDots
+        local px = diveX + (riseX - diveX) * t
+        local py = diveY + (riseY - diveY) * t + math.sin(t * math.pi * 3) * 12
+        local dotSize = 6 * (0.4 + 0.6 * math.sin(time * 10 + i))
+        love.graphics.setColor(0.4, 0.1, 0.7, alpha * 0.7)
+        love.graphics.circle("fill", px, py, dotSize)
+        love.graphics.setColor(0.8, 0.3, 1, alpha * 0.5)
+        love.graphics.circle("line", px, py, dotSize + 2)
+    end
+
+    -- ===== 4. Стрелка от точки выныривания к цели =====
+    drawArrow(riseX, riseY, toX, toY, alpha)
+
+    -- ===== 5. Эффект "выныривания" (всплеск магии) =====
+    love.graphics.setColor(0.8, 0.3, 1, alpha * 0.9)
+    love.graphics.circle("fill", riseX, riseY, 14)
+    love.graphics.setColor(1, 0.6, 1, alpha)
+    love.graphics.circle("line", riseX, riseY, 18)
+    for i = 1, 5 do
+        local angleOff = time * 12 + i
+        local offX = math.cos(angleOff) * 10 * pulse
+        local offY = math.sin(angleOff) * 10 * pulse
+        love.graphics.setColor(1, 0.4, 1, alpha)
+        love.graphics.circle("fill", riseX + offX, riseY + offY, 3)
+    end
+
+    love.graphics.setLineWidth(1)
 end
 
 return ui

@@ -40,12 +40,18 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     
     -- Флаги
     self.hasActedThisTurn = false
+    self.hasMovedThisTurn = false   -- для союзников
     
     -- Для строительных объектов
     self.globalHealthCost = nil
     
     -- 🧱 НЕПОДВИЖНОСТЬ: препятствия и здания не отталкиваются
     self.isPushable = (type == Entity.TYPES.CHARACTER)
+    
+    -- Анимация смерти
+    self.isDying = false
+    self.deathTimer = 0
+    self.deathDuration = 0.4   -- длительность анимации исчезновения
     
     return self
 end
@@ -109,6 +115,17 @@ function Entity:takeDamage(damage, globalHealth)
     end
     
     return self.health <= 0
+end
+
+-- Запуск анимации смерти
+function Entity:startDeath()
+    if self.isDying then return end
+    self.isDying = true
+    self.deathTimer = 0
+    self.health = 0   -- гарантируем, что здоровье ноль
+    if sounds and sounds.death then
+        sounds.death:play()
+    end
 end
 
 -- Получить строковое представление

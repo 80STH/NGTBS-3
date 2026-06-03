@@ -103,7 +103,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
             print(target.name .. " is slammed against the edge! Takes 1 damage!")
             if sounds and sounds.collision then sounds.collision:play() end
             if target.health <= 0 then
-                combat.removeEntity(target, entities)
+                target.startDeath()
             end
         end
         local effectX, effectY = hex:hexToPixel(fromQ, fromR)
@@ -198,8 +198,8 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
                 print(occupant.name .. " takes 1 collision damage!")
                 if sounds and sounds.collision then sounds.collision:play() end
             end
-            if firstTarget.health <= 0 then combat.removeEntity(firstTarget, entities) end
-            if occupant and occupant.health <= 0 then combat.removeEntity(occupant, entities) end
+            if firstTarget.health <= 0 then firstTarget:startDeath() end
+            if occupant and occupant.health <= 0 then occupant:startDeath() end
             local effectX, effectY = hex:hexToPixel(targetHex.q, targetHex.r)
             visual.addEffect(effectX, effectY, "slam")
         else
@@ -504,14 +504,7 @@ function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities
         visual.addEffect(x, y, "hit", 0.4)
     end
 
-    if wasDestroyed then
-        for i = #entities, 1, -1 do
-            if entities[i] == target then
-                table.remove(entities, i)
-                break
-            end
-        end
-    end
+    if wasDestroyed then target:startDeath() end
 
     attacker.hasActedThisTurn = true
     return true
@@ -799,11 +792,11 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
                 if occupant.health then
                     occupant.health = occupant.health - 1
                     if occupant.health <= 0 then
-                        combat.removeEntity(occupant, entities)
+                        occupant:startDeath()
                     end
                 end
                 if pushedObj.health <= 0 then
-                    combat.removeEntity(pushedObj, entities)
+                    pushedObj:startDeath()
                 end
                 -- Не перемещаем объект, остаётся на месте
                 if pushedObj.health <= 0 then
@@ -822,7 +815,7 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
                 if pushedObj and terrainMap then
                     local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities, globalHealth)
                     if died then
-                        combat.removeEntity(pushedObj, entities)
+                        pushedObj.startDeath()
                     end
                 end
             end
@@ -941,13 +934,6 @@ function combat.getEntityAtHex(q, r, entities)
     return nil
 end
 
-function combat.removeEntity(entity, entities)
-    for i, e in ipairs(entities) do
-        if e == entity then table.remove(entities, i); return true end
-    end
-    return false
-end
-
 -- combat.lua (заменить существующий метод)
 function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, sounds, directionIndex, globalHealth)
     -- Базовый множитель = 1.0
@@ -977,7 +963,7 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
         visual.addEffect(x, y, "hit", 0.4)
     end
 
-    if wasDestroyed then combat.removeEntity(target, entities) end
+    if wasDestroyed then target:startDeath() end
     return wasDestroyed
 end
 
@@ -1058,7 +1044,7 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
         isMoving = false,
         onComplete = function(pushedObj)
             if pushedObj.health <= 0 then
-                combat.removeEntity(pushedObj, entities)
+                pushedObj:startDeath()
             end
         end
     })

@@ -137,7 +137,6 @@ end
 function checkGameEnd()
     if not gameActive then return end
 
-    -- Поражение: глобальное здоровье <= 0
     if globalHealth.current <= 0 then
         loss = true
         gameActive = false
@@ -145,10 +144,9 @@ function checkGameEnd()
         return
     end
 
-    -- Поражение: нет живых союзников
     local anyAlly = false
     for _, e in ipairs(entities) do
-        if e.isPlayable and e.health > 0 then
+        if e.isPlayable and e.health > 0 and not e.isDying then
             anyAlly = true
             break
         end
@@ -160,11 +158,10 @@ function checkGameEnd()
         return
     end
 
-    -- Победа: лимит ходов достигнут И нет живых врагов
     if turnCount >= maxTurns then
         local anyEnemy = false
         for _, e in ipairs(entities) do
-            if e:isCharacter() and not e.isPlayable and e.health > 0 then
+            if e:isCharacter() and not e.isPlayable and e.health > 0 and not e.isDying then
                 anyEnemy = true
                 break
             end
@@ -234,6 +231,18 @@ function getWindDirectionFromHex(q, r, centerQ, centerR, hex)
         end
     end
     return nil
+end
+
+function updateDeathAnimations(dt)
+    for i = #entities, 1, -1 do
+        local e = entities[i]
+        if e.isDying then
+            e.deathTimer = e.deathTimer + dt
+            if e.deathTimer >= e.deathDuration then
+                table.remove(entities, i)
+            end
+        end
+    end
 end
 
 -- Изменить love.mousepressed (удалить button == 2, добавить обработку кнопок атак и режима атаки)
@@ -462,7 +471,6 @@ function endTurn()
         print("Cannot end turn now")
         return
     end
-    -- Принудительно завершаем ход для всех, кто не атаковал
     for _, a in ipairs(entities) do
         if a.isPlayable and not a.hasActedThisTurn then
             a.hasActedThisTurn = true
@@ -470,21 +478,13 @@ function endTurn()
         end
     end
 
-    -- ПРИМЕНЯЕМ ЭФФЕКТЫ КОНЦА ХОДА (горение, утопление) до атак врагов
     effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
-    checkGameEnd()   -- <-- добавить
-
-    local drownedList = effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
-    for _, dead in ipairs(drownedList) do
-        local x, y = hex:hexToPixel(dead.q, dead.r)
-        print("Adding effect at", effectX, effectY, "type", "slam")
-        visual.addEffect(x, y, "drown")
-    end
+    checkGameEnd()  -- <-- добавить
 
     -- Собираем врагов для атаки
     local attackers = {}
     for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 then
+        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 and not e.isDying then
             table.insert(attackers, e)
         end
     end
@@ -804,6 +804,7 @@ end
 
 function love.update(dt)
     visual.update(dt)
+    updateDeathAnimations(dt)
     -- Обновление анимаций движения всех сущностей (включая врагов)
     for _, actor in ipairs(entities) do
         updateActorMovement(actor, dt)
@@ -1035,9 +1036,18 @@ function drawActionIndicator(entity, x, y)
     end
 end
 
--- Унифицированная отрисовка любой сущности
 function drawEntity(entity)
     local x, y = getEntityDrawPosition(entity)
+    
+    -- Анимация смерти: прозрачность и масштаб
+    local alpha = 1
+    local scale = 1
+    if entity.isDying then
+        local t = entity.deathTimer / entity.deathDuration  -- 0..1
+        alpha = 1 - t
+        scale = 1 - t * 0.7
+        love.graphics.setColor(1, 1, 1, alpha)
+    end
     
     if entity.isPlayable and entity.hasMovedThisTurn and not entity.hasActedThisTurn then
         love.graphics.setColor(0.5, 0.8, 0.5, 0.9)
@@ -1046,16 +1056,22 @@ function drawEntity(entity)
 
     if entity.sprite then
         local sw, sh = entity.sprite:getDimensions()
-        local scale = 6
+        local baseScale = 6
         if selectedActor == entity and entity:isCharacter() then
-            scale = 6 + math.sin(entity.pulse) * 0.2
+            baseScale = 6 + math.sin(entity.pulse) * 0.2
         end
-        -- pivot в центр спрайта
-        love.graphics.draw(entity.sprite, x, y, 0, scale, scale, sw/2, sh/2)
+        local finalScale = baseScale * scale
+        love.graphics.draw(entity.sprite, x, y, 0, finalScale, finalScale, sw/2, sh/2)
     else
         -- fallback круг
         love.graphics.setColor(entity.color or {1, 1, 1, 1})
         love.graphics.circle("fill", x, y, 14)
+    end
+    
+    -- Красная подсветка для умирающих
+    if entity.isDying then
+        love.graphics.setColor(1, 0.2, 0.2, alpha)
+        love.graphics.circle("fill", x, y, 18)
     end
     
     -- Имя сущности (только для персонажей)
@@ -1076,7 +1092,7 @@ function drawEntity(entity)
     drawActionIndicator(entity, x, y)
     
     -- Рамка выделения для выбранного персонажа
-    if selectedActor == entity and entity:isCharacter() then
+    if selectedActor == entity and entity:isCharacter() and not entity.isDying then
         love.graphics.setColor(1, 1, 0, 0.8)
         love.graphics.circle("line", x, y, 22)
         love.graphics.setColor(1, 1, 1, 1)

@@ -235,12 +235,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
     if sounds and sounds.attack then sounds.attack:play() end
 
     if wasDestroyed then
-        for i = #entities, 1, -1 do
-            if entities[i] == target then
-                table.remove(entities, i)
-                break
-            end
-        end
+        target:startDeath()
     end
 
     enemy.hasPreparedAttack = false
