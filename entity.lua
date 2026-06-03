@@ -109,9 +109,8 @@ end
 
 -- Применить урон
 function Entity:takeDamage(damage, globalHealth)
-    local oldHealth = self.health
-    self.health = self.health - damage
-    local actualDamage = oldHealth - self.health
+    local actualDamage = math.min(damage, self.health)
+    self.health = self.health - actualDamage
     
     if self:isBuilding() and globalHealth then
         globalHealth.current = math.max(0, globalHealth.current - actualDamage)
@@ -119,6 +118,9 @@ function Entity:takeDamage(damage, globalHealth)
               self.name, actualDamage, math.max(0, self.health), self.maxHealth))
         print(string.format("⚔ Global health reduced by %d! (%d/%d)", 
               actualDamage, globalHealth.current, globalHealth.max))
+        
+        -- ВЫЗЫВАЕМ ПРОВЕРКУ КОНЦА ИГРЫ
+        if checkGameEnd then checkGameEnd() end
     else
         print(string.format("%s takes %d damage! (%d/%d HP)", 
               self.name, actualDamage, math.max(0, self.health), self.maxHealth))
