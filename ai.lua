@@ -175,7 +175,6 @@ function ai.prepareAttackForEnemy(enemy, entities, hex, selectedTargets)
     return true
 end
 
--- Переписать ai.executePreparedAttack
 function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
     if not enemy.hasPreparedAttack or enemy.health <= 0 then return false end
     local attack = enemy.preparedAttack
@@ -192,19 +191,31 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
             if not hex:isValidHex(curQ, curR) then break end
             local e = combat.getEntityAtHex(curQ, curR, entities)
             if e and e.health > 0 and e ~= enemy then
-                if (e:isCharacter() and e.isPlayable) or e:isBuilding() then
-                    target = e
-                    break
-                end
+                target = e
+                break
             end
         end
     else
-        -- Lich и Bite: используем сохранённую цель
+        -- Lich и Bite: сначала пробуем сохранённую цель
         local saved = enemy.preparedTargetEntity
         if saved and saved.health > 0 then
             local dist = hex:getDistance(enemy.q, enemy.r, saved.q, saved.r)
             if dist <= attack.range then
                 target = saved
+            end
+        end
+        
+        -- Если сохранённой цели нет или она мертва, и это Bite – ищем любую цель в радиусе 1
+        if not target and attack.name == "Bite" then
+            local neighbors = hex:getNeighbors(enemy.q, enemy.r)
+            for _, nb in ipairs(neighbors) do
+                if hex:isValidHex(nb.q, nb.r) then
+                    local e = combat.getEntityAtHex(nb.q, nb.r, entities)
+                    if e and e.health > 0 and e ~= enemy then
+                        target = e
+                        break
+                    end
+                end
             end
         end
     end
