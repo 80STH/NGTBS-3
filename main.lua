@@ -387,10 +387,8 @@ function love.mousepressed(x, y, button)
 end
 
 function prepareAllEnemies()
-    local enemies = ai.getLivingEnemies(entities)
-    for _, enemy in ipairs(enemies) do
-        ai.prepareAttackForEnemy(enemy, entities, hex)
-    end
+    -- Используем новую функцию с распределением целей
+    ai.prepareAllEnemiesWithTargetDistribution(entities, hex)
     turnState.phase = "player"
 
     -- Увеличиваем счётчик ходов и проверяем лимит
@@ -402,7 +400,7 @@ function prepareAllEnemies()
         fireAppliedForTurnLimit = true
     end
 
-    checkGameEnd()  -- проверяем, не наступила ли победа/поражение
+    checkGameEnd()
 
     -- Сброс флагов и режима атаки
     attackMode = false
@@ -451,7 +449,7 @@ function updateEnemyAttacks(dt)
         local enemy = table.remove(turnState.enemyAttackQueue, 1)
         turnState.currentAttackingEnemy = enemy
         if enemy and enemy.health > 0 then
-            ai.executePreparedAttack(enemy, entities, hex, sounds)
+            ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
             checkGameEnd()   -- <-- добавить
         end
         turnState.currentAttackingEnemy = nil
@@ -792,18 +790,14 @@ function processNextEnemyPrepare()
 
     local status = ai.moveAndPrepare(enemy, entities, hex)
     if status == "prepared" then
-        -- Уже подготовлен, сразу переходим к следующему
         turnState.currentPreparingEnemy = nil
         processNextEnemyPrepare()
     elseif status == "failed" then
-        -- Не может подготовиться (нет целей или движение невозможно)
-        -- Просто пропускаем этого врага
         print(enemy.name .. " cannot prepare attack, skipping")
         turnState.currentPreparingEnemy = nil
         processNextEnemyPrepare()
     elseif status == "moving" then
-        -- Будем ждать завершения движения в love.update
-        -- Ничего не делаем, ждём установки enemy.movementFinished
+        -- Ждём завершения движения
     end
 end
 
@@ -834,7 +828,7 @@ function love.update(dt)
             -- В любом случае, завершаем обработку этого врага
             if not enemy.hasPreparedAttack then
                 -- Пробуем подготовить, если цель рядом
-                local dist = ai.getDistanceToNearestPlayer(enemy, entities, hex)
+                local dist = ai.getDistanceToNearestTarget(enemy, entities, hex)
                 if dist == 1 then
                     ai.prepareAttackForEnemy(enemy, entities, hex)
                 end
@@ -856,7 +850,7 @@ function love.update(dt)
             turnState.enemyAttackTimer = 0
             local enemy = table.remove(turnState.enemyAttackQueue, 1)
             if enemy and enemy.health > 0 then
-                ai.executePreparedAttack(enemy, entities, hex, sounds)
+                ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
             end
         end
     end
@@ -1190,17 +1184,14 @@ function love.draw()
             ui.drawUnitTooltip(hoverEntity, panelX, panelY, terrainMap, hex)
         elseif hex:isActiveHex(hex.hoverQ, hex.hoverR) then
             local terrain = terrainMap and terrainMap[hex.hoverQ] and terrainMap[hex.hoverQ][hex.hoverR] or "grass"
-            local panelX = 10
-            local panelY = love.graphics.getHeight() - 60
-            ui.drawTerrainOnlyTooltip(terrain, panelX, panelY)
+            ui.drawCellTooltip(hex.hoverQ, hex.hoverR, terrain, hex)
         end
     end
 
     -- Стрелка направления подготовленной атаки (при наведении на врага)
-    if hex.hoverQ and hex.hoverQ >= 0 and hex.hoverR and hex.hoverR >= 0 then
-        local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
-        if hoverEntity and hoverEntity:isCharacter() and not hoverEntity.isPlayable and hoverEntity.hasPreparedAttack then
-            ui.drawPreparedAttackDirection(hex, hoverEntity, love.timer.getTime())
+    for _, entity in ipairs(entities) do
+        if entity:isCharacter() and not entity.isPlayable and entity.hasPreparedAttack and entity.health > 0 then
+            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime())
         end
     end
 
@@ -1214,6 +1205,10 @@ function love.draw()
     if not gameActive then
         local width = love.graphics.getWidth()
         local height = love.graphics.getHeight()
+        
+        -- Сохраняем текущий шрифт
+        local oldFont = love.graphics.getFont()
+        
         love.graphics.setColor(0, 0, 0, 0.85)
         love.graphics.rectangle("fill", 0, 0, width, height)
 
@@ -1234,6 +1229,9 @@ function love.draw()
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.setFont(love.graphics.newFont(24))
         love.graphics.print("New Game", btnX + 48, btnY + 12)
+        
+        -- Восстанавливаем старый шрифт
+        love.graphics.setFont(oldFont)
     end
 end
 

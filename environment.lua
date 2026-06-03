@@ -21,8 +21,9 @@ local gidToEntity = {
     [34] = { type = "character", name = "Warrior", isPlayable = true,  maxHealth = 5, moveRange = 3, attacks = "warrior" },
     [31] = { type = "character", name = "Mage",    isPlayable = true,  maxHealth = 3, moveRange = 4, attacks = "mage" },
     [30] = { type = "character", name = "Rogue",   isPlayable = true,  maxHealth = 4, moveRange = 5, attacks = "rogue" },
-    [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "enemy" },
-    [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "enemy" },
+    [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "ghost" },
+    [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
+    [27] = { type = "character", name = "Lich", isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "lich" },
     [11] = { type = "obstacle",  name = "SuperMountain", health = 999 },
     [12] = { type = "building",  name = "SmallBuilding", health = 1, globalHealthCost = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2, globalHealthCost = 2 },
@@ -179,6 +180,12 @@ local function createEntityFromGID(map, gid, gridX, gridY)
             attacks = environment.getMageAttacks()
         elseif def.attacks == "rogue" then
             attacks = environment.getRogueAttacks()
+        elseif def.attacks == "lich" then
+            attacks = environment.getLichAttacks()
+        elseif def.attacks == "ghost" then
+            attacks = environment.getGhostAttacks()
+        elseif def.attacks == "zombie" then
+            attacks = environment.getZombieAttacks()
         else
             attacks = {}
         end
@@ -414,6 +421,28 @@ function environment.getRogueAttacks()
     return {
         { attack = combat.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
         { attack = combat.PiercingShootAttack.new(5), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
+    }
+end
+
+function environment.getGhostAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, 2 damage" },
+    }
+end
+
+function environment.getZombieAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
+    }
+end
+
+-- Добавить функцию getLichAttacks()
+function environment.getLichAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any target cell, ignores obstacles" },
     }
 end
 

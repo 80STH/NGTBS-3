@@ -188,7 +188,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
 
     -- Наносим урон первой цели, если она есть
     if firstTarget then
-        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds)
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
     end
 
     -- Отталкивание цели (как было)
@@ -275,7 +275,7 @@ function combat.ShootAttack:execute(attacker, targetQ, targetR, hex, entities, s
     if not firstTarget then return false, "No target in that direction!" end
     local distance = hex:getDistance(attacker.q, attacker.r, targetHex.q, targetHex.r)
     if distance > self.range then return false, "Target out of range!" end
-    self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds)
+    self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
     self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
     combat.startPushAnimations(hex)   -- <-- добавить
     attacker.hasActedThisTurn = true
@@ -309,7 +309,7 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     local firstTarget, firstHex, secondTarget, secondHex = self:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     if not firstTarget then return false, "No target in that direction!" end
     if secondTarget then
-        self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds)
+        self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil, globalHealth)
         self:pushTargetInDirection(secondTarget, secondHex.q, secondHex.r, stepX, stepY, stepZ, hex, entities, sounds)
         combat.startPushAnimations(hex)   -- <-- добавить
     end
@@ -422,7 +422,7 @@ function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, en
     local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
     local centerTarget = combat.getEntityAtHex(targetQ, targetR, entities)
     if centerTarget then
-        self:dealDamageToTarget(centerTarget, attacker, self.damage, entities, sounds)
+        self:dealDamageToTarget(centerTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
     end
     local neighborsInDirection = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
     for _, neighbor in ipairs(neighborsInDirection) do
@@ -472,6 +472,147 @@ function combat.AoeDirectionalAttack:getPushCells(attacker, targetQ, targetR, he
         end
     end
     return cells
+end
+
+-- 7. МАГИЧЕСКИЙ СНАРЯД LICH'а (игнорирует препятствия)
+-- 7. МАГИЧЕСКИЙ СНАРЯД LICH'а (игнорирует препятствия, не требует прямой линии)
+combat.LichBoltAttack = setmetatable({}, combat.Attack)
+combat.LichBoltAttack.__index = combat.LichBoltAttack
+
+function combat.LichBoltAttack.new(range)
+    local self = combat.Attack.new("Magic Bolt", "Throw a bolt that hits any target in range, ignoring obstacles and line of sight", range or 5, 1, {})
+    return setmetatable(self, combat.LichBoltAttack)
+end
+
+function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance > self.range then
+        return false, "Target out of range"
+    end
+
+    local target = nil
+    for _, e in ipairs(entities) do
+        if e.q == targetQ and e.r == targetR and e.health > 0 then
+            if (e:isCharacter() and e.isPlayable) or e:isBuilding() then
+                target = e
+                break
+            end
+        end
+    end
+
+    if not target then
+        return false, "No valid target at that cell"
+    end
+
+    local damage = self.damage
+    local wasDestroyed = target:takeDamage(damage, globalHealth)
+    print(string.format("🔮 %s throws a magic bolt at %s for %d damage!", attacker.name, target.name, damage))
+    if sounds and sounds.attack then sounds.attack:play() end
+
+    if hex and visual then
+        local x, y = hex:hexToPixel(target.q, target.r)
+        visual.addEffect(x, y, "hit", 0.4)
+    end
+
+    if wasDestroyed then
+        for i = #entities, 1, -1 do
+            if entities[i] == target then
+                table.remove(entities, i)
+                break
+            end
+        end
+    end
+
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.LichBoltAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) > self.range then
+        return nil
+    end
+    for _, e in ipairs(entities) do
+        if e.q == targetQ and e.r == targetR and e.health > 0 then
+            if (e:isCharacter() and e.isPlayable) or e:isBuilding() then
+                return {q = targetQ, r = targetR}
+            end
+        end
+    end
+    return nil
+end
+
+-- 8. GHOST: магический снаряд с неограниченной дальностью, первая цель на линии, урон 2
+combat.GhostBoltAttack = setmetatable({}, combat.Attack)
+combat.GhostBoltAttack.__index = combat.GhostBoltAttack
+
+function combat.GhostBoltAttack.new()
+    local self = combat.Attack.new("Ghost Bolt", "Piercing shot with unlimited range, hits first target", math.huge, 2, {})
+    return setmetatable(self, combat.GhostBoltAttack)
+end
+
+function combat.GhostBoltAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if not firstTarget then return false, "No target in that direction!" end
+
+    -- Наносим урон (не отталкиваем)
+    self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+-- Для предпросмотра
+function combat.GhostBoltAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if firstTarget and targetHex then
+        return targetHex
+    end
+    return nil
+end
+
+-- 9. ZOMBIE: удар в упор, урон 3
+combat.ZombieBiteAttack = setmetatable({}, combat.Attack)
+combat.ZombieBiteAttack.__index = combat.ZombieBiteAttack
+
+function combat.ZombieBiteAttack.new()
+    local self = combat.Attack.new("Bite", "Devastating bite at close range", 1, 3, {})
+    return setmetatable(self, combat.ZombieBiteAttack)
+end
+
+function combat.ZombieBiteAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+
+    local target = nil
+    for _, e in ipairs(entities) do
+        if e.q == targetQ and e.r == targetR and e.health > 0 then
+            target = e
+            break
+        end
+    end
+    if not target then return false, "No target at that hex" end
+
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.ZombieBiteAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) == 1 then
+        local target = nil
+        for _, e in ipairs(entities) do
+            if e.q == targetQ and e.r == targetR and e.health > 0 then
+                target = e
+                break
+            end
+        end
+        if target then return {q = targetQ, r = targetR} end
+    end
+    return nil
 end
 
 -- ============================================================
@@ -811,7 +952,7 @@ function combat.removeEntity(entity, entities)
 end
 
 -- combat.lua (заменить существующий метод)
-function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, sounds, directionIndex)
+function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, sounds, directionIndex, globalHealth)
     -- Базовый множитель = 1.0
     local multiplier = 1.0
 
@@ -819,23 +960,21 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
         multiplier = multiplier * target.armor[directionIndex+1]
     end
 
-    -- Уязвимая точка (если совпадает с направлением атаки)
+    -- Уязвимая точка
     if target.weakPoint ~= nil and directionIndex == target.weakPoint then
-        multiplier = multiplier * 2.0   -- двойной урон по уязвимой точке
+        multiplier = multiplier * 2.0
         print(string.format("💥 Critical hit! %s hits %s's weak point!", attacker.name, target.name))
     end
 
-    -- Учитываем эффект кислоты и других статусов (уже есть status.getDamageMultiplier)
     local statusMultiplier = status.getDamageMultiplier(target)
     multiplier = multiplier * statusMultiplier
 
     local finalDamage = math.floor(damage * multiplier)
-    if finalDamage < 1 and damage > 0 then finalDamage = 1 end   -- хотя бы 1 урон
+    if finalDamage < 1 and damage > 0 then finalDamage = 1 end
 
-    local wasDestroyed = target:takeDamage(finalDamage)
+    local wasDestroyed = target:takeDamage(finalDamage, globalHealth)  -- ← передаём globalHealth
     if sounds and sounds.attack then sounds.attack:play() end
 
-    -- Визуальный эффект удара
     if hex and visual then
         local x, y = hex:hexToPixel(target.q, target.r)
         visual.addEffect(x, y, "hit", 0.4)
