@@ -37,6 +37,14 @@ function love.load()
         config.CENTER_R
     )
 
+    -- Счётчик ходов и лимит
+    turnCount = 0
+    maxTurns = 1
+    gameActive = true
+    win = false
+    loss = false
+    fireAppliedForTurnLimit = false
+
     windTorrentUI = {
         active = false,
         button = { x = 10, y = 240, width = 120, height = 30 }
@@ -110,25 +118,62 @@ function love.load()
 
     -- Создаём глобальное заклинание ветра
     windTorrent = combat.WindTorrentAttack.new()
-
-    -- -- Инициализация UI ветра (позиции кнопок направлений)
-    -- local startX = love.graphics.getWidth() - 160
-    -- local startY = 100
-    -- local dirIndex = 1
-    -- -- Новый порядок для flat-top: восток, северо-восток, северо-запад, запад, юго-запад, юго-восток
-    -- local dirOrder = {"E", "NE", "NW", "W", "SW", "SE"}
-    -- for _, dirName in ipairs(dirOrder) do
-    --     local row = math.floor((dirIndex - 1) / 2)
-    --     local col = (dirIndex - 1) % 2
-    --     windTorrentUI.directions[dirName] = {
-    --         x = startX + col * 75,
-    --         y = startY + row * 35,
-    --         name = dirName
-    --     }
-    --     dirIndex = dirIndex + 1
-    -- end
     
     windTorrentUI.button = { x = 10, y = 240, width = 120, height = 30, isHovered = false }
+end
+
+function applyFireToAllEnemies()
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable and e.health > 0 then
+            if not status.hasEntityStatus(e, "fire") then
+                status.applyToEntity(e, "fire")
+                print("🔥 " .. e.name .. " caught fire due to turn limit!")
+            end
+        end
+    end
+end
+
+function checkGameEnd()
+    if not gameActive then return end
+
+    -- Поражение: глобальное здоровье <= 0
+    if globalHealth.current <= 0 then
+        loss = true
+        gameActive = false
+        print("DEFEAT: Global health depleted!")
+        return
+    end
+
+    -- Поражение: нет живых союзников
+    local anyAlly = false
+    for _, e in ipairs(entities) do
+        if e.isPlayable and e.health > 0 then
+            anyAlly = true
+            break
+        end
+    end
+    if not anyAlly then
+        loss = true
+        gameActive = false
+        print("DEFEAT: All allies destroyed!")
+        return
+    end
+
+    -- Победа: лимит ходов достигнут И нет живых врагов
+    if turnCount >= maxTurns then
+        local anyEnemy = false
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and not e.isPlayable and e.health > 0 then
+                anyEnemy = true
+                break
+            end
+        end
+        if not anyEnemy then
+            win = true
+            gameActive = false
+            print("VICTORY: Turn limit reached and all enemies defeated!")
+        end
+    end
 end
 
 -- Функция создания кнопок атак для выбранного персонажа
@@ -193,6 +238,18 @@ end
 -- Изменить love.mousepressed (удалить button == 2, добавить обработку кнопок атак и режима атаки)
 function love.mousepressed(x, y, button)
     if button == 1 then
+        -- Если игра закончена – обрабатываем только кнопку New Game
+        if not gameActive then
+            local width = love.graphics.getWidth()
+            local height = love.graphics.getHeight()
+            local btnW, btnH = 200, 50
+            local btnX = width/2 - btnW/2
+            local btnY = height/2 + 20
+            if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
+                restartGame()
+            end
+            return
+        end
         -- ======================================================
         -- 1. СНАЧАЛА проверяем ВСЕ UI-кнопки (не зависят от гексов)
         -- ======================================================
@@ -329,14 +386,24 @@ function love.mousepressed(x, y, button)
     end
 end
 
--- При начале хода игрока сбросить attackMode и selectedAttack
--- В startEnemyPreparePhase или prepareAllEnemies добавить сброс перед переходом к игроку
 function prepareAllEnemies()
     local enemies = ai.getLivingEnemies(entities)
     for _, enemy in ipairs(enemies) do
         ai.prepareAttackForEnemy(enemy, entities, hex)
     end
     turnState.phase = "player"
+
+    -- Увеличиваем счётчик ходов и проверяем лимит
+    turnCount = turnCount + 1
+    print("Turn count: " .. turnCount .. " / " .. maxTurns)
+
+    if turnCount >= maxTurns and not fireAppliedForTurnLimit then
+        applyFireToAllEnemies()
+        fireAppliedForTurnLimit = true
+    end
+
+    checkGameEnd()  -- проверяем, не наступила ли победа/поражение
+
     -- Сброс флагов и режима атаки
     attackMode = false
     selectedAttack = nil
@@ -379,16 +446,14 @@ function updateEnemyAttacks(dt)
         return
     end
 
-    turnState.enemyAttackTimer = turnState.enemyAttackTimer + dt
     if turnState.enemyAttackTimer >= turnState.delayBetweenAttacks then
         turnState.enemyAttackTimer = 0
         local enemy = table.remove(turnState.enemyAttackQueue, 1)
-        turnState.currentAttackingEnemy = enemy   -- <-- установить текущего атакующего
+        turnState.currentAttackingEnemy = enemy
         if enemy and enemy.health > 0 then
             ai.executePreparedAttack(enemy, entities, hex, sounds)
+            checkGameEnd()   -- <-- добавить
         end
-        -- Сбросить после завершения атаки? Нет, лучше сбросить перед удалением из очереди следующего,
-        -- но анимация атаки мгновенная, можно сбросить после вызова executePreparedAttack
         turnState.currentAttackingEnemy = nil
     end
 end
@@ -407,7 +472,8 @@ function endTurn()
     end
 
     -- ПРИМЕНЯЕМ ЭФФЕКТЫ КОНЦА ХОДА (горение, утопление) до атак врагов
-    effects.applyEndOfTurnEffects(entities, hex, terrainMap, globalHealth)
+    effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
+    checkGameEnd()   -- <-- добавить
 
     local drownedList = effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
     for _, dead in ipairs(drownedList) do
@@ -674,7 +740,8 @@ function updateActorMovement(actor, dt)
                 local died = effects.applyAllCellEffects(actor, actor.q, actor.r, terrainMap, entities, globalHealth)
                 if died then
                     local x, y = hex:hexToPixel(actor.q, actor.r)
-                    visual.addEffect(x, y, "drown")
+                    visual.addEffect(x, y, "drown") --wtf
+                    checkGameEnd()
                 end
             end
             actor.isMoving = false
@@ -1144,6 +1211,30 @@ function love.draw()
             ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
         end
     end
+    if not gameActive then
+        local width = love.graphics.getWidth()
+        local height = love.graphics.getHeight()
+        love.graphics.setColor(0, 0, 0, 0.85)
+        love.graphics.rectangle("fill", 0, 0, width, height)
+
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setFont(love.graphics.newFont(48))
+        if win then
+            love.graphics.printf("VICTORY!", 0, height/2 - 100, width, "center")
+        elseif loss then
+            love.graphics.printf("DEFEAT!", 0, height/2 - 100, width, "center")
+        end
+
+        -- Кнопка New Game
+        local btnW, btnH = 200, 50
+        local btnX = width/2 - btnW/2
+        local btnY = height/2 + 20
+        love.graphics.setColor(0.2, 0.2, 0.6, 0.9)
+        love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 8)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setFont(love.graphics.newFont(24))
+        love.graphics.print("New Game", btnX + 48, btnY + 12)
+    end
 end
 
 -- Проверка, является ли клетка краем карты
@@ -1277,6 +1368,13 @@ function restartGame()
     startEnemyPreparePhase()
     
     print("=== GAME RESTARTED ===")
+
+    turnCount = 0
+    gameActive = true
+    win = false
+    loss = false
+    fireAppliedForTurnLimit = false
+    print("=== GAME RESTARTED ===")
 end
 
 -- Атака очищает историю движений
@@ -1319,6 +1417,7 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
         print(attacker.name .. " attacked and ended turn. Move history cleared.")
         attackMode = false
         selectedAttack = nil
+        checkGameEnd()   -- <-- добавить
     else
         print("Attack failed: " .. (message or "unknown"))
     end
