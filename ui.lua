@@ -878,49 +878,49 @@ end
 
 
 
-function ui.drawPreparedAttackDirection(hex, enemy, time)
+function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
     if not enemy.hasPreparedAttack then return end
     local attack = enemy.preparedAttack
     if not attack then return end
 
-    local fromX, fromY = getEntityDisplayPosition(enemy, hex)
+    local fromQ = enemy.preparedFromQ or enemy.q
+    local fromR = enemy.preparedFromR or enemy.r
+    local fromX, fromY = hex:hexToPixel(fromQ, fromR)
     if not fromX then return end
 
-    -- Ghost Bolt
+    -- Ghost Bolt: первая цель на линии
     if attack.name == "Ghost Bolt" then
-        local targetQ, targetR
-        if enemy.preparedTargetEntity and enemy.preparedTargetEntity.health > 0 then
-            targetQ, targetR = enemy.preparedTargetEntity.q, enemy.preparedTargetEntity.r
-        elseif enemy.preparedTargetQ ~= nil then
-            targetQ, targetR = enemy.preparedTargetQ, enemy.preparedTargetR
-        else
-            return
+        if enemy.attackDirection then
+            local step = enemy.attackDirection
+            local curQ, curR = enemy.q, enemy.r
+            local targetQ, targetR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
+            if hex:isValidHex(targetQ, targetR) then
+                local toX, toY = hex:hexToPixel(targetQ, targetR)
+                ui.drawDottedLine(fromX, fromY, toX, toY, 6, 25, time)
+            end
         end
-        -- Проверяем, жива ли цель (по координатам) и в пределах дальности
-        local targetEntity = getEntityAtHex(targetQ, targetR, entities) -- нужно передать entities, но entities не доступна здесь
-        -- Временно пропустим проверку на существование, просто рисуем
-        local toX, toY = hex:hexToPixel(targetQ, targetR)
-        ui.drawDottedLine(fromX, fromY, toX, toY, 6, 25, time)
         return
     end
 
-    -- Magic Bolt (Lich)
+    -- Magic Bolt (Lich): ищем любую живую цель в радиусе
     if attack.name == "Magic Bolt" then
-        local targetQ, targetR
-        if enemy.preparedTargetEntity and enemy.preparedTargetEntity.health > 0 then
-            targetQ, targetR = enemy.preparedTargetEntity.q, enemy.preparedTargetEntity.r
-        elseif enemy.preparedTargetQ ~= nil then
-            targetQ, targetR = enemy.preparedTargetQ, enemy.preparedTargetR
-        else
-            return
+        local bestTarget = nil
+        local bestDist = math.huge
+        for _, e in ipairs(entities) do
+            if e.health > 0 and (e.isPlayable or e:isBuilding()) then
+                local dist = hex:getDistance(enemy.q, enemy.r, e.q, e.r)
+                if dist <= attack.range then
+                    if dist < bestDist then
+                        bestDist = dist
+                        bestTarget = e
+                    end
+                end
+            end
         end
-        -- Проверяем дистанцию: если цель слишком далеко (вышла из радиуса), не рисуем
-        local dist = hex:getDistance(enemy.q, enemy.r, targetQ, targetR)
-        if dist > attack.range then
-            return  -- цель вне радиуса, не показываем стрелку
+        if bestTarget then
+            local toX, toY = hex:hexToPixel(bestTarget.q, bestTarget.r)
+            ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
         end
-        local toX, toY = hex:hexToPixel(targetQ, targetR)
-        ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
         return
     end
 

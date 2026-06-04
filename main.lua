@@ -1249,7 +1249,7 @@ function love.draw()
     -- Стрелка направления подготовленной атаки (при наведении на врага)
     for _, entity in ipairs(entities) do
         if entity:isCharacter() and not entity.isPlayable and entity.hasPreparedAttack and entity.health > 0 then
-            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime())
+            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), entities)  -- добавлен entities
         end
     end
 
