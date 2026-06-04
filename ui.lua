@@ -894,6 +894,26 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
     love.graphics.setColor(0.9, 0.9, 0.7, 1)
     love.graphics.print("Terrain: " .. terrain, x + 8, y + 40 + debuffsHeight)
 
+    -- Добавить информацию о выкопке
+    local hasDig = status.hasDigSite(entity.q, entity.r)
+    if hasDig then
+        local digSites = status.getAllDigSites()
+        local digInfo = nil
+        for _, site in ipairs(digSites) do
+            if site.q == entity.q and site.r == entity.r then
+                digInfo = site
+                break
+            end
+        end
+        if digInfo then
+            love.graphics.setColor(0.8, 0.6, 0.2, 1)
+            love.graphics.print("🕳️ Under Dig Site", x + 8, y + 40 + debuffsHeight + terrainHeight)
+            love.graphics.setColor(1, 0.9, 0.5, 1)
+            love.graphics.print("Spawn in: " .. digInfo.timer .. " turn(s)", x + 18, y + 40 + debuffsHeight + terrainHeight + lineHeight)
+            love.graphics.print("Age: " .. digInfo.age .. " / 3", x + 18, y + 40 + debuffsHeight + terrainHeight + lineHeight * 2)
+        end
+    end
+
     -- Атака врага (если есть)
     if attackText then
         love.graphics.setColor(0.9, 0.6, 0.3, 1)
@@ -1232,13 +1252,26 @@ end
 -- ui.lua
 function ui.drawCellTooltip(q, r, terrain, hex)
     local panelX = 10
-    local panelY = love.graphics.getHeight() - 100  -- немного выше, чтобы вместить статусы
+    local panelY = love.graphics.getHeight() - 130  -- чуть выше, чтобы поместить строку выкопки
     local statuses = status.getAtHex(q, r)
+    local hasDig = status.hasDigSite(q, r)
+    local digInfo = nil
+    if hasDig then
+        local digSites = status.getAllDigSites()
+        for _, site in ipairs(digSites) do
+            if site.q == q and site.r == r then
+                digInfo = site
+                break
+            end
+        end
+    end
+    
     local lineHeight = 16
     local titleHeight = 30
     local statusHeight = #statuses > 0 and (20 + #statuses * lineHeight) or 0
-    local panelWidth = 180
-    local panelHeight = titleHeight + statusHeight
+    local digHeight = hasDig and 40 or 0
+    local panelWidth = 200
+    local panelHeight = titleHeight + statusHeight + digHeight
 
     love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
     love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 5)
@@ -1257,6 +1290,15 @@ function ui.drawCellTooltip(q, r, terrain, hex)
             local text = iconMap[st] or st
             love.graphics.print(text, panelX + 18, panelY + 28 + i * lineHeight)
         end
+    end
+
+    if hasDig and digInfo then
+        local yOffset = titleHeight + statusHeight + 8
+        love.graphics.setColor(0.8, 0.6, 0.2, 1)
+        love.graphics.print("🕳️ Dig Site", panelX + 8, panelY + yOffset)
+        love.graphics.setColor(1, 0.9, 0.5, 1)
+        love.graphics.print("Spawn in: " .. digInfo.timer .. " turn(s)", panelX + 18, panelY + yOffset + lineHeight)
+        love.graphics.print("Age: " .. digInfo.age .. " / 3", panelX + 18, panelY + yOffset + lineHeight * 2)
     end
 end
 

@@ -1180,6 +1180,7 @@ end
 function love.draw()
     drawHexGrid()
     ui.drawPreparedAttacks(hex, entities)
+    ui.drawDigSites(hex, status.getAllDigSites())
     drawAllEntities()
     visual.draw()
     -- Обратный отсчёт до Decay
@@ -1220,7 +1221,6 @@ function love.draw()
             ui.drawPathPreview(hex, selectedActor, hex.hoverQ, hex.hoverR, entities, terrainMap)
         end
     end
-    ui.drawDigSites(hex, status.getAllDigSites())
     ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
     ui.drawEndTurnButton(turnState, entities)
     ui.drawRestartButton(restartButton, turnState)

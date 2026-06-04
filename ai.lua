@@ -209,7 +209,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
         
         -- Используем смещение, если оно есть
         if enemy.preparedTargetOffset then
-            local targetQ, targetR = applyCubeDiff(enemy.q, enemy.r,
+            local targetQ, targetR = hex_utils.applyCubeDiff(enemy.q, enemy.r,
                 enemy.preparedTargetOffset.dx,
                 enemy.preparedTargetOffset.dy,
                 enemy.preparedTargetOffset.dz)
