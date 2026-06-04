@@ -88,6 +88,19 @@ function visual.draw()
                 love.graphics.line(e.x, e.y, x2, y2)
             end
             love.graphics.setLineWidth(1)
+        elseif e.type == "dig" then
+            local radius = 10 + t * 20
+            love.graphics.setColor(0.6, 0.4, 0.2, alpha)
+            love.graphics.circle("fill", e.x, e.y, radius * 0.8)
+            love.graphics.setColor(0.9, 0.7, 0.3, alpha)
+            for i = 1, 6 do
+                local angle = (i / 6) * math.pi * 2 + e.timer * 15
+                local dx = math.cos(angle) * radius * 0.7
+                local dy = math.sin(angle) * radius * 0.5
+                love.graphics.circle("fill", e.x + dx, e.y + dy, 5)
+            end
+            love.graphics.setColor(1, 1, 0.5, alpha)
+            love.graphics.print("🕳️", e.x - 10, e.y - 12)
         end
     end
     love.graphics.setColor(1, 1, 1, 1)

@@ -1289,4 +1289,38 @@ function ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
     love.graphics.setLineWidth(1)
 end
 
+-- ui.lua, функция drawDigSites
+function ui.drawDigSites(hex, digSites)
+    local time = love.timer.getTime()
+    for _, site in ipairs(digSites) do
+        local x, y = hex:hexToPixel(site.q, site.r)
+        local radius = hex.radius
+        -- Тень ямы
+        love.graphics.setColor(0.2, 0.1, 0.05, 0.9)
+        love.graphics.circle("fill", x, y, radius * 0.45)
+        -- Внутренность ямы (темно-коричневая)
+        love.graphics.setColor(0.4, 0.2, 0.1, 0.9)
+        love.graphics.circle("fill", x, y, radius * 0.4)
+        -- Пульсирующая земля по краям
+        local pulse = 0.5 + 0.5 * math.sin(time * 5)
+        love.graphics.setColor(0.7, 0.4, 0.1, 0.7 + pulse * 0.3)
+        love.graphics.circle("line", x, y, radius * 0.42)
+        -- "Земляные" точки вокруг
+        for i = 1, 6 do
+            local angle = (i / 6) * math.pi * 2 + time * 3
+            local dx = math.cos(angle) * radius * 0.5
+            local dy = math.sin(angle) * radius * 0.4
+            love.graphics.setColor(0.5, 0.3, 0.1, 0.8)
+            love.graphics.circle("fill", x + dx, y + dy, 3)
+        end
+        -- Таймер (количество ходов до спавна) если >1
+        if site.timer > 1 then
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print(tostring(site.timer), x + 10, y - 14)
+        end
+        -- Отображение возраста (для дебага)
+        -- love.graphics.print(site.age, x + 15, y + 5)
+    end
+end
+
 return ui

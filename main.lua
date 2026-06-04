@@ -66,7 +66,8 @@ function love.load()
         currentPreparingEnemy = nil,
         enemyAttackQueue = {},
         enemyAttackTimer = 0,
-        delayBetweenAttacks = 0.4
+        delayBetweenAttacks = 0.4,
+        pendingDigProcessing = false   -- <-- добавить сюда
     }
 
     -- Инициализация врагов
@@ -497,6 +498,9 @@ function endTurn()
     turnState.enemyAttackTimer = 0
     turnState.phase = "enemy_attack"
     print("=== ENEMY ATTACK PHASE ===")
+    -- ВНИМАНИЕ: processDigSites будет вызван ПОСЛЕ того, как враги отстреляются
+    -- Для этого добавим флаг, что после атак нужно вызвать обработку выкопок
+    turnState.pendingDigProcessing = true
 end
 -- Обработка хода врагов
 function updateEnemyTurn(dt)
@@ -853,6 +857,10 @@ function love.update(dt)
     -- Обновление фазы атаки врагов
     if turnState.phase == "enemy_attack" then
         if #turnState.enemyAttackQueue == 0 then
+            if turnState.pendingDigProcessing then
+                processDigSites()
+                turnState.pendingDigProcessing = false
+            end
             turnCount = turnCount + 1
             print("Turn count increased to: " .. turnCount .. "/" .. maxTurns)
             turnState.phase = "enemy_prepare"
@@ -865,8 +873,21 @@ function love.update(dt)
             local enemy = table.remove(turnState.enemyAttackQueue, 1)
             if enemy and enemy.health > 0 then
                 ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
+                checkGameEnd()
             end
         end
+    end
+
+    if turnState.phase == "enemy_attack" and #turnState.enemyAttackQueue == 0 then
+        if turnState.pendingDigProcessing then
+            processDigSites()
+            turnState.pendingDigProcessing = nil
+        end
+        turnCount = turnCount + 1
+        print("Turn count increased to: " .. turnCount .. "/" .. maxTurns)
+        turnState.phase = "enemy_prepare"
+        startEnemyPreparePhase()
+        return
     end
 
     -- Ховер для мыши
@@ -1199,6 +1220,7 @@ function love.draw()
             ui.drawPathPreview(hex, selectedActor, hex.hoverQ, hex.hoverR, entities, terrainMap)
         end
     end
+    ui.drawDigSites(hex, status.getAllDigSites())
     ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
     ui.drawEndTurnButton(turnState, entities)
     ui.drawRestartButton(restartButton, turnState)
@@ -1430,6 +1452,7 @@ function restartGame()
     win = false
     loss = false
     fireAppliedForTurnLimit = false
+    status.clearAllDigSites()
     print("=== GAME RESTARTED ===")
 end
 
@@ -1590,4 +1613,93 @@ function love.keypressed(key)
         end
     end
 end
-    -- Tab больше не переключает атаку
+
+-- Функция обработки выкопок (вызывать после вражеских атак)
+function processDigSites()
+    -- 1. Урон существам, стоящим на выкопках
+    for _, entity in ipairs(entities) do
+        if entity.health > 0 and status.hasDigSite(entity.q, entity.r) then
+            local wasDestroyed = entity:takeDamage(1, globalHealth)
+            print(string.format("💀 %s stepped on a dig site and takes 1 damage!", entity.name))
+            if sounds and sounds.collision then sounds.collision:play() end
+            if wasDestroyed then
+                entity:startDeath()
+            end
+            status.stepOnDigSite(entity.q, entity.r)
+        end
+    end
+
+    -- 2. Удаляем мёртвых
+    for i = #entities, 1, -1 do
+        if entities[i].health <= 0 then
+            table.remove(entities, i)
+        end
+    end
+
+    -- 3. Спавн из готовых выкопок
+    local readyDigs = status.decrementDigTimers()
+    for _, dig in ipairs(readyDigs) do
+        local occupied = false
+        for _, e in ipairs(entities) do
+            if e.q == dig.q and e.r == dig.r then
+                occupied = true
+                break
+            end
+        end
+        local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
+        if not occupied and terrain ~= "water" then
+            local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
+            table.insert(entities, newEnemy)
+            local x, y = hex:hexToPixel(dig.q, dig.r)
+            visual.addEffect(x, y, "dig", 0.5)
+            print(string.format("🌀 A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r))
+        else
+            print(string.format("Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r))
+        end
+        status.removeDigSite(dig.q, dig.r)
+    end
+
+    -- 4. Старение выкопок
+    status.ageDigSites()
+
+    -- 5. Создание новых выкопок до 7 врагов
+    local aliveEnemies = 0
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable and e.health > 0 then
+            aliveEnemies = aliveEnemies + 1
+        end
+    end
+    local needed = 7 - aliveEnemies
+    if needed > 0 then
+        local candidates = {}
+        for q = 0, hex.gridWidth - 1 do
+            for r = 0, hex.gridHeight - 1 do
+                if hex:isActiveHex(q, r) then
+                    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+                    if terrain ~= "water" then
+                        local occupied = false
+                        for _, e in ipairs(entities) do
+                            if e.q == q and e.r == r then
+                                occupied = true
+                                break
+                            end
+                        end
+                        if not occupied and not status.hasDigSite(q, r) then
+                            table.insert(candidates, {q = q, r = r})
+                        end
+                    end
+                end
+            end
+        end
+        -- Перемешивание
+        for i = #candidates, 2, -1 do
+            local j = love.math.random(i)
+            candidates[i], candidates[j] = candidates[j], candidates[i]
+        end
+        for i = 1, math.min(needed, #candidates) do
+            local spot = candidates[i]
+            status.setDigSite(spot.q, spot.r, 1)
+            print(string.format("🕳️ New dig site at (%d,%d)", spot.q, spot.r))
+        end
+    end
+end

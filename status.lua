@@ -135,4 +135,76 @@ function status.setEntityStatuses(entity, statuses)
     end
 end
 
+-- Хранилище выкопок: ключ "q,r" -> { timer = 0, age = 0 }
+local digSites = {}
+
+-- Установить выкопку на клетку
+function status.setDigSite(q, r, timer)
+    local key = q .. "," .. r
+    digSites[key] = { timer = timer or 1, age = 0 }
+end
+
+-- Удалить выкопку
+function status.removeDigSite(q, r)
+    local key = q .. "," .. r
+    digSites[key] = nil
+end
+
+-- Проверить наличие выкопки
+function status.hasDigSite(q, r)
+    local key = q .. "," .. r
+    return digSites[key] ~= nil
+end
+
+-- Получить все выкопки (список {q, r, timer, age})
+function status.getAllDigSites()
+    local sites = {}
+    for key, data in pairs(digSites) do
+        local q, r = key:match("(.-),(.*)")
+        table.insert(sites, { q = tonumber(q), r = tonumber(r), timer = data.timer, age = data.age })
+    end
+    return sites
+end
+
+-- Увеличить возраст всех выкопок, удалить если age >= 3
+function status.ageDigSites()
+    for key, data in pairs(digSites) do
+        data.age = data.age + 1
+        if data.age >= 3 then
+            digSites[key] = nil
+        end
+    end
+end
+
+-- Уменьшить таймер у всех выкопок (вызывать в конце хода)
+-- Возвращает список выкопок, у которых timer стал 0 (готовы к спавну)
+function status.decrementDigTimers()
+    local ready = {}
+    for key, data in pairs(digSites) do
+        data.timer = data.timer - 1
+        if data.timer <= 0 then
+            local q, r = key:match("(.-),(.*)")
+            table.insert(ready, { q = tonumber(q), r = tonumber(r), data = data })
+        end
+    end
+    return ready
+end
+
+-- При наступании на выкопку: урон + откладывание (увеличиваем таймер, сбрасываем возраст)
+function status.stepOnDigSite(q, r)
+    local key = q .. "," .. r
+    local site = digSites[key]
+    if site then
+        site.timer = site.timer + 1   -- откладываем на следующий ход
+        site.age = 0                  -- сбрасываем старение
+        return true
+    end
+    return false
+end
+
+-- Очистить все выкопки (при рестарте)
+function status.clearAllDigSites()
+    digSites = {}
+end
+
 return status

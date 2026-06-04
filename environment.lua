@@ -446,4 +446,47 @@ function environment.getLichAttacks()
     }
 end
 
+-- Создать врага заданного типа на координатах
+function environment.createEnemyByType(enemyType, q, r)
+    local Entity = require("entity")
+    local attacks = {}
+    local name = ""
+    local maxHealth = 3
+    local moveRange = 2
+
+    if enemyType == "Ghost" then
+        attacks = environment.getGhostAttacks()
+        name = "Ghost"
+        maxHealth = 3
+        moveRange = 1
+    elseif enemyType == "Zombie" then
+        attacks = environment.getZombieAttacks()
+        name = "Zombie"
+        maxHealth = 3
+        moveRange = 2
+    elseif enemyType == "Lich" then
+        attacks = environment.getLichAttacks()
+        name = "Lich"
+        maxHealth = 2
+        moveRange = 1
+    else
+        -- fallback
+        attacks = environment.getZombieAttacks()
+        name = "Zombie"
+        maxHealth = 3
+        moveRange = 2
+    end
+
+    local entity = Entity.new(name, Entity.TYPES.CHARACTER, q, r, maxHealth, false, moveRange, nil, nil, attacks)
+    -- Загружаем спрайт позже? Пока оставим без спрайта (будет круг)
+    return entity
+end
+
+-- Создать случайного врага (из пула)
+function environment.createRandomEnemy(q, r)
+    local types = { "Ghost", "Zombie", "Lich" }
+    local rnd = love.math.random(1, #types)
+    return environment.createEnemyByType(types[rnd], q, r)
+end
+
 return environment
