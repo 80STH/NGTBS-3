@@ -214,41 +214,80 @@ end
 -- ОСНОВНЫЕ UI-ФУНКЦИИ, ВЫЗЫВАЕМЫЕ ИЗ MAIN.LUA
 -- ============================================================
 
+-- ui.lua, заменить существующую функцию drawPreparedAttacks
+
 function ui.drawPreparedAttacks(hex, entities)
     for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.attackDirection then
-            local dir = e.attackDirection
-            local curX, curY, curZ = hex_utils.axialToCube(e.q, e.r)
-            local targetX = curX + dir.dx
-            local targetY = curY + dir.dy
-            local targetZ = curZ + dir.dz
-            local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
-            if not hex:isValidHex(targetQ, targetR) then goto continue end
-            
-            local x, y = hex:hexToPixel(targetQ, targetR)
-            local radius = hex.radius
-            local vertices = hex:drawHexagon(x, y, radius)
-            
-            love.graphics.stencil(function()
-                love.graphics.polygon("fill", vertices)
-            end, "replace", 1)
-            love.graphics.setStencilTest("greater", 0)
-            
-            local tex = getHazardTexture()
-            love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.draw(tex, x - radius, y - radius, 0, 
-                               radius * 2 / tex:getWidth(), 
-                               radius * 2 / tex:getHeight())
-            
-            love.graphics.setStencilTest()
-            
-            love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.print("⚔", x - 6, y - 8)
-            ::continue::
+        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.preparedAttack then
+            local attack = e.preparedAttack
+            local targetCell = nil
+
+            -- Для атак, которые ищут первую цель на линии (Ghost, Shoot, Dash, Piercing)
+            if attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
+                if e.attackDirection then
+                    local step = e.attackDirection
+                    local curQ, curR = e.q, e.r
+                    local lastValidQ, lastValidR = curQ, curR
+                    while true do
+                        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
+                        if not hex:isActiveHex(nextQ, nextR) then
+                            break
+                        end
+                        local ent = getEntityAtHex(nextQ, nextR, entities)
+                        if ent and ent ~= e and ent.health > 0 then
+                            lastValidQ, lastValidR = nextQ, nextR
+                            break
+                        end
+                        lastValidQ, lastValidR = nextQ, nextR
+                        curQ, curR = nextQ, nextR
+                    end
+                    if (lastValidQ ~= e.q or lastValidR ~= e.r) then
+                        targetCell = {q = lastValidQ, r = lastValidR}
+                    end
+                end
+
+            elseif attack.name == "Bite" then
+                if e.preparedTargetOffset then
+                    local targetQ, targetR = hex_utils.applyCubeDiff(e.q, e.r,
+                        e.preparedTargetOffset.dx,
+                        e.preparedTargetOffset.dy,
+                        e.preparedTargetOffset.dz)
+                    if hex:isActiveHex(targetQ, targetR) then
+                        targetCell = {q = targetQ, r = targetR}
+                    end
+                end
+
+            elseif attack.name == "Magic Bolt" then
+                if e.preparedTargetOffset then
+                    local targetQ, targetR = hex_utils.applyCubeDiff(e.q, e.r,
+                        e.preparedTargetOffset.dx,
+                        e.preparedTargetOffset.dy,
+                        e.preparedTargetOffset.dz)
+                    if hex:isActiveHex(targetQ, targetR) then
+                        targetCell = {q = targetQ, r = targetR}
+                    end
+                end
+            end
+
+            if targetCell then
+                local x, y = hex:hexToPixel(targetCell.q, targetCell.r)
+                local vertices = hex:drawHexagon(x, y, hex.radius)
+                love.graphics.stencil(function()
+                    love.graphics.polygon("fill", vertices)
+                end, "replace", 1)
+                love.graphics.setStencilTest("greater", 0)
+                local tex = getHazardTexture()
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.draw(tex, x - hex.radius, y - hex.radius, 0,
+                                   hex.radius * 2 / tex:getWidth(),
+                                   hex.radius * 2 / tex:getHeight())
+                love.graphics.setStencilTest()
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.print("⚔", x - 6, y - 8)
+            end
         end
     end
 end
-
 -- ГЛАВНАЯ ФУНКЦИЯ ПРЕДПРОСМОТРА АТАКИ (вызывается при наведении мыши)
 function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR, entities)
     if not attackMode or not attack then return end
@@ -326,15 +365,19 @@ end
 if attack.name == "Magic Bolt" then
     local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
     if distance <= attack.range then
-        local target = getEntityAtHex(hoverQ, hoverR, entities)
-        if target then
-            local x, y = hex:hexToPixel(hoverQ, hoverR)
-            local vertices = hex:drawHexagon(x, y, hex.radius)
-            love.graphics.setColor(0.8, 0.2, 0.8, 0.3)  -- фиолетовая подсветка
-            love.graphics.polygon("fill", vertices)
-            love.graphics.setColor(0.9, 0.3, 0.9, 0.8)
-            love.graphics.polygon("line", vertices)
-            ui.drawDamageIcon(x + 20, y - 20, attack.damage or 1)
+        -- Добавить проверку прямой линии
+        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+        if stepX then
+            local target = getEntityAtHex(hoverQ, hoverR, entities)
+            if target then
+                local x, y = hex:hexToPixel(hoverQ, hoverR)
+                local vertices = hex:drawHexagon(x, y, hex.radius)
+                love.graphics.setColor(0.8, 0.2, 0.8, 0.3)
+                love.graphics.polygon("fill", vertices)
+                love.graphics.setColor(0.9, 0.3, 0.9, 0.8)
+                love.graphics.polygon("line", vertices)
+                ui.drawDamageIcon(x + 20, y - 20, attack.damage or 1)
+            end
         end
     end
     return
@@ -889,40 +932,100 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
     if not fromX then return end
 
     -- Ghost Bolt: первая цель на линии
-    if attack.name == "Ghost Bolt" then
-        if enemy.attackDirection then
-            local step = enemy.attackDirection
-            local curQ, curR = enemy.q, enemy.r
-            local targetQ, targetR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
-            if hex:isValidHex(targetQ, targetR) then
+if attack.name == "Ghost Bolt" then
+    if enemy.attackDirection then
+        local step = enemy.attackDirection
+        local curQ, curR = enemy.q, enemy.r
+        local lastValidQ, lastValidR = curQ, curR
+        -- Идём по линии до неактивной клетки
+        while true do
+            local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
+            if not hex:isActiveHex(nextQ, nextR) then
+                break  -- дошли до неактивной клетки (выход за пределы шестиугольника)
+            end
+            -- Проверяем, есть ли живая цель (первая встреченная)
+            local ent = getEntityAtHex(nextQ, nextR, entities)
+            if ent and ent ~= enemy and ent.health > 0 then
+                lastValidQ, lastValidR = nextQ, nextR
+                break
+            end
+            lastValidQ, lastValidR = nextQ, nextR
+            curQ, curR = nextQ, nextR
+        end
+        -- Если есть хоть одна клетка, не совпадающая с позицией врага
+        if (lastValidQ ~= enemy.q or lastValidR ~= enemy.r) then
+            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
+            local toX, toY = hex:hexToPixel(lastValidQ, lastValidR)
+            ui.drawDottedLine(fromX, fromY, toX, toY, 6, 25, time)
+        end
+    end
+    return
+end
+
+    -- ===== Magic Bolt (Lich) =====
+    if attack.name == "Magic Bolt" then
+        if enemy.preparedTargetOffset then
+            local targetQ, targetR = hex_utils.applyCubeDiff(
+                enemy.q, enemy.r,
+                enemy.preparedTargetOffset.dx,
+                enemy.preparedTargetOffset.dy,
+                enemy.preparedTargetOffset.dz
+            )
+            if hex:isActiveHex(targetQ, targetR) then
+                local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
                 local toX, toY = hex:hexToPixel(targetQ, targetR)
-                ui.drawDottedLine(fromX, fromY, toX, toY, 6, 25, time)
+                ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
             end
         end
         return
     end
 
-    -- Magic Bolt (Lich): ищем любую живую цель в радиусе
-    if attack.name == "Magic Bolt" then
-        local bestTarget = nil
-        local bestDist = math.huge
-        for _, e in ipairs(entities) do
-            if e.health > 0 and (e.isPlayable or e:isBuilding()) then
-                local dist = hex:getDistance(enemy.q, enemy.r, e.q, e.r)
-                if dist <= attack.range then
-                    if dist < bestDist then
-                        bestDist = dist
-                        bestTarget = e
-                    end
-                end
+    -- ===== Bite (Zombie) =====
+    if attack.name == "Bite" then
+        if enemy.preparedTargetOffset then
+            local targetQ, targetR = hex_utils.applyCubeDiff(
+                enemy.q, enemy.r,
+                enemy.preparedTargetOffset.dx,
+                enemy.preparedTargetOffset.dy,
+                enemy.preparedTargetOffset.dz
+            )
+            if hex:isActiveHex(targetQ, targetR) then
+                local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
+                local toX, toY = hex:hexToPixel(targetQ, targetR)
+                -- Рисуем обычную стрелку
+                local angle = math.atan2(toY - fromY, toX - fromX)
+                local arrowSize = 18
+                local lineWidth = 4
+                local radius = hex.radius
+                local offset = radius * 0.3
+
+                local startX = fromX + math.cos(angle) * offset
+                local startY = fromY + math.sin(angle) * offset
+                local endX = toX - math.cos(angle) * offset
+                local endY = toY - math.sin(angle) * offset
+
+                local pulse = 0.5 + 0.5 * math.sin(time * 8)
+                local alpha = 0.5 + 0.3 * pulse
+
+                love.graphics.setLineWidth(lineWidth)
+                love.graphics.setColor(1, 0.2, 0.2, alpha)
+                love.graphics.line(startX, startY, endX, endY)
+
+                local leftAngle = angle + math.pi * 0.7
+                local rightAngle = angle - math.pi * 0.7
+                love.graphics.line(endX, endY,
+                    endX + math.cos(leftAngle) * arrowSize,
+                    endY + math.sin(leftAngle) * arrowSize)
+                love.graphics.line(endX, endY,
+                    endX + math.cos(rightAngle) * arrowSize,
+                    endY + math.sin(rightAngle) * arrowSize)
+
+                love.graphics.setLineWidth(1)
             end
-        end
-        if bestTarget then
-            local toX, toY = hex:hexToPixel(bestTarget.q, bestTarget.r)
-            ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
         end
         return
     end
+    
 
     -- Для атак с направлением (Dash, Shoot, Piercing) – используем направление
     if enemy.attackDirection then

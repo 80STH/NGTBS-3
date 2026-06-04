@@ -128,9 +128,10 @@ function ai.getBestTargetForEnemy(enemy, entities, hex, selectedTargets)
                     valid = true
                 end
             end
-        else
-            -- Bite или Magic Bolt: достаточно расстояния
+        elseif attack.name == "Bite" then
             valid = (dist <= attack.range)
+        elseif attack.name == "Magic Bolt" then
+            valid = (dist <= attack.range) and isOnStraightLine(enemy.q, enemy.r, target.q, target.r, hex)
         end
 
         if not valid then goto continue end
@@ -172,7 +173,8 @@ function ai.prepareAttackForEnemy(enemy, entities, hex, selectedTargets)
     end
 
     enemy.hasPreparedAttack = true
-    enemy.preparedTargetEntity = bestTarget
+    local dx, dy, dz = hex_utils.getCubeDiff(enemy.q, enemy.r, bestTarget.q, bestTarget.r)
+    enemy.preparedTargetOffset = { dx = dx, dy = dy, dz = dz }
     enemy.preparedAttack = attack
     enemy.preparedTargetQ = nil   -- добавить
     enemy.preparedTargetR = nil   -- добавить
@@ -203,15 +205,29 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
             end
         end
     else
-        local saved = enemy.preparedTargetEntity
-        if saved and saved.health > 0 then
-            local dist = hex:getDistance(enemy.q, enemy.r, saved.q, saved.r)
-            if dist <= attack.range then
-                target = saved
+        local target = nil
+        
+        -- Используем смещение, если оно есть
+        if enemy.preparedTargetOffset then
+            local targetQ, targetR = applyCubeDiff(enemy.q, enemy.r,
+                enemy.preparedTargetOffset.dx,
+                enemy.preparedTargetOffset.dy,
+                enemy.preparedTargetOffset.dz)
+            local e = combat.getEntityAtHex(targetQ, targetR, entities)
+            if e and e.health > 0 then
+                if attack.name == "Magic Bolt" then
+                    if isOnStraightLine(enemy.q, enemy.r, targetQ, targetR, hex) then
+                        target = e
+                    end
+                else -- Bite
+                    if hex:getDistance(enemy.q, enemy.r, targetQ, targetR) <= attack.range then
+                        target = e
+                    end
+                end
             end
         end
-        
-        -- Для Bite: ищем любую цель в радиусе 1
+
+        -- Fallback для Bite, если цель не найдена (например, вышла за пределы)
         if not target and attack.name == "Bite" then
             local neighbors = hex:getNeighbors(enemy.q, enemy.r)
             for _, nb in ipairs(neighbors) do

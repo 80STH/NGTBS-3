@@ -480,6 +480,12 @@ function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities
         return false, "Target out of range"
     end
 
+    -- Проверка прямой линии
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then
+        return false, "Target not in a straight line!"
+    end
+
     local target = nil
     for _, e in ipairs(entities) do
         if e.q == targetQ and e.r == targetR and e.health > 0 then
@@ -514,6 +520,8 @@ function combat.LichBoltAttack:getTargetCell(attacker, targetQ, targetR, hex, en
     if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) > self.range then
         return nil
     end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
     for _, e in ipairs(entities) do
         if e.q == targetQ and e.r == targetR and e.health > 0 then
             if (e:isCharacter() and e.isPlayable) or e:isBuilding() then

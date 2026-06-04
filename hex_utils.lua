@@ -33,4 +33,15 @@ function hex_utils.getDistance(q1, r1, q2, r2)
     return (math.abs(x1 - x2) + math.abs(y1 - y2) + math.abs(z1 - z2)) / 2
 end
 
+function hex_utils.getCubeDiff(fromQ, fromR, toQ, toR)
+    local fx, fy, fz = hex_utils.axialToCube(fromQ, fromR)
+    local tx, ty, tz = hex_utils.axialToCube(toQ, toR)
+    return tx - fx, ty - fy, tz - fz
+end
+
+function hex_utils.applyCubeDiff(q, r, dx, dy, dz)
+    local x, y, z = hex_utils.axialToCube(q, r)
+    return hex_utils.cubeToAxial(x + dx, y + dy, z + dz)
+end
+
 return hex_utils
