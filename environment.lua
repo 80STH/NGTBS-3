@@ -29,6 +29,9 @@ local gidToEntity = {
     [7] = { type = "building",  name = "BigBuilding",   health = 2, globalHealthCost = 2 },
 }
 
+environment.enemySpriteCache = {}
+
+
 local terrainSpriteCache = {}  -- Кэш для текстур terrain
 
 -- Загрузка текстуры terrain из GID
@@ -196,6 +199,9 @@ local function createEntityFromGID(map, gid, gridX, gridY)
             nil, nil, attacks
         )
         actor.sprite = entitySprite
+        if not def.isPlayable then
+            environment.enemySpriteCache[def.name] = entitySprite
+        end
         return actor
 
     elseif def.type == "obstacle" then
@@ -446,7 +452,6 @@ function environment.getLichAttacks()
     }
 end
 
--- Создать врага заданного типа на координатах
 function environment.createEnemyByType(enemyType, q, r)
     local Entity = require("entity")
     local attacks = {}
@@ -470,15 +475,35 @@ function environment.createEnemyByType(enemyType, q, r)
         maxHealth = 2
         moveRange = 1
     else
-        -- fallback
         attacks = environment.getZombieAttacks()
         name = "Zombie"
         maxHealth = 3
         moveRange = 2
     end
 
-    local entity = Entity.new(name, Entity.TYPES.CHARACTER, q, r, maxHealth, false, moveRange, nil, nil, attacks)
-    -- Загружаем спрайт позже? Пока оставим без спрайта (будет круг)
+    local sprite = environment.enemySpriteCache[enemyType]
+    if not sprite then
+        -- Fallback: создаём цветной круг (на случай, если спрайт не загрузился)
+        local size = 64
+        local canvas = love.graphics.newCanvas(size, size)
+        canvas:setFilter("nearest", "nearest")
+        love.graphics.setCanvas(canvas)
+        love.graphics.clear(0, 0, 0, 0)
+        if enemyType == "Ghost" then
+            love.graphics.setColor(0.7, 0.3, 1, 1)
+        elseif enemyType == "Zombie" then
+            love.graphics.setColor(0.3, 0.7, 0.2, 1)
+        elseif enemyType == "Lich" then
+            love.graphics.setColor(0.8, 0.2, 0.8, 1)
+        else
+            love.graphics.setColor(1, 0.5, 0, 1)
+        end
+        love.graphics.circle("fill", size/2, size/2, size/2 - 4)
+        love.graphics.setCanvas()
+        sprite = canvas
+    end
+
+    local entity = Entity.new(name, Entity.TYPES.CHARACTER, q, r, maxHealth, false, moveRange, sprite, nil, attacks)
     return entity
 end
 

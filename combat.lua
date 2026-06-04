@@ -4,6 +4,7 @@ local combat = {}
 local visual = require("visual_effects")
 status = require("status")
 local Entity = require("entity")
+local attack_effects = require("attack_effects")
 
 local hex_utils = require("hex_utils")
 -- ============================================================
@@ -171,6 +172,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
 
     local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
+    attack_effects.dash(attacker, firstTarget, lastFree, hex)
     -- 🏃‍♂️ Перемещение атакующего в последнюю свободную клетку
     if lastFree and (lastFree.q ~= attacker.q or lastFree.r ~= attacker.r) then
         combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
@@ -228,6 +230,7 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     local dirX, dirY, dirZ = aX - tX, aY - tY, aZ - tZ
     local behindX, behindY, behindZ = aX + dirX, aY + dirY, aZ + dirZ
     local behindQ, behindR = hex_utils.cubeToAxial(behindX, behindY, behindZ)
+    attack_effects.flip(attacker, targetActor, behindQ, behindR, hex)
     if not hex:isValidHex(behindQ, behindR) then return false, "No free space behind the attacker!" end
     if combat.getEntityAtHex(behindQ, behindR, entities) then return false, "No free space behind the attacker!" end
     targetActor.q = behindQ
@@ -258,6 +261,7 @@ function combat.ShootAttack.new(range)
     local self = combat.Attack.new("Shoot", "Fire a projectile, pushing the first target", range or 5, 1, {})
     return setmetatable(self, combat.ShootAttack)
 end
+-- в combat.lua, внутри ShootAttack:execute
 function combat.ShootAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
@@ -265,9 +269,14 @@ function combat.ShootAttack:execute(attacker, targetQ, targetR, hex, entities, s
     if not firstTarget then return false, "No target in that direction!" end
     local distance = hex:getDistance(attacker.q, attacker.r, targetHex.q, targetHex.r)
     if distance > self.range then return false, "Target out of range!" end
+
+    -- Вычисляем клетку отталкивания (если есть)
+    local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+    local pushValid = hex:isActiveHex(pushQ, pushR)
+    attack_effects.shoot(attacker, firstTarget, nil, nil, hex)
     self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
     self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
-    combat.startPushAnimations(hex)   -- <-- добавить
+    combat.startPushAnimations(hex)
     attacker.hasActedThisTurn = true
     return true
 end
@@ -297,6 +306,7 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
     local firstTarget, firstHex, secondTarget, secondHex = self:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    attack_effects.piercingShoot(attacker, firstTarget, secondTarget, stepX, stepY, stepZ, hex)
     if not firstTarget then return false, "No target in that direction!" end
     if secondTarget then
         self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil, globalHealth)
@@ -361,7 +371,7 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
             -- Отбрасываем только живых врагов (не союзников)
             if target and target:isCharacter() and not target.isPlayable and target.health > 0 then
                 -- Направление от центра к соседу в кубических координатах
-                local cX, cY, cZ = axialToCube(targetQ, targetR)
+                local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
                 local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
                 local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
                 local pushQ, pushR = hex_utils.applyCubeStep(neighbor.q, neighbor.r, dirX, dirY, dirZ)
@@ -512,6 +522,8 @@ function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities
 
     if wasDestroyed then target:startDeath() end
 
+    attack_effects.magicBolt(attacker, target, hex)
+
     attacker.hasActedThisTurn = true
     return true
 end
@@ -551,6 +563,8 @@ function combat.GhostBoltAttack:execute(attacker, targetQ, targetR, hex, entitie
     -- Наносим урон (не отталкиваем)
     self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
     attacker.hasActedThisTurn = true
+
+    attack_effects.ghostBolt(attacker, firstTarget, hex)
     return true
 end
 
@@ -586,6 +600,8 @@ function combat.ZombieBiteAttack:execute(attacker, targetQ, targetR, hex, entiti
         end
     end
     if not target then return false, "No target at that hex" end
+
+    attack_effects.bite(attacker, target, hex)
 
     self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
     attacker.hasActedThisTurn = true

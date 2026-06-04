@@ -5,6 +5,8 @@
 local ai = {}
 local pathfinding = require("pathfinding")
 local hex_utils = require("hex_utils")
+local visual = require("visual_effects")
+local attack_effects = require("attack_effects")
 
 ai.DEBUG = true
 
@@ -184,37 +186,50 @@ function ai.prepareAttackForEnemy(enemy, entities, hex, selectedTargets)
     return true
 end
 
--- Выполнить подготовленную атаку
 function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
     if not enemy.hasPreparedAttack or enemy.health <= 0 then return false end
     local attack = enemy.preparedAttack
     if not attack then return false end
 
     local target = nil
+    local targetQ, targetR = nil, nil  -- целевая клетка (всегда будет определена)
+
+    -- ===== 1. Определяем целевую клетку и, возможно, цель =====
     if attackHitsFirstTarget(attack) then
+        -- Ghost Bolt, Shoot, Dash, Piercing – идут по линии до первой цели или до конца
         local dir = enemy.attackDirection
-        if not dir then return false end
-        local curQ, curR = enemy.q, enemy.r
-        while true do
-            curQ, curR = hex_utils.applyCubeStep(curQ, curR, dir.dx, dir.dy, dir.dz)
-            if not hex:isValidHex(curQ, curR) then break end
-            local e = combat.getEntityAtHex(curQ, curR, entities)
-            if e and e.health > 0 and e ~= enemy then
-                target = e
-                break
+        if dir then
+            local curQ, curR = enemy.q, enemy.r
+            local lastValidQ, lastValidR = curQ, curR
+            while true do
+                local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, dir.dx, dir.dy, dir.dz)
+                if not hex:isValidHex(nextQ, nextR) then break end
+                local e = combat.getEntityAtHex(nextQ, nextR, entities)
+                if e and e.health > 0 and e ~= enemy then
+                    target = e
+                    targetQ, targetR = nextQ, nextR
+                    break
+                end
+                lastValidQ, lastValidR = nextQ, nextR
+                curQ, curR = nextQ, nextR
+            end
+            if not target then
+                -- Цели нет – берём последнюю пройденную клетку (конец линии или край)
+                targetQ, targetR = lastValidQ, lastValidR
             end
         end
     else
-        local target = nil
-        
-        -- Используем смещение, если оно есть
+        -- Bite и Magic Bolt: используем сохранённое смещение
         if enemy.preparedTargetOffset then
-            local targetQ, targetR = hex_utils.applyCubeDiff(enemy.q, enemy.r,
+            targetQ, targetR = hex_utils.applyCubeDiff(
+                enemy.q, enemy.r,
                 enemy.preparedTargetOffset.dx,
                 enemy.preparedTargetOffset.dy,
-                enemy.preparedTargetOffset.dz)
+                enemy.preparedTargetOffset.dz
+            )
+            -- Проверяем, есть ли там живая цель
             local e = combat.getEntityAtHex(targetQ, targetR, entities)
-            if e and e.health > 0 then
+            if e and e.health > 0 and e ~= enemy then
                 if attack.name == "Magic Bolt" then
                     if isOnStraightLine(enemy.q, enemy.r, targetQ, targetR, hex) then
                         target = e
@@ -226,62 +241,74 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
                 end
             end
         end
+    end
 
-        -- Fallback для Bite, если цель не найдена (например, вышла за пределы)
-        if not target and attack.name == "Bite" then
-            local neighbors = hex:getNeighbors(enemy.q, enemy.r)
-            for _, nb in ipairs(neighbors) do
-                if hex:isValidHex(nb.q, nb.r) then
-                    local e = combat.getEntityAtHex(nb.q, nb.r, entities)
-                    if e and e.health > 0 and e ~= enemy then
-                        target = e
-                        break
-                    end
-                end
-            end
+    -- ===== 2. ВСЕГДА рисуем анимацию (даже если цели нет) =====
+    if attack.name == "Ghost Bolt" then
+        if target then
+            attack_effects.ghostBolt(enemy, target, hex)
+        elseif targetQ and targetR then
+            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
+            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.7, 0.3, 1.0, 3, 0.6)
         end
-        
-        -- Для Magic Bolt: ищем любую цель в радиусе
-        if not target and attack.name == "Magic Bolt" then
-            local targets = ai.getAttackableTargets(entities)
-            for _, t in ipairs(targets) do
-                local cand = t.entity
-                local dist = hex:getDistance(enemy.q, enemy.r, cand.q, cand.r)
-                if dist <= attack.range and cand.health > 0 then
-                    target = cand
-                    break
-                end
-            end
+    elseif attack.name == "Bite" then
+        if target then
+            attack_effects.bite(enemy, target, hex)
+        elseif targetQ and targetR then
+            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
+            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.2, 0.2, 4, 0.8)
+            visual.addEffect(toX, toY, "hit", 0.25)
+        end
+    elseif attack.name == "Magic Bolt" then
+        if target then
+            attack_effects.magicBolt(enemy, target, hex)
+        elseif targetQ and targetR then
+            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
+            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            -- Рисуем дугу через visual.addArcEffect
+            visual.addArcEffect(fromX, fromY, toX, toY, 0.6, 0.2, 1.0, 0.3)
+            visual.addEffect(toX, toY, "hit", 0.4)
+        end
+    elseif attack.name == "Dash" then
+        -- Для рывка можно нарисовать линию до целевой клетки (если есть)
+        if targetQ and targetR then
+            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
+            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            visual.addDashEffect(fromX, fromY, toX, toY)
+        end
+    elseif attack.name == "Shoot" then
+        if target then
+            attack_effects.shoot(enemy, target, nil, nil, hex)
+        elseif targetQ and targetR then
+            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
+            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.7, 0.2, 3, 1.0)
         end
     end
 
-    if not target then
-        debugPrint(enemy.name .. " has no valid target, attack cancelled")
-        enemy.hasPreparedAttack = false
-        enemy.attackDirection = nil
-        enemy.preparedTargetEntity = nil
-        enemy.preparedAttack = nil
-        enemy.preparedTargetQ = nil   -- добавить
-        enemy.preparedTargetR = nil   -- добавить
-        return false
+    -- ===== 3. Наносим урон, если цель есть =====
+    if target then
+        local damage = attack.damage
+        local wasDestroyed = target:takeDamage(damage, globalHealth)
+        print(string.format("%s attacks %s for %d damage!", enemy.name, target.name, damage))
+        if sounds and sounds.attack then sounds.attack:play() end
+        if wasDestroyed then
+            target:startDeath()
+        end
+    else
+        debugPrint(string.format("%s attacks cell (%d,%d) but no valid target, animation only", 
+                   enemy.name, targetQ or 0, targetR or 0))
     end
 
-    local damage = attack.damage
-    local wasDestroyed = target:takeDamage(damage, globalHealth)
-    print(string.format("%s attacks %s for %d damage!", enemy.name, target.name, damage))
-    if sounds and sounds.attack then sounds.attack:play() end
-
-    if wasDestroyed then
-        target:startDeath()
-    end
-
+    -- ===== 4. Сбрасываем состояние атаки =====
     enemy.hasPreparedAttack = false
     enemy.attackDirection = nil
-    enemy.preparedTargetEntity = nil
+    enemy.preparedTargetOffset = nil
     enemy.preparedAttack = nil
     return true
 end
-
 -- Расстояние до ближайшей цели
 function ai.getDistanceToNearestTarget(enemy, entities, hex)
     local best = math.huge
