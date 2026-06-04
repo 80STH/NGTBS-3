@@ -815,7 +815,7 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
                 if pushedObj and terrainMap then
                     local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities, globalHealth)
                     if died then
-                        pushedObj.startDeath()
+                        pushedObj:startDeath()
                     end
                 end
             end

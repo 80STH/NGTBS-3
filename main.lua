@@ -39,7 +39,9 @@ function love.load()
 
     -- Счётчик ходов и лимит
     turnCount = 0
-    maxTurns = 1
+    maxTurns = 1   -- например, 5 ходов
+    decayAppliedForTurnLimit = false
+    decayMessageTimer = 0
     gameActive = true
     win = false
     loss = false
@@ -123,12 +125,12 @@ function love.load()
     windTorrentUI.button = { x = 10, y = 240, width = 120, height = 30, isHovered = false }
 end
 
-function applyFireToAllEnemies()
+function applyDecayToAllEnemies()
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.health > 0 then
-            if not status.hasEntityStatus(e, "fire") then
-                status.applyToEntity(e, "fire")
-                print("🔥 " .. e.name .. " caught fire due to turn limit!")
+            if not status.hasEntityStatus(e, "decay") then
+                status.applyToEntity(e, "decay")
+                print("💀 " .. e.name .. " is afflicted with decay!")
             end
         end
     end
@@ -402,12 +404,12 @@ function prepareAllEnemies()
     turnState.phase = "player"
 
     -- Увеличиваем счётчик ходов и проверяем лимит
-    turnCount = turnCount + 1
     print("Turn count: " .. turnCount .. " / " .. maxTurns)
 
-    if turnCount >= maxTurns and not fireAppliedForTurnLimit then
-        applyFireToAllEnemies()
-        fireAppliedForTurnLimit = true
+    if turnCount >= maxTurns and not decayAppliedForTurnLimit then
+        applyDecayToAllEnemies()
+        decayAppliedForTurnLimit = true
+        decayMessageTimer = 2.0   -- показывать сообщение 2 секунды
     end
 
     checkGameEnd()
@@ -449,6 +451,9 @@ function updateEnemyAttacks(dt)
 
     if #turnState.enemyAttackQueue == 0 then
         turnState.phase = "enemy_prepare"
+        -- Увеличиваем счётчик ходов перед началом нового раунда
+        turnCount = turnCount + 1
+        print("Turn count increased to: " .. turnCount .. "/" .. maxTurns)
         prepareAllEnemies()
         turnState.currentAttackingEnemy = nil
         return
@@ -814,6 +819,9 @@ function love.update(dt)
         end
     end
     combat.updatePushAnimations(dt, hex)
+    if decayMessageTimer > 0 then
+        decayMessageTimer = decayMessageTimer - dt
+    end
 
     if turnState.phase == "enemy_prepare" and turnState.currentPreparingEnemy then
         local enemy = turnState.currentPreparingEnemy
@@ -821,17 +829,19 @@ function love.update(dt)
             turnState.currentPreparingEnemy = nil
             processNextEnemyPrepare()
         elseif not enemy.isMoving and enemy.movementFinished then
-            ai.prepareAttackForEnemy(enemy, entities, hex)
+            -- Движение завершено, теперь подготавливаем атаку (если возможно)
+            if not enemy.hasPreparedAttack then
+                if ai.canPrepareAttack(enemy, entities) then
+                    ai.prepareAttackForEnemy(enemy, entities, hex)
+                end
+            end
             enemy.movementFinished = false
             turnState.currentPreparingEnemy = nil
             processNextEnemyPrepare()
         elseif not enemy.isMoving and not enemy.movementFinished then
-            -- Движение не началось и не завершилось – возможно, moveAndPrepare вернул "prepared" или "failed"
-            -- В любом случае, завершаем обработку этого врага
+            -- Движение не началось или завершилось без флага – проверяем возможность атаки
             if not enemy.hasPreparedAttack then
-                -- Пробуем подготовить, если цель рядом
-                local dist = ai.getDistanceToNearestTarget(enemy, entities, hex)
-                if dist == 1 then
+                if ai.canPrepareAttack(enemy, entities) then
                     ai.prepareAttackForEnemy(enemy, entities, hex)
                 end
             end
@@ -843,6 +853,8 @@ function love.update(dt)
     -- Обновление фазы атаки врагов
     if turnState.phase == "enemy_attack" then
         if #turnState.enemyAttackQueue == 0 then
+            turnCount = turnCount + 1
+            print("Turn count increased to: " .. turnCount .. "/" .. maxTurns)
             turnState.phase = "enemy_prepare"
             startEnemyPreparePhase()
             return
@@ -1149,6 +1161,24 @@ function love.draw()
     ui.drawPreparedAttacks(hex, entities)
     drawAllEntities()
     visual.draw()
+    -- Обратный отсчёт до Decay
+    local turnsLeft = maxTurns - turnCount
+    if turnsLeft > 0 then
+        love.graphics.setColor(0.9, 0.7, 0.2, 1)
+        love.graphics.print("Decay in: " .. turnsLeft, 10, 110)
+    elseif turnsLeft == 0 and decayAppliedForTurnLimit then
+        love.graphics.setColor(0.8, 0.2, 0.2, 1)
+        love.graphics.print("DECAY ACTIVE!", 10, 110)
+    end
+
+    -- Анимированное сообщение "DECAY!" при первом применении
+    if decayMessageTimer > 0 then
+        local alpha = math.min(1, decayMessageTimer * 2)  -- затухание
+        love.graphics.setColor(0.8, 0.2, 0.2, alpha)
+        love.graphics.setFont(love.graphics.newFont(36))
+        love.graphics.print("💀 DECAY! 💀", love.graphics.getWidth()/2 - 120, love.graphics.getHeight()/2 - 50)
+        love.graphics.setFont(love.graphics.newFont(16))  -- восстановить
+    end
 
     -- Подсветка дальности движения врага при наведении
     if hex.hoverQ and hex.hoverQ >= 0 and hex.hoverR and hex.hoverR >= 0 then
@@ -1401,6 +1431,14 @@ function restartGame()
     loss = false
     fireAppliedForTurnLimit = false
     print("=== GAME RESTARTED ===")
+end
+
+function refreshAllEnemyPreparations(entities, hex)
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack then
+            ai.refreshPreparedAttack(e, entities, hex)
+        end
+    end
 end
 
 -- Атака очищает историю движений

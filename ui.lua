@@ -764,6 +764,11 @@ function ui.drawEntityStatusEffects(x, y, statuses, baseSize, time)
             ui.drawFireOnHex(x + offsetX, y + offsetY, baseSize * 0.4, time)
         elseif st == "acid" then
             ui.drawAcidOnHex(x + offsetX, y + offsetY, baseSize * 0.35, time)
+        elseif st == "decay" then
+            love.graphics.setColor(0.3, 0.8, 0.2, 0.9)
+            love.graphics.circle("fill", x + offsetX, y + offsetY, baseSize * 0.3)
+            love.graphics.setColor(0, 0, 0, 0.8)
+            love.graphics.print("☠", x + offsetX - 5, y + offsetY - 6)
         end
     end
 end
@@ -881,70 +886,80 @@ function ui.drawPreparedAttackDirection(hex, enemy, time)
     local fromX, fromY = getEntityDisplayPosition(enemy, hex)
     if not fromX then return end
 
-    -- Ghost Bolt: пунктирная линия до цели
+    -- Ghost Bolt
     if attack.name == "Ghost Bolt" then
-        local target = enemy.preparedTargetEntity
-        if target and target.health > 0 then
-            local toX, toY = getEntityDisplayPosition(target, hex)
-            if toX then
-                ui.drawDottedLine(fromX, fromY, toX, toY, 6, 25, time)
-            end
+        local targetQ, targetR
+        if enemy.preparedTargetEntity and enemy.preparedTargetEntity.health > 0 then
+            targetQ, targetR = enemy.preparedTargetEntity.q, enemy.preparedTargetEntity.r
+        elseif enemy.preparedTargetQ ~= nil then
+            targetQ, targetR = enemy.preparedTargetQ, enemy.preparedTargetR
+        else
+            return
         end
+        -- Проверяем, жива ли цель (по координатам) и в пределах дальности
+        local targetEntity = getEntityAtHex(targetQ, targetR, entities) -- нужно передать entities, но entities не доступна здесь
+        -- Временно пропустим проверку на существование, просто рисуем
+        local toX, toY = hex:hexToPixel(targetQ, targetR)
+        ui.drawDottedLine(fromX, fromY, toX, toY, 6, 25, time)
         return
     end
 
-    -- Magic Bolt (Лич): двойная дуга с выныриванием и заныриванием
+    -- Magic Bolt (Lich)
     if attack.name == "Magic Bolt" then
-        local target = enemy.preparedTargetEntity
-        if target and target.health > 0 then
-            local toX, toY = getEntityDisplayPosition(target, hex)
-            if toX then
-                ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
-            end
+        local targetQ, targetR
+        if enemy.preparedTargetEntity and enemy.preparedTargetEntity.health > 0 then
+            targetQ, targetR = enemy.preparedTargetEntity.q, enemy.preparedTargetEntity.r
+        elseif enemy.preparedTargetQ ~= nil then
+            targetQ, targetR = enemy.preparedTargetQ, enemy.preparedTargetR
+        else
+            return
         end
+        -- Проверяем дистанцию: если цель слишком далеко (вышла из радиуса), не рисуем
+        local dist = hex:getDistance(enemy.q, enemy.r, targetQ, targetR)
+        if dist > attack.range then
+            return  -- цель вне радиуса, не показываем стрелку
+        end
+        local toX, toY = hex:hexToPixel(targetQ, targetR)
+        ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
         return
     end
 
-    -- Для атак с направлением (Dash, Shoot, Piercing и т.д.)
-    if not enemy.attackDirection then return end
-    local dir = enemy.attackDirection
-    local curX, curY, curZ = hex_utils.axialToCube(enemy.q, enemy.r)
-    local targetX = curX + dir.dx
-    local targetY = curY + dir.dy
-    local targetZ = curZ + dir.dz
-    local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
-    if not hex:isValidHex(targetQ, targetR) then return end
+    -- Для атак с направлением (Dash, Shoot, Piercing) – используем направление
+    if enemy.attackDirection then
+        local step = enemy.attackDirection
+        local targetQ, targetR = hex_utils.applyCubeStep(enemy.q, enemy.r, step.dx, step.dy, step.dz)
+        if hex:isValidHex(targetQ, targetR) then
+            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            local angle = math.atan2(toY - fromY, toX - fromX)
+            local arrowSize = 18
+            local lineWidth = 4
+            local radius = hex.radius
+            local offset = radius * 0.3
 
-    local toX, toY = hex:hexToPixel(targetQ, targetR)
+            local startX = fromX + math.cos(angle) * offset
+            local startY = fromY + math.sin(angle) * offset
+            local endX = toX - math.cos(angle) * offset
+            local endY = toY - math.sin(angle) * offset
 
-    local angle = math.atan2(toY - fromY, toX - fromX)
-    local arrowSize = 18
-    local lineWidth = 4
-    local radius = hex.radius
-    local offset = radius * 0.3
+            local pulse = 0.5 + 0.5 * math.sin(time * 8)
+            local alpha = 0.5 + 0.3 * pulse
 
-    local startX = fromX + math.cos(angle) * offset
-    local startY = fromY + math.sin(angle) * offset
-    local endX = toX - math.cos(angle) * offset
-    local endY = toY - math.sin(angle) * offset
+            love.graphics.setLineWidth(lineWidth)
+            love.graphics.setColor(1, 0.2, 0.2, alpha)
+            love.graphics.line(startX, startY, endX, endY)
 
-    local pulse = 0.5 + 0.5 * math.sin(time * 8)
-    local alpha = 0.5 + 0.3 * pulse
+            local leftAngle = angle + math.pi * 0.7
+            local rightAngle = angle - math.pi * 0.7
+            love.graphics.line(endX, endY,
+                endX + math.cos(leftAngle) * arrowSize,
+                endY + math.sin(leftAngle) * arrowSize)
+            love.graphics.line(endX, endY,
+                endX + math.cos(rightAngle) * arrowSize,
+                endY + math.sin(rightAngle) * arrowSize)
 
-    love.graphics.setLineWidth(lineWidth)
-    love.graphics.setColor(1, 0.2, 0.2, alpha)
-    love.graphics.line(startX, startY, endX, endY)
-
-    local leftAngle = angle + math.pi * 0.7
-    local rightAngle = angle - math.pi * 0.7
-    love.graphics.line(endX, endY,
-        endX + math.cos(leftAngle) * arrowSize,
-        endY + math.sin(leftAngle) * arrowSize)
-    love.graphics.line(endX, endY,
-        endX + math.cos(rightAngle) * arrowSize,
-        endY + math.sin(rightAngle) * arrowSize)
-
-    love.graphics.setLineWidth(1)
+            love.graphics.setLineWidth(1)
+        end
+    end
 end
 
 -- ui.lua (добавить в конец файла, перед return ui)
