@@ -127,14 +127,18 @@ function love.load()
 end
 
 function applyDecayToAllEnemies()
+    print("applyDecayToAllEnemies called, turnCount=", turnCount, "maxTurns=", maxTurns)
+    local count = 0
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.health > 0 then
+            count = count + 1
             if not status.hasEntityStatus(e, "decay") then
                 status.applyToEntity(e, "decay")
                 print("💀 " .. e.name .. " is afflicted with decay!")
             end
         end
     end
+    print("Total living enemies found:", count)
 end
 
 function checkGameEnd()
@@ -485,7 +489,16 @@ function endTurn()
     end
 
     effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
-    checkGameEnd()  -- <-- добавить
+    checkGameEnd()
+
+    -- ===== НАЛОЖЕНИЕ DECAY ПРИ ДОСТИЖЕНИИ ЛИМИТА ХОДОВ =====
+    if turnCount >= maxTurns and not decayAppliedForTurnLimit then
+        applyDecayToAllEnemies()
+        decayAppliedForTurnLimit = true
+        decayMessageTimer = 2.0
+        print("DECAY APPLIED at end of turn " .. turnCount)
+    end
+    -- ======================================================
 
     -- Собираем врагов для атаки
     local attackers = {}
@@ -498,8 +511,6 @@ function endTurn()
     turnState.enemyAttackTimer = 0
     turnState.phase = "enemy_attack"
     print("=== ENEMY ATTACK PHASE ===")
-    -- ВНИМАНИЕ: processDigSites будет вызван ПОСЛЕ того, как враги отстреляются
-    -- Для этого добавим флаг, что после атак нужно вызвать обработку выкопок
     turnState.pendingDigProcessing = true
 end
 -- Обработка хода врагов
@@ -886,6 +897,7 @@ function love.update(dt)
         turnCount = turnCount + 1
         print("Turn count increased to: " .. turnCount .. "/" .. maxTurns)
         turnState.phase = "enemy_prepare"
+        effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
         startEnemyPreparePhase()
         return
     end

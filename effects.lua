@@ -70,10 +70,21 @@ function effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
                         entity:startDeath()
                     end
                 else
-                    -- на воде огонь должен был быть потушен, но на всякий случай снимем
                     status.removeFromEntity(entity, "fire")
                 end
             end
+
+            -- ===== ДОБАВИТЬ ОБРАБОТКУ DECAY =====
+            if status.hasEntityStatus(entity, "decay") then
+                local damage = 1
+                print(string.format("💀 %s decays for %d damage!", entity.name, damage))
+                local wasDestroyed = entity:takeDamage(damage, globalHealth)
+                if sounds and sounds.decay then sounds.decay:play() end
+                if wasDestroyed then
+                    entity:startDeath()
+                end
+            end
+            -- ====================================
 
             -- Проверка утопления (если персонаж на воде и не мёртв)
             if entity:isCharacter() then
