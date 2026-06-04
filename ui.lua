@@ -213,9 +213,6 @@ end
 -- ============================================================
 -- ОСНОВНЫЕ UI-ФУНКЦИИ, ВЫЗЫВАЕМЫЕ ИЗ MAIN.LUA
 -- ============================================================
-
--- ui.lua, заменить существующую функцию drawPreparedAttacks
-
 function ui.drawPreparedAttacks(hex, entities)
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.preparedAttack then
@@ -268,23 +265,99 @@ function ui.drawPreparedAttacks(hex, entities)
                     end
                 end
             end
+-- ui.lua, внутри функции drawPreparedAttacks, заменить блок с targetCell на следующий:
 
-            if targetCell then
-                local x, y = hex:hexToPixel(targetCell.q, targetCell.r)
-                local vertices = hex:drawHexagon(x, y, hex.radius)
-                love.graphics.stencil(function()
-                    love.graphics.polygon("fill", vertices)
-                end, "replace", 1)
-                love.graphics.setStencilTest("greater", 0)
-                local tex = getHazardTexture()
-                love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.draw(tex, x - hex.radius, y - hex.radius, 0,
-                                   hex.radius * 2 / tex:getWidth(),
-                                   hex.radius * 2 / tex:getHeight())
-                love.graphics.setStencilTest()
-                love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.print("⚔", x - 6, y - 8)
+if targetCell then
+    local x, y = hex:hexToPixel(targetCell.q, targetCell.r)
+    local vertices = hex:drawHexagon(x, y, hex.radius)
+    
+    -- Подсчёт количества атак на эту цель (от разных врагов)
+    local threatCount = 0
+    for _, other in ipairs(entities) do
+        if other:isCharacter() and not other.isPlayable and other.hasPreparedAttack and other.preparedAttack then
+            local otherAttack = other.preparedAttack
+            local otherTarget = nil
+            -- Аналогично определяем целевую клетку для other
+            if otherAttack.name == "Ghost Bolt" or otherAttack.name == "Shoot" or otherAttack.name == "Dash" or otherAttack.name == "Piercing Shot" then
+                if other.attackDirection then
+                    local step = other.attackDirection
+                    local curQ, curR = other.q, other.r
+                    while true do
+                        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
+                        if not hex:isActiveHex(nextQ, nextR) then break end
+                        local ent = getEntityAtHex(nextQ, nextR, entities)
+                        if ent and ent ~= other and ent.health > 0 then
+                            otherTarget = {q = nextQ, r = nextR}
+                            break
+                        end
+                        curQ, curR = nextQ, nextR
+                    end
+                end
+            elseif otherAttack.name == "Bite" or otherAttack.name == "Magic Bolt" then
+                if other.preparedTargetOffset then
+                    local tq, tr = hex_utils.applyCubeDiff(other.q, other.r,
+                        other.preparedTargetOffset.dx, other.preparedTargetOffset.dy, other.preparedTargetOffset.dz)
+                    if hex:isActiveHex(tq, tr) then
+                        otherTarget = {q = tq, r = tr}
+                    end
+                end
             end
+            if otherTarget and otherTarget.q == targetCell.q and otherTarget.r == targetCell.r then
+                threatCount = threatCount + 1
+            end
+        end
+    end
+    threatCount = math.min(threatCount, 3)  -- ограничиваем до 3
+    
+    -- Настройки отрисовки в зависимости от количества атак
+    local alpha, r, g, b, scaleMod
+    if threatCount == 1 then
+        alpha = 0.5
+        r, g, b = 1, 0.5, 0.2
+        scaleMod = 1.0
+    elseif threatCount == 2 then
+        alpha = 0.75
+        r, g, b = 1, 0.3, 0.1
+        scaleMod = 1.2
+    else -- threatCount >= 3
+        alpha = 1.0
+        r, g, b = 1, 0, 0
+        scaleMod = 1.4
+    end
+    
+    -- Пульсация (только для 1 и 2 атак)
+    local pulse = 1.0
+    if threatCount <= 2 then
+        local t = love.timer.getTime()
+        pulse = 0.7 + 0.3 * math.sin(t * (5 + threatCount * 3))
+        alpha = alpha * pulse
+    end
+    
+    love.graphics.stencil(function()
+        love.graphics.polygon("fill", vertices)
+    end, "replace", 1)
+    love.graphics.setStencilTest("greater", 0)
+    
+    local tex = getHazardTexture()
+    love.graphics.setColor(r, g, b, alpha)
+    -- Рисуем текстуру, возможно, несколько раз с наложением для усиления
+    if threatCount >= 2 then
+        -- Для 2+ атак рисуем дважды со сдвигом (имитация плотности)
+        love.graphics.draw(tex, x - hex.radius - 2, y - hex.radius - 2, 0,
+                           hex.radius * 2 / tex:getWidth() * scaleMod,
+                           hex.radius * 2 / tex:getHeight() * scaleMod)
+        love.graphics.draw(tex, x - hex.radius + 2, y - hex.radius + 2, 0,
+                           hex.radius * 2 / tex:getWidth() * scaleMod,
+                           hex.radius * 2 / tex:getHeight() * scaleMod)
+    end
+    love.graphics.draw(tex, x - hex.radius, y - hex.radius, 0,
+                       hex.radius * 2 / tex:getWidth() * scaleMod,
+                       hex.radius * 2 / tex:getHeight() * scaleMod)
+    
+    love.graphics.setStencilTest()
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print("⚔", x - 6, y - 8)
+end
         end
     end
 end
@@ -365,7 +438,6 @@ end
 if attack.name == "Magic Bolt" then
     local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
     if distance <= attack.range then
-        -- Добавить проверку прямой линии
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
         if stepX then
             local target = getEntityAtHex(hoverQ, hoverR, entities)
@@ -377,6 +449,26 @@ if attack.name == "Magic Bolt" then
                 love.graphics.setColor(0.9, 0.3, 0.9, 0.8)
                 love.graphics.polygon("line", vertices)
                 ui.drawDamageIcon(x + 20, y - 20, attack.damage or 1)
+
+                -- Отрисовка дуги от атакующего до цели
+                local fromX, fromY = hex:hexToPixel(attacker.q, attacker.r)
+                local toX, toY = hex:hexToPixel(hoverQ, hoverR)
+                local dx = toX - fromX
+                local dy = toY - fromY
+                local midX = (fromX + toX) / 2
+                local midY = (fromY + toY) / 2
+                local perpX = -dy
+                local perpY = dx
+                local len = math.sqrt(dx*dx + dy*dy)
+                if len > 0.01 then
+                    perpX = perpX / len
+                    perpY = perpY / len
+                end
+                local offset = 60
+                local ctrlX = midX + perpX * offset
+                local ctrlY = midY + perpY * offset
+                local time = love.timer.getTime()
+                ui.drawDottedArc(fromX, fromY, toX, toY, ctrlX, ctrlY, 5, 25, time)
             end
         end
     end
@@ -982,23 +1074,39 @@ if attack.name == "Ghost Bolt" then
     return
 end
 
-    -- ===== Magic Bolt (Lich) =====
-    if attack.name == "Magic Bolt" then
-        if enemy.preparedTargetOffset then
-            local targetQ, targetR = hex_utils.applyCubeDiff(
-                enemy.q, enemy.r,
-                enemy.preparedTargetOffset.dx,
-                enemy.preparedTargetOffset.dy,
-                enemy.preparedTargetOffset.dz
-            )
-            if hex:isActiveHex(targetQ, targetR) then
-                local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
-                local toX, toY = hex:hexToPixel(targetQ, targetR)
-                ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
+if attack.name == "Magic Bolt" then
+    if enemy.preparedTargetOffset then
+        local targetQ, targetR = hex_utils.applyCubeDiff(
+            enemy.q, enemy.r,
+            enemy.preparedTargetOffset.dx,
+            enemy.preparedTargetOffset.dy,
+            enemy.preparedTargetOffset.dz
+        )
+        if hex:isActiveHex(targetQ, targetR) then
+            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
+            local toX, toY = hex:hexToPixel(targetQ, targetR)
+
+            -- Вычисляем контрольную точку дуги (смещение перпендикулярно линии)
+            local dx = toX - fromX
+            local dy = toY - fromY
+            local midX = (fromX + toX) / 2
+            local midY = (fromY + toY) / 2
+            local perpX = -dy
+            local perpY = dx
+            local len = math.sqrt(dx*dx + dy*dy)
+            if len > 0.01 then
+                perpX = perpX / len
+                perpY = perpY / len
             end
+            local offset = 60   -- величина изгиба
+            local ctrlX = midX + perpX * offset
+            local ctrlY = midY + perpY * offset
+
+            ui.drawDottedArc(fromX, fromY, toX, toY, ctrlX, ctrlY, 6, 25, time)
         end
-        return
     end
+    return
+end
 
     -- ===== Bite (Zombie) =====
     if attack.name == "Bite" then
@@ -1082,33 +1190,6 @@ end
 
             love.graphics.setLineWidth(1)
         end
-    end
-end
-
--- ui.lua (добавить в конец файла, перед return ui)
-
--- Рисует пунктирную линию из больших пульсирующих кружков
-function ui.drawDottedLine(x1, y1, x2, y2, dotRadius, step, time)
-    local dx = x2 - x1
-    local dy = y2 - y1
-    local length = math.sqrt(dx*dx + dy*dy)
-    if length < 0.1 then return end
-    local dirX = dx / length
-    local dirY = dy / length
-
-    local numDots = math.floor(length / step)
-    if numDots < 1 then numDots = 1 end
-
-    for i = 0, numDots do
-        local t = i / numDots
-        local px = x1 + dx * t
-        local py = y1 + dy * t
-        local pulse = 0.6 + 0.4 * math.sin(time * 8 + i)
-        local r = dotRadius * (0.7 + 0.3 * pulse)
-        love.graphics.setColor(0.7, 0.3, 1, 0.85 * pulse)
-        love.graphics.circle("fill", px, py, r)
-        love.graphics.setColor(1, 0.8, 1, 0.9)
-        love.graphics.circle("line", px, py, r + 2)
     end
 end
 
@@ -1467,5 +1548,73 @@ function ui.drawDigSites(hex, digSites)
         -- love.graphics.print(site.age, x + 15, y + 5)
     end
 end
+
+-- ============================================================
+-- Функция рисования пунктирной прямой (с тенью)
+-- ============================================================
+function ui.drawDottedLine(x1, y1, x2, y2, dotRadius, step, time)
+    local dx = x2 - x1
+    local dy = y2 - y1
+    local length = math.sqrt(dx*dx + dy*dy)
+    if length < 0.1 then return end
+    local dirX = dx / length
+    local dirY = dy / length
+
+    local numDots = math.floor(length / step)
+    if numDots < 1 then numDots = 1 end
+
+    for i = 0, numDots do
+        local t = i / numDots
+        local px = x1 + dx * t
+        local py = y1 + dy * t
+        local pulse = 0.6 + 0.4 * math.sin(time * 8 + i)
+        local r = dotRadius * (0.7 + 0.3 * pulse)
+        local alpha = 0.85 * pulse
+
+        -- Тень
+        love.graphics.setColor(0, 0, 0, 0.5 * alpha)
+        love.graphics.circle("fill", px + 2, py + 2, r)
+
+        -- Основная точка
+        love.graphics.setColor(0.7, 0.3, 1, alpha)
+        love.graphics.circle("fill", px, py, r)
+        love.graphics.setColor(1, 0.8, 1, 0.9)
+        love.graphics.circle("line", px, py, r + 2)
+    end
+end
+
+function ui.drawDottedArc(x1, y1, x2, y2, cx, cy, dotRadius, step, time)
+    local function bezier(t)
+        local mt = 1 - t
+        local x = mt*mt * x1 + 2*mt*t * cx + t*t * x2
+        local y = mt*mt * y1 + 2*mt*t * cy + t*t * y2
+        return x, y
+    end
+
+    -- Приблизительная длина дуги (грубая оценка)
+    local mid1x, mid1y = bezier(0.5)
+    local len = math.sqrt((x2-x1)^2 + (y2-y1)^2) + math.sqrt((mid1x-cx)^2 + (mid1y-cy)^2)*0.5
+    local numDots = math.max(5, math.floor(len / step))
+    if numDots < 1 then numDots = 1 end
+
+    for i = 0, numDots do
+        local t = i / numDots
+        local px, py = bezier(t)
+        local pulse = 0.6 + 0.4 * math.sin(time * 8 + i)
+        local r = dotRadius * (0.7 + 0.3 * pulse)
+        local alpha = 0.85 * pulse
+
+        -- Тень
+        love.graphics.setColor(0, 0, 0, 0.5 * alpha)
+        love.graphics.circle("fill", px + 2, py + 2, r)
+
+        -- Основная точка
+        love.graphics.setColor(0.7, 0.2, 1, alpha)
+        love.graphics.circle("fill", px, py, r)
+        love.graphics.setColor(1, 0.5, 1, alpha * 0.9)
+        love.graphics.circle("line", px, py, r + 2)
+    end
+end
+
 
 return ui
