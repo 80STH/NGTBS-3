@@ -1016,46 +1016,47 @@ function getEntityDrawPosition(entity)
     return hex:hexToPixel(entity.q, entity.r)
 end
 
--- Унифицированная отрисовка полоски здоровья для любых сущностей
-function drawHealthBar(entity, x, y)
-    -- Показываем полоску только если есть максимальное здоровье > 1
-    if not entity.maxHealth or entity.maxHealth <= 1 then
-        return
+function drawHealthBar(entity, x, y, damage)
+    -- Защита от nil-координат
+    if not x or not y then
+        if entity and entity.q ~= nil and entity.r ~= nil and hex then
+            x, y = hex:hexToPixel(entity.q, entity.r)
+        else
+            return
+        end
     end
-    
-    local barWidth = 40
-    local barHeight = 6
-    local healthPercent = math.max(0, entity.health / entity.maxHealth)
-    
-    -- Для зданий используем другой цвет
-    local bgColor, fgColor
-    if entity:isBuilding() then
-        bgColor = {0.5, 0.3, 0.1, 0.8}
-        fgColor = {0.9, 0.6, 0.2, 0.8}
-    elseif entity:isObstacle() then
-        bgColor = {0.4, 0.2, 0.1, 0.8}
-        fgColor = {0.6, 0.4, 0.2, 0.8}
-    else
-        bgColor = {0.5, 0, 0, 0.8}
-        fgColor = {0, 1, 0, 0.8}
-    end
-    
-    -- Фон
-    love.graphics.setColor(bgColor)
-    love.graphics.rectangle("fill", x - barWidth/2, y - 28, barWidth, barHeight, 2)
-    
-    -- Заполнение
-    love.graphics.setColor(fgColor)
-    love.graphics.rectangle("fill", x - barWidth/2, y - 28, barWidth * healthPercent, barHeight, 2)
-    
-    -- Рамка
-    love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.rectangle("line", x - barWidth/2, y - 28, barWidth, barHeight, 2)
-    
-    -- Текст здоровья (только для персонажей и если достаточно места)
-    if entity:isCharacter() then
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print(entity.health .. "/" .. entity.maxHealth, x - 15, y - 40)
+
+    if not entity.maxHealth or entity.maxHealth <= 0 then return end
+    if entity.maxHealth > 10 then return end
+
+    local cellSize = 8
+    local spacing = 1
+    local totalWidth = entity.maxHealth * (cellSize + spacing) - spacing
+    local startX = x - totalWidth / 2
+    local startY = y - 28
+
+    damage = damage or 0
+    local damageClamped = math.min(damage, entity.health)  -- сколько ячеек будет повреждено
+
+    for i = 1, entity.maxHealth do
+        local cellX = startX + (i - 1) * (cellSize + spacing)
+        local cellY = startY
+        local isAlive = i <= entity.health
+        local willTakeDamage = damageClamped > 0 and i > entity.health - damageClamped and i <= entity.health
+
+        if willTakeDamage then
+            -- Мигание: красный с пульсацией
+            local t = love.timer.getTime()
+            local blink = 0.5 + 0.5 * math.sin(t * 8)
+            love.graphics.setColor(1, 0.2 + blink * 0.3, 0.2, 0.9)
+        elseif isAlive then
+            love.graphics.setColor(0, 0.8, 0, 0.9)
+        else
+            love.graphics.setColor(0.4, 0.1, 0.1, 0.6)
+        end
+        love.graphics.rectangle("fill", cellX, cellY, cellSize, cellSize)
+        love.graphics.setColor(1, 1, 1, 0.5)
+        love.graphics.rectangle("line", cellX, cellY, cellSize, cellSize)
     end
 end
 
@@ -1070,6 +1071,7 @@ function drawActionIndicator(entity, x, y)
 end
 
 function drawEntity(entity)
+    love.graphics.setColor(1, 1, 1, 1) --временно
     local x, y = getEntityDrawPosition(entity)
     
     -- Анимация смерти: прозрачность и масштаб
@@ -1105,12 +1107,6 @@ function drawEntity(entity)
     if entity.isDying then
         love.graphics.setColor(1, 0.2, 0.2, alpha)
         love.graphics.circle("fill", x, y, 18)
-    end
-    
-    -- Имя сущности (только для персонажей)
-    if entity:isCharacter() then
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print(entity.name, x - 20, y - 25)
     end
 
     local entityStatuses = status.getEntityStatuses(entity)
