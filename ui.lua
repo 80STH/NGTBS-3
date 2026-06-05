@@ -938,23 +938,6 @@ function ui.drawCellStatusEffects(x, y, radius, statuses, time)
     end
 end
 
-function ui.drawEntityStatusEffects(x, y, statuses, baseSize, time)
-    for i, st in ipairs(statuses) do
-        local offsetX = -baseSize * 0.6 + i * baseSize * 0.4
-        local offsetY = -baseSize * 0.8
-        if st == "fire" then
-            ui.drawFireOnHex(x + offsetX, y + offsetY, baseSize * 0.4, time)
-        elseif st == "acid" then
-            ui.drawAcidOnHex(x + offsetX, y + offsetY, baseSize * 0.35, time)
-        elseif st == "decay" then
-            love.graphics.setColor(0.3, 0.8, 0.2, 0.9)
-            love.graphics.circle("fill", x + offsetX, y + offsetY, baseSize * 0.3)
-            love.graphics.setColor(0, 0, 0, 0.8)
-            love.graphics.print("☠", x + offsetX - 5, y + offsetY - 6)
-        end
-    end
-end
-
 -- ui.lua (новая функция)
 
 function ui.drawUnitTooltip(entity, x, y, terrainMap)
@@ -1747,13 +1730,132 @@ function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
     end
 end
 
--- Вспомогательная функция (дублируем из main.lua, чтобы ui.lua не зависел от глобального окружения)
-local function getEntityAtHex(q, r, entities)
-    for _, e in ipairs(entities) do
-        if e.q == q and e.r == r then return e end
+-- ======================================================
+-- ВИЗУАЛЬНЫЕ ЭФФЕКТЫ СТАТУСОВ НА ЮНИТАХ (НЕ НА КЛЕТКАХ)
+-- ======================================================
+
+function ui.drawFireOnEntity(x, y, radius, time)
+    local t = time * 8
+    love.graphics.setBlendMode("add")
+    -- Внешнее свечение
+    for i = 1, 3 do
+        local size = radius * (0.6 + 0.2 * math.sin(t * 2 + i))
+        love.graphics.setColor(1, 0.3, 0, 0.2)
+        love.graphics.circle("fill", x, y, size)
     end
-    return nil
+    -- Языки пламени, вырывающиеся вверх
+    for i = 1, 5 do
+        local angle = -math.pi/2 + (i-2)*0.5 + math.sin(t*10+i)*0.3
+        local len = radius * (0.5 + 0.2 * math.sin(t * 6 + i))
+        local tipX = x + math.cos(angle) * len * 0.5
+        local tipY = y + math.sin(angle) * len - radius * 0.3
+        local baseX1 = x + math.cos(angle - 0.4) * (len * 0.3)
+        local baseY1 = y + math.sin(angle - 0.4) * (len * 0.3)
+        local baseX2 = x + math.cos(angle + 0.4) * (len * 0.3)
+        local baseY2 = y + math.sin(angle + 0.4) * (len * 0.3)
+        local rCol = 1
+        local gCol = 0.3 + 0.5 * (math.sin(t * 8 + i) * 0.5 + 0.5)
+        love.graphics.setColor(rCol, gCol, 0, 0.9)
+        love.graphics.polygon("fill", tipX, tipY, baseX1, baseY1, baseX2, baseY2)
+    end
+    -- Искры
+    for i = 1, 4 do
+        local sparkAngle = t * 15 + i * 1.2
+        local dist = radius * 0.4
+        local sparkX = x + math.cos(sparkAngle) * dist
+        local sparkY = y - radius * 0.4 + math.sin(sparkAngle) * dist * 0.5
+        love.graphics.setColor(1, 0.7, 0.1, 0.9)
+        love.graphics.circle("fill", sparkX, sparkY, radius * 0.07)
+    end
+    love.graphics.setBlendMode("alpha")
 end
 
+function ui.drawAcidOnEntity(x, y, radius, time)
+    local t = time * 3
+    love.graphics.setBlendMode("add")
+    -- Кислотная лужа под ногами
+    love.graphics.setColor(0.3, 0.8, 0.2, 0.5)
+    love.graphics.ellipse("fill", x, y + radius*0.2, radius*0.8, radius*0.3)
+    -- Пузыри, поднимающиеся вверх
+    for i = 1, 4 do
+        local bubbleAngle = t * 4 + i * 1.5
+        local dist = radius * 0.5 * math.sin(t * 3 + i)
+        local bx = x + math.cos(bubbleAngle) * dist * 0.5
+        local by = y - radius * 0.4 + math.sin(bubbleAngle) * dist * 0.3
+        local size = radius * 0.1 * (0.6 + 0.4 * math.sin(t * 7 + i))
+        love.graphics.setColor(0.4, 1, 0.2, 0.8)
+        love.graphics.circle("fill", bx, by, size)
+        love.graphics.setColor(0.8, 1, 0.4, 0.5)
+        love.graphics.circle("line", bx, by, size * 1.2)
+    end
+    love.graphics.setBlendMode("alpha")
+end
+
+function ui.drawDecayOnEntity(x, y, radius, time)
+    local t = time * 2
+    love.graphics.setBlendMode("add")
+    -- Гнилостное облако
+    love.graphics.setColor(0.4, 0.1, 0.5, 0.6)
+    love.graphics.circle("fill", x, y, radius * 0.9)
+    love.graphics.setColor(0.2, 0.05, 0.3, 0.4)
+    love.graphics.circle("fill", x, y, radius * 1.1)
+    -- Вращающиеся тёмные частицы
+    for i = 1, 6 do
+        local angle = t * 2 + (i / 6) * math.pi * 2
+        local rDist = radius * 0.5 + math.sin(t * 3 + i) * radius * 0.2
+        local px = x + math.cos(angle) * rDist
+        local py = y + math.sin(angle) * rDist * 0.6
+        love.graphics.setColor(0.5, 0.2, 0.7, 0.7)
+        love.graphics.circle("fill", px, py, radius * 0.08)
+    end
+    -- Череп с пульсацией
+    local scale = 0.7 + 0.2 * math.sin(t * 5)
+    love.graphics.setColor(0.9, 0.9, 0.9, 0.9)
+    love.graphics.print("💀", x - 9 * scale, y - 9 * scale, 0, scale, scale)
+    love.graphics.setBlendMode("alpha")
+end
+
+-- Обновлённая функция отрисовки эффектов статусов на сущности
+function ui.drawEntityStatusEffects(x, y, entity, baseSize, time)
+    -- Не рисуем эффекты на постройках и препятствиях
+    if not entity:isCharacter() then return end
+    
+    local statuses = status.getEntityStatuses(entity)
+    if #statuses == 0 then return end
+    
+    -- Отображаем только первые 3 статуса, смещая их
+    for i, st in ipairs(statuses) do
+        if i > 3 then break end
+        local offsetX = -baseSize * 0.6 + i * baseSize * 0.4
+        local offsetY = -baseSize * 0.8
+        if st == "fire" then
+            ui.drawFireOnEntity(x + offsetX, y + offsetY, baseSize * 0.45, time)
+        elseif st == "acid" then
+            ui.drawAcidOnEntity(x + offsetX, y + offsetY, baseSize * 0.4, time)
+        elseif st == "decay" then
+            ui.drawDecayOnEntity(x + offsetX, y + offsetY, baseSize * 0.45, time)
+        end
+    end
+end
+
+-- Возвращает цвет для мигания в зависимости от статусов (приоритет: fire > decay > acid)
+function ui.getEntityStatusColor(entity, time)
+    local statuses = status.getEntityStatuses(entity)
+    if not statuses or #statuses == 0 then return nil end
+
+    local pulse = 0.4 + 0.4 * math.sin(time * 8)  -- пульсация 0..0.8
+    local color = nil
+
+    -- Приоритет статусов
+    if status.hasEntityStatus(entity, "fire") then
+        color = {1, 0.2, 0.1, pulse}
+    elseif status.hasEntityStatus(entity, "decay") then
+        color = {0.6, 0.2, 0.8, pulse}
+    elseif status.hasEntityStatus(entity, "acid") then
+        color = {0.2, 0.9, 0.2, pulse}
+    end
+
+    return color
+end
 
 return ui

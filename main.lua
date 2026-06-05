@@ -1127,6 +1127,18 @@ function drawEntity(entity)
         end
         local finalScale = baseScale * scale
         love.graphics.draw(entity.sprite, x, y, 0, finalScale, finalScale, sw/2, sh/2)
+        
+        -- НАКЛАДЫВАЕМ ЦВЕТНУЮ ПОДСВЕТКУ (только для персонажей)
+        if entity:isCharacter() then
+            local statusColor = ui.getEntityStatusColor(entity, love.timer.getTime())
+            if statusColor then
+                love.graphics.setColor(statusColor)
+                love.graphics.setBlendMode("add")
+                love.graphics.circle("fill", x, y, 22)  -- радиус чуть больше спрайта
+                love.graphics.setBlendMode("alpha")
+                love.graphics.setColor(1, 1, 1, 1)
+            end
+        end
     else
         -- fallback круг
         love.graphics.setColor(entity.color or {1, 1, 1, 1})
@@ -1141,7 +1153,7 @@ function drawEntity(entity)
 
     local entityStatuses = status.getEntityStatuses(entity)
     if #entityStatuses > 0 then
-        ui.drawEntityStatusEffects(x, y, entityStatuses, 20, love.timer.getTime())
+        ui.drawEntityStatusEffects(x, y, entity, 20, love.timer.getTime())
     end
     
     -- Полоска здоровья
