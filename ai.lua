@@ -248,16 +248,16 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
         if target then
             attack_effects.ghostBolt(enemy, target, hex)
         elseif targetQ and targetR then
-            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
-            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+            local toX, toY = getDrawCoords(targetQ, targetR)
             visual.addLineEffect(fromX, fromY, toX, toY, 0.7, 0.3, 1.0, 3, 0.6)
         end
     elseif attack.name == "Bite" then
         if target then
             attack_effects.bite(enemy, target, hex)
         elseif targetQ and targetR then
-            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
-            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+            local toX, toY = getDrawCoords(targetQ, targetR)
             visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.2, 0.2, 4, 0.8)
             visual.addEffect(toX, toY, "hit", 0.25)
         end
@@ -265,8 +265,8 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
         if target then
             attack_effects.magicBolt(enemy, target, hex)
         elseif targetQ and targetR then
-            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
-            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+            local toX, toY = getDrawCoords(targetQ, targetR)
             -- Рисуем дугу через visual.addArcEffect
             visual.addArcEffect(fromX, fromY, toX, toY, 0.6, 0.2, 1.0, 0.3)
             visual.addEffect(toX, toY, "hit", 0.4)
@@ -274,16 +274,16 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
     elseif attack.name == "Dash" then
         -- Для рывка можно нарисовать линию до целевой клетки (если есть)
         if targetQ and targetR then
-            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
-            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+            local toX, toY = getDrawCoords(targetQ, targetR)
             visual.addDashEffect(fromX, fromY, toX, toY)
         end
     elseif attack.name == "Shoot" then
         if target then
             attack_effects.shoot(enemy, target, nil, nil, hex)
         elseif targetQ and targetR then
-            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
-            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+            local toX, toY = getDrawCoords(targetQ, targetR)
             visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.7, 0.2, 3, 1.0)
         end
     end
@@ -493,8 +493,8 @@ function ai.startEnemyMove(enemy, hex)
         enemy.timer = 0
         enemy.targetQ = step.q
         enemy.targetR = step.r
-        enemy.startX, enemy.startY = hex:hexToPixel(enemy.q, enemy.r)
-        enemy.endX, enemy.endY = hex:hexToPixel(step.q, step.r)
+        enemy.startX, enemy.startY = getDrawCoords(enemy.q, enemy.r)
+        enemy.endX, enemy.endY = getDrawCoords(step.q, step.r)
     else
         enemy.isMoving = false
         enemy.path = {}

@@ -107,7 +107,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
                 target.startDeath()
             end
         end
-        local effectX, effectY = hex:hexToPixel(fromQ, fromR)
+        local effectX, effectY = getDrawCoords(fromQ, fromR)
         visual.addEffect(effectX, effectY, "slam")
         if onComplete then onComplete(false) end
         return
@@ -202,7 +202,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
             end
             if firstTarget.health <= 0 then firstTarget:startDeath() end
             if occupant and occupant.health <= 0 then occupant:startDeath() end
-            local effectX, effectY = hex:hexToPixel(targetHex.q, targetHex.r)
+            local effectX, effectY = getDrawCoords(targetHex.q, targetHex.r)
             visual.addEffect(effectX, effectY, "slam")
         else
             self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
@@ -550,7 +550,7 @@ function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities
     if sounds and sounds.attack then sounds.attack:play() end
 
     if hex and visual then
-        local x, y = hex:hexToPixel(target.q, target.r)
+        local x, y = getDrawCoords(target.q, target.r)
         visual.addEffect(x, y, "hit", 0.4)
     end
 
@@ -784,8 +784,8 @@ pushAnimations = { queue = {}, active = false }
 function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
 
     -- Добавляем эффект ветра от стартовой клетки к конечной
-    local startX, startY = hex:hexToPixel(fromQ, fromR)
-    local endX, endY = hex:hexToPixel(toQ, toR)
+    local startX, startY = getDrawCoords(fromQ, fromR)
+    local endX, endY = getDrawCoords(toQ, toR)
     visual.addPushEffect(startX, startY, endX, endY, 0.25)
 
     table.insert(pushAnimations.queue, {
@@ -864,8 +864,8 @@ function combat.initNextPushAnimation(hex)
     local anim = pushAnimations.queue[1]
     if not anim.isMoving then
         if not anim.isShake then
-            anim.startX, anim.startY = hex:hexToPixel(anim.fromQ, anim.fromR)
-            anim.endX, anim.endY = hex:hexToPixel(anim.toQ, anim.toR)
+            anim.startX, anim.startY = getDrawCoords(anim.fromQ, anim.fromR)
+            anim.endX, anim.endY = getDrawCoords(anim.toQ, anim.toR)
         end
         anim.timer = 0
         anim.isMoving = true
@@ -893,7 +893,7 @@ function combat.updatePushAnimations(dt, hex)
         end
 
         if anim.isShake then
-            local x, y = hex:hexToPixel(anim.obj.q, anim.obj.r)
+            local x, y = getDrawCoords(anim.obj.q, anim.obj.r)
             anim.obj.currentDrawX = x + anim.offsetX * (1 - ease)
             anim.obj.currentDrawY = y + anim.offsetY * (1 - ease)
         else
@@ -972,7 +972,7 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
     if sounds and sounds.attack then sounds.attack:play() end
 
     if hex and visual then
-        local x, y = hex:hexToPixel(target.q, target.r)
+        local x, y = getDrawCoords(target.q, target.r)
         visual.addEffect(x, y, "hit", 0.4)
     end
 
@@ -1012,7 +1012,7 @@ end
 
 function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, withEntity)
     -- Эффект столкновения в целевой клетке (визуальный, без урона)
-    local x, y = hex:hexToPixel(toQ, toR)
+    local x, y = getDrawCoords(toQ, toR)
     visual.addEffect(x, y, "collision", 0.3)
     if sounds and sounds.collision then sounds.collision:play() end
 
@@ -1034,8 +1034,8 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
     end
 
     -- Bounce-анимация (движение на 80% пути и обратно)
-    local startX, startY = hex:hexToPixel(fromQ, fromR)
-    local endX, endY = hex:hexToPixel(toQ, toR)
+    local startX, startY = getDrawCoords(fromQ, fromR)
+    local endX, endY = getDrawCoords(toQ, toR)
     table.insert(pushAnimations.queue, {
         obj = obj,
         fromQ = fromQ, fromR = fromR,

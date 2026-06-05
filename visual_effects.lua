@@ -114,20 +114,26 @@ function visual.draw()
 elseif e.type == "arc" then
     local t = e.timer / e.duration
     local alpha = 1 - t
-    -- квадратичная кривая Безье с контрольной точкой посередине+смещение
     local midX = (e.fromX + e.toX) / 2
     local midY = (e.fromY + e.toY) / 2
-    local perpX = (e.toY - e.fromY)
-    local perpY = (e.fromX - e.toX)
-    local len = math.sqrt(perpX*perpX + perpY*perpY)
-    if len > 0.01 then
-        perpX = perpX / len * 40
-        perpY = perpY / len * 40
+    local ctrlX, ctrlY
+    if e.ctrlX and e.ctrlY then
+        ctrlX, ctrlY = e.ctrlX, e.ctrlY
+    else
+        -- старый расчёт: перпендикуляр
+        local perpX = (e.toY - e.fromY)
+        local perpY = (e.fromX - e.toX)
+        local len = math.sqrt(perpX*perpX + perpY*perpY)
+        if len > 0.01 then
+            perpX = perpX / len * 40
+            perpY = perpY / len * 40
+        end
+        ctrlX, ctrlY = midX + perpX, midY + perpY
     end
     local function bezier(p)
         local u = 1 - p
-        local x = u*u*e.fromX + 2*u*p*(midX+perpX) + p*p*e.toX
-        local y = u*u*e.fromY + 2*u*p*(midY+perpY) + p*p*e.toY
+        local x = u*u*e.fromX + 2*u*p*ctrlX + p*p*e.toX
+        local y = u*u*e.fromY + 2*u*p*ctrlY + p*p*e.toY
         return x, y
     end
     for i = 0, 20 do
@@ -215,13 +221,15 @@ function visual.addDashEffect(fromX, fromY, toX, toY)
     })
 end
 
-function visual.addArcEffect(fromX, fromY, toX, toY, r, g, b, duration)
+function visual.addArcEffect(fromX, fromY, toX, toY, r, g, b, duration, ctrlX, ctrlY)
     table.insert(visual.effects, {
         type = "arc",
         fromX = fromX, fromY = fromY,
         toX = toX, toY = toY,
         r = r or 1, g = g or 1, b = b or 1,
-        timer = 0, duration = duration or 0.3
+        timer = 0, duration = duration or 0.3,
+        ctrlX = ctrlX,   -- опциональная контрольная точка
+        ctrlY = ctrlY
     })
 end
 

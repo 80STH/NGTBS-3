@@ -126,6 +126,14 @@ function love.load()
     windTorrentUI.button = { x = 10, y = 240, width = 120, height = 30, isHovered = false }
 end
 
+function getDrawCoords(q, r)
+    local x, y = hex:hexToPixel(q, r)
+    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
+        y = y + config.WATER_Y_OFFSET
+    end
+    return x, y
+end
+
 function applyDecayToAllEnemies()
     print("applyDecayToAllEnemies called, turnCount=", turnCount, "maxTurns=", maxTurns)
     local count = 0
@@ -734,8 +742,8 @@ function startNextMove(actor)
         actor.timer = 0
         actor.targetQ = step.q
         actor.targetR = step.r
-        actor.startX, actor.startY = hex:hexToPixel(actor.q, actor.r)
-        actor.endX, actor.endY = hex:hexToPixel(actor.targetQ, actor.targetR)
+        actor.startX, actor.startY = getDrawCoords(actor.q, actor.r)
+        actor.endX, actor.endY = getDrawCoords(actor.targetQ, actor.targetR)
     else
         actor.isMoving = false
         actor.path = {}
@@ -929,47 +937,57 @@ function drawHexGrid()
     local gridH = hex.gridHeight
     if not gridW or not gridH then return end
 
-    -- 1. Рисуем terrain и эффекты сверху вниз (по возрастанию r)
+    -- 1. Собираем все активные клетки вместе с их Y-координатой (глубиной)
+    local cells = {}
     for row = 0, gridH - 1 do
         for col = 0, gridW - 1 do
             if hex:isActiveHex(col, row) then
                 local terrainType = terrainMap and terrainMap[col] and terrainMap[col][row] or "grass"
                 local cellX, cellY = hex:hexToPixel(col, row)
-                hex:drawTerrainHex(col, row, terrainType, cellX, cellY)
-
-                local hexStatuses = status.getAtHex(col, row)
-                if #hexStatuses > 0 then
-                    ui.drawCellStatusEffects(cellX, cellY, hex.radius, hexStatuses, love.timer.getTime())
-                end
+                -- Y-координата верхней грани (учитываем смещение для воды, чтобы вода не "всплывала")
+                local yOffset = (terrainType == "water") and config.WATER_Y_OFFSET or 0
+                local depth = cellY + yOffset  -- чем больше, тем ближе к зрителю
+                table.insert(cells, {
+                    q = col, r = row,
+                    x = cellX, y = cellY,
+                    terrain = terrainType,
+                    depth = depth
+                })
             end
         end
     end
 
-    -- 2. Рисуем рамки и выделения (также сверху вниз)
-    for row = 0, gridH - 1 do
-        for col = 0, gridW - 1 do
-            if not hex:isActiveHex(col, row) then goto continue end
-            local cellX, cellY = hex:hexToPixel(col, row)
-            local vertices = hex:drawHexagon(cellX, cellY, hex.radius)
+    -- Сортируем по глубине: сначала дальние (меньший depth), потом ближние (больший depth)
+    table.sort(cells, function(a, b) return a.depth < b.depth end)
 
-            local isCurrentActor = selectedActor and selectedActor.q == col and selectedActor.r == row
-            local isSelected = (hex.selectedQ == col and hex.selectedR == row)
-            local isHovered = (hex.hoverQ == col and hex.hoverR == row)
+    -- 2. Рисуем terrain и эффекты в отсортированном порядке
+    for _, cell in ipairs(cells) do
+        hex:drawTerrainHex(cell.q, cell.r, cell.terrain, cell.x, cell.y)
+        local hexStatuses = status.getAtHex(cell.q, cell.r)
+        if #hexStatuses > 0 then
+            local yOffset = (cell.terrain == "water") and config.WATER_Y_OFFSET or 0
+            ui.drawCellStatusEffects(cell.x, cell.y + yOffset, hex.radius, hexStatuses, love.timer.getTime())
+        end
+    end
 
-            if isCurrentActor then
-                love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
-                love.graphics.polygon("fill", vertices)
-            elseif isSelected then
-                love.graphics.setColor(0.2, 0.4, 0.8, 0.5)
-                love.graphics.polygon("fill", vertices)
-            elseif isHovered then
-                love.graphics.setColor(0.5, 0.8, 0.3, 0.5)
-                love.graphics.polygon("fill", vertices)
-            end
+    -- 3. Рисуем рамки и выделения (также в отсортированном порядке, но можно и отдельно, так как они прозрачные)
+    for _, cell in ipairs(cells) do
+        local yOffset = (cell.terrain == "water") and config.WATER_Y_OFFSET or 0
+        local vertices = hex:drawHexagon(cell.x, cell.y + yOffset, hex.radius)
 
-            love.graphics.setColor(0, 0, 0, 0.5)
-            love.graphics.polygon("line", vertices)
-            ::continue::
+        local isCurrentActor = selectedActor and selectedActor.q == cell.q and selectedActor.r == cell.r
+        local isSelected = (hex.selectedQ == cell.q and hex.selectedR == cell.r)
+        local isHovered = (hex.hoverQ == cell.q and hex.hoverR == cell.r)
+
+        if isCurrentActor then
+            love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
+            love.graphics.polygon("fill", vertices)
+        elseif isSelected then
+            love.graphics.setColor(0.2, 0.4, 0.8, 0.5)
+            love.graphics.polygon("fill", vertices)
+        elseif isHovered then
+            love.graphics.setColor(0.5, 0.8, 0.3, 0.5)
+            love.graphics.polygon("fill", vertices)
         end
     end
     love.graphics.setColor(1, 1, 1, 1)
@@ -1025,7 +1043,7 @@ function getEntityDrawPosition(entity)
     end
 
     -- 4. Статическое положение
-    return hex:hexToPixel(entity.q, entity.r)
+    return getDrawCoords(entity.q, entity.r)
 end
 
 function drawHealthBar(entity, x, y, damage)
@@ -1174,7 +1192,7 @@ function love.draw()
         love.graphics.print("DECAY ACTIVE!", 10, 110)
     end
 
-    if not attackMode then
+if not attackMode then
         if selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and turnState.phase == "player" then
             ui.drawMovementRange(hex, selectedActor, entities, terrainMap)
             if hex.hoverQ >= 0 and hex.hoverR >= 0 then
@@ -1207,7 +1225,7 @@ function love.draw()
     end
 
     if attackMode and selectedAttack and selectedActor and not selectedActor.hasActedThisTurn and hex.hoverQ >= 0 and hex.hoverR >= 0 then
-        ui.drawAttackPreview(hex, selectedActor, selectedAttack, attackMode, hex.hoverQ, hex.hoverR, entities)
+        ui.drawAttackPreview(hex, selectedActor, selectedAttack, attackMode, hex.hoverQ, hex.hoverR, entities, terrainMap)
     end
     ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
     ui.drawEndTurnButton(turnState, entities)
@@ -1259,15 +1277,14 @@ function love.draw()
     -- Стрелка направления подготовленной атаки (при наведении на врага)
     for _, entity in ipairs(entities) do
         if entity:isCharacter() and not entity.isPlayable and entity.hasPreparedAttack and entity.health > 0 then
-            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), entities)  -- добавлен entities
+            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), entities, terrainMap)
         end
     end
 
-    -- После отрисовки остального интерфейса, перед выводом фаз
     if windTorrentUI.active and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local direction = getWindDirectionFromHex(hex.hoverQ, hex.hoverR, hex.centerQ, hex.centerR, hex)
         if direction then
-            ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)   -- теперь передаём terrainMap
+            ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
         end
     end
     if not gameActive then

@@ -110,9 +110,11 @@ end
 function attack_effects.magicBolt(attacker, target, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
     local toX, toY = getHexCenter(target, hex)
-    -- Магическая дуга
-    visual.addArcEffect(fromX, fromY, toX, toY, 0.6, 0.2, 1.0, 0.25)
-    -- Взрыв в цели
+    local midX = (fromX + toX) / 2
+    local midY = (fromY + toY) / 2
+    local ctrlX = midX
+    local ctrlY = midY - 60   -- всегда вверх
+    visual.addArcEffect(fromX, fromY, toX, toY, 0.6, 0.2, 1.0, 0.25, ctrlX, ctrlY)
     visual.addEffect(toX, toY, "hit", 0.4)
     visual.addMagicExplosion(toX, toY, 0.8, 0.2, 1.0)
 end

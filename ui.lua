@@ -19,7 +19,7 @@ local function getEntityDisplayPosition(entity, hex)
     if entity.currentDrawX and entity.currentDrawY then
         return entity.currentDrawX, entity.currentDrawY
     end
-    return hex:hexToPixel(entity.q, entity.r)
+    return getDrawCoords(entity.q, entity.r)
 end
 
 local function getHazardTexture()
@@ -91,10 +91,10 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
 
     -- Рисуем линию и силуэт (как было ранее)
     local points = {}
-    local startX, startY = hex:hexToPixel(actor.q, actor.r)
+    local startX, startY = getDrawCoords(actor.q, actor.r)
     table.insert(points, {x = startX, y = startY})
     for _, step in ipairs(path) do
-        local x, y = hex:hexToPixel(step.q, step.r)
+        local x, y = getDrawCoords(step.q, step.r)
         table.insert(points, {x = x, y = y})
     end
 
@@ -257,13 +257,14 @@ function ui.drawPreparedAttacks(hex, entities)
             end
 
 if targetCell then
-    local x, y = hex:hexToPixel(targetCell.q, targetCell.r)
-    local targetEntity = getEntityAtHex(targetCell.q, targetCell.r, entities)
-    if targetEntity and targetEntity.health > 0 then
-        drawHealthBar(targetEntity, x, y, attack.damage) 
-    end
+local x, y = getDrawCoords(targetCell.q, targetCell.r)
 
-    local vertices = hex:drawHexagon(x, y, hex.radius)
+                    local targetEntity = getEntityAtHex(targetCell.q, targetCell.r, entities)
+                    if targetEntity and targetEntity.health > 0 then
+                        drawHealthBar(targetEntity, x, y, attack.damage)
+                    end
+
+                    local vertices = hex:drawHexagon(x, y, hex.radius)
     
     -- Подсчёт количества атак на эту цель (от разных врагов)
     local threatCount = 0
@@ -377,14 +378,14 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
                 local pushCell = attack:getPushCell(attacker, hoverQ, hoverR, hex, entities)
                 if pushCell then
                     -- Подсветка цели
-                    local fromX, fromY = hex:hexToPixel(target.q, target.r)
+                    local fromX, fromY = getDrawCoords(target.q, target.r)
                     local vertices = hex:drawHexagon(fromX, fromY, hex.radius)
                     love.graphics.setColor(1, 0.5, 0, 0.3)
                     love.graphics.polygon("fill", vertices)
                     love.graphics.setColor(1, 0.7, 0, 0.8)
                     love.graphics.polygon("line", vertices)
                     -- Стрелка переворота
-                    local toX, toY = hex:hexToPixel(pushCell.q, pushCell.r)
+                    local toX, toY = getDrawCoords(pushCell.q, pushCell.r)
                     ui.drawPushArrow(fromX, fromY, toX, toY)
                 end
             end
@@ -398,7 +399,7 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
         if stepX then
             local firstTarget, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
             if firstTarget and targetHex then
-                local x, y = hex:hexToPixel(targetHex.q, targetHex.r)
+                local x, y = getDrawCoords(targetHex.q, targetHex.r)
                 local vertices = hex:drawHexagon(x, y, hex.radius)
                 love.graphics.setColor(0.6, 0.2, 0.8, 0.3)
                 love.graphics.polygon("fill", vertices)
@@ -416,7 +417,7 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
         if distance == 1 then
             local target = getEntityAtHex(hoverQ, hoverR, entities)
             if target then
-                local x, y = hex:hexToPixel(hoverQ, hoverR)
+                local x, y = getDrawCoords(hoverQ, hoverR)
                 local vertices = hex:drawHexagon(x, y, hex.radius)
                 love.graphics.setColor(0.8, 0.2, 0.2, 0.3)
                 love.graphics.polygon("fill", vertices)
@@ -428,45 +429,26 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
         return
     end
 
-    if attack.name == "Magic Bolt" then
-        local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
-        if distance <= attack.range then
-            local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
-            if stepX then
-                local target = getEntityAtHex(hoverQ, hoverR, entities)
-                if target then
-                    local x, y = hex:hexToPixel(hoverQ, hoverR)
-                    local vertices = hex:drawHexagon(x, y, hex.radius)
-                    love.graphics.setColor(0.8, 0.2, 0.8, 0.3)
-                    love.graphics.polygon("fill", vertices)
-                    love.graphics.setColor(0.9, 0.3, 0.9, 0.8)
-                    love.graphics.polygon("line", vertices)
-                    drawHealthBar(target, x, y, attack.damage)
-
-                    -- Отрисовка дуги от атакующего до цели
-                    local fromX, fromY = hex:hexToPixel(attacker.q, attacker.r)
-                    local toX, toY = hex:hexToPixel(hoverQ, hoverR)
-                    local dx = toX - fromX
-                    local dy = toY - fromY
-                    local midX = (fromX + toX) / 2
-                    local midY = (fromY + toY) / 2
-                    local perpX = -dy
-                    local perpY = dx
-                    local len = math.sqrt(dx*dx + dy*dy)
-                    if len > 0.01 then
-                        perpX = perpX / len
-                        perpY = perpY / len
-                    end
-                    local offset = 60
-                    local ctrlX = midX + perpX * offset
-                    local ctrlY = midY + perpY * offset
-                    local time = love.timer.getTime()
-                    ui.drawDottedArc(fromX, fromY, toX, toY, ctrlX, ctrlY, 5, 25, time)
-                end
+if attack.name == "Magic Bolt" then
+    local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+    if distance <= attack.range then
+        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+        if stepX then
+            local target = getEntityAtHex(hoverQ, hoverR, entities)
+            if target then
+                -- ... подсветка цели ...
+                local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
+                local toX, toY = getDrawCoords(hoverQ, hoverR)
+                local midX = (fromX + toX) / 2
+                local midY = (fromY + toY) / 2
+                local ctrlX = midX
+                local ctrlY = midY - 60
+                ui.drawDottedArc(fromX, fromY, toX, toY, ctrlX, ctrlY, 5, 25, time)
             end
         end
-        return
     end
+    return
+end
 
     if attack.name == "Dash" then
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
@@ -475,8 +457,8 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
             
             -- Рисуем путь (стрелку) от атакующего до lastFree
             if lastFree then
-                local fromX, fromY = hex:hexToPixel(attacker.q, attacker.r)
-                local toX, toY = hex:hexToPixel(lastFree.q, lastFree.r)
+                local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
+                local toX, toY = getDrawCoords(lastFree.q, lastFree.r)
                 ui.drawPushArrow(fromX, fromY, toX, toY)
                 -- Силуэт атакующего на целевой клетке
                 local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
@@ -494,7 +476,7 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
 
             -- Урон по первой цели + возможный урон от отталкивания
             if firstTarget then
-                local targetX, targetY = hex:hexToPixel(firstTarget.q, firstTarget.r)
+                local targetX, targetY = getDrawCoords(firstTarget.q, firstTarget.r)
                 local totalDamage = attack.damage or 1
                 if targetHex then
                     local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
@@ -510,10 +492,10 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
                 if targetHex then
                     local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
                     if hex:isActiveHex(pushQ, pushR) and not combat.getEntityAtHex(pushQ, pushR, entities) then
-                        local pushX, pushY = hex:hexToPixel(pushQ, pushR)
+                        local pushX, pushY = getDrawCoords(pushQ, pushR)
                         ui.drawPushArrow(targetX, targetY, pushX, pushY)
                     else
-                        local blockX, blockY = hex:hexToPixel(pushQ, pushR)
+                        local blockX, blockY = getDrawCoords(pushQ, pushR)
                         love.graphics.setColor(1, 0, 0, 0.8)
                         love.graphics.circle("fill", blockX, blockY, hex.radius * 0.3)
                         love.graphics.setColor(1, 1, 1, 1)
@@ -658,7 +640,7 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
     for _, pd in ipairs(previewData) do
         local target = pd.target
         if target and target.health > 0 then
-            local fromX, fromY = hex:hexToPixel(pd.fromCell.q, pd.fromCell.r)
+            local fromX, fromY = getDrawCoords(pd.fromCell.q, pd.fromCell.r)
             -- Подсветка исходной клетки цели
             local vertices = hex:drawHexagon(fromX, fromY, hex.radius)
             love.graphics.setColor(1, 0.5, 0, 0.3)
@@ -681,7 +663,7 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
 
             -- Отталкивание
             if pd.pushTo then
-                local toX, toY = hex:hexToPixel(pd.pushTo.q, pd.pushTo.r)
+                local toX, toY = getDrawCoords(pd.pushTo.q, pd.pushTo.r)
                 ui.drawPushArrow(fromX, fromY, toX, toY)
 
                 local collisionDamage, reason, second = ui.checkCollisionDamage(
@@ -691,14 +673,14 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
                 if collisionDamage > 0 then
                     local crashX, crashY = toX, toY
                     if reason == "collision_both" and second then
-                        local secX, secY = hex:hexToPixel(second.q, second.r)
+                        local secX, secY = getDrawCoords(second.q, second.r)
                         ui.drawCollisionIcon(secX, secY, 1, true)
                         ui.drawCollisionIcon(crashX, crashY, 1, true)
                         drawHealthBar(second, secX, secY, 1)   -- <-- добавить урон зданию
                     elseif reason == "collision_immovable" then
                         ui.drawCollisionIcon(crashX, crashY, 1, false)
                         if second then
-                            local secX, secY = hex:hexToPixel(second.q, second.r)
+                            local secX, secY = getDrawCoords(second.q, second.r)
                             drawHealthBar(second, secX, secY, 1)   -- <-- добавить урон зданию
                         end
                     elseif reason == "edge" then
@@ -711,7 +693,7 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
 
     -- Дополнительно подсветить клетку, куда бьём (только для атак с направлением)
     if attack.getLineDirection then
-        local x, y = hex:hexToPixel(hoverQ, hoverR)
+        local x, y = getDrawCoords(hoverQ, hoverR)
         local vertices = hex:drawHexagon(x, y, hex.radius)
         love.graphics.setColor(1, 1, 0, 0.5)
         love.graphics.polygon("fill", vertices)
@@ -724,16 +706,15 @@ function ui.drawMovementRange(hex, actor, entities, terrainMap)
     if actor.hasMovedThisTurn or actor.hasActedThisTurn then return end
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
-            if hex:isActiveHex(q, r) then
-                -- Используем isCellReachable для проверки достижимости
-                if ui.isCellReachable(actor, q, r, entities, terrainMap, hex) then
-                    local x, y = hex:hexToPixel(q, r)
-                    local vertices = hex:drawHexagon(x, y, hex.radius)
-                    love.graphics.setColor(0.2, 0.8, 0.2, 0.2)
-                    love.graphics.polygon("fill", vertices)
-                    love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
-                    love.graphics.polygon("line", vertices)
-                end
+            if hex:isActiveHex(q, r) and ui.isCellReachable(actor, q, r, entities, terrainMap, hex) then
+                local terrainType = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+                local yOffset = (terrainType == "water") and 12 or 0
+                local x, y = getDrawCoords(q, r)
+                local vertices = hex:drawHexagon(x, y + yOffset, hex.radius)
+                love.graphics.setColor(0.2, 0.8, 0.2, 0.2)
+                love.graphics.polygon("fill", vertices)
+                love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
+                love.graphics.polygon("line", vertices)
             end
         end
     end
@@ -1044,7 +1025,7 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
 
     local fromQ = enemy.preparedFromQ or enemy.q
     local fromR = enemy.preparedFromR or enemy.r
-    local fromX, fromY = hex:hexToPixel(fromQ, fromR)
+    local fromX, fromY = getDrawCoords(fromQ, fromR)
     if not fromX then return end
 
     -- Ghost Bolt: первая цель на линии
@@ -1070,8 +1051,8 @@ if attack.name == "Ghost Bolt" then
         end
         -- Если есть хоть одна клетка, не совпадающая с позицией врага
         if (lastValidQ ~= enemy.q or lastValidR ~= enemy.r) then
-            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
-            local toX, toY = hex:hexToPixel(lastValidQ, lastValidR)
+            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+            local toX, toY = getDrawCoords(lastValidQ, lastValidR)
             ui.drawDottedLine(fromX, fromY, toX, toY, 6, 25, time)
         end
     end
@@ -1087,8 +1068,8 @@ if attack.name == "Magic Bolt" then
             enemy.preparedTargetOffset.dz
         )
         if hex:isActiveHex(targetQ, targetR) then
-            local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
-            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+            local toX, toY = getDrawCoords(targetQ, targetR)
 
             -- Вычисляем контрольную точку дуги (смещение перпендикулярно линии)
             local dx = toX - fromX
@@ -1122,8 +1103,8 @@ end
                 enemy.preparedTargetOffset.dz
             )
             if hex:isActiveHex(targetQ, targetR) then
-                local fromX, fromY = hex:hexToPixel(enemy.q, enemy.r)
-                local toX, toY = hex:hexToPixel(targetQ, targetR)
+                local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+                local toX, toY = getDrawCoords(targetQ, targetR)
                 -- Рисуем обычную стрелку
                 local angle = math.atan2(toY - fromY, toX - fromX)
                 local arrowSize = 18
@@ -1164,7 +1145,7 @@ end
         local step = enemy.attackDirection
         local targetQ, targetR = hex_utils.applyCubeStep(enemy.q, enemy.r, step.dx, step.dy, step.dz)
         if hex:isValidHex(targetQ, targetR) then
-            local toX, toY = hex:hexToPixel(targetQ, targetR)
+            local toX, toY = getDrawCoords(targetQ, targetR)
             local angle = math.atan2(toY - fromY, toX - fromX)
             local arrowSize = 18
             local lineWidth = 4
@@ -1262,8 +1243,8 @@ function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
         if obj.health <= 0 then goto continue end
 
         local newQ, newR = applyStep(obj.q, obj.r)
-        local fromX, fromY = hex:hexToPixel(obj.q, obj.r)
-        local toX, toY = hex:hexToPixel(newQ, newR)
+        local fromX, fromY = getDrawCoords(obj.q, obj.r)
+        local toX, toY = getDrawCoords(newQ, newR)
         local damage = 0
 
         if not isValid(newQ, newR) then
@@ -1279,7 +1260,7 @@ function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
                 table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true, entity=obj})
                 table.insert(damagedEntities, {entity=obj, damage=damage, x=fromX, y=fromY})
                 -- Добавляем урон для неподвижного объекта
-                local immX, immY = hex:hexToPixel(immovableMap[immovableKey].q, immovableMap[immovableKey].r)
+                local immX, immY = getDrawCoords(immovableMap[immovableKey].q, immovableMap[immovableKey].r)
                 table.insert(damagedEntities, {entity=immovableMap[immovableKey], damage=damage, x=immX, y=immY})
             else
                 local targetOcc = targetMap[newQ .. "," .. newR]
@@ -1288,7 +1269,7 @@ function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
                     damage = 1
                     table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true, doubleDamage=true, entity=obj, with=targetOcc})
                     table.insert(damagedEntities, {entity=obj, damage=damage, x=fromX, y=fromY})
-                    local otherX, otherY = hex:hexToPixel(targetOcc.q, targetOcc.r)
+                    local otherX, otherY = getDrawCoords(targetOcc.q, targetOcc.r)
                     table.insert(damagedEntities, {entity=targetOcc, damage=damage, x=otherX, y=otherY})
                 else
                     -- Свободное перемещение
@@ -1396,25 +1377,20 @@ end
 
 -- ui.lua
 function ui.drawEnemyMovementRange(hex, enemy, entities, terrainMap)
-    if not enemy or enemy.isPlayable or not enemy:isCharacter() or enemy.health <= 0 then
-        return
-    end
-    if enemy.hasActedThisTurn or enemy.isMoving then
-        return
-    end
+    if not enemy or enemy.isPlayable or not enemy:isCharacter() or enemy.health <= 0 then return end
+    if enemy.hasActedThisTurn or enemy.isMoving then return end
 
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
-            if hex:isActiveHex(q, r) then
-                -- Проверяем, может ли враг дойти до клетки
-                if ui.isCellReachableForEnemy(enemy, q, r, entities, terrainMap, hex) then
-                    local x, y = hex:hexToPixel(q, r)
-                    local vertices = hex:drawHexagon(x, y, hex.radius)
-                    love.graphics.setColor(0.8, 0.2, 0.2, 0.2)  -- красноватая подсветка
-                    love.graphics.polygon("fill", vertices)
-                    love.graphics.setColor(0.8, 0.2, 0.2, 0.5)
-                    love.graphics.polygon("line", vertices)
-                end
+            if hex:isActiveHex(q, r) and ui.isCellReachableForEnemy(enemy, q, r, entities, terrainMap, hex) then
+                local terrainType = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+                local yOffset = (terrainType == "water") and 12 or 0
+                local x, y = getDrawCoords(q, r)
+                local vertices = hex:drawHexagon(x, y + yOffset, hex.radius)
+                love.graphics.setColor(0.8, 0.2, 0.2, 0.2)
+                love.graphics.polygon("fill", vertices)
+                love.graphics.setColor(0.8, 0.2, 0.2, 0.5)
+                love.graphics.polygon("line", vertices)
             end
         end
     end
@@ -1530,7 +1506,7 @@ end
 function ui.drawDigSites(hex, digSites)
     local time = love.timer.getTime()
     for _, site in ipairs(digSites) do
-        local x, y = hex:hexToPixel(site.q, site.r)
+        local x, y = getDrawCoords(site.q, site.r)
         local radius = hex.radius
         -- Тень ямы
         love.graphics.setColor(0.2, 0.1, 0.05, 0.9)
@@ -1692,11 +1668,13 @@ function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
 
                 ::skip::
                 if canApply then
-                    local x, y = hex:hexToPixel(q, r)
-                    local vertices = hex:drawHexagon(x, y, hex.radius)
-                    love.graphics.setColor(0.9, 0.8, 0.2, 0.25)   -- заливка желтая полупрозрачная
+                    local terrainType = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+                    local yOffset = (terrainType == "water") and 12 or 0
+                    local x, y = getDrawCoords(q, r)
+                    local vertices = hex:drawHexagon(x, y + yOffset, hex.radius)
+                    love.graphics.setColor(0.9, 0.8, 0.2, 0.25)
                     love.graphics.polygon("fill", vertices)
-                    love.graphics.setColor(0.9, 0.8, 0.2, 0.7)   -- обводка желтая
+                    love.graphics.setColor(0.9, 0.8, 0.2, 0.7)
                     love.graphics.polygon("line", vertices)
                 end
             end
