@@ -157,36 +157,24 @@ function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
 end
 
 -- Отрисовка стрелки отталкивания (с отступом от центров)
-function ui.drawPushArrow(fromX, fromY, toX, toY)
+function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha)
     local angle = math.atan2(toY - fromY, toX - fromX)
-    local arrowSize = 18          -- размер наконечника
-    local lineWidth = 4           -- толщина линии
-    
-    -- Смещаем начало и конец стрелки внутрь от центров (на 20% радиуса гекса)
-    local radius = hex.radius      -- радиус гекса (56)
-    local offset = radius * 0.3    -- отступ от центра (16.8)
+    local arrowSize = 18
+    local lineWidth = 4
+    local radius = hex.radius
+    local offset = radius * 0.3
     local startX = fromX + math.cos(angle) * offset
     local startY = fromY + math.sin(angle) * offset
     local endX = toX - math.cos(angle) * offset
     local endY = toY - math.sin(angle) * offset
-    
     love.graphics.setLineWidth(lineWidth)
-    love.graphics.setColor(1, 0.8, 0.2, 0.9)
-    
-    -- Линия
+    love.graphics.setColor(r or 1, g or 0.8, b or 0.2, alpha or 0.9)
     love.graphics.line(startX, startY, endX, endY)
-    
-    -- Наконечник
     local leftAngle = angle + math.pi * 0.7
     local rightAngle = angle - math.pi * 0.7
-    love.graphics.line(endX, endY,
-        endX + math.cos(leftAngle) * arrowSize,
-        endY + math.sin(leftAngle) * arrowSize)
-    love.graphics.line(endX, endY,
-        endX + math.cos(rightAngle) * arrowSize,
-        endY + math.sin(rightAngle) * arrowSize)
-    
-    love.graphics.setLineWidth(1)  -- сброс
+    love.graphics.line(endX, endY, endX + math.cos(leftAngle) * arrowSize, endY + math.sin(leftAngle) * arrowSize)
+    love.graphics.line(endX, endY, endX + math.cos(rightAngle) * arrowSize, endY + math.sin(rightAngle) * arrowSize)
+    love.graphics.setLineWidth(1)
 end
 
 -- Нарисовать значок столкновения
@@ -583,54 +571,128 @@ end
         end
     end
 
-    -- AoePushAttack (Stone Throw)
-    if attack.getPushCells and not previewData then
-        local pushCells = attack:getPushCells(attacker, hoverQ, hoverR, hex, entities)
-        if #pushCells > 0 then
-            previewData = {}
-            local neighbors = hex:getNeighbors(hoverQ, hoverR)
-            for i, neighbor in ipairs(neighbors) do
-                local target = getEntityAtHex(neighbor.q, neighbor.r, entities)
-                if target and target:isCharacter() and not target.isPlayable then
-                    table.insert(previewData, {
-                        target = target,
-                        fromCell = {q = target.q, r = target.r},
-                        pushTo = pushCells[i] or {q = target.q, r = target.r},
-                        attackDamage = 0,
-                    })
-                end
-            end
-        end
+-- ================= STONE THROW (AoePushAttack) =================
+if attack.name == "Stone Throw" then
+    local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+    if dist < (attack.minRange or 2) or dist > attack.range then return end
+
+    local dirQ, dirR = hoverQ - attacker.q, hoverR - attacker.r
+
+    -- Проверка прямой линии
+    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+    if not stepX then return end
+
+    local centerX, centerY = getDrawCoords(hoverQ, hoverR)
+    local centerVertices = hex:drawHexagon(centerX, centerY, hex.radius)  -- <-- добавлено
+    love.graphics.setColor(1, 1, 0, 0.3)
+    love.graphics.polygon("fill", centerVertices)
+    -- Урон, если есть цель
+    local targetEntity = getEntityAtHex(hoverQ, hoverR, entities)
+    if targetEntity and targetEntity.health > 0 then
+        drawHealthBar(targetEntity, centerX, centerY, 1)
     end
 
-    -- AoeDirectionalAttack (Cone Blast)
-    if attack.getPushCells and not previewData and attack.getNeighborsInDirection then
-        local pushCells = attack:getPushCells(attacker, hoverQ, hoverR, hex, entities)
-        if #pushCells > 0 then
-            previewData = {}
-            local centerTarget = getEntityAtHex(hoverQ, hoverR, entities)
-            if centerTarget then
-                table.insert(previewData, {
-                    target = centerTarget,
-                    fromCell = {q = hoverQ, r = hoverR},
-                    pushTo = nil,
-                    attackDamage = 1,
-                })
+    local neighbors = attack:getNeighborsInDirection(hoverQ, hoverR, dirQ, dirR, hex)
+    for _, nb in ipairs(neighbors) do
+        if hex:isActiveHex(nb.q, nb.r) then
+            local cX, cY, cZ = hex_utils.axialToCube(hoverQ, hoverR)
+            local nX, nY, nZ = hex_utils.axialToCube(nb.q, nb.r)
+            local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
+            local pushQ, pushR = hex_utils.applyCubeStep(nb.q, nb.r, dirX, dirY, dirZ)
+
+            -- внутри блока Stone Throw
+local target = getEntityAtHex(nb.q, nb.r, entities)
+local hasTarget = target and target:isCharacter() and target.health > 0
+
+            local x, y = getDrawCoords(nb.q, nb.r)
+            local vertices = hex:drawHexagon(x, y, hex.radius)
+            if hasTarget then
+                love.graphics.setColor(1, 0.5, 0, 0.3)
+                love.graphics.polygon("fill", vertices)
+                love.graphics.setColor(1, 0.7, 0, 0.8)
+                love.graphics.polygon("line", vertices)
+            else
+                love.graphics.setColor(0.5, 0.5, 0.5, 0.3)
+                love.graphics.polygon("fill", vertices)
+                love.graphics.setColor(0.7, 0.7, 0.7, 0.8)
+                love.graphics.polygon("line", vertices)
             end
-            local neighbors = attack:getNeighborsInDirection(hoverQ, hoverR, hoverQ - attacker.q, hoverR - attacker.r, hex)
-            for i, neighbor in ipairs(neighbors) do
-                local target = getEntityAtHex(neighbor.q, neighbor.r, entities)
-                if target then
-                    table.insert(previewData, {
-                        target = target,
-                        fromCell = {q = target.q, r = target.r},
-                        pushTo = pushCells[i] or neighbor,
-                        attackDamage = 0,
-                    })
-                end
+
+            local fromX, fromY = getDrawCoords(nb.q, nb.r)
+            local toX, toY = getDrawCoords(pushQ, pushR)
+            if hasTarget then
+                ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.8, 0.2, 0.9)
+                drawHealthBar(target, fromX, fromY, 0)
+            else
+                ui.drawPushArrow(fromX, fromY, toX, toY, 0.7, 0.7, 0.7, 0.6)
             end
         end
     end
+    return
+end
+
+-- ================= CONE BLAST (AoeDirectionalAttack) =================
+if attack.name == "Cone Blast" then
+    local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+    if dist < (attack.minRange or 2) or dist > attack.range then return end
+
+    local dirQ, dirR = hoverQ - attacker.q, hoverR - attacker.r
+
+    -- Центр
+    local centerX, centerY = getDrawCoords(hoverQ, hoverR)
+    local centerVertices = hex:drawHexagon(centerX, centerY, hex.radius)
+    local centerTarget = getEntityAtHex(hoverQ, hoverR, entities)
+    if centerTarget and centerTarget:isCharacter() and centerTarget.health > 0 then
+        love.graphics.setColor(1, 0.5, 0, 0.3)
+        love.graphics.polygon("fill", centerVertices)
+        love.graphics.setColor(1, 0.7, 0, 0.8)
+        love.graphics.polygon("line", centerVertices)
+        drawHealthBar(centerTarget, centerX, centerY, 1)
+    else
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.3)
+        love.graphics.polygon("fill", centerVertices)
+        love.graphics.setColor(0.7, 0.7, 0.7, 0.8)
+        love.graphics.polygon("line", centerVertices)
+    end
+
+    -- Соседи в направлении
+    local allNeighbors = hex:getNeighbors(hoverQ, hoverR)
+    for _, nb in ipairs(allNeighbors) do
+        if hex:isActiveHex(nb.q, nb.r) then
+            local cX, cY, cZ = hex_utils.axialToCube(hoverQ, hoverR)
+            local nX, nY, nZ = hex_utils.axialToCube(nb.q, nb.r)
+            local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
+            local pushQ, pushR = hex_utils.applyCubeStep(nb.q, nb.r, dirX, dirY, dirZ)
+
+            local target = getEntityAtHex(nb.q, nb.r, entities)
+            local hasTarget = target and target:isCharacter() and target.health > 0
+
+            local x, y = getDrawCoords(nb.q, nb.r)
+            local vertices = hex:drawHexagon(x, y, hex.radius)
+            if hasTarget then
+                love.graphics.setColor(1, 0.5, 0, 0.3)
+                love.graphics.polygon("fill", vertices)
+                love.graphics.setColor(1, 0.7, 0, 0.8)
+                love.graphics.polygon("line", vertices)
+            else
+                love.graphics.setColor(0.5, 0.5, 0.5, 0.3)
+                love.graphics.polygon("fill", vertices)
+                love.graphics.setColor(0.7, 0.7, 0.7, 0.8)
+                love.graphics.polygon("line", vertices)
+            end
+
+            local fromX, fromY = getDrawCoords(nb.q, nb.r)
+            local toX, toY = getDrawCoords(pushQ, pushR)
+            if hasTarget then
+                ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.8, 0.2, 0.9)
+                drawHealthBar(target, fromX, fromY, 0)
+            else
+                ui.drawPushArrow(fromX, fromY, toX, toY, 0.7, 0.7, 0.7, 0.6)
+            end
+        end
+    end
+    return
+end
 
     if not previewData or #previewData == 0 then
         return
@@ -1603,40 +1665,20 @@ function ui.drawDottedArc(x1, y1, x2, y2, cx, cy, dotRadius, step, time)
     end
 end
 
--- ui.lua (добавить в конец файла)
 function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
     if not attacker or not attack then return end
     if attacker.hasActedThisTurn then return end
 
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
-            if hex:isActiveHex(q, r) then
-                local canApply = false
-                
-                -- 1. Проверка дальности
+            if not hex:isActiveHex(q, r) then
+                -- клетка неактивна, пропускаем
+            else
                 local dist = hex:getDistance(attacker.q, attacker.r, q, r)
-                if dist > attack.range then goto skip end
+                if dist <= attack.range then
+                    local canApply = false
 
-                -- 2. Атаки с прямой линией (требуют stepX)
-                if attack.getLineDirection then
-                    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
-                    if not stepX then goto skip end
-
-                    -- Ghost Bolt / Shoot / Dash / Piercing Shot – первая цель на линии
-                    if attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
-                        local firstTarget, _ = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-                        if firstTarget then
-                            canApply = true
-                        end
-                    -- Magic Bolt – цель должна быть именно в этой клетке
-                    elseif attack.name == "Magic Bolt" then
-                        local target = getEntityAtHex(q, r, entities)
-                        if target and (target:isCharacter() and not target.isPlayable or target:isBuilding()) then
-                            canApply = true
-                        end
-                    end
-                else
-                    -- Атаки без прямой линии: Bite, Stone Throw, Cone Blast, Flip
+                    -- 1. Bite
                     if attack.name == "Bite" then
                         if dist == 1 then
                             local target = getEntityAtHex(q, r, entities)
@@ -1644,17 +1686,13 @@ function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
                                 canApply = true
                             end
                         end
-                    elseif attack.name == "Stone Throw" or attack.name == "Cone Blast" then
-                        -- Можно применить на любую клетку в радиусе 1
-                        if dist <= attack.range then
-                            canApply = true
-                        end
+
+                    -- 2. Flip
                     elseif attack.name == "Flip" then
                         if dist == 1 then
                             local target = getEntityAtHex(q, r, entities)
                             if target and target:isCharacter() and not target.isPlayable then
                                 local pushCell = attack:getPushCell(attacker, q, r, hex, entities)
-                                -- Проверяем, что клетка за атакующим активна и свободна
                                 if pushCell and hex:isActiveHex(pushCell.q, pushCell.r) then
                                     local occupant = getEntityAtHex(pushCell.q, pushCell.r, entities)
                                     if not occupant then
@@ -1663,19 +1701,46 @@ function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
                                 end
                             end
                         end
-                    end
-                end
 
-                ::skip::
-                if canApply then
-                    local terrainType = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    local yOffset = (terrainType == "water") and 12 or 0
-                    local x, y = getDrawCoords(q, r)
-                    local vertices = hex:drawHexagon(x, y + yOffset, hex.radius)
-                    love.graphics.setColor(0.9, 0.8, 0.2, 0.25)
-                    love.graphics.polygon("fill", vertices)
-                    love.graphics.setColor(0.9, 0.8, 0.2, 0.7)
-                    love.graphics.polygon("line", vertices)
+                    -- 3. Stone Throw и Cone Blast
+                    elseif attack.name == "Stone Throw" or attack.name == "Cone Blast" then
+                        local minRange = attack.minRange or 1
+                        if dist >= minRange then
+                            local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                            if stepX then
+                                canApply = true
+                            end
+                        end
+
+                    -- 4. Magic Bolt
+                    elseif attack.name == "Magic Bolt" then
+                        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                        if stepX then
+                            local target = getEntityAtHex(q, r, entities)
+                            if target and (target:isCharacter() and not target.isPlayable or target:isBuilding()) then
+                                canApply = true
+                            end
+                        end
+
+                    -- 5. Ghost Bolt, Shoot, Dash, Piercing Shot
+                    elseif attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
+                        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                        if stepX then
+                            local firstTarget, _ = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+                            if firstTarget then
+                                canApply = true
+                            end
+                        end
+                    end
+
+                    if canApply then
+                        local x, y = getDrawCoords(q, r)
+                        local vertices = hex:drawHexagon(x, y, hex.radius)
+                        love.graphics.setColor(0.9, 0.8, 0.2, 0.25)
+                        love.graphics.polygon("fill", vertices)
+                        love.graphics.setColor(0.9, 0.8, 0.2, 0.7)
+                        love.graphics.polygon("line", vertices)
+                    end
                 end
             end
         end

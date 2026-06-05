@@ -352,25 +352,73 @@ function combat.PiercingShootAttack:getPushCells(attacker, targetQ, targetR, hex
     return cells
 end
 
--- 5. АТАКА КАМНЕМ (Stone Throw) – создаёт препятствие и отбрасывает врагов вокруг
+-- ================== STONE THROW (AoePushAttack) ==================
 combat.AoePushAttack = setmetatable({}, combat.Attack)
 combat.AoePushAttack.__index = combat.AoePushAttack
 
 function combat.AoePushAttack.new()
-    local self = combat.Attack.new("Stone Throw", "Throw a stone that pushes all enemies around it", 1, 0, {})
+    local self = combat.Attack.new("Stone Throw", "Throw a stone that pushes three enemies in a cone", math.huge, 0, {})
+    self.minRange = 2
     return setmetatable(self, combat.AoePushAttack)
+end
+
+-- Вспомогательная функция для получения трёх соседей в направлении
+function combat.AoePushAttack:getNeighborsInDirection(centerQ, centerR, dirQ, dirR, hex)
+    if centerQ == nil or centerR == nil then
+        return {}
+    end
+
+    local neighbors = hex:getNeighbors(centerQ, centerR)
+    local validNeighbors = {}
+    for _, nb in ipairs(neighbors) do
+        if nb and nb.q ~= nil and nb.r ~= nil then
+            table.insert(validNeighbors, nb)
+        end
+    end
+
+    if #validNeighbors == 0 then
+        return {}
+    end
+
+    local dirVec = { q = dirQ or 0, r = dirR or 0 }
+
+    local function dot(a, b)
+        return (a.q or 0) * (b.q or 0) + (a.r or 0) * (b.r or 0)
+    end
+
+    table.sort(validNeighbors, function(a, b)
+        return dot(a, dirVec) > dot(b, dirVec)
+    end)
+
+    local top = {}
+    for i = 1, math.min(3, #validNeighbors) do
+        table.insert(top, validNeighbors[i])
+    end
+    return top
 end
 
 function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    if distance > self.range then
-        return false, "Target out of range!"
+    if distance < self.minRange then
+        return false, "Target too close! (minimum 2)"
     end
+    -- Проверка прямой линии
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
 
-    -- Проверяем, занята ли целевая клетка
+    -- Создаём камень в целевой клетке (если свободно)
     local centerEntity = combat.getEntityAtHex(targetQ, targetR, entities)
+    if centerEntity then
+    -- Наносим урон цели вместо создания камня
+    self:dealDamageToTarget(centerEntity, attacker, 1, entities, sounds, nil, combat.globalHealth)
+else
+    -- Создаём камень (как было)
+    local stone = Entity.new("Stone", Entity.TYPES.OBSTACLE, targetQ, targetR, 1, false, 0, nil, nil, {})
+    stone.isPushable = true
+    stone.color = {0.5,0.5,0.5,1}
+    table.insert(entities, stone)
+end
     if not centerEntity then
-        -- Создаём камень (препятствие с 1 HP)
         local stone = Entity.new("Stone", Entity.TYPES.OBSTACLE, targetQ, targetR, 1, false, 0, nil, nil, {})
         stone.isPushable = true
         stone.color = {0.5, 0.5, 0.5, 1}
@@ -380,31 +428,28 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
         print("[Stone] Center cell occupied, stone not placed, but push still occurs")
     end
 
-    -- Собираем цели для визуального эффекта
+    -- Направление от атакующего к цели
+    local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
+    local neighborsInDirection = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
+
     local pushedTargets = {}
-    local neighbors = hex:getNeighbors(targetQ, targetR)
-    for _, neighbor in ipairs(neighbors) do
-        if hex:isValidHex(neighbor.q, neighbor.r) then
-            local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
-            if target and target:isCharacter() and not target.isPlayable and target.health > 0 then
-                local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
-                local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
-                local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
-                local pushQ, pushR = hex_utils.applyCubeStep(neighbor.q, neighbor.r, dirX, dirY, dirZ)
-                table.insert(pushedTargets, {
-                    entity = target,
-                    fromCell = {q = neighbor.q, r = neighbor.r},
-                    pushTo = {q = pushQ, r = pushR},
-                    direction = {dx = dirX, dy = dirY, dz = dirZ}
-                })
-            end
+    for _, nb in ipairs(neighborsInDirection) do
+        local target = combat.getEntityAtHex(nb.q, nb.r, entities)
+        if target and target:isCharacter() and target.health > 0 then
+            local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
+            local nX, nY, nZ = hex_utils.axialToCube(nb.q, nb.r)
+            local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
+            local pushQ, pushR = hex_utils.applyCubeStep(nb.q, nb.r, dirX, dirY, dirZ)
+            table.insert(pushedTargets, {
+                entity = target,
+                fromCell = {q = nb.q, r = nb.r},
+                pushTo = {q = pushQ, r = pushR}
+            })
         end
     end
 
-    -- Визуальный эффект камня и отталкивания
     attack_effects.stoneThrow(targetQ, targetR, pushedTargets, hex)
 
-    -- Выполняем отталкивание
     for _, pd in ipairs(pushedTargets) do
         self:pushTargetToHex(pd.entity, pd.fromCell.q, pd.fromCell.r, pd.pushTo.q, pd.pushTo.r, hex, entities, sounds)
     end
@@ -414,75 +459,117 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
     return true
 end
 
--- Предпросмотр: возвращает таблицу с pushCell и направлением для каждого врага
+-- Предпросмотр для Stone Throw
 function combat.AoePushAttack:getPushCells(attacker, targetQ, targetR, hex, entities)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance < self.minRange then return {} end
+
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return {} end
+
+    local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
+    local neighbors = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
     local cells = {}
-    local neighbors = hex:getNeighbors(targetQ, targetR)
-    for _, neighbor in ipairs(neighbors) do
-        if hex:isValidHex(neighbor.q, neighbor.r) then
-            local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
-            if target and target:isCharacter() and not target.isPlayable and target.health > 0 then
-                local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
-                local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
-                local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
-                local pushQ, pushR = hex_utils.applyCubeStep(neighbor.q, neighbor.r, dirX, dirY, dirZ)
-                local isValid = hex:isValidHex(pushQ, pushR)
-                table.insert(cells, {
-                    target = target,
-                    fromCell = {q = neighbor.q, r = neighbor.r},
-                    pushTo = {q = pushQ, r = pushR, edge = not isValid},
-                    direction = {dx = dirX, dy = dirY, dz = dirZ}
-                })
-            end
+    for _, nb in ipairs(neighbors) do
+        local target = combat.getEntityAtHex(nb.q, nb.r, entities)
+        if target and target:isCharacter() and target.health > 0 then
+            local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
+            local nX, nY, nZ = hex_utils.axialToCube(nb.q, nb.r)
+            local dX, dY, dZ = nX - cX, nY - cY, nZ - cZ
+            local pushQ, pushR = hex_utils.applyCubeStep(nb.q, nb.r, dX, dY, dZ)
+            table.insert(cells, {
+                target = target,
+                fromCell = {q = nb.q, r = nb.r},
+                pushTo = {q = pushQ, r = pushR, edge = not hex:isActiveHex(pushQ, pushR)}
+            })
         end
     end
     return cells
 end
 
+
 -- 6. AoE ТРИ ЦЕЛИ В НАПРАВЛЕНИИ (Cone Blast)
 combat.AoeDirectionalAttack = setmetatable({}, combat.Attack)
 combat.AoeDirectionalAttack.__index = combat.AoeDirectionalAttack
 function combat.AoeDirectionalAttack.new()
-    local self = combat.Attack.new("Cone Blast", "Deals 1 damage to the center and pushes 3 adjacent targets in a chosen direction", 1, 1, {})
+    local self = combat.Attack.new("Cone Blast", "Deals 1 damage to the center and pushes all 6 surrounding enemies", math.huge, 1, {})
+    self.minRange = 2
     return setmetatable(self, combat.AoeDirectionalAttack)
 end
+
 function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    if distance > self.range then return false, "Target out of range!" end
-    local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
+    if distance < self.minRange then
+        return false, "Target too close! (minimum 2)"
+    end
+
+    if not hex:isActiveHex(targetQ, targetR) then
+        return false, "Target cell is not active"
+    end
+    -- Обязательная прямая линия
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+
+    -- Урон центру
     local centerTarget = combat.getEntityAtHex(targetQ, targetR, entities)
-    if centerTarget then
+    if centerTarget and centerTarget:isCharacter() then
         self:dealDamageToTarget(centerTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
     end
 
-    -- Визуальный эффект конусного взрыва
     attack_effects.coneBlast(targetQ, targetR, hex)
 
-    local neighborsInDirection = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
-    for _, neighbor in ipairs(neighborsInDirection) do
-        local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
-        if target then
-            local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
-            local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
-            local dX, dY, dZ = nX - cX, nY - cY, nZ - cZ
-            local pushQ, pushR = hex_utils.applyCubeStep(neighbor.q, neighbor.r, dX, dY, dZ)
-            self:pushTargetToHex(target, neighbor.q, neighbor.r, pushQ, pushR, hex, entities, sounds)
+    -- Все 6 соседей
+    local allNeighbors = hex:getNeighbors(targetQ, targetR)
+    for _, nb in ipairs(allNeighbors) do
+        if hex:isActiveHex(nb.q, nb.r) then
+            local target = combat.getEntityAtHex(nb.q, nb.r, entities)
+            if target and target:isCharacter() and target.health > 0 then
+                local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
+                local nX, nY, nZ = hex_utils.axialToCube(nb.q, nb.r)
+                local dX, dY, dZ = nX - cX, nY - cY, nZ - cZ
+                local pushQ, pushR = hex_utils.applyCubeStep(nb.q, nb.r, dX, dY, dZ)
+                self:pushTargetToHex(target, nb.q, nb.r, pushQ, pushR, hex, entities, sounds)
+            end
         end
     end
+
     combat.startPushAnimations(hex)
     attacker.hasActedThisTurn = true
     return true
 end
 function combat.AoeDirectionalAttack:getNeighborsInDirection(centerQ, centerR, dirQ, dirR, hex)
+    -- Защита от некорректных аргументов
+    if centerQ == nil or centerR == nil then
+        return {}
+    end
+
     local neighbors = hex:getNeighbors(centerQ, centerR)
-    local dirVec = {q = dirQ, r = dirR}
-    local function dot(a, b) return a.q * b.q + a.r * b.r end
-    table.sort(neighbors, function(a, b)
+    local validNeighbors = {}
+
+    -- Отфильтровываем элементы с отсутствующими координатами
+    for _, nb in ipairs(neighbors) do
+        if nb and nb.q ~= nil and nb.r ~= nil then
+            table.insert(validNeighbors, nb)
+        end
+    end
+
+    if #validNeighbors == 0 then
+        return {}
+    end
+
+    local dirVec = { q = dirQ or 0, r = dirR or 0 }
+
+    local function dot(a, b)
+        return (a.q or 0) * (b.q or 0) + (a.r or 0) * (b.r or 0)
+    end
+
+    table.sort(validNeighbors, function(a, b)
         return dot(a, dirVec) > dot(b, dirVec)
     end)
+
     local top = {}
-    for i = 1, math.min(3, #neighbors) do
-        table.insert(top, neighbors[i])
+    for i = 1, math.min(3, #validNeighbors) do
+        table.insert(top, validNeighbors[i])
     end
     return top
 end
@@ -493,7 +580,8 @@ function combat.AoeDirectionalAttack:getPushCells(attacker, targetQ, targetR, he
     local neighbors = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
     for _, neighbor in ipairs(neighbors) do
         local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
-        if target and target:isCharacter() and not target.isPlayable then
+        -- Любой персонаж, а не только враг
+        if target and target:isCharacter() then
             local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
             local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
             local dX, dY, dZ = nX - cX, nY - cY, nZ - cZ
