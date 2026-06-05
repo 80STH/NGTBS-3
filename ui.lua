@@ -1198,8 +1198,8 @@ end
 end
 
 -- Предпросмотр Wind Torrent: рисует стрелки от каждого подвижного объекта к его новому положению
+-- ui.lua
 function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
-    -- Копируем логику из combat.WindTorrentAttack:executeGlobalWithAnimation
     local stepMap = {
         E  = {dx = 1, dy = -1, dz = 0},
         NE = {dx = 1, dy = 0, dz = -1},
@@ -1226,12 +1226,14 @@ function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
         local x, y, z = axialToCube(q, r)
         return cubeToAxial(x + step.dx, y + step.dy, z + step.dz)
     end
-    local function isValid(q, r) return hex:isActiveHex(q, r) end
+    local function isValid(q, r)
+        return hex:isActiveHex(q, r)
+    end
 
     -- Собираем подвижные объекты
     local movableObjects = {}
     for _, entity in ipairs(entities) do
-        if entity.isPushable then
+        if entity.isPushable and entity.health > 0 then
             table.insert(movableObjects, entity)
         end
     end
@@ -1248,7 +1250,7 @@ function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
     -- Карта неподвижных объектов
     local immovableMap = {}
     for _, entity in ipairs(entities) do
-        if not entity.isPushable then
+        if not entity.isPushable and entity.health > 0 then
             local key = entity.q .. "," .. entity.r
             immovableMap[key] = entity
         end
@@ -1256,44 +1258,50 @@ function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
 
     -- Карта занятости для предпросмотра
     local targetMap = {}
-    local previewData = {} -- { fromX, fromY, toX, toY, damage, collisionWith }
+    local previewData = {}    -- { fromX, fromY, toX, toY, damage, entity, secondEntity? }
+    local damagedEntities = {} -- { entity, damage, x, y }
 
     for _, obj in ipairs(movableObjects) do
+        if obj.health <= 0 then goto continue end
+
         local newQ, newR = applyStep(obj.q, obj.r)
         local fromX, fromY = hex:hexToPixel(obj.q, obj.r)
         local toX, toY = hex:hexToPixel(newQ, newR)
         local damage = 0
-        local collisionTarget = nil
+        local collisionWith = nil
 
         if not isValid(newQ, newR) then
             -- Вылет за край
             damage = 1
-            -- рисуем стрелку до края (toX,toY) уже за пределами? можно до границы карты, но проще нарисовать стрелку до ближайшей точки
-            table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isEdge=true})
+            table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isEdge=true, entity=obj})
+            table.insert(damagedEntities, {entity=obj, damage=damage, x=fromX, y=fromY})
         else
-            -- Проверка неподвижного объекта
             local immovableKey = newQ .. "," .. newR
             if immovableMap[immovableKey] then
                 damage = 1
-                table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true})
+                table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true, entity=obj})
+                table.insert(damagedEntities, {entity=obj, damage=damage, x=fromX, y=fromY})
             else
-                -- Проверка коллизии с другим подвижным (уже обработанным)
                 local key = newQ .. "," .. newR
                 if targetMap[key] then
                     -- Столкновение двух подвижных
                     damage = 1
-                    collisionTarget = targetMap[key]
-                    table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true, doubleDamage=true})
-                    -- Добавляем также урон для уже записанного объекта (добавим позже)
+                    collisionWith = targetMap[key]
+                    table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true, doubleDamage=true, entity=obj, with=collisionWith})
+                    table.insert(damagedEntities, {entity=obj, damage=damage, x=fromX, y=fromY})
+                    -- Второй объект тоже получит урон
+                    local otherX, otherY = hex:hexToPixel(collisionWith.q, collisionWith.r)
+                    table.insert(damagedEntities, {entity=collisionWith, damage=damage, x=otherX, y=otherY})
                 else
                     targetMap[key] = obj
-                    table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=0})
+                    table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=0, entity=obj})
                 end
             end
         end
+        ::continue::
     end
 
-    -- Рисуем стрелки и иконки урона
+    -- Рисуем стрелки и иконки столкновений
     for _, pd in ipairs(previewData) do
         ui.drawPushArrow(pd.fromX, pd.fromY, pd.toX, pd.toY)
         if pd.damage > 0 then
@@ -1305,7 +1313,14 @@ function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
         end
     end
 
-        -- Подсветка клеток назначения
+    -- Рисуем мигающие полоски здоровья для всех, кто получит урон
+    for _, dmg in ipairs(damagedEntities) do
+        if dmg.entity and dmg.entity.health > 0 then
+            drawHealthBar(dmg.entity, dmg.x, dmg.y, dmg.damage)
+        end
+    end
+
+    -- Подсветка клеток назначения (для визуализации)
     for _, pd in ipairs(previewData) do
         local q, r = hex:pixelToHex(pd.toX, pd.toY)
         if hex:isValidHex(q, r) then

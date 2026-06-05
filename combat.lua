@@ -634,7 +634,7 @@ function combat.WindTorrentAttack.new()
     return setmetatable(self, combat.WindTorrentAttack)
 end
 
-function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, entities, sounds, onComplete)
+function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, entities, sounds, terrainMap, globalHealth, onComplete)
     if self.hasBeenUsed then
         if onComplete then onComplete(false, "Already used") end
         return false
@@ -662,7 +662,7 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
     end
     local function isValid(q, r) return hex:isActiveHex(q, r) end
 
-    -- Собираем только подвижные объекты
+    -- Собираем подвижные объекты
     local movableObjects = {}
     for _, entity in ipairs(entities) do
         if entity.isPushable then
@@ -670,7 +670,7 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
         end
     end
 
-    -- Сортировка: сначала те, кто дальше по направлению ветра (максимальная проекция)
+    -- Сортировка по дальности вдоль направления (максимальная проекция)
     table.sort(movableObjects, function(a, b)
         local function getProjection(obj)
             local x, y, z = hex_utils.axialToCube(obj.q, obj.r)
@@ -688,101 +688,56 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
         end
     end
 
-    -- Результаты
-    local pushes = {}       -- успешные перемещения
-    local damageEvents = {} -- урон без перемещения (с указанием причины и дополнительной цели)
+    -- Карта занятости для предотвращения двойного перемещения
+    local occupied = {}
 
-    -- Карта занятости клеток после обработки (чтобы избежать наложений)
-    local occupied = {}     -- key "q,r" -> объект, который займёт клетку
+    -- Список анимаций, которые будут добавлены
+    local animationsAdded = false
 
-    -- Обрабатываем объекты в порядке сортировки
     for _, obj in ipairs(movableObjects) do
+        if obj.health <= 0 then goto continue end
+
         local fromKey = obj.q .. "," .. obj.r
-        -- Если клетка, на которой стоит obj, уже занята кем-то другим (не им) – такого быть не должно, но на всякий случай
         if occupied[fromKey] and occupied[fromKey] ~= obj then
-            -- Конфликт: кто-то уже занял его позицию – obj получает урон и не двигается
-            table.insert(damageEvents, {obj = obj, reason = "collision", with = occupied[fromKey]})
-            -- Помечаем его клетку как занятую им же (он остаётся)
+            -- Конфликт: кто-то уже занял его позицию → bounce-анимация с ним
+            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, obj.q, obj.r, hex, entities, sounds, globalHealth, occupied[fromKey])
             occupied[fromKey] = obj
             goto continue
         end
 
         local newQ, newR = applyStep(obj.q, obj.r)
         if not isValid(newQ, newR) then
-            -- Вылет за край
-            table.insert(damageEvents, {obj = obj, reason = "edge"})
-            occupied[fromKey] = obj   -- он остаётся на месте
+            -- Вылет за край: bounce-анимация до края и назад
+            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, globalHealth, nil)
+            occupied[fromKey] = obj
         else
             local immovableKey = newQ .. "," .. newR
             if immovableMap[immovableKey] then
-                -- Столкновение с неподвижным препятствием
-                table.insert(damageEvents, {obj = obj, reason = "immovable", obstacle = immovableMap[immovableKey]})
+                -- Столкновение с неподвижным объектом
+                combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, globalHealth, immovableMap[immovableKey])
                 occupied[fromKey] = obj
             else
-                -- Проверяем, не занята ли целевая клетка уже кем-то (кто уже обработан и останется/переместится)
                 local targetOcc = occupied[newQ .. "," .. newR]
                 if targetOcc then
-                    -- Столкновение с другим подвижным объектом (уже обработанным)
-                    table.insert(damageEvents, {obj = obj, reason = "collision", with = targetOcc})
-                    -- Добавляем урон и для targetOcc (он уже получит урон при своей обработке? Если он уже переместился, то у него не было столкновения. Нужно добавить урон и ему)
-                    -- Найдём, не было ли уже damageEvents для targetOcc
-                    local found = false
-                    for _, de in ipairs(damageEvents) do
-                        if de.obj == targetOcc then
-                            found = true
-                            break
-                        end
-                    end
-                    if not found then
-                        table.insert(damageEvents, {obj = targetOcc, reason = "collision", with = obj})
-                    end
-                    occupied[fromKey] = obj   -- obj остаётся на месте
+                    -- Столкновение с другим подвижным объектом
+                    combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, globalHealth, targetOcc)
+                    occupied[fromKey] = obj
                 else
-                    -- Всё свободно – перемещаем
-                    table.insert(pushes, {obj = obj, fromQ = obj.q, fromR = obj.r, toQ = newQ, toR = newR})
+                    -- Всё свободно – обычное перемещение
+                    combat.addPushAnimation(obj, obj.q, obj.r, newQ, newR)
                     occupied[newQ .. "," .. newR] = obj
-                    -- Если obj перемещается, его исходная клетка освобождается, поэтому не помечаем occupied[fromKey]
                 end
             end
         end
         ::continue::
     end
 
-    -- Применяем урон от damageEvents (без анимации перемещения)
-    for _, dmg in ipairs(damageEvents) do
-        if dmg.obj.health then
-            dmg.obj.health = dmg.obj.health - 1
-            if dmg.reason == "edge" then
-                print(string.format("💨 %s is blown off the map!", dmg.obj.name))
-            elseif dmg.reason == "immovable" then
-                print(string.format("💥 %s crashes into an obstacle!", dmg.obj.name))
-            elseif dmg.reason == "collision" and dmg.with then
-                print(string.format("💥 %s collides with %s!", dmg.obj.name, dmg.with.name))
-                -- Второй объект уже получил урон при своей обработке, но если его нет в damageEvents, добавим?
-                -- Уже добавили выше, повторно не надо
-            end
-            if sounds and sounds.collision then sounds.collision:play() end
-        end
-    end
-
-    -- Удаляем погибших после всех уронов
-    for i = #entities, 1, -1 do
-        if entities[i].health <= 0 then
-            print(string.format("💀 %s has been defeated!", entities[i].name))
-            table.remove(entities, i)
-        end
-    end
-
-    -- Запускаем анимации для успешных перемещений
-    for _, push in ipairs(pushes) do
-        combat.addPushAnimation(push.obj, push.fromQ, push.fromR, push.toQ, push.toR)
-    end
-
-    -- Запускаем очередь анимаций
+    -- Запускаем анимации
     combat.startPushAnimations(hex, function()
         self.hasBeenUsed = true
         if sounds and sounds.wind then sounds.wind:play() end
         if onComplete then onComplete(true, nil) end
+        if _G.checkGameEnd then _G.checkGameEnd() end
     end)
     return true
 end
@@ -1021,34 +976,25 @@ function combat.addShakeAnimation(obj, q, r)
     })
 end
 
--- Добавить bounce-анимацию для столкновения (движение вперёд и назад)
 function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, withEntity)
-    -- Эффект столкновения в целевой клетке
+    -- Эффект столкновения в целевой клетке (визуальный, без урона)
     local x, y = hex:hexToPixel(toQ, toR)
     visual.addEffect(x, y, "collision", 0.3)
     if sounds and sounds.collision then sounds.collision:play() end
 
-    -- Урон обоим участникам
-    local damage = 1
-    if obj.health then
-        local wasDestroyed = obj:takeDamage(damage, globalHealth)
-        if wasDestroyed then
-            for i = #entities, 1, -1 do
-                if entities[i] == obj then
-                    table.remove(entities, i)
-                    break
-                end
+    -- Отложенное нанесение урона после анимации
+    local function applyDamage()
+        local damage = 1
+        if obj.health and obj.health > 0 then
+            local wasDestroyed = obj:takeDamage(damage, globalHealth)
+            if wasDestroyed then
+                obj:startDeath()
             end
         end
-    end
-    if withEntity and withEntity.health then
-        local wasDestroyed = withEntity:takeDamage(damage, globalHealth)
-        if wasDestroyed then
-            for i = #entities, 1, -1 do
-                if entities[i] == withEntity then
-                    table.remove(entities, i)
-                    break
-                end
+        if withEntity and withEntity.health and withEntity.health > 0 then
+            local wasDestroyed = withEntity:takeDamage(damage, globalHealth)
+            if wasDestroyed then
+                withEntity:startDeath()
             end
         end
     end
@@ -1060,19 +1006,20 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
         obj = obj,
         fromQ = fromQ, fromR = fromR,
         toQ = toQ, toR = toR,
-        bounceBack = true,      -- флаг для возврата
+        bounceBack = true,
         startX = startX, startY = startY,
         endX = endX, endY = endY,
         timer = 0,
-        duration = 0.2,         -- длительность туда-обратно
+        duration = 0.2,
         isMoving = false,
         onComplete = function(pushedObj)
+            -- Урон применяется только после завершения анимации
+            applyDamage()
             if pushedObj.health <= 0 then
                 pushedObj:startDeath()
             end
         end
     })
-    combat.startPushAnimations(hex)
 end
 
 return combat

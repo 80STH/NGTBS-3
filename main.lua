@@ -301,14 +301,14 @@ function love.mousepressed(x, y, button)
         if hex:isActiveHex(tq, tr) then
             local direction = getWindDirectionFromHex(tq, tr, hex.centerQ, hex.centerR, hex)
             if direction then
-                windTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds, function(success, message)
+                windTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds, terrainMap, globalHealth, function(success, message)
                     if success then
                         actionHistory = {}
                         print("Wind Torrent used! History cleared.")
                     else
                         print("Wind Torrent failed: " .. (message or "unknown error"))
                     end
-                    restoreSelectedActor()  -- <-- восстанавливаем выделение
+                    restoreSelectedActor()
                 end)
                 windTorrentUI.active = false
             else
@@ -1287,7 +1287,7 @@ function love.draw()
     if windTorrentUI.active and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local direction = getWindDirectionFromHex(hex.hoverQ, hex.hoverR, hex.centerQ, hex.centerR, hex)
         if direction then
-            ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
+            ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)   -- теперь передаём terrainMap
         end
     end
     if not gameActive then
