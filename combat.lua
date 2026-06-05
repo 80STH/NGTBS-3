@@ -220,19 +220,29 @@ function combat.FlipAttack.new()
     local self = combat.Attack.new("Flip", "Flip the target behind the attacker", 1, 0, {})
     return setmetatable(self, combat.FlipAttack)
 end
+
 function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
     if distance ~= 1 then return false, "Target must be adjacent!" end
     local targetActor = combat.getEntityAtHex(targetQ, targetR, entities)
-    if not targetActor then return false, "No enemy at that hex!" end
+    -- ДОБАВЛЕНО: цель должна быть вражеским персонажем (не зданием и не препятствием)
+    if not targetActor then return false, "No entity at that hex!" end
+    if not targetActor:isCharacter() or targetActor.isPlayable then
+        return false, "Target must be an enemy character!"
+    end
     local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
     local tX, tY, tZ = hex_utils.axialToCube(targetQ, targetR)
     local dirX, dirY, dirZ = aX - tX, aY - tY, aZ - tZ
     local behindX, behindY, behindZ = aX + dirX, aY + dirY, aZ + dirZ
     local behindQ, behindR = hex_utils.cubeToAxial(behindX, behindY, behindZ)
+    -- Проверка, что клетка за атакующим существует, активна и не занята ничем
+    if not hex:isActiveHex(behindQ, behindR) then
+        return false, "No free space behind the attacker!"
+    end
+    if combat.getEntityAtHex(behindQ, behindR, entities) then
+        return false, "Cell behind attacker is occupied!"
+    end
     attack_effects.flip(attacker, targetActor, behindQ, behindR, hex)
-    if not hex:isValidHex(behindQ, behindR) then return false, "No free space behind the attacker!" end
-    if combat.getEntityAtHex(behindQ, behindR, entities) then return false, "No free space behind the attacker!" end
     targetActor.q = behindQ
     targetActor.r = behindR
     print(string.format("%s flips %s behind them!", attacker.name, targetActor.name))
@@ -243,16 +253,23 @@ end
 -- Предпросмотр переворота: куда переместится цель
 function combat.FlipAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
     if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) ~= 1 then return nil end
+    local targetActor = combat.getEntityAtHex(targetQ, targetR, entities)
+    if not targetActor or not targetActor:isCharacter() or targetActor.isPlayable then
+        return nil
+    end
     local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
     local tX, tY, tZ = hex_utils.axialToCube(targetQ, targetR)
     local dirX, dirY, dirZ = aX - tX, aY - tY, aZ - tZ
     local behindX, behindY, behindZ = aX + dirX, aY + dirY, aZ + dirZ
     local behindQ, behindR = hex_utils.cubeToAxial(behindX, behindY, behindZ)
-    if hex:isValidHex(behindQ, behindR) then
-        return {q = behindQ, r = behindR}
-    end
-    return nil
+    if not hex:isActiveHex(behindQ, behindR) then return nil end
+    if combat.getEntityAtHex(behindQ, behindR, entities) then return nil end
+    return {q = behindQ, r = behindR}
 end
+
+-- function combat.FlipAttack:getLineDirection(fromQ, fromR, toQ, toR, hex)
+--     return nil
+-- end
 
 -- 3. ВЫСТРЕЛ (Shoot)
 combat.ShootAttack = setmetatable({}, combat.Attack)
@@ -355,7 +372,7 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
     if not centerEntity then
         -- Создаём камень (препятствие с 1 HP)
         local stone = Entity.new("Stone", Entity.TYPES.OBSTACLE, targetQ, targetR, 1, false, 0, nil, nil, {})
-        stone.isPushable = true  -- камень не двигается от отталкиваний
+        stone.isPushable = true
         stone.color = {0.5, 0.5, 0.5, 1}
         table.insert(entities, stone)
         print("[Stone] A stone appears at (" .. targetQ .. "," .. targetR .. ")")
@@ -363,22 +380,35 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
         print("[Stone] Center cell occupied, stone not placed, but push still occurs")
     end
 
-    -- Отбрасываем всех врагов (противников) вокруг целевой клетки
+    -- Собираем цели для визуального эффекта
+    local pushedTargets = {}
     local neighbors = hex:getNeighbors(targetQ, targetR)
     for _, neighbor in ipairs(neighbors) do
         if hex:isValidHex(neighbor.q, neighbor.r) then
             local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
-            -- Отбрасываем только живых врагов (не союзников)
             if target and target:isCharacter() and not target.isPlayable and target.health > 0 then
-                -- Направление от центра к соседу в кубических координатах
                 local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
                 local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
                 local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
                 local pushQ, pushR = hex_utils.applyCubeStep(neighbor.q, neighbor.r, dirX, dirY, dirZ)
-                self:pushTargetToHex(target, neighbor.q, neighbor.r, pushQ, pushR, hex, entities, sounds)
+                table.insert(pushedTargets, {
+                    entity = target,
+                    fromCell = {q = neighbor.q, r = neighbor.r},
+                    pushTo = {q = pushQ, r = pushR},
+                    direction = {dx = dirX, dy = dirY, dz = dirZ}
+                })
             end
         end
     end
+
+    -- Визуальный эффект камня и отталкивания
+    attack_effects.stoneThrow(targetQ, targetR, pushedTargets, hex)
+
+    -- Выполняем отталкивание
+    for _, pd in ipairs(pushedTargets) do
+        self:pushTargetToHex(pd.entity, pd.fromCell.q, pd.fromCell.r, pd.pushTo.q, pd.pushTo.r, hex, entities, sounds)
+    end
+
     combat.startPushAnimations(hex)
     attacker.hasActedThisTurn = true
     return true
@@ -424,6 +454,10 @@ function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, en
     if centerTarget then
         self:dealDamageToTarget(centerTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
     end
+
+    -- Визуальный эффект конусного взрыва
+    attack_effects.coneBlast(targetQ, targetR, hex)
+
     local neighborsInDirection = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
     for _, neighbor in ipairs(neighborsInDirection) do
         local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
@@ -435,7 +469,7 @@ function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, en
             self:pushTargetToHex(target, neighbor.q, neighbor.r, pushQ, pushR, hex, entities, sounds)
         end
     end
-    combat.startPushAnimations(hex)   -- <-- добавить
+    combat.startPushAnimations(hex)
     attacker.hasActedThisTurn = true
     return true
 end

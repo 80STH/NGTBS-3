@@ -1156,33 +1156,6 @@ function updateEntityAnimations(dt)
     end
 end
 
-function drawAttackIndicators()
-    if not selectedActor or selectedActor.hasActedThisTurn or selectedActor.isMoving then
-        return
-    end
-    
-    -- Подсвечиваем соседние клетки для атаки
-    local neighbors = hex:getNeighbors(selectedActor.q, selectedActor.r)
-    for _, neighbor in ipairs(neighbors) do
-        if hex:isValidHex(neighbor.q, neighbor.r) then
-            local target = getEntityAtHex(neighbor.q, neighbor.r)
-            if target then
-                local x, y = hex:hexToPixel(neighbor.q, neighbor.r)
-                local vertices = hex:drawHexagon(x, y, hex.radius)
-                
-                love.graphics.setColor(1, 0.2, 0.2, 0.4)
-                love.graphics.polygon("fill", vertices)
-                love.graphics.setColor(1, 0.5, 0.5, 0.8)
-                love.graphics.polygon("line", vertices)
-                
-                -- Отображаем иконку атаки
-                love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.print("⚔", x - 5, y - 10)
-            end
-        end
-    end
-end
-
 
 -- main.love.draw (добавить вызов)
 function love.draw()
@@ -1199,6 +1172,19 @@ function love.draw()
     elseif turnsLeft == 0 and decayAppliedForTurnLimit then
         love.graphics.setColor(0.8, 0.2, 0.2, 1)
         love.graphics.print("DECAY ACTIVE!", 10, 110)
+    end
+
+    if not attackMode then
+        if selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and turnState.phase == "player" then
+            ui.drawMovementRange(hex, selectedActor, entities, terrainMap)
+            if hex.hoverQ >= 0 and hex.hoverR >= 0 then
+                ui.drawPathPreview(hex, selectedActor, hex.hoverQ, hex.hoverR, entities, terrainMap)
+            end
+        end
+    else
+        if selectedAttack and selectedActor and not selectedActor.hasActedThisTurn then
+            ui.drawAttackableCells(hex, selectedActor, selectedAttack, entities, terrainMap)
+        end
     end
 
     -- Анимированное сообщение "DECAY!" при первом применении
@@ -1222,12 +1208,6 @@ function love.draw()
 
     if attackMode and selectedAttack and selectedActor and not selectedActor.hasActedThisTurn and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         ui.drawAttackPreview(hex, selectedActor, selectedAttack, attackMode, hex.hoverQ, hex.hoverR, entities)
-    end
-    if selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and turnState.phase == "player" then
-        ui.drawMovementRange(hex, selectedActor, entities, terrainMap)
-        if not attackMode and hex.hoverQ >= 0 and hex.hoverR >= 0 then
-            ui.drawPathPreview(hex, selectedActor, hex.hoverQ, hex.hoverR, entities, terrainMap)
-        end
     end
     ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
     ui.drawEndTurnButton(turnState, entities)

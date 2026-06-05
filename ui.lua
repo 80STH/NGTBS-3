@@ -1627,5 +1627,90 @@ function ui.drawDottedArc(x1, y1, x2, y2, cx, cy, dotRadius, step, time)
     end
 end
 
+-- ui.lua (добавить в конец файла)
+function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
+    if not attacker or not attack then return end
+    if attacker.hasActedThisTurn then return end
+
+    for q = 0, hex.gridWidth - 1 do
+        for r = 0, hex.gridHeight - 1 do
+            if hex:isActiveHex(q, r) then
+                local canApply = false
+                
+                -- 1. Проверка дальности
+                local dist = hex:getDistance(attacker.q, attacker.r, q, r)
+                if dist > attack.range then goto skip end
+
+                -- 2. Атаки с прямой линией (требуют stepX)
+                if attack.getLineDirection then
+                    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                    if not stepX then goto skip end
+
+                    -- Ghost Bolt / Shoot / Dash / Piercing Shot – первая цель на линии
+                    if attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
+                        local firstTarget, _ = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+                        if firstTarget then
+                            canApply = true
+                        end
+                    -- Magic Bolt – цель должна быть именно в этой клетке
+                    elseif attack.name == "Magic Bolt" then
+                        local target = getEntityAtHex(q, r, entities)
+                        if target and (target:isCharacter() and not target.isPlayable or target:isBuilding()) then
+                            canApply = true
+                        end
+                    end
+                else
+                    -- Атаки без прямой линии: Bite, Stone Throw, Cone Blast, Flip
+                    if attack.name == "Bite" then
+                        if dist == 1 then
+                            local target = getEntityAtHex(q, r, entities)
+                            if target and target:isCharacter() and not target.isPlayable then
+                                canApply = true
+                            end
+                        end
+                    elseif attack.name == "Stone Throw" or attack.name == "Cone Blast" then
+                        -- Можно применить на любую клетку в радиусе 1
+                        if dist <= attack.range then
+                            canApply = true
+                        end
+                    elseif attack.name == "Flip" then
+                        if dist == 1 then
+                            local target = getEntityAtHex(q, r, entities)
+                            if target and target:isCharacter() and not target.isPlayable then
+                                local pushCell = attack:getPushCell(attacker, q, r, hex, entities)
+                                -- Проверяем, что клетка за атакующим активна и свободна
+                                if pushCell and hex:isActiveHex(pushCell.q, pushCell.r) then
+                                    local occupant = getEntityAtHex(pushCell.q, pushCell.r, entities)
+                                    if not occupant then
+                                        canApply = true
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+
+                ::skip::
+                if canApply then
+                    local x, y = hex:hexToPixel(q, r)
+                    local vertices = hex:drawHexagon(x, y, hex.radius)
+                    love.graphics.setColor(0.9, 0.8, 0.2, 0.25)   -- заливка желтая полупрозрачная
+                    love.graphics.polygon("fill", vertices)
+                    love.graphics.setColor(0.9, 0.8, 0.2, 0.7)   -- обводка желтая
+                    love.graphics.polygon("line", vertices)
+                end
+            end
+        end
+    end
+end
+
+-- Вспомогательная функция (дублируем из main.lua, чтобы ui.lua не зависел от глобального окружения)
+local function getEntityAtHex(q, r, entities)
+    for _, e in ipairs(entities) do
+        if e.q == q and e.r == r then return e end
+    end
+    return nil
+end
+
 
 return ui
