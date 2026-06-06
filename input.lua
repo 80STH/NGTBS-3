@@ -6,8 +6,8 @@ function input.mousepressed(x, y, button)
     if button ~= 1 then return end
 
     if not gameActive then
-        local width = love.graphics.getWidth()
-        local height = love.graphics.getHeight()
+        local width = logicalW
+        local height = logicalH
         local btnW, btnH = 200, 50
         local btnX = width/2 - btnW/2
         local btnY = height/2 + 20
@@ -87,8 +87,8 @@ function input.mousepressed(x, y, button)
     end
 
     -- Enemy Order button toggle
-    local orderBtnX = love.graphics.getWidth() - 110
-    local orderBtnY = love.graphics.getHeight() - 40
+    local orderBtnX = logicalW - 110
+    local orderBtnY = logicalH - 40
     if x >= orderBtnX and x <= orderBtnX + 100 and y >= orderBtnY and y <= orderBtnY + 30 then
         showEnemyOrder = not showEnemyOrder
         print("Enemy order display: " .. (showEnemyOrder and "ON" or "OFF"))

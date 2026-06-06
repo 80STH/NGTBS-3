@@ -63,6 +63,8 @@ function GameState.new()
 
     self.showEnemyOrder = false
 
+    self.dpiScale = 1
+
     self.DEBUG_COMBAT = true
 
     return self

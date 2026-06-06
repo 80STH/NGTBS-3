@@ -24,6 +24,9 @@ require("game")
 pushAnimations = state.pushAnimations
 
 windTorrent = nil
+dpiScale = 1
+logicalW = 0
+logicalH = 0
 
 function syncStateToGlobals()
     entities = state.entities
@@ -53,6 +56,7 @@ function syncStateToGlobals()
     fireAppliedForTurnLimit = state.fireAppliedForTurnLimit
     pushAnimations = state.pushAnimations
     showEnemyOrder = state.showEnemyOrder
+    dpiScale = state.dpiScale
     DEBUG_COMBAT = state.DEBUG_COMBAT
 end
 
@@ -83,6 +87,7 @@ function syncGlobalsToState()
     state.decayMessageTimer = decayMessageTimer
     state.fireAppliedForTurnLimit = fireAppliedForTurnLimit
     state.pushAnimations = pushAnimations
+    state.dpiScale = dpiScale
     state.showEnemyOrder = showEnemyOrder
 end
 
@@ -90,6 +95,7 @@ function love.load()
     selectedAttack = nil
     attackMode = false
     attackButtons = {}
+    dpiScale = love.window.getDPIScale()
     restartButton = {
         x = 10, y = 320, width = 120, height = 30,
         text = "Restart Game", isHovered = false
@@ -118,7 +124,7 @@ function love.load()
         active = false,
         button = { x = 10, y = 240, width = 120, height = 30 }
     }
-    hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
+    hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
 
     status.initHexStatuses(hexStatuses)
 
@@ -162,7 +168,7 @@ function love.load()
 
     turnManager.startGame()
 
-    hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
+    hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
 
     sounds = {}
     sounds.undo = love.audio.newSource("sounds/hover.wav", "static")
@@ -236,7 +242,7 @@ function getWindDirectionFromHex(q, r, centerQ, centerR, hex)
 end
 
 function love.mousepressed(x, y, button)
-    input.mousepressed(x, y, button)
+    input.mousepressed(x / dpiScale, y / dpiScale, button)
 end
 
 function isPositionOccupied(q, r, movingEntity)
@@ -281,6 +287,8 @@ function love.update(dt)
     turnManager.update(dt)
 
     local mx, my = love.mouse.getPosition()
+    mx = mx / dpiScale
+    my = my / dpiScale
     local hq, hr = hex:pixelToHex(mx, my)
     if hex:isActiveHex(hq, hr) then
         hex.hoverQ, hex.hoverR = hq, hr
@@ -296,9 +304,19 @@ function love.update(dt)
                                       my >= windTorrentUI.button.y and my <= windTorrentUI.button.y + windTorrentUI.button.height)
 end
 
+function love.resize(w, h)
+    dpiScale = love.window.getDPIScale()
+    hex:centerOnScreen(w / dpiScale, h / dpiScale)
+end
+
 function love.draw()
+    love.graphics.push()
+    love.graphics.scale(dpiScale)
+    logicalW = love.graphics.getWidth() / dpiScale
+    logicalH = love.graphics.getHeight() / dpiScale
     syncGlobalsToState()
     renderer.draw(state)
+    love.graphics.pop()
 end
 
 function getEnemyAttackOrder(entities, turnState)

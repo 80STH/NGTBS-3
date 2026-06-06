@@ -21,11 +21,12 @@ function restartGame()
         config.CENTER_Q,
         config.CENTER_R
     )
-    hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
+    hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
 
     status.initHexStatuses(hexStatuses)
 
     globalHealth = { current = 5, max = 5, initial = 5 }
+    combat.globalHealth = globalHealth
 
     turnState = {
         phase = "enemy_prepare",
@@ -65,6 +66,7 @@ function restartGame()
     end
 
     windTorrent = combat.WindTorrentAttack.new()
+    dpiScale = love.window.getDPIScale()
 
     attackMode = false
     selectedAttack = nil

@@ -816,16 +816,16 @@ function ui.drawWindTorrentUI(windTorrent, windTorrentUI, turnState)
 
     if windTorrentUI.active then
         love.graphics.setColor(0, 0, 0, 0.7)
-        love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+        love.graphics.rectangle("fill", 0, 0, logicalW, logicalH)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print("Select wind direction:", love.graphics.getWidth()/2 - 80, 50)
+        love.graphics.print("Select wind direction:", logicalW/2 - 80, 50)
         for dirName, dir in pairs(windTorrentUI.directions) do
             love.graphics.setColor(0.3, 0.5, 0.9, 0.9)
             love.graphics.rectangle("fill", dir.x, dir.y, 70, 30, 5)
             love.graphics.setColor(1, 1, 1, 1)
             love.graphics.print(dirName, dir.x + 25, dir.y + 8)
         end
-        local cx, cy = love.graphics.getWidth()/2 - 40, love.graphics.getHeight() - 80
+        local cx, cy = logicalW/2 - 40, logicalH - 80
         love.graphics.setColor(0.8, 0.2, 0.2, 0.9)
         love.graphics.rectangle("fill", cx, cy, 80, 30, 5)
         love.graphics.setColor(1, 1, 1, 1)
@@ -833,19 +833,40 @@ function ui.drawWindTorrentUI(windTorrent, windTorrentUI, turnState)
     end
 end
 
--- Полоска глобального здоровья
+-- Полоска глобального здоровья (ячейками)
 function ui.drawGlobalHealthBar(globalHealth)
-    local barWidth = 200
-    local barHeight = 20
-    local x = 10   -- была 10 – это левый край
-    local y = 60   -- чуть ниже, чтобы не мешать другим кнопкам (Undo, End Turn)
-    love.graphics.setColor(0.5, 0, 0, 0.8)
-    love.graphics.rectangle("fill", x, y, barWidth, barHeight, 5)
-    local percent = globalHealth.current / globalHealth.max
-    love.graphics.setColor(0.8, 0.2, 0.2, 0.9)
-    love.graphics.rectangle("fill", x, y, barWidth * percent, barHeight, 5)
+    local pipWidth = 16
+    local pipHeight = 32
+    local pipSpacing = 0
+    local x = 10
+    local y = 56
+    local totalW = globalHealth.max * (pipWidth + pipSpacing) - pipSpacing
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("Global Health: " .. globalHealth.current .. "/" .. globalHealth.max, x + 5, y + 4)
+    love.graphics.print("Global Health:", x, y - 16)
+    -- Рамка вокруг всех ячеек
+    love.graphics.setColor(0.25, 0.25, 0.25, 0.8)
+    love.graphics.rectangle("fill", x - 2, y - 2, totalW + 4, pipHeight + 4, 3)
+    love.graphics.setColor(0.6, 0.6, 0.6, 0.9)
+    love.graphics.rectangle("line", x - 2, y - 2, totalW + 4, pipHeight + 4, 3)
+    for i = 0, globalHealth.max - 1 do
+        local px = x + (pipWidth + pipSpacing) * i
+        local py = y
+        if i < globalHealth.current then
+            love.graphics.setColor(0.9, 0.2, 0.15, 0.95)
+            love.graphics.rectangle("fill", px, py, pipWidth, pipHeight)
+        else
+            love.graphics.setColor(0.15, 0.02, 0.02, 0.5)
+            love.graphics.rectangle("fill", px, py, pipWidth, pipHeight)
+        end
+    end
+    -- Вертикальные разделители между ячейками
+    love.graphics.setColor(0.15, 0.15, 0.15, 0.8)
+    for i = 1, globalHealth.max - 1 do
+        local lx = x + (pipWidth + pipSpacing) * i - 1
+        love.graphics.line(lx, y, lx, y + pipHeight)
+    end
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(globalHealth.current .. "/" .. globalHealth.max, x + totalW + 8, y + pipHeight / 2 - 4)
 end
 
 -- Панель атак
@@ -869,8 +890,8 @@ end
 
 function ui.drawEnemyOrderButton(mouseX, mouseY)
     local btnW, btnH = 100, 30
-    local x = love.graphics.getWidth() - btnW - 10
-    local y = love.graphics.getHeight() - btnH - 10
+    local x = logicalW - btnW - 10
+    local y = logicalH - btnH - 10
     local isHover = mouseX >= x and mouseX <= x + btnW and mouseY >= y and mouseY <= y + btnH
 
     love.graphics.setColor(isHover and 0.6 or 0.3, 0.4, 0.6, 0.8)
@@ -1356,7 +1377,7 @@ end
 -- ui.lua
 function ui.drawCellTooltip(q, r, terrain, hex)
     local panelX = 10
-    local panelY = love.graphics.getHeight() - 130  -- чуть выше, чтобы поместить строку выкопки
+    local panelY = logicalH - 130  -- чуть выше, чтобы поместить строку выкопки
     local statuses = status.getAtHex(q, r)
     local hasDig = status.hasDigSite(q, r)
     local digInfo = nil
@@ -1842,7 +1863,7 @@ function updateAttackButtons(actor)
     if not actor or not actor.attacks or #actor.attacks == 0 then
         return
     end
-    local startX = love.graphics.getWidth() - 160
+    local startX = logicalW - 160
     local startY = 100
     for i, attackInfo in ipairs(actor.attacks) do
         local btn = {

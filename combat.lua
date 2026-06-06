@@ -92,7 +92,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
     local occupant = combat.getEntityAtHex(toQ, toR, entities)
     if occupant and occupant ~= target then
         -- Столкновение → bounce + урон
-        combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, combat.globalHealth, occupant)
+        combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, occupant)
         if onComplete then onComplete(false) end
         return
     end
@@ -410,7 +410,7 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
     local centerEntity = combat.getEntityAtHex(targetQ, targetR, entities)
     if centerEntity then
     -- Наносим урон цели вместо создания камня
-    self:dealDamageToTarget(centerEntity, attacker, 1, entities, sounds, nil, combat.globalHealth)
+    self:dealDamageToTarget(centerEntity, attacker, 1, entities, sounds, nil, globalHealth)
 else
     -- Создаём камень (как было)
     local stone = Entity.new("Stone", Entity.TYPES.OBSTACLE, targetQ, targetR, 1, false, 0, nil, nil, {})

@@ -42,7 +42,7 @@ function renderer.draw(state)
         local alpha = math.min(1, state.decayMessageTimer * 2)
         love.graphics.setColor(0.8, 0.2, 0.2, alpha)
         love.graphics.setFont(love.graphics.newFont(36))
-        love.graphics.print("DECAY!", love.graphics.getWidth()/2 - 90, love.graphics.getHeight()/2 - 50)
+        love.graphics.print("DECAY!", logicalW/2 - 90, logicalH/2 - 50)
         love.graphics.setFont(love.graphics.newFont(16))
     end
 
@@ -74,6 +74,8 @@ function renderer.draw(state)
     love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 130)
 
     local mx, my = love.mouse.getPosition()
+    mx = mx / state.dpiScale
+    my = my / state.dpiScale
     local hoverOrder = ui.drawEnemyOrderButton(mx, my)
     local showOrder = hoverOrder or state.showEnemyOrder
     if showOrder then
@@ -96,7 +98,7 @@ function renderer.draw(state)
         local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
         if hoverEntity and hoverEntity.health > 0 then
             local panelX = 10
-            local panelY = love.graphics.getHeight() - 180
+            local panelY = logicalH - 180
             ui.drawUnitTooltip(hoverEntity, panelX, panelY, state.terrainMap)
         elseif hex:isActiveHex(hex.hoverQ, hex.hoverR) then
             local terrain = state.terrainMap and state.terrainMap[hex.hoverQ] and state.terrainMap[hex.hoverQ][hex.hoverR] or "grass"
@@ -118,8 +120,8 @@ function renderer.draw(state)
     end
 
     if not state.gameActive then
-        local width = love.graphics.getWidth()
-        local height = love.graphics.getHeight()
+        local width = logicalW
+        local height = logicalH
         local oldFont = love.graphics.getFont()
 
         love.graphics.setColor(0, 0, 0, 0.85)
@@ -260,17 +262,24 @@ function drawHealthBar(entity, x, y, damage)
     if not entity.maxHealth or entity.maxHealth <= 0 then return end
     if entity.maxHealth > 10 then return end
 
-    local cellSize = 8
+    local pipW, pipH = 8, 16
     local spacing = 1
-    local totalWidth = entity.maxHealth * (cellSize + spacing) - spacing
+    local totalWidth = entity.maxHealth * (pipW + spacing) - spacing
     local startX = x - totalWidth / 2
     local startY = y - 28
 
     damage = damage or 0
     local damageClamped = math.min(damage, entity.health)
 
+    -- Рамка вокруг всех ячеек
+    local framePad = 1
+    love.graphics.setColor(0.15, 0.15, 0.15, 0.7)
+    love.graphics.rectangle("fill", startX - framePad, startY - framePad, totalWidth + framePad * 2, pipH + framePad * 2)
+    love.graphics.setColor(0.5, 0.5, 0.5, 0.7)
+    love.graphics.rectangle("line", startX - framePad, startY - framePad, totalWidth + framePad * 2, pipH + framePad * 2)
+
     for i = 1, entity.maxHealth do
-        local cellX = startX + (i - 1) * (cellSize + spacing)
+        local cellX = startX + (i - 1) * (pipW + spacing)
         local cellY = startY
         local isAlive = i <= entity.health
         local willTakeDamage = damageClamped > 0 and i > entity.health - damageClamped and i <= entity.health
@@ -282,11 +291,16 @@ function drawHealthBar(entity, x, y, damage)
         elseif isAlive then
             love.graphics.setColor(0, 0.8, 0, 0.9)
         else
-            love.graphics.setColor(0.4, 0.1, 0.1, 0.6)
+            love.graphics.setColor(0.15, 0.02, 0.02, 0.4)
         end
-        love.graphics.rectangle("fill", cellX, cellY, cellSize, cellSize)
-        love.graphics.setColor(1, 1, 1, 0.5)
-        love.graphics.rectangle("line", cellX, cellY, cellSize, cellSize)
+        love.graphics.rectangle("fill", cellX, cellY, pipW, pipH)
+    end
+
+    -- Вертикальные разделители
+    love.graphics.setColor(0.1, 0.1, 0.1, 0.6)
+    for i = 2, entity.maxHealth do
+        local lx = startX + (i - 1) * (pipW + spacing) - 1
+        love.graphics.line(lx, startY, lx, startY + pipH)
     end
 end
 
