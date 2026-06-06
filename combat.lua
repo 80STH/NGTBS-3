@@ -1144,4 +1144,209 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
     })
 end
 
+-- ============================================================
+-- ДЕЙСТВИЯ ИГРОКА (move / attack / undo)
+-- ============================================================
+
+function performMove(actor, targetQ, targetR)
+    if not actor.isPlayable then return false end
+    if not hex:isActiveHex(targetQ, targetR) then
+        print("Target cell is outside the playable hexagon")
+        return false
+    end
+    if actor.isMoving or actor.hasActedThisTurn then return false end
+    if actor.hasMovedThisTurn then
+        print(actor.name .. " has already moved this turn!")
+        return false
+    end
+    if actor.q == targetQ and actor.r == targetR then return false end
+    local distance = hex:getDistance(actor.q, actor.r, targetQ, targetR)
+    if distance > actor.moveRange then
+        print("Too far")
+        return false
+    end
+    if isCellOccupiedForStop(targetQ, targetR, actor) then
+        print("Cell occupied")
+        return false
+    end
+    local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, actor.moveRange,
+        function(q, r) return not isCellPassable(q, r, actor) end, hex)
+    if not path or #path == 0 then
+        print("No valid path")
+        return false
+    end
+    addToHistory(actor, actor.q, actor.r, targetQ, targetR)
+    actor.hasMovedThisTurn = true
+    actor.path = path
+    actor.currentPathIndex = 1
+    startNextMove(actor)
+    return true
+end
+
+function startNextMove(actor)
+    if actor.currentPathIndex <= #actor.path then
+        local step = actor.path[actor.currentPathIndex]
+        actor.isMoving = true
+        actor.timer = 0
+        actor.targetQ = step.q
+        actor.targetR = step.r
+        actor.startX, actor.startY = getDrawCoords(actor.q, actor.r)
+        actor.endX, actor.endY = getDrawCoords(actor.targetQ, actor.targetR)
+    else
+        actor.isMoving = false
+        actor.path = {}
+        actor.currentPathIndex = 0
+        if selectedActor == actor then
+            hex.selectedQ = actor.q
+            hex.selectedR = actor.r
+        end
+    end
+end
+
+function updateActorMovement(actor, dt)
+    if actor.isMoving then
+        actor.timer = actor.timer + dt
+        local t = actor.timer / actor.speed
+        if t >= 1 then
+            actor.q = actor.targetQ
+            actor.r = actor.targetR
+            if actor.currentPathIndex >= #actor.path then
+                local died = effects.applyAllCellEffects(actor, actor.q, actor.r, terrainMap, entities, globalHealth)
+                if died then
+                    local x, y = hex:hexToPixel(actor.q, actor.r)
+                    visual.addEffect(x, y, "drown")
+                    checkGameEnd()
+                end
+            end
+            actor.isMoving = false
+            actor.currentPathIndex = actor.currentPathIndex + 1
+            if actor.currentPathIndex <= #actor.path then
+                startNextMove(actor)
+            else
+                actor.path = {}
+                actor.currentPathIndex = 0
+                if selectedActor == actor then
+                    hex.selectedQ = actor.q
+                    hex.selectedR = actor.r
+                end
+            end
+        end
+    end
+end
+
+function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
+    print("[DEBUG] performAttackWithSelectedAttack called")
+    print("  attacker:", attacker and attacker.name, "hasActed:", attacker and attacker.hasActedThisTurn)
+    print("  targetQ,targetR:", targetQ, targetR)
+    print("  attack:", attack and attack.name)
+
+    if not attacker.isPlayable then
+        print("[DEBUG] Not a playable character")
+        return false, "Not a playable character"
+    end
+    if attacker.hasActedThisTurn then
+        print("[DEBUG] Already acted this turn")
+        return false, "Already acted this turn"
+    end
+    if not attack then
+        print("[DEBUG] No attack selected")
+        return false, "No attack selected"
+    end
+
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    print("[DEBUG] Distance to target:", distance, "Attack range:", attack.range)
+    if distance > attack.range then
+        return false, "Target out of range"
+    end
+
+    print("[DEBUG] Executing attack...")
+    local success, message = attack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    print("[DEBUG] Attack result:", success, message)
+
+    if success then
+        attacker.hasActedThisTurn = true
+        actionHistory = {}
+        print(attacker.name .. " attacked and ended turn. Move history cleared.")
+        attackMode = false
+        selectedAttack = nil
+        checkGameEnd()
+    else
+        print("Attack failed: " .. (message or "unknown"))
+    end
+    return success, message
+end
+
+function undoLastAction()
+    if #actionHistory == 0 then
+        print("No moves to undo!")
+        return false
+    end
+
+    local action = actionHistory[#actionHistory]
+    local actor = action.actor
+
+    if not actor then
+        table.remove(actionHistory)
+        return undoLastAction()
+    end
+
+    if actor.isMoving then
+        print("Cannot undo while moving")
+        return false
+    end
+
+    actor.q = action.fromQ
+    actor.r = action.fromR
+    actor.hasActedThisTurn = false
+    actor.hasMovedThisTurn = false
+    actor.isMoving = false
+    actor.path = {}
+    actor.currentPathIndex = 0
+
+    if action.healthBefore ~= nil then
+        actor.health = action.healthBefore
+    end
+    if action.statusesBefore then
+        status.setEntityStatuses(actor, action.statusesBefore)
+    end
+
+    if actor.health > 0 then
+        local found = false
+        for _, e in ipairs(entities) do
+            if e == actor then
+                found = true
+                break
+            end
+        end
+        if not found then
+            table.insert(entities, actor)
+            print(actor.name .. " was resurrected by undo!")
+        end
+    end
+
+    if selectedActor == actor then
+        hex.selectedQ = actor.q
+        hex.selectedR = actor.r
+    end
+
+    table.remove(actionHistory)
+
+    sounds.undo:play()
+    print("Undone move for " .. actor.name .. ". History size: " .. #actionHistory)
+    return true
+end
+
+function addToHistory(actor, fromQ, fromR, toQ, toR)
+    if not actor.isPlayable then return end
+    table.insert(actionHistory, {
+        actor = actor,
+        fromQ = fromQ, fromR = fromR,
+        toQ = toQ, toR = toR,
+        type = "move",
+        healthBefore = actor.health,
+        statusesBefore = status.copyEntityStatuses(actor),
+    })
+    print("Move recorded. History size: " .. #actionHistory)
+end
+
 return combat

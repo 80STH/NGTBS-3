@@ -1858,4 +1858,49 @@ function ui.getEntityStatusColor(entity, time)
     return color
 end
 
+-- ============================================================
+-- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ УПРАВЛЕНИЯ ВЫБОРОМ
+-- ============================================================
+
+function updateAttackButtons(actor)
+    attackButtons = {}
+    if not actor or not actor.attacks or #actor.attacks == 0 then
+        return
+    end
+    local startX = love.graphics.getWidth() - 160
+    local startY = 100
+    for i, attackInfo in ipairs(actor.attacks) do
+        local btn = {
+            x = startX,
+            y = startY + (i-1) * 35,
+            width = 150,
+            height = 30,
+            attack = attackInfo.attack,
+            name = attackInfo.name,
+            desc = attackInfo.description
+        }
+        table.insert(attackButtons, btn)
+    end
+end
+
+function clearSelectedActor()
+    selectedActor = nil
+    hex.selectedQ = -1
+    hex.selectedR = -1
+    attackMode = false
+    selectedAttack = nil
+    attackButtons = {}
+end
+
+function restoreSelectedActor()
+    for _, a in ipairs(entities) do
+        if a.isPlayable and a.health > 0 then
+            selectedActor = a
+            hex.selectedQ, hex.selectedR = a.q, a.r
+            updateAttackButtons(selectedActor)
+            break
+        end
+    end
+end
+
 return ui

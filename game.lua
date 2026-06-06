@@ -1,0 +1,253 @@
+-- game.lua
+-- Жизненный цикл игры: рестарт, проверка конца, общие эффекты.
+-- Функции — глобальные (используются другими модулями через _G).
+
+local turnManager = require("turn_manager")
+
+function endTurn()
+    turnManager.endPlayerTurn()
+end
+
+function restartGame()
+    print("=== RESTARTING GAME ===")
+
+    local hexStatuses
+    terrainMap, entities, width, height, hexStatuses = environment.loadMapFromTiled('maps/map1.lua')
+
+    hex = require("hexgrid").new(
+        config.HEX_RADIUS,
+        width, height,
+        config.ACTIVE_RADIUS,
+        config.CENTER_Q,
+        config.CENTER_R
+    )
+    hex:centerOnScreen(love.graphics.getWidth(), love.graphics.getHeight())
+
+    status.initHexStatuses(hexStatuses)
+
+    globalHealth = { current = 5, max = 5, initial = 5 }
+
+    turnState = {
+        phase = "enemy_prepare",
+        enemyPrepareQueue = {},
+        currentPreparingEnemy = nil,
+        enemyAttackQueue = {},
+        enemyAttackTimer = 0,
+        delayBetweenAttacks = 0.4
+    }
+
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable then
+            e.hasPreparedAttack = false
+            e.preparePos = nil
+            e.preparedTarget = nil
+            e.movementFinished = false
+            e.isMoving = false
+            e.path = {}
+            e.currentPathIndex = 0
+        end
+    end
+
+    selectedActor = nil
+    for _, a in ipairs(entities) do
+        if a.isPlayable and a.health > 0 then
+            selectedActor = a
+            hex.selectedQ, hex.selectedR = a.q, a.r
+            break
+        end
+    end
+
+    for _, a in ipairs(entities) do
+        if a.isPlayable then
+            a.hasActedThisTurn = false
+            a.hasMovedThisTurn = false
+        end
+    end
+
+    windTorrent = combat.WindTorrentAttack.new()
+
+    attackMode = false
+    selectedAttack = nil
+    attackButtons = {}
+    actionHistory = {}
+    pushAnimations = { queue = {}, active = false }
+    visual.effects = {}
+
+    updateAttackButtons(selectedActor)
+
+    turnCount = 0
+    gameActive = true
+    win = false
+    loss = false
+    fireAppliedForTurnLimit = false
+    decayAppliedForTurnLimit = false
+    status.clearAllDigSites()
+
+    turnManager.startGame()
+
+    syncGlobalsToState()
+    print("=== GAME RESTARTED ===")
+end
+
+function checkGameEnd()
+    if not gameActive then return end
+
+    if globalHealth.current <= 0 then
+        loss = true
+        gameActive = false
+        print("DEFEAT: Global health depleted!")
+        syncGlobalsToState()
+        return
+    end
+
+    local anyAlly = false
+    for _, e in ipairs(entities) do
+        if e.isPlayable and e.health > 0 and not e.isDying then
+            anyAlly = true
+            break
+        end
+    end
+    if not anyAlly then
+        loss = true
+        gameActive = false
+        print("DEFEAT: All allies destroyed!")
+        syncGlobalsToState()
+        return
+    end
+
+    if turnCount >= maxTurns then
+        local anyEnemy = false
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and not e.isPlayable and e.health > 0 and not e.isDying then
+                anyEnemy = true
+                break
+            end
+        end
+        if not anyEnemy then
+            win = true
+            gameActive = false
+            print("VICTORY: Turn limit reached and all enemies defeated!")
+            syncGlobalsToState()
+        end
+    end
+end
+
+function applyDecayToAllEnemies()
+    print("applyDecayToAllEnemies called, turnCount=", turnCount, "maxTurns=", maxTurns)
+    local count = 0
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable and e.health > 0 then
+            count = count + 1
+            if not status.hasEntityStatus(e, "decay") then
+                status.applyToEntity(e, "decay")
+                print("Decay afflicts " .. e.name)
+            end
+        end
+    end
+    print("Total living enemies found:", count)
+end
+
+function updateDeathAnimations(dt)
+    for i = #entities, 1, -1 do
+        local e = entities[i]
+        if e.isDying then
+            e.deathTimer = e.deathTimer + dt
+            if e.deathTimer >= e.deathDuration then
+                table.remove(entities, i)
+            end
+        end
+    end
+end
+
+function countPlayableActors()
+    local count = 0
+    for _, actor in ipairs(entities) do
+        if actor.isPlayable then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+function processDigSites()
+    for _, entity in ipairs(entities) do
+        if entity.health > 0 and status.hasDigSite(entity.q, entity.r) then
+            local wasDestroyed = entity:takeDamage(1, globalHealth)
+            print(string.format("Dig site damage: %s takes 1 damage!", entity.name))
+            if sounds and sounds.collision then sounds.collision:play() end
+            if wasDestroyed then
+                entity:startDeath()
+            end
+            status.stepOnDigSite(entity.q, entity.r)
+        end
+    end
+
+    for i = #entities, 1, -1 do
+        if entities[i].health <= 0 then
+            table.remove(entities, i)
+        end
+    end
+
+    local readyDigs = status.decrementDigTimers()
+    for _, dig in ipairs(readyDigs) do
+        local occupied = false
+        for _, e in ipairs(entities) do
+            if e.q == dig.q and e.r == dig.r then
+                occupied = true
+                break
+            end
+        end
+        local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
+        if not occupied and terrain ~= "water" then
+            local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
+            table.insert(entities, newEnemy)
+            local x, y = hex:hexToPixel(dig.q, dig.r)
+            visual.addEffect(x, y, "dig", 0.5)
+            print(string.format("A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r))
+        else
+            print(string.format("Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r))
+        end
+        status.removeDigSite(dig.q, dig.r)
+    end
+
+    status.ageDigSites()
+
+    local aliveEnemies = 0
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable and e.health > 0 then
+            aliveEnemies = aliveEnemies + 1
+        end
+    end
+    local needed = 7 - aliveEnemies
+    if needed > 0 then
+        local candidates = {}
+        for q = 0, hex.gridWidth - 1 do
+            for r = 0, hex.gridHeight - 1 do
+                if hex:isActiveHex(q, r) then
+                    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+                    if terrain ~= "water" then
+                        local occupied = false
+                        for _, e in ipairs(entities) do
+                            if e.q == q and e.r == r then
+                                occupied = true
+                                break
+                            end
+                        end
+                        if not occupied and not status.hasDigSite(q, r) then
+                            table.insert(candidates, {q = q, r = r})
+                        end
+                    end
+                end
+            end
+        end
+        for i = #candidates, 2, -1 do
+            local j = love.math.random(i)
+            candidates[i], candidates[j] = candidates[j], candidates[i]
+        end
+        for i = 1, math.min(needed, #candidates) do
+            local spot = candidates[i]
+            status.setDigSite(spot.q, spot.r, 1)
+            print(string.format("New dig site at (%d,%d)", spot.q, spot.r))
+        end
+    end
+end
