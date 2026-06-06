@@ -86,6 +86,15 @@ function input.mousepressed(x, y, button)
         return
     end
 
+    -- Enemy Order button toggle
+    local orderBtnX = love.graphics.getWidth() - 110
+    local orderBtnY = love.graphics.getHeight() - 40
+    if x >= orderBtnX and x <= orderBtnX + 100 and y >= orderBtnY and y <= orderBtnY + 30 then
+        showEnemyOrder = not showEnemyOrder
+        print("Enemy order display: " .. (showEnemyOrder and "ON" or "OFF"))
+        return
+    end
+
     if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving then
         for _, btn in ipairs(attackButtons) do
             if x >= btn.x and x <= btn.x + btn.width and y >= btn.y and y <= btn.y + btn.height then
@@ -135,17 +144,114 @@ function input.mousepressed(x, y, button)
 end
 
 function input.keypressed(key)
-    if key == "u" or key == "U" then
-        if #actionHistory > 0 then undoLastAction() end
-    elseif key == "e" or key == "E" then
-        if turnState.phase == "player" then endTurn() end
-    elseif key == "escape" then
+    if not gameActive then
+        if key == "return" or key == " " or key == "r" or key == "R" then
+            restartGame()
+        end
+        return
+    end
+
+    if key == "escape" then
         if windTorrentUI.active then
             windTorrentUI.active = false
             restoreSelectedActor()
             print("Wind Torrent cancelled")
-            return
+        elseif attackMode then
+            attackMode = false
+            selectedAttack = nil
+            print("Attack cancelled")
         end
+        return
+    end
+
+    if key == "u" or key == "U" then
+        if #actionHistory > 0 then undoLastAction() end
+        return
+    end
+
+    if key == "e" or key == "E" then
+        if turnState.phase == "player" then endTurn() end
+        return
+    end
+
+    if key == "r" or key == "R" then
+        restartGame()
+        return
+    end
+
+    if key == "o" or key == "O" then
+        showEnemyOrder = not showEnemyOrder
+        print("Enemy order display: " .. (showEnemyOrder and "ON" or "OFF"))
+        return
+    end
+
+    if key == "w" or key == "W" then
+        if turnState.phase == "player" and windTorrent and not windTorrent.hasBeenUsed then
+            windTorrentUI.active = true
+            clearSelectedActor()
+            print("Click on any hex to choose wind direction, or press ESC to cancel")
+        elseif windTorrent and windTorrent.hasBeenUsed then
+            print("Wind Torrent has already been used this game!")
+        elseif turnState.phase ~= "player" then
+            print("Can only use Wind Torrent during your turn!")
+        else
+            print("Wind Torrent not available")
+        end
+        return
+    end
+
+    if key == "1" then
+        if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and #attackButtons >= 1 then
+            selectedAttack = attackButtons[1].attack
+            attackMode = true
+            print("[DEBUG] Attack selected: " .. attackButtons[1].name)
+        end
+        return
+    end
+
+    if key == "2" then
+        if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and #attackButtons >= 2 then
+            selectedAttack = attackButtons[2].attack
+            attackMode = true
+            print("[DEBUG] Attack selected: " .. attackButtons[2].name)
+        end
+        return
+    end
+
+    if key == "tab" then
+        if turnState.phase == "player" then
+            local actors = {}
+            for _, e in ipairs(entities) do
+                if e.isPlayable and e.health > 0 then
+                    table.insert(actors, e)
+                end
+            end
+            if #actors > 0 then
+                local currentIdx = 1
+                if selectedActor then
+                    for i, a in ipairs(actors) do
+                        if a == selectedActor then
+                            currentIdx = i
+                            break
+                        end
+                    end
+                end
+                local forward = not love.keyboard.isDown("lshift") and not love.keyboard.isDown("rshift")
+                local nextIdx
+                if forward then
+                    nextIdx = currentIdx % #actors + 1
+                else
+                    nextIdx = (currentIdx - 2 + #actors) % #actors + 1
+                end
+                selectedActor = actors[nextIdx]
+                hex.selectedQ, hex.selectedR = selectedActor.q, selectedActor.r
+                updateAttackButtons(selectedActor)
+                attackMode = false
+                selectedAttack = nil
+                print("Selected: " .. selectedActor.name)
+            end
+        end
+        return
     end
 end
 

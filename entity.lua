@@ -45,7 +45,7 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     -- Для строительных объектов
     self.globalHealthCost = nil
     
-    -- 🧱 НЕПОДВИЖНОСТЬ: препятствия и здания не отталкиваются
+    --  НЕПОДВИЖНОСТЬ: препятствия и здания не отталкиваются
     self.isPushable = (type == Entity.TYPES.CHARACTER)
     
     -- Анимация смерти
@@ -104,7 +104,7 @@ function Entity:takeDamage(damage, globalHealth)
         globalHealth.current = math.max(0, globalHealth.current - actualDamage)
         print(string.format("%s takes %d damage! (%d/%d HP)", 
               self.name, actualDamage, math.max(0, self.health), self.maxHealth))
-        print(string.format("⚔ Global health reduced by %d! (%d/%d)", 
+        print(string.format(" Global health reduced by %d! (%d/%d)", 
               actualDamage, globalHealth.current, globalHealth.max))
         
         -- ВЫЗЫВАЕМ ПРОВЕРКУ КОНЦА ИГРЫ

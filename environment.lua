@@ -73,7 +73,7 @@ local function loadTerrainSprite(map, gid, tileWidth, tileHeight)
         return nil
     end
     
-    -- 👇 СМЕЩЕНИЯ ПРИ РИСОВАНИИ НА CANVAS
+    --  СМЕЩЕНИЯ ПРИ РИСОВАНИИ НА CANVAS
     local drawOffsetX = 1   -- смещение по X при рисовании на canvas
     local drawOffsetY = -4   -- смещение по Y при рисовании на canvas
     
@@ -82,7 +82,7 @@ local function loadTerrainSprite(map, gid, tileWidth, tileHeight)
     love.graphics.setCanvas(canvas)
     love.graphics.clear(0, 0, 0, 0)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(texture, quad, drawOffsetX, drawOffsetY)  -- 👈 смещение здесь
+    love.graphics.draw(texture, quad, drawOffsetX, drawOffsetY)  --  смещение здесь
     love.graphics.setCanvas()
     
     terrainSpriteCache[gid] = canvas

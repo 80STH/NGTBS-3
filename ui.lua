@@ -182,7 +182,6 @@ function ui.drawCollisionIcon(x, y, damage, isDouble)
     love.graphics.setColor(0.8, 0.4, 0, 1)
     love.graphics.circle("fill", x, y, 12)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("💥", x - 8, y - 8)
     if damage and damage > 0 then
         love.graphics.print(tostring(damage), x + 8, y - 6)
     end
@@ -339,7 +338,6 @@ local x, y = getDrawCoords(targetCell.q, targetCell.r)
     
     love.graphics.setStencilTest()
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("⚔", x - 6, y - 8)
 end
         end
     end
@@ -814,7 +812,7 @@ function ui.drawWindTorrentUI(windTorrent, windTorrentUI, turnState)
     love.graphics.setColor(available and 0.2 or 0.5, 0.6, 0.8, 0.8)
     love.graphics.rectangle("fill", windTorrentUI.button.x, windTorrentUI.button.y, windTorrentUI.button.width, windTorrentUI.button.height, 5)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("🌬️ Wind Torrent", windTorrentUI.button.x + 5, windTorrentUI.button.y + 8)
+    love.graphics.print("Wind Torrent (W)", windTorrentUI.button.x + 5, windTorrentUI.button.y + 8)
 
     if windTorrentUI.active then
         love.graphics.setColor(0, 0, 0, 0.7)
@@ -831,7 +829,7 @@ function ui.drawWindTorrentUI(windTorrent, windTorrentUI, turnState)
         love.graphics.setColor(0.8, 0.2, 0.2, 0.9)
         love.graphics.rectangle("fill", cx, cy, 80, 30, 5)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print("Cancel", cx + 15, cy + 8)
+        love.graphics.print("Cancel (ESC)", cx + 5, cy + 8)
     end
 end
 
@@ -860,7 +858,8 @@ function ui.drawAttackPanel(selectedActor, attackButtons, selectedAttack, attack
         love.graphics.setColor(isSelected and 0.9 or 0.3, 0.7, 0.3, 0.8)
         love.graphics.rectangle("fill", btn.x, btn.y, btn.width, btn.height, 5)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print(btn.name .. (isSelected and " ✓" or ""), btn.x + 5, btn.y + 8)
+        local prefix = i .. "."
+        love.graphics.print(prefix .. " " .. btn.name .. (isSelected and " ✓" or ""), btn.x + 5, btn.y + 8)
         if isSelected then
             love.graphics.setColor(1, 1, 0.5, 0.9)
             love.graphics.print(btn.desc, btn.x + 5, btn.y - 18)
@@ -877,7 +876,7 @@ function ui.drawEnemyOrderButton(mouseX, mouseY)
     love.graphics.setColor(isHover and 0.6 or 0.3, 0.4, 0.6, 0.8)
     love.graphics.rectangle("fill", x, y, btnW, btnH, 5)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("Order (hover)", x + 8, y + 8)
+    love.graphics.print("Order (O)", x + 13, y + 8)
 
     return isHover
 end
@@ -977,7 +976,7 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
         local targetY = entity.preparedTargetCube.y + deltaY
         local targetZ = entity.preparedTargetCube.z + deltaZ
         local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
-        prepareText = string.format("⚔ Prepares: (%d,%d) → (%d,%d) for 1 dmg", entity.q, entity.r, targetQ, targetR)
+        prepareText = string.format(" Prepares: (%d,%d) → (%d,%d) for 1 dmg", entity.q, entity.r, targetQ, targetR)
     end
 
     local panelWidth = 200
@@ -991,16 +990,16 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
     -- Имя и здоровье
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.print(entity.name, x + 8, y + 6)
-    love.graphics.print("❤️ " .. entity.health .. "/" .. entity.maxHealth, x + 8, y + 24)
+    love.graphics.print(" " .. entity.health .. "/" .. entity.maxHealth, x + 8, y + 24)
 
     -- Дебаффы
     love.graphics.setColor(1, 0.8, 0.4, 1)
-    love.graphics.print("💀 Debuffs:", x + 8, y + 40)
+    love.graphics.print("Debuffs:", x + 8, y + 40)
     if #statuses == 0 then
         love.graphics.setColor(0.7, 0.7, 0.7, 1)
         love.graphics.print("None", x + 18, y + 58)
     else
-        local iconMap = { fire = "🔥 Fire", acid = "🧪 Acid" }
+        local iconMap = { fire = "Fire", acid = "Acid" }
         love.graphics.setColor(1, 0.9, 0.6, 1)
         for i, st in ipairs(statuses) do
             local text = iconMap[st] or st
@@ -1029,7 +1028,7 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
         end
         if digInfo then
             love.graphics.setColor(0.8, 0.6, 0.2, 1)
-            love.graphics.print("🕳️ Under Dig Site", x + 8, y + 40 + debuffsHeight + terrainHeight)
+            love.graphics.print("Under Dig Site", x + 8, y + 40 + debuffsHeight + terrainHeight)
             love.graphics.setColor(1, 0.9, 0.5, 1)
             love.graphics.print("Spawn in: " .. digInfo.timer .. " turn(s)", x + 18, y + 40 + debuffsHeight + terrainHeight + lineHeight)
             love.graphics.print("Age: " .. digInfo.age .. " / 3", x + 18, y + 40 + debuffsHeight + terrainHeight + lineHeight * 2)
@@ -1039,7 +1038,7 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
     -- Атака врага (если есть)
     if attackText then
         love.graphics.setColor(0.9, 0.6, 0.3, 1)
-        love.graphics.print("⚔ " .. attackText.name, x + 8, y + 40 + debuffsHeight + terrainHeight)
+        love.graphics.print(" " .. attackText.name, x + 8, y + 40 + debuffsHeight + terrainHeight)
         love.graphics.setColor(0.8, 0.8, 0.7, 1)
         love.graphics.print(attackText.description, x + 12, y + 56 + debuffsHeight + terrainHeight)
     end
@@ -1116,23 +1115,10 @@ if attack.name == "Magic Bolt" then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
 
-            -- Вычисляем контрольную точку дуги (смещение перпендикулярно линии)
-            local dx = toX - fromX
-            local dy = toY - fromY
             local midX = (fromX + toX) / 2
             local midY = (fromY + toY) / 2
-            local perpX = -dy
-            local perpY = dx
-            local len = math.sqrt(dx*dx + dy*dy)
-            if len > 0.01 then
-                perpX = perpX / len
-                perpY = perpY / len
-            end
-            local offset = 60   -- величина изгиба
-            local ctrlX = midX + perpX * offset
-            local ctrlY = midY + perpY * offset
 
-            ui.drawDottedArc(fromX, fromY, toX, toY, ctrlX, ctrlY, 6, 25, time)
+            ui.drawDottedArc(fromX, fromY, toX, toY, midX, midY - 60, 6, 25, time)
         end
     end
     return
@@ -1356,7 +1342,7 @@ function ui.drawWindTorrentButton(windTorrent, windTorrentUI, turnState)
     love.graphics.setColor(available and 0.2 or 0.5, 0.6, 0.8, 0.8)
     love.graphics.rectangle("fill", windTorrentUI.button.x, windTorrentUI.button.y, windTorrentUI.button.width, windTorrentUI.button.height, 5)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("🌬️ Wind Torrent", windTorrentUI.button.x + 5, windTorrentUI.button.y + 8)
+    love.graphics.print("Wind Torrent (W)", windTorrentUI.button.x + 5, windTorrentUI.button.y + 8)
 end
 
 function ui.drawRestartButton(button, turnState)
@@ -1364,7 +1350,7 @@ function ui.drawRestartButton(button, turnState)
     love.graphics.setColor(0.4, 0.2, 0.6, 0.8)
     love.graphics.rectangle("fill", button.x, button.y, button.width, button.height, 5)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print(button.text, button.x + 15, button.y + 8)
+    love.graphics.print(button.text .. " (R)", button.x + 10, button.y + 8)
 end
 
 -- ui.lua
@@ -1402,7 +1388,7 @@ function ui.drawCellTooltip(q, r, terrain, hex)
     if #statuses > 0 then
         love.graphics.setColor(1, 0.8, 0.4, 1)
         love.graphics.print("Statuses:", panelX + 8, panelY + 28)
-        local iconMap = { fire = "🔥 Fire", acid = "🧪 Acid" }
+        local iconMap = { fire = "Fire", acid = "Acid" }
         love.graphics.setColor(1, 0.9, 0.6, 1)
         for i, st in ipairs(statuses) do
             local text = iconMap[st] or st
@@ -1413,7 +1399,7 @@ function ui.drawCellTooltip(q, r, terrain, hex)
     if hasDig and digInfo then
         local yOffset = titleHeight + statusHeight + 8
         love.graphics.setColor(0.8, 0.6, 0.2, 1)
-        love.graphics.print("🕳️ Dig Site", panelX + 8, panelY + yOffset)
+        love.graphics.print("Dig Site", panelX + 8, panelY + yOffset)
         love.graphics.setColor(1, 0.9, 0.5, 1)
         love.graphics.print("Spawn in: " .. digInfo.timer .. " turn(s)", panelX + 18, panelY + yOffset + lineHeight)
         love.graphics.print("Age: " .. digInfo.age .. " / 3", panelX + 18, panelY + yOffset + lineHeight * 2)
@@ -1808,33 +1794,22 @@ function ui.drawDecayOnEntity(x, y, radius, time)
         love.graphics.setColor(0.5, 0.2, 0.7, 0.7)
         love.graphics.circle("fill", px, py, radius * 0.08)
     end
-    -- Череп с пульсацией
-    local scale = 0.7 + 0.2 * math.sin(t * 5)
-    love.graphics.setColor(0.9, 0.9, 0.9, 0.9)
-    love.graphics.print("💀", x - 9 * scale, y - 9 * scale, 0, scale, scale)
     love.graphics.setBlendMode("alpha")
 end
 
--- Обновлённая функция отрисовки эффектов статусов на сущности
-function ui.drawEntityStatusEffects(x, y, entity, baseSize, time)
-    -- Не рисуем эффекты на постройках и препятствиях
+function ui.drawEntityStatusEffects(x, y, entity, radius, time)
     if not entity:isCharacter() then return end
     
     local statuses = status.getEntityStatuses(entity)
     if #statuses == 0 then return end
     
-    -- Отображаем только первые 3 статуса, смещая их
-    for i, st in ipairs(statuses) do
-        if i > 3 then break end
-        local offsetX = -baseSize * 0.6 + i * baseSize * 0.4
-        local offsetY = -baseSize * 0.8
-        if st == "fire" then
-            ui.drawFireOnEntity(x + offsetX, y + offsetY, baseSize * 0.45, time)
-        elseif st == "acid" then
-            ui.drawAcidOnEntity(x + offsetX, y + offsetY, baseSize * 0.4, time)
-        elseif st == "decay" then
-            ui.drawDecayOnEntity(x + offsetX, y + offsetY, baseSize * 0.45, time)
-        end
+    -- Рисуем эффект наложением поверх спрайта (приоритет: fire > decay > acid)
+    if status.hasEntityStatus(entity, "fire") then
+        ui.drawFireOnEntity(x, y, radius, time)
+    elseif status.hasEntityStatus(entity, "decay") then
+        ui.drawDecayOnEntity(x, y, radius, time)
+    elseif status.hasEntityStatus(entity, "acid") then
+        ui.drawAcidOnEntity(x, y, radius, time)
     end
 end
 

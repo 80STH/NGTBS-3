@@ -52,6 +52,7 @@ function syncStateToGlobals()
     decayMessageTimer = state.decayMessageTimer
     fireAppliedForTurnLimit = state.fireAppliedForTurnLimit
     pushAnimations = state.pushAnimations
+    showEnemyOrder = state.showEnemyOrder
     DEBUG_COMBAT = state.DEBUG_COMBAT
 end
 
@@ -82,6 +83,7 @@ function syncGlobalsToState()
     state.decayMessageTimer = decayMessageTimer
     state.fireAppliedForTurnLimit = fireAppliedForTurnLimit
     state.pushAnimations = pushAnimations
+    state.showEnemyOrder = showEnemyOrder
 end
 
 function love.load()
@@ -183,6 +185,8 @@ function love.load()
     windTorrent = combat.WindTorrentAttack.new()
 
     windTorrentUI.button = { x = 10, y = 240, width = 120, height = 30, isHovered = false }
+
+    showEnemyOrder = false
 
     syncGlobalsToState()
 end

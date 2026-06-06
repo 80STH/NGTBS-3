@@ -61,6 +61,8 @@ function GameState.new()
 
     self.pushAnimations = { queue = {}, active = false }
 
+    self.showEnemyOrder = false
+
     self.DEBUG_COMBAT = true
 
     return self

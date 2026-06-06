@@ -70,7 +70,7 @@ function status.applyToEntity(entity, statusType)
         if st == statusType then return end
     end
     table.insert(status.entityStatuses[entity], statusType)
-    print(string.format("🔥 %s got %s debuff!", entity.name, statusType))
+    print(string.format(" %s got %s debuff!", entity.name, statusType))
 end
 
 -- Удалить статус с сущности
@@ -79,7 +79,7 @@ function status.removeFromEntity(entity, statusType)
         for i, st in ipairs(status.entityStatuses[entity]) do
             if st == statusType then
                 table.remove(status.entityStatuses[entity], i)
-                print(string.format("✨ %s lost %s debuff", entity.name, statusType))
+                print(string.format(" %s lost %s debuff", entity.name, statusType))
                 break
             end
         end

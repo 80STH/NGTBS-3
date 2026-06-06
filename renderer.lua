@@ -74,7 +74,8 @@ function renderer.draw(state)
     love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 130)
 
     local mx, my = love.mouse.getPosition()
-    local showOrder = ui.drawEnemyOrderButton(mx, my)
+    local hoverOrder = ui.drawEnemyOrderButton(mx, my)
+    local showOrder = hoverOrder or state.showEnemyOrder
     if showOrder then
         local orderMap = getEnemyAttackOrder(state.entities, state.turnState)
         for _, enemy in ipairs(state.entities) do
@@ -139,7 +140,7 @@ function renderer.draw(state)
         love.graphics.setColor(0.2, 0.2, 0.6, 0.9)
         love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 8)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print("New Game", btnX + 48, btnY + 12)
+        love.graphics.print("New Game (Enter)", btnX + 20, btnY + 12)
         love.graphics.setFont(oldFont)
     end
 end
@@ -181,7 +182,7 @@ function drawHexGrid(state)
 
     for _, cell in ipairs(cells) do
         local yOffset = (cell.terrain == "water") and state.config.WATER_Y_OFFSET or 0
-        local vertices = hex:drawHexagon(cell.x, cell.y + yOffset, hex.radius)
+        local insetVerts = hex:drawHexagon(cell.x, cell.y + yOffset, hex.radius - 2)
 
         local isCurrentActor = state.selectedActor and state.selectedActor.q == cell.q and state.selectedActor.r == cell.r
         local isSelected = (hex.selectedQ == cell.q and hex.selectedR == cell.r)
@@ -189,14 +190,15 @@ function drawHexGrid(state)
 
         if isCurrentActor then
             love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
-            love.graphics.polygon("fill", vertices)
+            love.graphics.polygon("fill", insetVerts)
         elseif isSelected then
             love.graphics.setColor(0.2, 0.4, 0.8, 0.5)
-            love.graphics.polygon("fill", vertices)
+            love.graphics.polygon("fill", insetVerts)
         elseif isHovered then
             love.graphics.setColor(0.5, 0.8, 0.3, 0.5)
-            love.graphics.polygon("fill", vertices)
+            love.graphics.polygon("fill", insetVerts)
         end
+        love.graphics.setLineWidth(1)
     end
     love.graphics.setColor(1, 1, 1, 1)
 end
@@ -324,16 +326,6 @@ function drawEntity(entity, state)
         local finalScale = baseScale * scale
         love.graphics.draw(entity.sprite, x, y, 0, finalScale, finalScale, sw/2, sh/2)
 
-        if entity:isCharacter() then
-            local statusColor = ui.getEntityStatusColor(entity, love.timer.getTime())
-            if statusColor then
-                love.graphics.setColor(statusColor)
-                love.graphics.setBlendMode("add")
-                love.graphics.circle("fill", x, y, 22)
-                love.graphics.setBlendMode("alpha")
-                love.graphics.setColor(1, 1, 1, 1)
-            end
-        end
     else
         love.graphics.setColor(entity.color or {1, 1, 1, 1})
         love.graphics.circle("fill", x, y, 14)
@@ -346,7 +338,12 @@ function drawEntity(entity, state)
 
     local entityStatuses = status.getEntityStatuses(entity)
     if #entityStatuses > 0 then
-        ui.drawEntityStatusEffects(x, y, entity, 20, love.timer.getTime())
+        local overlayRadius = 22
+        if entity.sprite then
+            local sw, sh = entity.sprite:getDimensions()
+            overlayRadius = math.max(sw, sh) * 6 / 2
+        end
+        ui.drawEntityStatusEffects(x, y, entity, overlayRadius, love.timer.getTime())
     end
 
     drawHealthBar(entity, x, y)

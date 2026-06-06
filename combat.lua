@@ -173,7 +173,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
     attack_effects.dash(attacker, firstTarget, lastFree, hex)
-    -- 🏃‍♂️ Перемещение атакующего в последнюю свободную клетку
+    --  Перемещение атакующего в последнюю свободную клетку
     if lastFree and (lastFree.q ~= attacker.q or lastFree.r ~= attacker.r) then
         combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
     end
@@ -634,7 +634,7 @@ function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities
 
     local damage = self.damage
     local wasDestroyed = target:takeDamage(damage, globalHealth)
-    print(string.format("🔮 %s throws a magic bolt at %s for %d damage!", attacker.name, target.name, damage))
+    print(string.format(" %s throws a magic bolt at %s for %d damage!", attacker.name, target.name, damage))
     if sounds and sounds.attack then sounds.attack:play() end
 
     if hex and visual then
@@ -751,7 +751,7 @@ combat.WindTorrentAttack = setmetatable({}, combat.Attack)
 combat.WindTorrentAttack.__index = combat.WindTorrentAttack
 
 function combat.WindTorrentAttack.new()
-    local self = combat.Attack.new("🌬️ Wind Torrent", "Global wind pushes everything one step", 999, 0, {})
+    local self = combat.Attack.new("Wind Torrent", "Global wind pushes everything one step", 999, 0, {})
     self.hasBeenUsed = false
     return setmetatable(self, combat.WindTorrentAttack)
 end
@@ -776,7 +776,7 @@ function combat.WindTorrentAttack:executeGlobalWithAnimation(direction, hex, ent
         return false
     end
 
-    print(string.format("💨 WIND TORRENT: Pushing everything %s!", direction))
+    print(string.format(" WIND TORRENT: Pushing everything %s!", direction))
 
     local function applyStep(q, r)
         local x, y, z = hex_utils.axialToCube(q, r)
@@ -887,7 +887,7 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
                 -- Столкновение: урон обоим, перемещение отменяется
                 if pushedObj.health and pushedObj.health > 0 then
                     pushedObj.health = pushedObj.health - 1
-                    print(string.format("💥 %s collides with %s! Both take 1 damage!", pushedObj.name, occupant.name))
+                    print(string.format(" %s collides with %s! Both take 1 damage!", pushedObj.name, occupant.name))
                     if sounds and sounds.collision then sounds.collision:play() end
                 end
                 if occupant.health then
@@ -1047,7 +1047,7 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
     -- Уязвимая точка
     if target.weakPoint ~= nil and directionIndex == target.weakPoint then
         multiplier = multiplier * 2.0
-        print(string.format("💥 Critical hit! %s hits %s's weak point!", attacker.name, target.name))
+        print(string.format(" Critical hit! %s hits %s's weak point!", attacker.name, target.name))
     end
 
     local statusMultiplier = status.getDamageMultiplier(target)
@@ -1210,12 +1210,14 @@ function updateActorMovement(actor, dt)
         if t >= 1 then
             actor.q = actor.targetQ
             actor.r = actor.targetR
-            if actor.currentPathIndex >= #actor.path then
+            -- Применяем эффекты клетки на каждом шагу пути
+            if terrainMap then
                 local died = effects.applyAllCellEffects(actor, actor.q, actor.r, terrainMap, entities, globalHealth)
                 if died then
                     local x, y = hex:hexToPixel(actor.q, actor.r)
                     visual.addEffect(x, y, "drown")
                     checkGameEnd()
+                    return
                 end
             end
             actor.isMoving = false

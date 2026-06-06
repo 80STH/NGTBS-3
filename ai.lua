@@ -267,8 +267,9 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
         elseif targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            -- Рисуем дугу через visual.addArcEffect
-            visual.addArcEffect(fromX, fromY, toX, toY, 0.6, 0.2, 1.0, 0.3)
+            local midX = (fromX + toX) / 2
+            local midY = (fromY + toY) / 2
+            visual.addArcEffect(fromX, fromY, toX, toY, 0.6, 0.2, 1.0, 0.3, midX, midY - 60)
             visual.addEffect(toX, toY, "hit", 0.4)
         end
     elseif attack.name == "Dash" then
@@ -515,6 +516,13 @@ function ai.updateEnemyMovement(enemy, dt, hex)
                 if enemy.currentPathIndex <= #enemy.path then
                     ai.startEnemyMove(enemy, hex)
                 else
+                    -- Применяем эффекты клетки назначения
+                    if terrainMap then
+                        local died = effects.applyAllCellEffects(enemy, enemy.q, enemy.r, terrainMap, entities, globalHealth)
+                        if died then
+                            checkGameEnd()
+                        end
+                    end
                     enemy.path = {}
                     enemy.currentPathIndex = 0
                     enemy.movementFinished = true

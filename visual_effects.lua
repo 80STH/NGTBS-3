@@ -100,7 +100,6 @@ function visual.draw()
                 love.graphics.circle("fill", e.x + dx, e.y + dy, 5)
             end
             love.graphics.setColor(1, 1, 0.5, alpha)
-            love.graphics.print("🕳️", e.x - 10, e.y - 12)
         elseif e.type == "dash" then
     local t = e.timer / e.duration
     local alpha = 1 - t
@@ -120,15 +119,8 @@ elseif e.type == "arc" then
     if e.ctrlX and e.ctrlY then
         ctrlX, ctrlY = e.ctrlX, e.ctrlY
     else
-        -- старый расчёт: перпендикуляр
-        local perpX = (e.toY - e.fromY)
-        local perpY = (e.fromX - e.toX)
-        local len = math.sqrt(perpX*perpX + perpY*perpY)
-        if len > 0.01 then
-            perpX = perpX / len * 40
-            perpY = perpY / len * 40
-        end
-        ctrlX, ctrlY = midX + perpX, midY + perpY
+        ctrlX = midX
+        ctrlY = midY - 40
     end
     local function bezier(p)
         local u = 1 - p

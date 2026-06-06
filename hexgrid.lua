@@ -222,7 +222,7 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
 
     -- Обводка верхней грани
     love.graphics.setColor(0, 0, 0, 0.5)
-    love.graphics.setLineWidth(1.2)
+    love.graphics.setLineWidth(2)
     love.graphics.polygon("line", topVertices)
 
     -- Тень
