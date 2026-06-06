@@ -66,6 +66,10 @@ function restartGame()
     end
 
     windTorrent = combat.WindTorrentAttack.new()
+    healAbility = { hasBeenUsed = false }
+    healUI = { active = false }
+    extraMoveAbility = { hasBeenUsed = false }
+    extraMoveUI = { active = false }
     dpiScale = love.window.getDPIScale()
 
     attackMode = false
@@ -117,20 +121,26 @@ function checkGameEnd()
         return
     end
 
-    if turnCount >= maxTurns then
-        local anyEnemy = false
-        for _, e in ipairs(entities) do
-            if e:isCharacter() and not e.isPlayable and e.health > 0 and not e.isDying then
-                anyEnemy = true
-                break
-            end
+    local anyEnemy = false
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable and e.health > 0 and not e.isDying then
+            anyEnemy = true
+            break
         end
-        if not anyEnemy then
-            win = true
-            gameActive = false
-            print("VICTORY: Turn limit reached and all enemies defeated!")
-            syncGlobalsToState()
-        end
+    end
+    if not anyEnemy and decayAppliedForTurnLimit then
+        win = true
+        gameActive = false
+        print("VICTORY: All enemies defeated after turn limit!")
+        syncGlobalsToState()
+        return
+    end
+
+    if turnCount >= maxTurns and not anyEnemy then
+        win = true
+        gameActive = false
+        print("VICTORY: Turn limit reached and all enemies defeated!")
+        syncGlobalsToState()
     end
 end
 
@@ -213,6 +223,8 @@ function processDigSites()
     end
 
     status.ageDigSites()
+
+    if decayAppliedForTurnLimit then return end
 
     local aliveEnemies = 0
     for _, e in ipairs(entities) do

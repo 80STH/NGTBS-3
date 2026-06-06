@@ -39,6 +39,48 @@ function input.mousepressed(x, y, button)
         return
     end
 
+    -- Heal ability button
+    local healBtn = { x = 10, y = 120, width = 120, height = 30 }
+    if x >= healBtn.x and x <= healBtn.x + healBtn.width and y >= healBtn.y and y <= healBtn.y + healBtn.height then
+        if healUI.active then
+            healUI.active = false
+            restoreSelectedActor()
+            print("Heal cancelled")
+        elseif turnState.phase ~= "player" then
+            print("Can only use abilities during your turn!")
+        elseif healAbility.hasBeenUsed then
+            print("Heal has already been used this game!")
+        else
+            windTorrentUI.active = false
+            extraMoveUI.active = false
+            healUI.active = true
+            clearSelectedActor()
+            print("Click on an ally to heal, or press ESC to cancel")
+        end
+        return
+    end
+
+    -- Extra Move ability button
+    local extraBtn = { x = 10, y = 155, width = 120, height = 30 }
+    if x >= extraBtn.x and x <= extraBtn.x + extraBtn.width and y >= extraBtn.y and y <= extraBtn.y + extraBtn.height then
+        if extraMoveUI.active then
+            extraMoveUI.active = false
+            restoreSelectedActor()
+            print("Extra Move cancelled")
+        elseif turnState.phase ~= "player" then
+            print("Can only use abilities during your turn!")
+        elseif extraMoveAbility.hasBeenUsed then
+            print("Extra Move has already been used this game!")
+        else
+            windTorrentUI.active = false
+            healUI.active = false
+            extraMoveUI.active = true
+            clearSelectedActor()
+            print("Click on an ally that has already attacked, or press ESC to cancel")
+        end
+        return
+    end
+
     if windTorrentUI.active then
         local tq, tr = hex:pixelToHex(x, y)
         if hex:isActiveHex(tq, tr) then
@@ -67,7 +109,29 @@ function input.mousepressed(x, y, button)
         end
     end
 
-    if x >= 10 and x <= 130 and y >= 200 and y <= 230 then
+    -- Ability targeting (Heal / Extra Move)
+    if healUI.active or extraMoveUI.active then
+        local tq, tr = hex:pixelToHex(x, y)
+        if hex:isActiveHex(tq, tr) then
+            local target = getEntityAtHex(tq, tr)
+            local success = false
+            if healUI.active then
+                success = tryUseHealAbility(target)
+            elseif extraMoveUI.active then
+                success = tryUseExtraMoveAbility(target)
+            end
+            if success then
+                healUI.active = false
+                extraMoveUI.active = false
+                restoreSelectedActor()
+            end
+        else
+            print("Invalid hex")
+        end
+        return
+    end
+
+    if x >= 10 and x <= 130 and y >= 190 and y <= 220 then
         if #actionHistory > 0 then
             undoLastAction()
         else
@@ -116,6 +180,7 @@ function input.mousepressed(x, y, button)
         local success, msg = performAttackWithSelectedAttack(selectedActor, tq, tr, selectedAttack)
         attackMode = false
         selectedAttack = nil
+        globalHealth.previewDamage = 0
         if not success then
             print("Attack failed: " .. msg)
         end
@@ -124,22 +189,23 @@ function input.mousepressed(x, y, button)
 
     local clicked = getEntityAtHex(tq, tr)
     if clicked and clicked.isPlayable and clicked.health > 0 then
-        if not clicked.hasActedThisTurn then
-            selectedActor = clicked
-            hex.selectedQ, hex.selectedR = tq, tr
-            updateAttackButtons(selectedActor)
-            attackMode = false
-            selectedAttack = nil
-            print("Selected: " .. clicked.name)
-        end
+        selectedActor = clicked
+        hex.selectedQ, hex.selectedR = tq, tr
+        updateAttackButtons(selectedActor)
+        attackMode = false
+        selectedAttack = nil
+        print("Selected: " .. clicked.name .. (clicked.hasActedThisTurn and " (acted)" or ""))
         return
     end
 
-    if selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.hasMovedThisTurn and not selectedActor.isMoving then
-        performMove(selectedActor, tq, tr)
-        hex.selectedQ, hex.selectedR = selectedActor.q, selectedActor.r
-        attackMode = false
-        selectedAttack = nil
+    if selectedActor and not selectedActor.isMoving then
+        local canMove = (not selectedActor.hasActedThisTurn or selectedActor.canMoveAfterAttack) and (not selectedActor.hasMovedThisTurn or selectedActor.canMoveAfterAttack)
+        if canMove then
+            performMove(selectedActor, tq, tr)
+            hex.selectedQ, hex.selectedR = selectedActor.q, selectedActor.r
+            attackMode = false
+            selectedAttack = nil
+        end
     end
 end
 
@@ -152,7 +218,15 @@ function input.keypressed(key)
     end
 
     if key == "escape" then
-        if windTorrentUI.active then
+        if healUI.active then
+            healUI.active = false
+            restoreSelectedActor()
+            print("Heal cancelled")
+        elseif extraMoveUI.active then
+            extraMoveUI.active = false
+            restoreSelectedActor()
+            print("Extra Move cancelled")
+        elseif windTorrentUI.active then
             windTorrentUI.active = false
             restoreSelectedActor()
             print("Wind Torrent cancelled")
@@ -196,6 +270,44 @@ function input.keypressed(key)
             print("Can only use Wind Torrent during your turn!")
         else
             print("Wind Torrent not available")
+        end
+        return
+    end
+
+    if key == "h" or key == "H" then
+        if healUI.active then
+            healUI.active = false
+            restoreSelectedActor()
+            print("Heal cancelled")
+        elseif turnState.phase ~= "player" then
+            print("Can only use abilities during your turn!")
+        elseif healAbility.hasBeenUsed then
+            print("Heal has already been used this game!")
+        else
+            windTorrentUI.active = false
+            extraMoveUI.active = false
+            healUI.active = true
+            clearSelectedActor()
+            print("Click on an ally to heal, or press ESC to cancel")
+        end
+        return
+    end
+
+    if key == "x" or key == "X" then
+        if extraMoveUI.active then
+            extraMoveUI.active = false
+            restoreSelectedActor()
+            print("Extra Move cancelled")
+        elseif turnState.phase ~= "player" then
+            print("Can only use abilities during your turn!")
+        elseif extraMoveAbility.hasBeenUsed then
+            print("Extra Move has already been used this game!")
+        else
+            windTorrentUI.active = false
+            healUI.active = false
+            extraMoveUI.active = true
+            clearSelectedActor()
+            print("Click on an ally that has already attacked, or press ESC to cancel")
         end
         return
     end
@@ -253,6 +365,60 @@ function input.keypressed(key)
         end
         return
     end
+end
+
+function tryUseHealAbility(target)
+    if turnState.phase ~= "player" then
+        print("Can only use abilities during your turn!")
+        return false
+    end
+    if healAbility.hasBeenUsed then
+        print("Heal has already been used this game!")
+        return false
+    end
+    if not target or not target.isPlayable or target.health <= 0 then
+        print("No valid ally targeted!")
+        return false
+    end
+    local hasDebuffs = #status.getEntityStatuses(target) > 0 or status.hasDigSite(target.q, target.r)
+    if target.health >= target.maxHealth and not hasDebuffs then
+        print(tostring(target.name) .. " is at full health with no debuffs to cure!")
+        return false
+    end
+    target.health = target.maxHealth
+    status.entityStatuses[target] = nil
+    if status.hasAtHex(target.q, target.r, "fire") then
+        status.removeFromHex(target.q, target.r, "fire")
+        print("Fire on the ground extinguished!")
+    end
+    healAbility.hasBeenUsed = true
+    actionHistory = {}
+    print(tostring(target.name) .. " fully healed and all negative effects removed!")
+    return true
+end
+
+function tryUseExtraMoveAbility(target)
+    if turnState.phase ~= "player" then
+        print("Can only use abilities during your turn!")
+        return false
+    end
+    if extraMoveAbility.hasBeenUsed then
+        print("Extra Move has already been used this game!")
+        return false
+    end
+    if not target or not target.isPlayable or target.health <= 0 then
+        print("No valid ally targeted!")
+        return false
+    end
+    if not target.hasActedThisTurn then
+        print(tostring(target.name) .. " hasn't attacked yet — cannot use Extra Move!")
+        return false
+    end
+    target.canMoveAfterAttack = true
+    extraMoveAbility.hasBeenUsed = true
+    actionHistory = {}
+    print(tostring(target.name) .. " can now move after attacking!")
+    return true
 end
 
 return input

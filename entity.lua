@@ -41,6 +41,7 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     -- Флаги
     self.hasActedThisTurn = false
     self.hasMovedThisTurn = false   -- для союзников
+    self.canMoveAfterAttack = false
     
     -- Для строительных объектов
     self.globalHealthCost = nil
@@ -103,6 +104,9 @@ function Entity:takeDamage(damage, globalHealth)
     if self:isBuilding() and globalHealth then
         globalHealth.current = math.max(0, globalHealth.current - actualDamage)
         globalHealth.flashTimer = 2.0
+        if screenShake then
+            screenShake.timer = screenShake.duration
+        end
         print(string.format("%s takes %d damage! (%d/%d HP)", 
               self.name, actualDamage, math.max(0, self.health), self.maxHealth))
         print(string.format(" Global health reduced by %d! (%d/%d)", 

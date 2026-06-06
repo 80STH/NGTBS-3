@@ -35,10 +35,11 @@ function effects.applyAllCellEffects(entity, q, r, terrainMap, entities, globalH
         end
     end
 
-    -- 3. Кислота с клетки накладывает эффект кислоты
+    -- 3. Кислота с клетки накладывает эффект кислоты и исчезает с земли
     if status.hasAtHex(q, r, "acid") and not status.hasEntityStatus(entity, "acid") then
         status.applyToEntity(entity, "acid")
-        print(string.format(" %s covered in acid from cell!", entity.name))
+        status.removeFromHex(q, r, "acid")
+        print(string.format(" %s covered in acid from cell, ground acid consumed!", entity.name))
     end
 
     -- 4. Утопление в воде (только для персонажей, не для препятствий)

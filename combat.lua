@@ -243,8 +243,8 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
         return false, "Cell behind attacker is occupied!"
     end
     attack_effects.flip(attacker, targetActor, behindQ, behindR, hex)
-    targetActor.q = behindQ
-    targetActor.r = behindR
+    combat.addPushAnimation(targetActor, targetQ, targetR, behindQ, behindR)
+    combat.startPushAnimations(hex)
     print(string.format("%s flips %s behind them!", attacker.name, targetActor.name))
     if sounds and sounds.attack then sounds.attack:play() end
     attacker.hasActedThisTurn = true
@@ -275,7 +275,7 @@ end
 combat.ShootAttack = setmetatable({}, combat.Attack)
 combat.ShootAttack.__index = combat.ShootAttack
 function combat.ShootAttack.new(range)
-    local self = combat.Attack.new("Shoot", "Fire a projectile, pushing the first target", range or 5, 1, {})
+    local self = combat.Attack.new("Shoot", "Fire a projectile, pushing the first target", range or 999, 1, {})
     return setmetatable(self, combat.ShootAttack)
 end
 -- в combat.lua, внутри ShootAttack:execute
@@ -284,9 +284,6 @@ function combat.ShootAttack:execute(attacker, targetQ, targetR, hex, entities, s
     if not stepX then return false, "Not a straight line!" end
     local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     if not firstTarget then return false, "No target in that direction!" end
-    local distance = hex:getDistance(attacker.q, attacker.r, targetHex.q, targetHex.r)
-    if distance > self.range then return false, "Target out of range!" end
-
     -- Вычисляем клетку отталкивания (если есть)
     local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
     local pushValid = hex:isActiveHex(pushQ, pushR)
@@ -316,7 +313,7 @@ end
 combat.PiercingShootAttack = setmetatable({}, combat.Attack)
 combat.PiercingShootAttack.__index = combat.PiercingShootAttack
 function combat.PiercingShootAttack.new(range)
-    local self = combat.Attack.new("Piercing Shot", "Shoot through the first target (0 dmg, pushes) to hit the second (1 dmg, pushes)", range or 5, 0, {})
+    local self = combat.Attack.new("Piercing Shot", "Shoot through the first target (0 dmg, pushes) to hit the second (1 dmg, pushes)", range or 999, 0, {})
     return setmetatable(self, combat.PiercingShootAttack)
 end
 function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
@@ -325,13 +322,10 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     local firstTarget, firstHex, secondTarget, secondHex = self:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     attack_effects.piercingShoot(attacker, firstTarget, secondTarget, stepX, stepY, stepZ, hex)
     if not firstTarget then return false, "No target in that direction!" end
-    if firstTarget:isBuilding() then
-        self:dealDamageToTarget(firstTarget, attacker, 1, entities, sounds, nil, globalHealth)
-        attacker.hasActedThisTurn = true
-        return true
+    if firstTarget.isPushable ~= false then
+        self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+        combat.startPushAnimations(hex)
     end
-    self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, entities, sounds)
-    combat.startPushAnimations(hex)
     if secondTarget then
         self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil, globalHealth)
         if secondTarget.isPushable ~= false then
@@ -500,7 +494,7 @@ end
 combat.AoeDirectionalAttack = setmetatable({}, combat.Attack)
 combat.AoeDirectionalAttack.__index = combat.AoeDirectionalAttack
 function combat.AoeDirectionalAttack.new()
-    local self = combat.Attack.new("Cone Blast", "Deals 1 damage to the center and pushes all 6 surrounding enemies", math.huge, 1, {})
+    local self = combat.Attack.new("Cone Blast", "Pushes all 6 surrounding enemies away from the center", math.huge, 0, {})
     self.minRange = 2
     return setmetatable(self, combat.AoeDirectionalAttack)
 end
@@ -517,12 +511,6 @@ function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, en
     -- Обязательная прямая линия
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
-
-    -- Урон центру
-    local centerTarget = combat.getEntityAtHex(targetQ, targetR, entities)
-    if centerTarget and centerTarget:isCharacter() then
-        self:dealDamageToTarget(centerTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
-    end
 
     attack_effects.coneBlast(targetQ, targetR, hex)
 
@@ -1162,8 +1150,9 @@ function performMove(actor, targetQ, targetR)
         print("Target cell is outside the playable hexagon")
         return false
     end
-    if actor.isMoving or actor.hasActedThisTurn then return false end
-    if actor.hasMovedThisTurn then
+    if actor.isMoving then return false end
+    if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return false end
+    if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then
         print(actor.name .. " has already moved this turn!")
         return false
     end
@@ -1235,6 +1224,10 @@ function updateActorMovement(actor, dt)
             else
                 actor.path = {}
                 actor.currentPathIndex = 0
+                if actor.canMoveAfterAttack then
+                    actor.canMoveAfterAttack = false
+                    actor.hasActedThisTurn = true
+                end
                 if selectedActor == actor then
                     hex.selectedQ = actor.q
                     hex.selectedR = actor.r
@@ -1279,6 +1272,7 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
         print(attacker.name .. " attacked and ended turn. Move history cleared.")
         attackMode = false
         selectedAttack = nil
+        globalHealth.previewDamage = 0
         checkGameEnd()
     else
         print("Attack failed: " .. (message or "unknown"))
@@ -1334,10 +1328,12 @@ function undoLastAction()
         end
     end
 
-    if selectedActor == actor then
-        hex.selectedQ = actor.q
-        hex.selectedR = actor.r
-    end
+    selectedActor = actor
+    hex.selectedQ = actor.q
+    hex.selectedR = actor.r
+    updateAttackButtons(actor)
+    attackMode = false
+    selectedAttack = nil
 
     table.remove(actionHistory)
 

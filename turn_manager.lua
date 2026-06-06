@@ -35,6 +35,7 @@ function turnManager.endPlayerTurn()
         applyDecayToAllEnemies()
         decayAppliedForTurnLimit = true
         decayMessageTimer = 2.0
+        status.clearAllDigSites()
     end
 
     local attackers = {}
@@ -117,6 +118,7 @@ function processNextEnemyPrepare()
             if a.isPlayable and a.health > 0 then
                 a.hasActedThisTurn = false
                 a.hasMovedThisTurn = false
+                a.canMoveAfterAttack = false
             end
         end
         actionHistory = {}

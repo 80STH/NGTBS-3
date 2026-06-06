@@ -480,7 +480,7 @@ function environment.getMageAttacks()
     local combat = require("combat")
     return {
         { attack = combat.AoePushAttack.new(), name = "Stone Throw", description = "Throw a stone that pushes enemies around" },
-        { attack = combat.AoeDirectionalAttack.new(), name = "Shockwave", description = "Deals 1 damage and pushes 3 enemies in a cone" },
+        { attack = combat.AoeDirectionalAttack.new(), name = "Shockwave", description = "Pushes all 6 surrounding enemies away from the center" },
     }
 end
 
@@ -488,7 +488,7 @@ function environment.getRogueAttacks()
     local combat = require("combat")
     return {
         { attack = combat.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
-        { attack = combat.PiercingShootAttack.new(5), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
+        { attack = combat.PiercingShootAttack.new(), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
     }
 end
 

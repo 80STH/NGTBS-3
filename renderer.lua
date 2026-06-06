@@ -5,45 +5,99 @@ local ui = require("ui")
 local visual = require("visual_effects")
 local status = require("status")
 local combat = require("combat")
+local hex_utils = require("hex_utils")
 
 function renderer.draw(state)
     if not state or not state.hex then return end
     local hex = state.hex
 
-    drawHexGrid(state)
-    ui.drawPreparedAttacks(hex, state.entities)
+    -- Collect cell overlays for grid rendering
+    local cellOverlays = {}
+    ui.collectPreparedAttackOverlays(hex, state.entities, cellOverlays)
+    if state.attackMode and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn then
+        ui.collectAttackableCellOverlays(hex, state.selectedActor, state.selectedAttack, state.entities, state.terrainMap, cellOverlays)
+    end
+    ui.collectAbilityTargetOverlays(state.entities, state.healUI, state.extraMoveUI, cellOverlays)
+    if state.attackMode and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn and hex.hoverQ >= 0 and hex.hoverR >= 0 then
+        local ovCells = {}
+        ui.collectAttackPreviewOverlays(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities, ovCells)
+        for _, c in ipairs(ovCells) do
+            local key = c.q .. "," .. c.r
+            if not cellOverlays[key] then
+                cellOverlays[key] = {preview = true}
+            end
+        end
+    end
+
+    -- Normalize overlay data
+    local t = love.timer.getTime()
+    local hexRadius = hex.radius
+    local hazardTex = ui.getHazardTexture()
+    for key, info in pairs(cellOverlays) do
+        if info == true then
+            -- Attackable cell
+            cellOverlays[key] = {fill = {0.9, 0.8, 0.2, 0.25}, line = {0.9, 0.8, 0.2, 0.7}}
+        elseif info.preview then
+            -- Attack preview
+            cellOverlays[key] = {fill = {1, 0.5, 0, 0.3}, line = {1, 0.7, 0, 0.8}}
+        elseif info.threatCount then
+            -- Prepared attack (stencil + hazard texture)
+            local threatCount = info.threatCount
+            local fillR, fillG, fillB, fillA
+            local scaleMod
+            if threatCount == 1 then
+                fillR, fillG, fillB, fillA = 1, 0.5, 0.2, 0.5
+                scaleMod = 1.0
+            elseif threatCount == 2 then
+                fillR, fillG, fillB, fillA = 1, 0.3, 0.1, 0.75
+                scaleMod = 1.2
+            else
+                fillR, fillG, fillB, fillA = 1, 0, 0, 1
+                scaleMod = 1.4
+            end
+            if threatCount <= 2 then
+                local pulse = 0.7 + 0.3 * math.sin(t * (5 + threatCount * 3))
+                fillA = fillA * pulse
+            end
+            info.draw = function(vertices, ox, oy)
+                love.graphics.stencil(function()
+                    love.graphics.polygon("fill", vertices)
+                end, "replace", 1)
+                love.graphics.setStencilTest("greater", 0)
+                love.graphics.setColor(fillR, fillG, fillB, fillA)
+                if threatCount >= 2 then
+                    love.graphics.draw(hazardTex, ox - hexRadius - 2, oy - hexRadius - 2, 0,
+                        hexRadius * 2 / hazardTex:getWidth() * scaleMod,
+                        hexRadius * 2 / hazardTex:getHeight() * scaleMod)
+                    love.graphics.draw(hazardTex, ox - hexRadius + 2, oy - hexRadius + 2, 0,
+                        hexRadius * 2 / hazardTex:getWidth() * scaleMod,
+                        hexRadius * 2 / hazardTex:getHeight() * scaleMod)
+                end
+                love.graphics.draw(hazardTex, ox - hexRadius, oy - hexRadius, 0,
+                    hexRadius * 2 / hazardTex:getWidth() * scaleMod,
+                    hexRadius * 2 / hazardTex:getHeight() * scaleMod)
+                love.graphics.setStencilTest()
+            end
+        end
+    end
+
+    drawHexGrid(state, cellOverlays)
+    ui.drawPreparedAttackHealthBars(hex, state.entities)
     ui.drawDigSites(hex, status.getAllDigSites())
     drawAllEntities(state)
     visual.draw()
 
-    local turnsLeft = state.maxTurns - state.turnCount
-    if turnsLeft > 0 then
-        love.graphics.setColor(0.9, 0.7, 0.2, 1)
-        love.graphics.print("Decay in: " .. turnsLeft, 10, 110)
-    elseif turnsLeft == 0 and state.decayAppliedForTurnLimit then
-        love.graphics.setColor(0.8, 0.2, 0.2, 1)
-        love.graphics.print("DECAY ACTIVE!", 10, 110)
-    end
-
     if not state.attackMode then
-        if state.selectedActor and not state.selectedActor.hasActedThisTurn and not state.selectedActor.isMoving and state.turnState.phase == "player" then
-            ui.drawMovementRange(hex, state.selectedActor, state.entities, state.terrainMap)
-            if hex.hoverQ >= 0 and hex.hoverR >= 0 then
-                ui.drawPathPreview(hex, state.selectedActor, hex.hoverQ, hex.hoverR, state.entities, state.terrainMap)
+        local sel = state.selectedActor
+        if sel and not sel.isMoving and state.turnState.phase == "player" then
+            local canShowMove = (not sel.hasActedThisTurn or sel.canMoveAfterAttack) and (not sel.hasMovedThisTurn or sel.canMoveAfterAttack)
+            if canShowMove then
+                ui.drawMovementRange(hex, sel, state.entities, state.terrainMap)
+                if hex.hoverQ >= 0 and hex.hoverR >= 0 then
+                    ui.drawPathPreview(hex, sel, hex.hoverQ, hex.hoverR, state.entities, state.terrainMap)
+                end
             end
         end
-    else
-        if state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn then
-            ui.drawAttackableCells(hex, state.selectedActor, state.selectedAttack, state.entities, state.terrainMap)
-        end
-    end
-
-    if state.decayMessageTimer > 0 then
-        local alpha = math.min(1, state.decayMessageTimer * 2)
-        love.graphics.setColor(0.8, 0.2, 0.2, alpha)
-        love.graphics.setFont(love.graphics.newFont(36))
-        love.graphics.print("DECAY!", logicalW/2 - 90, logicalH/2 - 50)
-        love.graphics.setFont(love.graphics.newFont(16))
     end
 
     if hex.hoverQ >= 0 and hex.hoverR >= 0 then
@@ -59,6 +113,53 @@ function renderer.draw(state)
         ui.drawAttackPreview(hex, state.selectedActor, state.selectedAttack, state.attackMode, hex.hoverQ, hex.hoverR, state.entities)
     end
 
+    -- Enemy attack preview on hover (only when not in player attack mode)
+    if not state.attackMode and hex.hoverQ >= 0 and hex.hoverR >= 0 then
+        local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
+        if hoverEntity and hoverEntity:isCharacter() and not hoverEntity.isPlayable and hoverEntity.hasPreparedAttack and hoverEntity.health > 0 then
+            local attack = hoverEntity.preparedAttack
+            if attack then
+                local targetQ, targetR = hoverEntity.q, hoverEntity.r
+                if attack.name == "Ghost Bolt" and hoverEntity.attackDirection then
+                    local step = hoverEntity.attackDirection
+                    local curQ, curR = hoverEntity.q, hoverEntity.r
+                    while true do
+                        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
+                        if not hex:isActiveHex(nextQ, nextR) then break end
+                        local ent = getEntityAtHex(nextQ, nextR, state.entities)
+                        if ent and ent ~= hoverEntity and ent.health > 0 then
+                            targetQ, targetR = nextQ, nextR
+                            break
+                        end
+                        curQ, curR = nextQ, nextR
+                    end
+                elseif attack.name == "Magic Bolt" and hoverEntity.preparedTargetOffset then
+                    targetQ, targetR = hex_utils.applyCubeDiff(
+                        hoverEntity.q, hoverEntity.r,
+                        hoverEntity.preparedTargetOffset.dx,
+                        hoverEntity.preparedTargetOffset.dy,
+                        hoverEntity.preparedTargetOffset.dz
+                    )
+                elseif attack.name == "Bite" and hoverEntity.preparedTargetOffset then
+                    targetQ, targetR = hex_utils.applyCubeDiff(
+                        hoverEntity.q, hoverEntity.r,
+                        hoverEntity.preparedTargetOffset.dx,
+                        hoverEntity.preparedTargetOffset.dy,
+                        hoverEntity.preparedTargetOffset.dz
+                    )
+                elseif hoverEntity.attackDirection then
+                    local step = hoverEntity.attackDirection
+                    targetQ, targetR = hex_utils.applyCubeStep(hoverEntity.q, hoverEntity.r, step.dx, step.dy, step.dz)
+                end
+                if hex:isValidHex(targetQ, targetR) then
+                    ui.drawAttackPreview(hex, hoverEntity, attack, true, targetQ, targetR, state.entities)
+                end
+            end
+        end
+    end
+
+    ui.drawHealAbilityButton(state.healAbility, state.healUI, state.turnState)
+    ui.drawExtraMoveAbilityButton(state.extraMoveAbility, state.extraMoveUI, state.turnState)
     ui.drawUndoButton(state.actionHistory, state.maxUndoCount, state.selectedActor)
     ui.drawEndTurnButton(state.turnState, state.entities)
     ui.drawRestartButton(state.restartButton, state.turnState)
@@ -67,11 +168,13 @@ function renderer.draw(state)
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
 
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("Phase: " .. state.turnState.phase, 10, 10)
+    local decayActive = state.turnCount >= state.maxTurns
+    local decayStr = decayActive and "Decay active!" or ("Decay in: " .. (state.maxTurns - state.turnCount))
+    love.graphics.print(decayStr .. "  |  Phase: " .. state.turnState.phase, 10, 5)
     if state.selectedActor then
-        love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 30)
+        love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 23)
     end
-    love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 130)
+    love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 95)
 
     local mx, my = love.mouse.getPosition()
     mx = mx / state.dpiScale
@@ -100,6 +203,7 @@ function renderer.draw(state)
             local panelX = 10
             local panelY = logicalH - 180
             ui.drawUnitTooltip(hoverEntity, panelX, panelY, state.terrainMap)
+            ui.drawStatusDetails(hoverEntity, panelX, panelY + 125)
         elseif hex:isActiveHex(hex.hoverQ, hex.hoverR) then
             local terrain = state.terrainMap and state.terrainMap[hex.hoverQ] and state.terrainMap[hex.hoverQ][hex.hoverR] or "grass"
             ui.drawCellTooltip(hex.hoverQ, hex.hoverR, terrain, hex)
@@ -151,7 +255,7 @@ end
 -- ФУНКЦИИ ОТРИСОВКИ (перемещены из main.lua)
 -- ============================================================
 
-function drawHexGrid(state)
+function drawHexGrid(state, cellOverlays)
     local hex = state.hex
     love.graphics.setLineWidth(1)
     local gridW = hex.gridWidth
@@ -175,15 +279,29 @@ function drawHexGrid(state)
 
     for _, cell in ipairs(cells) do
         hex:drawTerrainHex(cell.q, cell.r, cell.terrain, cell.x, cell.y)
+        local yOffset = (cell.terrain == "water") and state.config.WATER_Y_OFFSET or 0
         local hexStatuses = status.getAtHex(cell.q, cell.r)
         if #hexStatuses > 0 then
-            local yOffset = (cell.terrain == "water") and state.config.WATER_Y_OFFSET or 0
             ui.drawCellStatusEffects(cell.x, cell.y + yOffset, hex.radius, hexStatuses, love.timer.getTime())
         end
-    end
 
-    for _, cell in ipairs(cells) do
-        local yOffset = (cell.terrain == "water") and state.config.WATER_Y_OFFSET or 0
+        local cellKey = cell.q .. "," .. cell.r
+        local overlay = cellOverlays and cellOverlays[cellKey]
+        if overlay then
+            local verts = hex:drawHexagon(cell.x, cell.y + yOffset, hex.radius)
+            if overlay.fill then
+                love.graphics.setColor(overlay.fill[1], overlay.fill[2], overlay.fill[3], overlay.fill[4])
+                love.graphics.polygon("fill", verts)
+            end
+            if overlay.line then
+                love.graphics.setColor(overlay.line[1], overlay.line[2], overlay.line[3], overlay.line[4])
+                love.graphics.polygon("line", verts)
+            end
+            if overlay.draw then
+                overlay.draw(verts, cell.x, cell.y + yOffset)
+            end
+        end
+
         local insetVerts = hex:drawHexagon(cell.x, cell.y + yOffset, hex.radius - 2)
 
         local isCurrentActor = state.selectedActor and state.selectedActor.q == cell.q and state.selectedActor.r == cell.r
@@ -305,11 +423,18 @@ function drawHealthBar(entity, x, y, damage)
 end
 
 function drawActionIndicator(entity, x, y)
-    if entity:isCharacter() and entity.hasActedThisTurn then
+    if not entity:isCharacter() then return end
+    if entity.hasActedThisTurn then
         love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
         love.graphics.circle("fill", x + 15, y - 15, 8)
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.print("\xE2\x9C\x93", x + 11, y - 20)
+    elseif entity.isPlayable and not entity.hasMovedThisTurn then
+        love.graphics.setColor(0.2, 0.9, 0.2, 0.9)
+        love.graphics.circle("fill", x + 15, y - 15, 8)
+    elseif entity.isPlayable and entity.hasMovedThisTurn then
+        love.graphics.setColor(1, 0.7, 0, 0.9)
+        love.graphics.circle("fill", x + 15, y - 15, 8)
     end
 end
 
@@ -324,11 +449,6 @@ function drawEntity(entity, state)
         alpha = 1 - t
         scale = 1 - t * 0.7
         love.graphics.setColor(1, 1, 1, alpha)
-    end
-
-    if entity.isPlayable and entity.hasMovedThisTurn and not entity.hasActedThisTurn then
-        love.graphics.setColor(0.5, 0.8, 0.5, 0.9)
-        love.graphics.print("\xF0\x9F\x8F\x83", x + 18, y - 20)
     end
 
     if entity.sprite then

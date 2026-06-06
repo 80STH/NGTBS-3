@@ -27,6 +27,7 @@ windTorrent = nil
 dpiScale = 1
 logicalW = 0
 logicalH = 0
+screenShake = { timer = 0, intensity = 6, duration = 0.3 }
 
 function syncStateToGlobals()
     entities = state.entities
@@ -58,6 +59,10 @@ function syncStateToGlobals()
     showEnemyOrder = state.showEnemyOrder
     dpiScale = state.dpiScale
     DEBUG_COMBAT = state.DEBUG_COMBAT
+    healAbility = state.healAbility
+    healUI = state.healUI
+    extraMoveAbility = state.extraMoveAbility
+    extraMoveUI = state.extraMoveUI
 end
 
 function syncGlobalsToState()
@@ -89,6 +94,10 @@ function syncGlobalsToState()
     state.pushAnimations = pushAnimations
     state.dpiScale = dpiScale
     state.showEnemyOrder = showEnemyOrder
+    state.healAbility = healAbility
+    state.healUI = healUI
+    state.extraMoveAbility = extraMoveAbility
+    state.extraMoveUI = extraMoveUI
 end
 
 function love.load()
@@ -97,7 +106,7 @@ function love.load()
     attackButtons = {}
     dpiScale = love.window.getDPIScale()
     restartButton = {
-        x = 10, y = 320, width = 120, height = 30,
+        x = 10, y = 295, width = 120, height = 30,
         text = "Restart Game", isHovered = false
     }
     sti = require 'libraries/sti'
@@ -112,7 +121,7 @@ function love.load()
     )
 
     turnCount = 0
-    maxTurns = 1
+    maxTurns = 5
     decayAppliedForTurnLimit = false
     decayMessageTimer = 0
     gameActive = true
@@ -122,7 +131,7 @@ function love.load()
 
     windTorrentUI = {
         active = false,
-        button = { x = 10, y = 240, width = 120, height = 30 }
+        button = { x = 10, y = 225, width = 120, height = 30 }
     }
     hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
 
@@ -184,13 +193,18 @@ function love.load()
     actionHistory = {}
 
     endTurnButton = {
-        x = 10, y = 280, width = 120, height = 30,
+        x = 10, y = 260, width = 120, height = 30,
         text = "End Turn", isHovered = false
     }
 
     windTorrent = combat.WindTorrentAttack.new()
 
-    windTorrentUI.button = { x = 10, y = 240, width = 120, height = 30, isHovered = false }
+    healAbility = { hasBeenUsed = false }
+    healUI = { active = false }
+    extraMoveAbility = { hasBeenUsed = false }
+    extraMoveUI = { active = false }
+
+    windTorrentUI.button = { x = 10, y = 225, width = 120, height = 30, isHovered = false }
 
     showEnemyOrder = false
 
@@ -287,6 +301,10 @@ function love.update(dt)
         decayMessageTimer = decayMessageTimer - dt
     end
 
+    if screenShake.timer > 0 then
+        screenShake.timer = math.max(0, screenShake.timer - dt)
+    end
+
     turnManager.update(dt)
 
     local mx, my = love.mouse.getPosition()
@@ -300,7 +318,7 @@ function love.update(dt)
     end
 
     undoButton = undoButton or {}
-    undoButton.isHovered = (mx >= 10 and mx <= 130 and my >= 200 and my <= 230)
+    undoButton.isHovered = (mx >= 10 and mx <= 130 and my >= 190 and my <= 220)
     endTurnButton.isHovered = (mx >= endTurnButton.x and mx <= endTurnButton.x + endTurnButton.width and
                                my >= endTurnButton.y and my <= endTurnButton.y + endTurnButton.height)
     windTorrentUI.button.isHovered = (mx >= windTorrentUI.button.x and mx <= windTorrentUI.button.x + windTorrentUI.button.width and
@@ -315,6 +333,12 @@ end
 function love.draw()
     love.graphics.push()
     love.graphics.scale(dpiScale)
+    if screenShake.timer > 0 then
+        local t = screenShake.timer / screenShake.duration
+        local ease = (1 - t) * (1 - t)
+        local offsetY = screenShake.intensity * ease * math.sin(t * math.pi * 12)
+        love.graphics.translate(0, offsetY)
+    end
     logicalW = love.graphics.getWidth() / dpiScale
     logicalH = love.graphics.getHeight() / dpiScale
     syncGlobalsToState()

@@ -25,7 +25,7 @@ function GameState.new()
         pendingDigProcessing = false,
     }
     self.turnCount = 0
-    self.maxTurns = 1
+    self.maxTurns = 5
     self.gameActive = true
     self.win = false
     self.loss = false
@@ -42,15 +42,20 @@ function GameState.new()
     self.windTorrent = nil
     self.windTorrentUI = {
         active = false,
-        button = { x = 10, y = 240, width = 120, height = 30, isHovered = false },
+        button = { x = 10, y = 225, width = 120, height = 30, isHovered = false },
     }
 
+    self.healAbility = { hasBeenUsed = false }
+    self.healUI = { active = false }
+    self.extraMoveAbility = { hasBeenUsed = false }
+    self.extraMoveUI = { active = false }
+
     self.restartButton = {
-        x = 10, y = 320, width = 120, height = 30,
+        x = 10, y = 295, width = 120, height = 30,
         text = "Restart Game", isHovered = false,
     }
     self.endTurnButton = {
-        x = 10, y = 280, width = 120, height = 30,
+        x = 10, y = 260, width = 120, height = 30,
         text = "End Turn", isHovered = false,
     }
     self.undoButton = { isHovered = false }
