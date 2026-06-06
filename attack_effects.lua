@@ -84,7 +84,8 @@ function attack_effects.stoneThrow(centerQ, centerR, pushedTargets, hex)
         for _, target in ipairs(pushedTargets) do
             if target and target.entity then
                 local tx, ty = hex:hexToPixel(target.entity.q, target.entity.r)
-                visual.addPushEffect(tx, ty, tx, ty, 0.2)
+                local ptx, pty = hex:hexToPixel(target.pushTo.q, target.pushTo.r)
+                visual.addPushEffect(tx, ty, ptx, pty, 0.2)
             end
         end
     else
