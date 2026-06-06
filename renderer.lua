@@ -337,8 +337,15 @@ function drawEntity(entity, state)
         if state.selectedActor == entity and entity:isCharacter() then
             baseScale = 6 + math.sin(entity.pulse) * 0.2
         end
+        if entity:isObstacle() or entity:isBuilding() then
+            baseScale = 5
+        end
         local finalScale = baseScale * scale
-        love.graphics.draw(entity.sprite, x, y, 0, finalScale, finalScale, sw/2, sh/2)
+        local drawY = y
+        if entity:isObstacle() or entity:isBuilding() then
+            drawY = y - 6
+        end
+        love.graphics.draw(entity.sprite, x, drawY, 0, finalScale, finalScale, sw/2, sh/2)
 
     else
         love.graphics.setColor(entity.color or {1, 1, 1, 1})

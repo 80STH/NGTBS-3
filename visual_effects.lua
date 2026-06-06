@@ -195,6 +195,22 @@ elseif e.type == "ghost_hit" then
     love.graphics.circle("fill", e.x, e.y, 12 + t*10)
     love.graphics.setColor(0.9, 0.6, 1, alpha*0.8)
     love.graphics.circle("line", e.x, e.y, 16 + t*12)
+
+elseif e.type == "ground_slam" then
+    local t = e.timer / e.duration
+    local alpha = 1 - t
+    local sink = 8 * math.sin(t * math.pi)
+    local verts = e.hex:drawHexagon(e.x, e.y + sink, e.hex.radius)
+    -- Сжатый тёмный hex
+    love.graphics.setColor(0.3, 0.2, 0.1, alpha * 0.4)
+    love.graphics.polygon("fill", verts)
+    -- Пульсирующий контур
+    local pulse = 8 * math.sin(t * math.pi)
+    local pulseVerts = e.hex:drawHexagon(e.x, e.y, e.hex.radius + pulse)
+    love.graphics.setColor(0.9, 0.6, 0.2, alpha * 0.6)
+    love.graphics.setLineWidth(2)
+    love.graphics.polygon("line", pulseVerts)
+    love.graphics.setLineWidth(1)
 end
     end
     love.graphics.setColor(1, 1, 1, 1)
@@ -269,6 +285,15 @@ function visual.addMagicExplosion(x, y, r, g, b)
         x = x, y = y,
         r = r or 0.6, g = g or 0.2, b = b or 1.0,
         timer = 0, duration = 0.4
+    })
+end
+
+function visual.addGroundSlam(x, y, hex)
+    table.insert(visual.effects, {
+        type = "ground_slam",
+        x = x, y = y,
+        hex = hex,
+        timer = 0, duration = 0.35
     })
 end
 

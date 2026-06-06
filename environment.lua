@@ -150,6 +150,62 @@ local function loadTileSprite(map, gid, tileWidth, tileHeight)
     return canvas
 end
 
+-- Генерация самописных спрайтов для гор и построек
+local function generateCustomSprite(name, w, h)
+    local canvas = love.graphics.newCanvas(w, h)
+    canvas:setFilter("nearest", "nearest")
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear(0, 0, 0, 0)
+
+    if name == "SuperMountain" then
+        -- Тёмная основа
+        love.graphics.setColor(0.45, 0.4, 0.35)
+        love.graphics.polygon("fill", 0, h, w/2, 0, w, h)
+        -- Светлая сторона (левая)
+        love.graphics.setColor(0.55, 0.5, 0.45)
+        love.graphics.polygon("fill", 0, h, w/2, 0, w/2, h)
+        -- Снежная шапка
+        love.graphics.setColor(0.95, 0.95, 1)
+        love.graphics.polygon("fill", w/2-2, 0, w/2+2, 0, w/2+1, 3, w/2-2, 3)
+        love.graphics.polygon("fill", w/2-1, 1, w/2+1, 1, w/2, 3)
+        -- Тень у основания
+        love.graphics.setColor(0.3, 0.25, 0.2)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+
+    elseif name == "SmallBuilding" then
+        -- Стена
+        love.graphics.setColor(0.7, 0.55, 0.35)
+        love.graphics.rectangle("fill", 1, 4, w-2, h-4)
+        -- Крыша (треугольная)
+        love.graphics.setColor(0.6, 0.25, 0.15)
+        love.graphics.polygon("fill", 0, 4, w/2, 1, w, 4)
+        -- Дверь
+        love.graphics.setColor(0.4, 0.25, 0.15)
+        love.graphics.rectangle("fill", w/2-2, h-4, 4, 4)
+        -- Окно
+        love.graphics.setColor(0.85, 0.9, 1)
+        love.graphics.rectangle("fill", 2, 6, 3, 3)
+
+    elseif name == "BigBuilding" then
+        -- Стена
+        love.graphics.setColor(0.5, 0.55, 0.6)
+        love.graphics.rectangle("fill", 0, 2, w, h-2)
+        -- Плоская крыша
+        love.graphics.setColor(0.4, 0.45, 0.5)
+        love.graphics.rectangle("fill", 0, 0, w, 3)
+        -- Ряды окон
+        love.graphics.setColor(0.8, 0.85, 1)
+        for row = 0, 1 do
+            for col = 0, 2 do
+                love.graphics.rectangle("fill", 2 + col * 4, 5 + row * 5, 2, 3)
+            end
+        end
+    end
+
+    love.graphics.setCanvas()
+    return canvas
+end
+
 -- Создание сущности с текстурой из тайлсета
 local function createEntityFromGID(map, gid, gridX, gridY)
     local def = gidToEntity[gid]
@@ -157,7 +213,13 @@ local function createEntityFromGID(map, gid, gridX, gridY)
 
     local tileWidth = map.tilewidth or 32
     local tileHeight = map.tileheight or 32
-    local entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)
+    local entitySprite
+
+    if def.name == "SuperMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" then
+        entitySprite = generateCustomSprite(def.name, tileWidth, tileHeight)
+    else
+        entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)
+    end
     
     -- Fallback, если не удалось загрузить спрайт
     if not entitySprite then

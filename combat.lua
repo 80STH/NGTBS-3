@@ -325,13 +325,20 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     local firstTarget, firstHex, secondTarget, secondHex = self:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     attack_effects.piercingShoot(attacker, firstTarget, secondTarget, stepX, stepY, stepZ, hex)
     if not firstTarget then return false, "No target in that direction!" end
-    if secondTarget then
-        self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil, globalHealth)
-        self:pushTargetInDirection(secondTarget, secondHex.q, secondHex.r, stepX, stepY, stepZ, hex, entities, sounds)
-        combat.startPushAnimations(hex)   -- <-- добавить
+    if firstTarget:isBuilding() then
+        self:dealDamageToTarget(firstTarget, attacker, 1, entities, sounds, nil, globalHealth)
+        attacker.hasActedThisTurn = true
+        return true
     end
     self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, entities, sounds)
-    combat.startPushAnimations(hex)   -- <-- добавить
+    combat.startPushAnimations(hex)
+    if secondTarget then
+        self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil, globalHealth)
+        if secondTarget.isPushable ~= false then
+            self:pushTargetInDirection(secondTarget, secondHex.q, secondHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+            combat.startPushAnimations(hex)
+        end
+    end
     attacker.hasActedThisTurn = true
     return true
 end
@@ -341,11 +348,11 @@ function combat.PiercingShootAttack:getPushCells(attacker, targetQ, targetR, hex
     if not stepX then return {} end
     local firstTarget, firstHex, secondTarget, secondHex = self:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     local cells = {}
-    if firstTarget and firstHex then
+    if firstTarget and firstHex and firstTarget.isPushable ~= false then
         local pushQ, pushR = hex_utils.applyCubeStep(firstHex.q, firstHex.r, stepX, stepY, stepZ)
         table.insert(cells, {q = pushQ, r = pushR, edge = not hex:isValidHex(pushQ, pushR)})
     end
-    if secondTarget and secondHex then
+    if secondTarget and secondHex and secondTarget.isPushable ~= false then
         local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
         table.insert(cells, {q = pushQ, r = pushR, edge = not hex:isValidHex(pushQ, pushR)})
     end
@@ -402,6 +409,9 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
     if distance < self.minRange then
         return false, "Target too close! (minimum 2)"
     end
+    if not hex:isActiveHex(targetQ, targetR) then
+        return false, "Cannot target outside the active area"
+    end
     -- Проверка прямой линии
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
@@ -411,22 +421,19 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
     if centerEntity then
     -- Наносим урон цели вместо создания камня
     self:dealDamageToTarget(centerEntity, attacker, 1, entities, sounds, nil, globalHealth)
+elseif terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
+    -- Камень тонет в воде
+    local cx, cy = hex:hexToPixel(targetQ, targetR)
+    visual.addEffect(cx, cy, "drown", 0.3)
+    print("[Stone] Stone sinks in water at (" .. targetQ .. "," .. targetR .. ")")
 else
     -- Создаём камень (как было)
     local stone = Entity.new("Stone", Entity.TYPES.OBSTACLE, targetQ, targetR, 1, false, 0, nil, nil, {})
     stone.isPushable = true
     stone.color = {0.5,0.5,0.5,1}
     table.insert(entities, stone)
+    print("[Stone] A stone appears at (" .. targetQ .. "," .. targetR .. ")")
 end
-    if not centerEntity then
-        local stone = Entity.new("Stone", Entity.TYPES.OBSTACLE, targetQ, targetR, 1, false, 0, nil, nil, {})
-        stone.isPushable = true
-        stone.color = {0.5, 0.5, 0.5, 1}
-        table.insert(entities, stone)
-        print("[Stone] A stone appears at (" .. targetQ .. "," .. targetR .. ")")
-    else
-        print("[Stone] Center cell occupied, stone not placed, but push still occurs")
-    end
 
     -- Направление от атакующего к цели
     local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
@@ -463,6 +470,7 @@ end
 function combat.AoePushAttack:getPushCells(attacker, targetQ, targetR, hex, entities)
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
     if distance < self.minRange then return {} end
+    if not hex:isActiveHex(targetQ, targetR) then return {} end
 
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return {} end

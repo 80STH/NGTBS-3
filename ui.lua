@@ -159,27 +159,49 @@ end
 -- Отрисовка стрелки отталкивания (с отступом от центров)
 function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha)
     local angle = math.atan2(toY - fromY, toX - fromX)
-    local arrowSize = 18
-    local lineWidth = 4
+    local arrowSize = 16
+    local lineWidth = 3
     local radius = hex.radius
     local offset = radius * 0.3
     local startX = fromX + math.cos(angle) * offset
     local startY = fromY + math.sin(angle) * offset
     local endX = toX - math.cos(angle) * offset
     local endY = toY - math.sin(angle) * offset
+
+    local cr = r or 1
+    local cg = g or 0.8
+    local cb = b or 0.2
+    local ca = alpha or 0.9
+
+    -- Тень
+    love.graphics.setColor(0, 0, 0, ca * 0.35)
+    love.graphics.setLineWidth(lineWidth + 2)
+    love.graphics.line(startX + 2, startY + 2, endX + 2, endY + 2)
+    -- Стрелка (линия)
+    love.graphics.setColor(cr, cg, cb, ca)
     love.graphics.setLineWidth(lineWidth)
-    love.graphics.setColor(r or 1, g or 0.8, b or 0.2, alpha or 0.9)
     love.graphics.line(startX, startY, endX, endY)
-    local leftAngle = angle + math.pi * 0.7
-    local rightAngle = angle - math.pi * 0.7
-    love.graphics.line(endX, endY, endX + math.cos(leftAngle) * arrowSize, endY + math.sin(leftAngle) * arrowSize)
-    love.graphics.line(endX, endY, endX + math.cos(rightAngle) * arrowSize, endY + math.sin(rightAngle) * arrowSize)
     love.graphics.setLineWidth(1)
+
+    -- Треугольный наконечник
+    local headLen = arrowSize
+    local headWidth = headLen * 0.5
+    local lx = endX + math.cos(angle + math.pi * 0.85) * headWidth
+    local ly = endY + math.sin(angle + math.pi * 0.85) * headWidth
+    local rx = endX + math.cos(angle - math.pi * 0.85) * headWidth
+    local ry = endY + math.sin(angle - math.pi * 0.85) * headWidth
+    local tipX = endX + math.cos(angle) * headLen
+    local tipY = endY + math.sin(angle) * headLen
+
+    love.graphics.setColor(0, 0, 0, ca * 0.35)
+    love.graphics.polygon("fill", tipX + 1, tipY + 1, lx + 1, ly + 1, rx + 1, ry + 1)
+    love.graphics.setColor(cr, cg, cb, ca)
+    love.graphics.polygon("fill", tipX, tipY, lx, ly, rx, ry)
 end
 
 -- Нарисовать значок столкновения
 function ui.drawCollisionIcon(x, y, damage, isDouble)
-    love.graphics.setColor(0.8, 0.4, 0, 1)
+    love.graphics.setColor(0.8, 0, 0, 1)
     love.graphics.circle("fill", x, y, 12)
     love.graphics.setColor(1, 1, 1, 1)
     if damage and damage > 0 then
@@ -347,10 +369,16 @@ end
 function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR, entities)
     if not attackMode or not attack then return end
     if not attacker or attacker.hasActedThisTurn then return end
+    globalHealth.previewDamage = 0
 
-    -- Получаем дистанцию до наведённой клетки
+    -- Проверяем, можно ли вообще применить атаку на эту клетку
     local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
     if distance > attack.range then return end
+    if not hex:isActiveHex(hoverQ, hoverR) then return end
+    if attack.getLineDirection then
+        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+        if not stepX then return end
+    end
 
     -- Анализируем тип атаки и получаем детали предпросмотра
     local previewData = nil
@@ -387,11 +415,17 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
             if firstTarget and targetHex then
                 local x, y = getDrawCoords(targetHex.q, targetHex.r)
                 local vertices = hex:drawHexagon(x, y, hex.radius)
+                -- Тень под целью
+                love.graphics.setColor(0, 0, 0, 0.25)
+                love.graphics.polygon("fill", vertices)
                 love.graphics.setColor(0.6, 0.2, 0.8, 0.3)
                 love.graphics.polygon("fill", vertices)
                 love.graphics.setColor(0.8, 0.4, 1, 0.8)
                 love.graphics.polygon("line", vertices)
                 drawHealthBar(firstTarget, x, y, attack.damage)
+                if firstTarget:isBuilding() then
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + attack.damage
+                end
             end
         end
         return
@@ -410,6 +444,9 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
                 love.graphics.setColor(1, 0.4, 0.4, 0.8)
                 love.graphics.polygon("line", vertices)
                 drawHealthBar(target, x, y, attack.damage)
+                if target:isBuilding() then
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + attack.damage
+                end
             end
         end
         return
@@ -422,14 +459,23 @@ if attack.name == "Magic Bolt" then
         if stepX then
             local target = getEntityAtHex(hoverQ, hoverR, entities)
             if target then
-                -- ... подсветка цели ...
-                local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
                 local toX, toY = getDrawCoords(hoverQ, hoverR)
+                local vertices = hex:drawHexagon(toX, toY, hex.radius)
+                love.graphics.setColor(0, 0, 0, 0.25)
+                love.graphics.polygon("fill", vertices)
+                local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
                 local midX = (fromX + toX) / 2
                 local midY = (fromY + toY) / 2
                 local ctrlX = midX
                 local ctrlY = midY - 60
-                ui.drawDottedArc(fromX, fromY, toX, toY, ctrlX, ctrlY, 5, 25, time)
+                ui.drawDottedArc(fromX, fromY, toX, toY, ctrlX, ctrlY, 5, 25, love.timer.getTime())
+                if target:isBuilding() or (target:isCharacter() and not target.isPlayable) then
+                    local dmg = attack.damage or 1
+                    drawHealthBar(target, toX, toY, dmg)
+                    if target:isBuilding() then
+                        globalHealth.previewDamage = (globalHealth.previewDamage or 0) + dmg
+                    end
+                end
             end
         end
     end
@@ -445,6 +491,15 @@ end
             if lastFree then
                 local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
                 local toX, toY = getDrawCoords(lastFree.q, lastFree.r)
+                -- Светящийся след рывка
+                local trailPulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 6)
+                love.graphics.setLineWidth(6)
+                love.graphics.setColor(0.3, 1, 0.3, 0.15 * trailPulse)
+                love.graphics.line(fromX, fromY, toX, toY)
+                love.graphics.setLineWidth(2)
+                love.graphics.setColor(0.6, 1, 0.6, 0.4 * trailPulse)
+                love.graphics.line(fromX, fromY, toX, toY)
+                love.graphics.setLineWidth(1)
                 ui.drawPushArrow(fromX, fromY, toX, toY)
                 -- Силуэт атакующего на целевой клетке
                 local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
@@ -474,6 +529,9 @@ end
                     end
                 end
                 drawHealthBar(firstTarget, targetX, targetY, totalDamage)
+                if firstTarget:isBuilding() then
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + totalDamage
+                end
                 
                 if targetHex then
                     local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
@@ -512,6 +570,12 @@ end
             end
 
             if firstTarget then
+                -- Пунктирная линия от атакующего к цели
+                if attack.getLineDirection then
+                    local fx, fy = getDrawCoords(attacker.q, attacker.r)
+                    local tx, ty = getDrawCoords(firstTarget.q, firstTarget.r)
+                    ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+                end
                 previewData = {
                     {
                         target = firstTarget,
@@ -550,18 +614,20 @@ end
                 local firstTarget, firstHex, secondTarget, secondHex = attack:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
                 previewData = {}
                 if firstTarget and firstHex then
+                    local isPushable = firstTarget.isPushable ~= false
                     table.insert(previewData, {
                         target = firstTarget,
                         fromCell = {q = firstHex.q, r = firstHex.r},
-                        pushTo = pushCells[1],
-                        attackDamage = 0,
+                        pushTo = isPushable and pushCells[1] or nil,
+                        attackDamage = firstTarget:isBuilding() and 1 or 0,
                     })
                 end
                 if secondTarget and secondHex and #pushCells >= 2 then
+                    local isPushable = secondTarget.isPushable ~= false
                     table.insert(previewData, {
                         target = secondTarget,
                         fromCell = {q = secondHex.q, r = secondHex.r},
-                        pushTo = pushCells[2],
+                        pushTo = isPushable and pushCells[2] or nil,
                         attackDamage = 1,
                     })
                 end
@@ -573,6 +639,7 @@ end
 if attack.name == "Stone Throw" then
     local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
     if dist < (attack.minRange or 2) or dist > attack.range then return end
+    if not hex:isActiveHex(hoverQ, hoverR) then return end
 
     local dirQ, dirR = hoverQ - attacker.q, hoverR - attacker.r
 
@@ -580,14 +647,28 @@ if attack.name == "Stone Throw" then
     local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
     if not stepX then return end
 
+    local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
     local centerX, centerY = getDrawCoords(hoverQ, hoverR)
+    local midX = (fromX + centerX) / 2
+    local midY = (fromY + centerY) / 2
+    ui.drawDottedArc(fromX, fromY, centerX, centerY, midX, midY - 50, 4, 20, love.timer.getTime())
     local centerVertices = hex:drawHexagon(centerX, centerY, hex.radius)  -- <-- добавлено
-    love.graphics.setColor(1, 1, 0, 0.3)
-    love.graphics.polygon("fill", centerVertices)
+    if terrainMap and terrainMap[hoverQ] and terrainMap[hoverQ][hoverR] == "water" then
+        love.graphics.setColor(0.2, 0.5, 0.9, 0.4)
+        love.graphics.polygon("fill", centerVertices)
+        love.graphics.setColor(0.3, 0.6, 1, 0.8)
+        love.graphics.polygon("line", centerVertices)
+    else
+        love.graphics.setColor(1, 1, 0, 0.3)
+        love.graphics.polygon("fill", centerVertices)
+    end
     -- Урон, если есть цель
     local targetEntity = getEntityAtHex(hoverQ, hoverR, entities)
     if targetEntity and targetEntity.health > 0 then
         drawHealthBar(targetEntity, centerX, centerY, 1)
+        if targetEntity:isBuilding() then
+            globalHealth.previewDamage = (globalHealth.previewDamage or 0) + 1
+        end
     end
 
     local neighbors = attack:getNeighborsInDirection(hoverQ, hoverR, dirQ, dirR, hex)
@@ -620,7 +701,19 @@ local hasTarget = target and target:isCharacter() and target.health > 0
             local toX, toY = getDrawCoords(pushQ, pushR)
             if hasTarget then
                 ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.8, 0.2, 0.9)
-                drawHealthBar(target, fromX, fromY, 0)
+                local colDamage, colReason, colOccupant = ui.checkCollisionDamage(
+                    target, nb.q, nb.r, pushQ, pushR, hex, entities
+                )
+                drawHealthBar(target, fromX, fromY, colDamage)
+                if colDamage > 0 then
+                    if colOccupant then
+                        drawHealthBar(colOccupant, toX, toY, 1)
+                        if colOccupant:isBuilding() then
+                            globalHealth.previewDamage = (globalHealth.previewDamage or 0) + 1
+                        end
+                    end
+                    ui.drawCollisionIcon(toX, toY, 1, colReason == "collision_both")
+                end
             else
                 ui.drawPushArrow(fromX, fromY, toX, toY, 0.7, 0.7, 0.7, 0.6)
             end
@@ -646,6 +739,9 @@ if attack.name == "Cone Blast" then
         love.graphics.setColor(1, 0.7, 0, 0.8)
         love.graphics.polygon("line", centerVertices)
         drawHealthBar(centerTarget, centerX, centerY, 1)
+        if centerTarget:isBuilding() then
+            globalHealth.previewDamage = (globalHealth.previewDamage or 0) + 1
+        end
     else
         love.graphics.setColor(0.5, 0.5, 0.5, 0.3)
         love.graphics.polygon("fill", centerVertices)
@@ -683,7 +779,19 @@ if attack.name == "Cone Blast" then
             local toX, toY = getDrawCoords(pushQ, pushR)
             if hasTarget then
                 ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.8, 0.2, 0.9)
-                drawHealthBar(target, fromX, fromY, 0)
+                local colDamage, colReason, colOccupant = ui.checkCollisionDamage(
+                    target, nb.q, nb.r, pushQ, pushR, hex, entities
+                )
+                drawHealthBar(target, fromX, fromY, colDamage)
+                if colDamage > 0 then
+                    if colOccupant then
+                        drawHealthBar(colOccupant, toX, toY, 1)
+                        if colOccupant:isBuilding() then
+                            globalHealth.previewDamage = (globalHealth.previewDamage or 0) + 1
+                        end
+                    end
+                    ui.drawCollisionIcon(toX, toY, 1, colReason == "collision_both")
+                end
             else
                 ui.drawPushArrow(fromX, fromY, toX, toY, 0.7, 0.7, 0.7, 0.6)
             end
@@ -694,6 +802,14 @@ end
 
     if not previewData or #previewData == 0 then
         return
+    end
+
+    -- Собираем здания, которые уже учтены как прямые цели
+    local directBuildingIds = {}
+    for _, pd in ipairs(previewData) do
+        if pd.target and pd.target:isBuilding() and pd.attackDamage > 0 then
+            directBuildingIds[pd.target.q .. "," .. pd.target.r] = true
+        end
     end
 
     -- Отрисовка для каждой цели
@@ -719,6 +835,9 @@ end
             end
             if totalDamage > 0 then
                 drawHealthBar(target, fromX, fromY, totalDamage)
+                if target:isBuilding() then
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + totalDamage
+                end
             end
 
             -- Отталкивание
@@ -736,12 +855,18 @@ end
                         local secX, secY = getDrawCoords(second.q, second.r)
                         ui.drawCollisionIcon(secX, secY, 1, true)
                         ui.drawCollisionIcon(crashX, crashY, 1, true)
-                        drawHealthBar(second, secX, secY, 1)   -- <-- добавить урон зданию
+                        drawHealthBar(second, secX, secY, 1)
+                        if second:isBuilding() and not directBuildingIds[second.q .. "," .. second.r] then
+                            globalHealth.previewDamage = (globalHealth.previewDamage or 0) + 1
+                        end
                     elseif reason == "collision_immovable" then
                         ui.drawCollisionIcon(crashX, crashY, 1, false)
                         if second then
                             local secX, secY = getDrawCoords(second.q, second.r)
-                            drawHealthBar(second, secX, secY, 1)   -- <-- добавить урон зданию
+                            drawHealthBar(second, secX, secY, 1)
+                            if second:isBuilding() and not directBuildingIds[second.q .. "," .. second.r] then
+                                globalHealth.previewDamage = (globalHealth.previewDamage or 0) + 1
+                            end
                         end
                     elseif reason == "edge" then
                         ui.drawCollisionIcon(crashX, crashY, 1, false)
@@ -835,6 +960,8 @@ end
 
 -- Полоска глобального здоровья (ячейками)
 function ui.drawGlobalHealthBar(globalHealth)
+    local previewDamage = globalHealth.previewDamage or 0
+    globalHealth.previewDamage = 0
     local pipWidth = 16
     local pipHeight = 32
     local pipSpacing = 0
@@ -851,7 +978,12 @@ function ui.drawGlobalHealthBar(globalHealth)
     for i = 0, globalHealth.max - 1 do
         local px = x + (pipWidth + pipSpacing) * i
         local py = y
-        if i < globalHealth.current then
+        local willTakeDamage = previewDamage > 0 and i >= globalHealth.current - previewDamage and i < globalHealth.current
+        if willTakeDamage then
+            local blink = 0.5 + 0.5 * math.sin(love.timer.getTime() * 8)
+            love.graphics.setColor(1, 0.2 + blink * 0.3, 0.2, 0.9)
+            love.graphics.rectangle("fill", px, py, pipWidth, pipHeight)
+        elseif i < globalHealth.current then
             love.graphics.setColor(0.9, 0.2, 0.15, 0.95)
             love.graphics.rectangle("fill", px, py, pipWidth, pipHeight)
         else
@@ -1157,40 +1289,13 @@ end
             if hex:isActiveHex(targetQ, targetR) then
                 local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
                 local toX, toY = getDrawCoords(targetQ, targetR)
-                -- Рисуем обычную стрелку
-                local angle = math.atan2(toY - fromY, toX - fromX)
-                local arrowSize = 18
-                local lineWidth = 4
-                local radius = hex.radius
-                local offset = radius * 0.3
-
-                local startX = fromX + math.cos(angle) * offset
-                local startY = fromY + math.sin(angle) * offset
-                local endX = toX - math.cos(angle) * offset
-                local endY = toY - math.sin(angle) * offset
-
                 local pulse = 0.5 + 0.5 * math.sin(time * 8)
                 local alpha = 0.5 + 0.3 * pulse
-
-                love.graphics.setLineWidth(lineWidth)
-                love.graphics.setColor(1, 0.2, 0.2, alpha)
-                love.graphics.line(startX, startY, endX, endY)
-
-                local leftAngle = angle + math.pi * 0.7
-                local rightAngle = angle - math.pi * 0.7
-                love.graphics.line(endX, endY,
-                    endX + math.cos(leftAngle) * arrowSize,
-                    endY + math.sin(leftAngle) * arrowSize)
-                love.graphics.line(endX, endY,
-                    endX + math.cos(rightAngle) * arrowSize,
-                    endY + math.sin(rightAngle) * arrowSize)
-
-                love.graphics.setLineWidth(1)
+                ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.2, 0.2, alpha)
             end
         end
         return
     end
-    
 
     -- Для атак с направлением (Dash, Shoot, Piercing) – используем направление
     if enemy.attackDirection then
@@ -1198,34 +1303,9 @@ end
         local targetQ, targetR = hex_utils.applyCubeStep(enemy.q, enemy.r, step.dx, step.dy, step.dz)
         if hex:isValidHex(targetQ, targetR) then
             local toX, toY = getDrawCoords(targetQ, targetR)
-            local angle = math.atan2(toY - fromY, toX - fromX)
-            local arrowSize = 18
-            local lineWidth = 4
-            local radius = hex.radius
-            local offset = radius * 0.3
-
-            local startX = fromX + math.cos(angle) * offset
-            local startY = fromY + math.sin(angle) * offset
-            local endX = toX - math.cos(angle) * offset
-            local endY = toY - math.sin(angle) * offset
-
             local pulse = 0.5 + 0.5 * math.sin(time * 8)
             local alpha = 0.5 + 0.3 * pulse
-
-            love.graphics.setLineWidth(lineWidth)
-            love.graphics.setColor(1, 0.2, 0.2, alpha)
-            love.graphics.line(startX, startY, endX, endY)
-
-            local leftAngle = angle + math.pi * 0.7
-            local rightAngle = angle - math.pi * 0.7
-            love.graphics.line(endX, endY,
-                endX + math.cos(leftAngle) * arrowSize,
-                endY + math.sin(leftAngle) * arrowSize)
-            love.graphics.line(endX, endY,
-                endX + math.cos(rightAngle) * arrowSize,
-                endY + math.sin(rightAngle) * arrowSize)
-
-            love.graphics.setLineWidth(1)
+            ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.2, 0.2, alpha)
         end
     end
 end

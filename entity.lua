@@ -102,6 +102,7 @@ function Entity:takeDamage(damage, globalHealth)
     
     if self:isBuilding() and globalHealth then
         globalHealth.current = math.max(0, globalHealth.current - actualDamage)
+        globalHealth.flashTimer = 2.0
         print(string.format("%s takes %d damage! (%d/%d HP)", 
               self.name, actualDamage, math.max(0, self.health), self.maxHealth))
         print(string.format(" Global health reduced by %d! (%d/%d)", 

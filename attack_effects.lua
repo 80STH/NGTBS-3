@@ -79,17 +79,16 @@ end
 -- Эффект для Stone Throw (AoePushAttack)
 function attack_effects.stoneThrow(centerQ, centerR, pushedTargets, hex)
     local centerX, centerY = hex:hexToPixel(centerQ, centerR)
-    -- Удар камня в центре
-    visual.addEffect(centerX, centerY, "slam", 0.4)
-    -- Волна отталкивания
-    for _, target in ipairs(pushedTargets) do
-        if target and target.entity then
-            local tx, ty = getHexCenter(target.entity, hex)
-            local dirX = target.pushTo.q - target.fromCell.q
-            local dirY = target.pushTo.r - target.fromCell.r
-            -- Эффект отталкивания
-            visual.addPushEffect(tx, ty, hex:hexToPixel(target.pushTo.q, target.pushTo.r), 0.2)
+    if terrainMap and terrainMap[centerQ] and terrainMap[centerQ][centerR] == "water" then
+        visual.addEffect(centerX, centerY, "drown", 0.4)
+        for _, target in ipairs(pushedTargets) do
+            if target and target.entity then
+                local tx, ty = hex:hexToPixel(target.entity.q, target.entity.r)
+                visual.addPushEffect(tx, ty, tx, ty, 0.2)
+            end
         end
+    else
+        visual.addGroundSlam(centerX, centerY, hex)
     end
 end
 
