@@ -28,6 +28,8 @@ dpiScale = 1
 logicalW = 0
 logicalH = 0
 screenShake = { timer = 0, intensity = 6, duration = 0.3 }
+testViewActive = false
+testViewOffsetY = 0
 
 function syncStateToGlobals()
     entities = state.entities
@@ -316,6 +318,10 @@ function love.update(dt)
             endTurnButton.holdTimer = 0
             endTurn()
         end
+    end
+
+    if testViewActive then
+        testViewOffsetY = math.sin(love.timer.getTime() * 1.5) * 60
     end
 
     if screenShake.timer > 0 then

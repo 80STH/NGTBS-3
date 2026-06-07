@@ -182,6 +182,7 @@ function renderer.draw(state)
     ui.drawEndTurnButton(state.turnState, state.entities)
     ui.drawRestartButton(state.restartButton, state.turnState)
     ui.drawWindTorrentButton(state.windTorrent, state.windTorrentUI, state.turnState, mx, my)
+    ui.drawTestViewButton(mx, my)
 
     ui.drawGlobalHealthBar(state.globalHealth, mx, my)
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
@@ -281,8 +282,13 @@ function drawHexGrid(state, cellOverlays)
                 local terrainType = state.terrainMap and state.terrainMap[col] and state.terrainMap[col][row] or "grass"
                 local cellX, cellY = hex:hexToPixel(col, row)
                 local yOffset = (terrainType == "water") and state.config.WATER_Y_OFFSET or 0
-                local depth = cellY + yOffset
-                table.insert(cells, { q = col, r = row, x = cellX, y = cellY, terrain = terrainType, depth = depth })
+                -- Test view: shift center cell up/down
+                local testY = 0
+                if testViewActive and col == hex.centerQ and row == hex.centerR then
+                    testY = testViewOffsetY
+                end
+                local depth = cellY + yOffset + testY
+                table.insert(cells, { q = col, r = row, x = cellX, y = cellY, terrain = terrainType, depth = depth, testY = testY })
             end
         end
     end
@@ -290,17 +296,18 @@ function drawHexGrid(state, cellOverlays)
     table.sort(cells, function(a, b) return a.depth < b.depth end)
 
     for _, cell in ipairs(cells) do
-        hex:drawTerrainHex(cell.q, cell.r, cell.terrain, cell.x, cell.y)
+        local drawY = cell.y + (cell.testY or 0)
         local yOffset = (cell.terrain == "water") and state.config.WATER_Y_OFFSET or 0
+        hex:drawTerrainHex(cell.q, cell.r, cell.terrain, cell.x, drawY)
         local hexStatuses = status.getAtHex(cell.q, cell.r)
         if #hexStatuses > 0 then
-            ui.drawCellStatusEffects(cell.x, cell.y + yOffset, hex.radius, hexStatuses, love.timer.getTime())
+            ui.drawCellStatusEffects(cell.x, drawY + yOffset, hex.radius, hexStatuses, love.timer.getTime())
         end
 
         local cellKey = cell.q .. "," .. cell.r
         local overlay = cellOverlays and cellOverlays[cellKey]
         if overlay then
-            local verts = hex:drawHexagon(cell.x, cell.y + yOffset, hex.radius)
+            local verts = hex:drawHexagon(cell.x, drawY + yOffset, hex.radius)
             if overlay.fill then
                 love.graphics.setColor(overlay.fill[1], overlay.fill[2], overlay.fill[3], overlay.fill[4])
                 love.graphics.polygon("fill", verts)
@@ -310,11 +317,11 @@ function drawHexGrid(state, cellOverlays)
                 love.graphics.polygon("line", verts)
             end
             if overlay.draw then
-                overlay.draw(verts, cell.x, cell.y + yOffset)
+                overlay.draw(verts, cell.x, drawY + yOffset)
             end
         end
 
-        local insetVerts = hex:drawHexagon(cell.x, cell.y + yOffset, hex.radius - 2)
+        local insetVerts = hex:drawHexagon(cell.x, drawY + yOffset, hex.radius - 2)
 
         local isCurrentActor = state.selectedActor and state.selectedActor.q == cell.q and state.selectedActor.r == cell.r
         local isSelected = (hex.selectedQ == cell.q and hex.selectedR == cell.r)

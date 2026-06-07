@@ -140,6 +140,15 @@ function input.mousepressed(x, y, button)
         return
     end
 
+    -- Test view button
+    local tw, th = 120, 22
+    local tx, ty = logicalW - 130, 10
+    if x >= tx and x <= tx + tw and y >= ty and y <= ty + th then
+        testViewActive = not testViewActive
+        print("Test view: " .. (testViewActive and "ON" or "OFF"))
+        return
+    end
+
     if x >= endTurnButton.x and x <= endTurnButton.x + endTurnButton.width and
        y >= endTurnButton.y and y <= endTurnButton.y + endTurnButton.height then
         if turnState.phase == "player" then
@@ -295,6 +304,14 @@ function input.keypressed(key)
 
     if key == "e" or key == "E" then
         if turnState.phase == "player" then endTurn() end
+        return
+    end
+
+    -- Test view: T to toggle oscillation
+    if key == "t" or key == "T" then
+        testViewActive = not testViewActive
+        if not testViewActive then testViewOffsetY = 0 end
+        print("Test view: " .. (testViewActive and "ON" or "OFF"))
         return
     end
 

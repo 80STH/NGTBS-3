@@ -2547,4 +2547,30 @@ function ui.collectAbilityTargetOverlays(entities, healUI, extraMoveUI, out)
     end
 end
 
+-- Test view button (для тестирования визуала, легко удалить)
+function ui.drawTestViewButton(mx, my)
+    local x = logicalW - 130
+    local y = 10
+    local w, h = 120, 22
+    local isHover = mx >= x and mx <= x + w and my >= y and my <= y + h
+    love.graphics.setColor(testViewActive and 0.3 or 0.4, 0.3, 0.5, 0.85)
+    love.graphics.rectangle("fill", x, y, w, h, 4)
+    love.graphics.setColor(1, 1, 1, 1)
+    local txt = testViewActive and ("Cell: " .. string.format("%.0f", testViewOffsetY)) or "Test Cell (T)"
+    love.graphics.print(txt, x + 4, y + 4)
+    if isHover and testViewActive then
+        local tooltipW, tooltipH = 260, 48
+        local tx, ty = x + w + 6, y
+        if tx + tooltipW > logicalW - 10 then tx = x - tooltipW - 6 end
+        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
+        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(1, 1, 0.6, 1)
+        love.graphics.print("Center cell oscillates: " .. string.format("%.0f", testViewOffsetY), tx + 8, ty + 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.print("T or click: toggle", tx + 8, ty + 26)
+    end
+end
+
 return ui
