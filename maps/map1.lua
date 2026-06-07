@@ -9,7 +9,7 @@ return {
   height = 11,
   tilewidth = 14,
   tileheight = 12,
-  nextlayerid = 4,
+  nextlayerid = 5,
   nextobjectid = 2,
   hexsidelength = 6,
   staggeraxis = "y",
@@ -72,7 +72,16 @@ return {
       properties = {},
       wangsets = {},
       tilecount = 72,
-      tiles = {}
+      tiles = {
+        {
+          id = 4,
+          properties = {
+            ["IsPlayable"] = false,
+            ["MaxHealth"] = 5,
+            ["Name"] = "Zombie"
+          }
+        }
+      }
     }
   },
   layers = {
@@ -94,7 +103,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJyNziEOADAIQ1EQSHr/424C0TTdgvjurawioibc0lQSO0y9sD+vmzmmH9b5pHd8iz3E8bZa3dxY99+fx9I65zyMPQUVA1Y="
+      data = "eJyVzjsKACAMA9Bm6Njc/7g6VJAQ/AxBxNfUjIjscAYmKdkdO/VgT1470aYuFuZesgvmhOmm6fq17r8nz0frnHrK7HofzFoDCA=="
     },
     {
       type = "tilelayer",
@@ -114,7 +123,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJxzZWBgcEXC3FiwK5EYl1opIOYBYkkkMTkKzeZBMtsVajY7VFwej3psfFzukIbSSgwQgE8tDEsSUAezl50EMwm5k5BaAJ29GWg="
+      data = "eJxzZWBgcEXC3FiwK5EYl1opIGYHYkkkMTks6tlIMJsHyWxXqNnsUHF5JPUwwI5DP7rZDEjugJmtBBVHV2uNJA7DkljUIZsNs5cdh5nYwoONgDpC4QUAz9sW/g=="
     },
     {
       type = "tilelayer",
@@ -125,7 +134,7 @@ return {
       id = 3,
       name = "status",
       class = "",
-      visible = true,
+      visible = false,
       opacity = 1,
       offsetx = 0,
       offsety = 0,
@@ -134,7 +143,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJwLYmBgCBpkmAFKK5CgllSzqY01oZhYdwchqac1BgA/XSTu"
+      data = "eJwLYmBgCBpkWHMImk1LN1OKAX8IJkg="
     }
   }
 }

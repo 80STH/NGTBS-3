@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.1" orientation="hexagonal" renderorder="right-down" width="11" height="11" tilewidth="14" tileheight="12" infinite="0" hexsidelength="6" staggeraxis="y" staggerindex="odd" nextlayerid="4" nextobjectid="2">
+<map version="1.10" tiledversion="1.12.1" orientation="hexagonal" renderorder="right-down" width="11" height="11" tilewidth="14" tileheight="12" infinite="0" hexsidelength="6" staggeraxis="y" staggerindex="odd" nextlayerid="5" nextobjectid="2">
  <editorsettings>
   <export target="map1.lua" format="lua"/>
  </editorsettings>
@@ -9,20 +9,27 @@
  </tileset>
  <tileset firstgid="21" name="entities" tilewidth="16" tileheight="16" tilecount="72" columns="9">
   <image source="entities.png" width="159" height="142"/>
+  <tile id="4">
+   <properties>
+    <property name="IsPlayable" type="bool" value="false"/>
+    <property name="MaxHealth" type="int" value="5"/>
+    <property name="Name" value="Zombie"/>
+   </properties>
+  </tile>
  </tileset>
  <layer id="1" name="terrain" width="11" height="11">
   <data encoding="base64" compression="zlib">
-   eJyNziEOADAIQ1EQSHr/424C0TTdgvjurawioibc0lQSO0y9sD+vmzmmH9b5pHd8iz3E8bZa3dxY99+fx9I65zyMPQUVA1Y=
+   eJyVzjsKACAMA9Bm6Njc/7g6VJAQ/AxBxNfUjIjscAYmKdkdO/VgT1470aYuFuZesgvmhOmm6fq17r8nz0frnHrK7HofzFoDCA==
   </data>
  </layer>
  <layer id="2" name="entities" width="11" height="11">
   <data encoding="base64" compression="zlib">
-   eJxzZWBgcEXC3FiwK5EYl1opIOYBYkkkMTkKzeZBMtsVajY7VFwej3psfFzukIbSSgwQgE8tDEsSUAezl50ItcSGLyG1AKflGYE=
+   eJxzZWBgcEXC3FiwK5EYl1opIGYHYkkkMTks6tlIMJsHyWxXqNnsUHF5JPUwwI5DP7rZDEjugJmtBBVHV2uNJA7DkljUIZsNs5cdh5nYwoONgDpC4QUAz9sW/g==
   </data>
  </layer>
- <layer id="3" name="status" width="11" height="11">
+ <layer id="3" name="status" width="11" height="11" visible="0">
   <data encoding="base64" compression="zlib">
-   eJwLYmBgCBpkmAFKK5CgllSzqY01oZhYdwchqac1BgA/XSTu
+   eJwLYmBgCBpkWHMImk1LN1OKAX8IJkg=
   </data>
  </layer>
 </map>
