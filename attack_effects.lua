@@ -20,6 +20,13 @@ function attack_effects.dash(attacker, target, lastFreeCell, hex)
         local toX, toY = hex:hexToPixel(lastFreeCell.q, lastFreeCell.r)
         visual.addDashEffect(fromX, fromY, toX, toY)
     end
+    -- Удар по цели
+    if target then
+        local x, y = getHexCenter(target, hex)
+        visual.addEffect(x, y, "hit", 0.3)
+        -- Добавляем эффект "сдвиг воздуха"
+        visual.addShockwave(x, y, 15)
+    end
 end
 
 -- Эффект для Flip (переворот)

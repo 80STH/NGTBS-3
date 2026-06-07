@@ -172,120 +172,41 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
 
     local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
-    -- Визуальный эффект рывка (след)
-    if lastFree then
-        local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
-        local toX, toY = getDrawCoords(lastFree.q, lastFree.r)
-        visual.addDashEffect(fromX, fromY, toX, toY)
+    attack_effects.dash(attacker, firstTarget, lastFree, hex)
+    --  Перемещение атакующего в последнюю свободную клетку
+    if lastFree and (lastFree.q ~= attacker.q or lastFree.r ~= attacker.r) then
+        combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
     end
 
-    if lastFree and (lastFree.q ~= attacker.q or lastFree.r ~= attacker.r) then
-        -- Анимация движения модельки атакующего до lastFree
-        local startX, startY = getDrawCoords(attacker.q, attacker.r)
-        local endX, endY = getDrawCoords(lastFree.q, lastFree.r)
-        table.insert(pushAnimations.queue, {
-            obj = attacker,
-            fromQ = attacker.q, fromR = attacker.r,
-            toQ = lastFree.q, toR = lastFree.r,
-            startX = startX, startY = startY,
-            endX = endX, endY = endY,
-            timer = 0, duration = 0.2,
-            isMoving = false,
-            isDash = true,
-            onComplete = function(pushedObj)
-                pushedObj.q = lastFree.q
-                pushedObj.r = lastFree.r
-                pushedObj.currentDrawX = nil
-                pushedObj.currentDrawY = nil
+    -- Наносим урон первой цели, если она есть
+    if firstTarget then
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
+    end
 
-                -- Применяем эффекты клетки после перемещения
-                if terrainMap then
-                    local died = effects.applyAllCellEffects(pushedObj, lastFree.q, lastFree.r, terrainMap, entities, globalHealth)
-                    if died then pushedObj:startDeath() end
-                end
-
-                -- Удар и урон в момент столкновения с целью
-                if firstTarget and targetHex then
-                    local cx, cy = getDrawCoords(targetHex.q, targetHex.r)
-                    visual.addEffect(cx, cy, "hit", 0.3)
-                    visual.addShockwave(cx, cy, 15)
-                    if sounds and sounds.collision then sounds.collision:play() end
-                end
-
-                if firstTarget then
-                    self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
-                end
-
-                -- Отталкивание цели
-                if firstTarget and firstTarget.health > 0 and targetHex then
-                    local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-                    local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
-                    local isEdge = not hex:isActiveHex(pushQ, pushR)
-                    if isEdge or occupant or not firstTarget.isPushable then
-                        if firstTarget.health > 0 then
-                            firstTarget.health = firstTarget.health - 1
-                            print(firstTarget.name .. " takes 1 collision damage!")
-                            if sounds and sounds.collision then sounds.collision:play() end
-                        end
-                        if occupant and occupant.health > 0 then
-                            occupant.health = occupant.health - 1
-                            print(occupant.name .. " takes 1 collision damage!")
-                            if sounds and sounds.collision then sounds.collision:play() end
-                        end
-                        if firstTarget.health <= 0 then firstTarget:startDeath() end
-                        if occupant and occupant.health <= 0 then occupant:startDeath() end
-                        local effectX, effectY = getDrawCoords(targetHex.q, targetHex.r)
-                        visual.addEffect(effectX, effectY, "slam")
-                    else
-                        self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
-                    end
-                end
-
-                -- Атакующий отъезжает на клетку назад (эффект отдачи)
-                local bounceQ, bounceR = hex_utils.applyCubeStep(lastFree.q, lastFree.r, -stepX, -stepY, -stepZ)
-                combat.addBounceAnimation(attacker, lastFree.q, lastFree.r, bounceQ, bounceR, 0.15)
+    -- Отталкивание цели (как было)
+    if firstTarget and targetHex then
+        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+        local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
+        local isEdge = not hex:isActiveHex(pushQ, pushR)
+        if isEdge or occupant then
+            -- урон от столкновения
+            if firstTarget.health > 0 then
+                firstTarget.health = firstTarget.health - 1
+                print(firstTarget.name .. " takes 1 collision damage!")
+                if sounds and sounds.collision then sounds.collision:play() end
             end
-        })
-    else
-        -- Цель рядом — анимация отдачи без движения вперёд
-        if firstTarget and targetHex then
-            local cx, cy = getDrawCoords(targetHex.q, targetHex.r)
-            visual.addEffect(cx, cy, "hit", 0.3)
-            visual.addShockwave(cx, cy, 15)
-            if sounds and sounds.collision then sounds.collision:play() end
-        end
-
-        if firstTarget then
-            self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
-        end
-
-        if firstTarget and firstTarget.health > 0 and targetHex then
-            local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-            local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
-            local isEdge = not hex:isActiveHex(pushQ, pushR)
-            if isEdge or occupant then
-                if firstTarget.health > 0 then
-                    firstTarget.health = firstTarget.health - 1
-                    print(firstTarget.name .. " takes 1 collision damage!")
-                    if sounds and sounds.collision then sounds.collision:play() end
-                end
-                if occupant and occupant.health > 0 then
-                    occupant.health = occupant.health - 1
-                    print(occupant.name .. " takes 1 collision damage!")
-                    if sounds and sounds.collision then sounds.collision:play() end
-                end
-                if firstTarget.health <= 0 then firstTarget:startDeath() end
-                if occupant and occupant.health <= 0 then occupant:startDeath() end
-                local effectX, effectY = getDrawCoords(targetHex.q, targetHex.r)
-                visual.addEffect(effectX, effectY, "slam")
-            else
-                self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+            if occupant and occupant.health > 0 then
+                occupant.health = occupant.health - 1
+                print(occupant.name .. " takes 1 collision damage!")
+                if sounds and sounds.collision then sounds.collision:play() end
             end
+            if firstTarget.health <= 0 then firstTarget:startDeath() end
+            if occupant and occupant.health <= 0 then occupant:startDeath() end
+            local effectX, effectY = getDrawCoords(targetHex.q, targetHex.r)
+            visual.addEffect(effectX, effectY, "slam")
+        else
+            self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
         end
-
-        -- Отдача атакующего назад
-        local recoilQ, recoilR = hex_utils.applyCubeStep(attacker.q, attacker.r, -stepX, -stepY, -stepZ)
-        combat.addBounceAnimation(attacker, attacker.q, attacker.r, recoilQ, recoilR, 0.15)
     end
 
     combat.startPushAnimations(hex)
@@ -950,14 +871,13 @@ function combat.updatePushAnimations(dt, hex)
 
         local ease
         if anim.bounceBack then
-            local forwardT = math.min(1, t * 1.25)
+            -- Движение вперёд на 80% времени, затем возврат
+            local forwardT = math.min(1, t * 1.25) -- 0..1 за 80% времени
             ease = forwardT
             if t > 0.8 then
                 local backT = (t - 0.8) / 0.2
                 ease = 1 - backT
             end
-        elseif anim.isDash then
-            ease = 1 - math.pow(1 - t, 2)
         else
             ease = t < 0.5 and 2 * t * t or 1 - math.pow(-2 * t + 2, 2) / 2
         end
