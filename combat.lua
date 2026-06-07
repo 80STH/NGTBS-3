@@ -183,8 +183,8 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
         self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
     end
 
-    -- Отталкивание цели (как было)
-    if firstTarget and targetHex then
+    -- Отталкивание цели (только для тех, кого можно толкать)
+    if firstTarget and targetHex and firstTarget.isPushable then
         local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
         local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
         local isEdge = not hex:isActiveHex(pushQ, pushR)
@@ -195,13 +195,13 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
                 print(firstTarget.name .. " takes 1 collision damage!")
                 if sounds and sounds.collision then sounds.collision:play() end
             end
-            if occupant and occupant.health > 0 then
+            if occupant and occupant.isPushable and occupant.health > 0 then
                 occupant.health = occupant.health - 1
                 print(occupant.name .. " takes 1 collision damage!")
                 if sounds and sounds.collision then sounds.collision:play() end
             end
             if firstTarget.health <= 0 then firstTarget:startDeath() end
-            if occupant and occupant.health <= 0 then occupant:startDeath() end
+            if occupant and occupant.isPushable and occupant.health <= 0 then occupant:startDeath() end
             local effectX, effectY = getDrawCoords(targetHex.q, targetHex.r)
             visual.addEffect(effectX, effectY, "slam")
         else
@@ -343,17 +343,25 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     local firstTarget, firstHex, secondTarget, secondHex = self:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     attack_effects.piercingShoot(attacker, firstTarget, secondTarget, stepX, stepY, stepZ, hex)
     if not firstTarget then return false, "No target in that direction!" end
-    if firstTarget.isPushable ~= false then
-        self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, entities, sounds)
-        combat.startPushAnimations(hex)
-    end
+    -- Урон второй цели
     if secondTarget then
         self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil, globalHealth)
-        if secondTarget.isPushable ~= false then
-            self:pushTargetInDirection(secondTarget, secondHex.q, secondHex.r, stepX, stepY, stepZ, hex, entities, sounds)
-            combat.startPushAnimations(hex)
-        end
     end
+    -- Толкаем вторую (дальнюю) цель первой, чтобы освободить клетку для первой
+    if secondTarget and secondTarget.isPushable ~= false and secondHex then
+        local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
+        self:pushTargetToHex(secondTarget, secondHex.q, secondHex.r, pushQ, pushR, hex, entities, sounds)
+        -- Сразу обновляем позицию в игровом состоянии, чтобы первая цель не видела коллизию
+        secondTarget.q = pushQ
+        secondTarget.r = pushR
+        secondTarget.currentDrawX = nil
+        secondTarget.currentDrawY = nil
+    end
+    -- Затем толкаем первую (ближнюю) цель
+    if firstTarget.isPushable ~= false then
+        self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+    end
+    combat.startPushAnimations(hex)
     attacker.hasActedThisTurn = true
     return true
 end
@@ -851,67 +859,77 @@ function combat.initNextPushAnimation(hex)
         end
         return
     end
-    local anim = pushAnimations.queue[1]
-    if not anim.isMoving then
-        if not anim.isShake then
-            anim.startX, anim.startY = getDrawCoords(anim.fromQ, anim.fromR)
-            anim.endX, anim.endY = getDrawCoords(anim.toQ, anim.toR)
+    for _, anim in ipairs(pushAnimations.queue) do
+        if not anim.isMoving then
+            if not anim.isShake then
+                anim.startX, anim.startY = getDrawCoords(anim.fromQ, anim.fromR)
+                anim.endX, anim.endY = getDrawCoords(anim.toQ, anim.toR)
+            end
+            anim.timer = 0
+            anim.isMoving = true
         end
-        anim.timer = 0
-        anim.isMoving = true
     end
 end
 
 function combat.updatePushAnimations(dt, hex)
     if not pushAnimations.active or #pushAnimations.queue == 0 then return end
-    local anim = pushAnimations.queue[1]
-    if anim and anim.isMoving then
-        anim.timer = anim.timer + dt
-        local t = math.min(1, anim.timer / anim.duration)
+    local allDone = true
+    for i = #pushAnimations.queue, 1, -1 do
+        local anim = pushAnimations.queue[i]
+        if anim and anim.isMoving then
+            anim.timer = anim.timer + dt
+            local t = math.min(1, anim.timer / anim.duration)
 
-        local ease
-        if anim.bounceBack then
-            -- Движение вперёд на 80% времени, затем возврат
-            local forwardT = math.min(1, t * 1.25) -- 0..1 за 80% времени
-            ease = forwardT
-            if t > 0.8 then
-                local backT = (t - 0.8) / 0.2
-                ease = 1 - backT
-            end
-        else
-            ease = t < 0.5 and 2 * t * t or 1 - math.pow(-2 * t + 2, 2) / 2
-        end
-
-        if anim.isShake then
-            local x, y = getDrawCoords(anim.obj.q, anim.obj.r)
-            anim.obj.currentDrawX = x + anim.offsetX * (1 - ease)
-            anim.obj.currentDrawY = y + anim.offsetY * (1 - ease)
-        else
-            local x = anim.startX + (anim.endX - anim.startX) * ease
-            local y = anim.startY + (anim.endY - anim.startY) * ease
-            anim.obj.currentDrawX = x
-            anim.obj.currentDrawY = y
-        end
-
-        if t >= 1 then
-            if anim.isShake then
-                anim.obj.currentDrawX = nil
-                anim.obj.currentDrawY = nil
-            elseif anim.bounceBack then
-                -- Возвращаем объект в исходную позицию
-                anim.obj.q = anim.fromQ
-                anim.obj.r = anim.fromR
-                anim.obj.currentDrawX = nil
-                anim.obj.currentDrawY = nil
+            local ease
+            if anim.bounceBack then
+                local forwardT = math.min(1, t * 1.25)
+                ease = forwardT
+                if t > 0.8 then
+                    local backT = (t - 0.8) / 0.2
+                    ease = 1 - backT
+                end
             else
-                anim.obj.q = anim.toQ
-                anim.obj.r = anim.toR
-                anim.obj.currentDrawX = nil
-                anim.obj.currentDrawY = nil
+                ease = t < 0.5 and 2 * t * t or 1 - math.pow(-2 * t + 2, 2) / 2
             end
-            if anim.onComplete then anim.onComplete(anim.obj) end
-            table.remove(pushAnimations.queue, 1)
-            combat.initNextPushAnimation(hex)
+
+            if anim.isShake then
+                local x, y = getDrawCoords(anim.obj.q, anim.obj.r)
+                anim.obj.currentDrawX = x + anim.offsetX * (1 - ease)
+                anim.obj.currentDrawY = y + anim.offsetY * (1 - ease)
+            else
+                local x = anim.startX + (anim.endX - anim.startX) * ease
+                local y = anim.startY + (anim.endY - anim.startY) * ease
+                anim.obj.currentDrawX = x
+                anim.obj.currentDrawY = y
+            end
+
+            if t >= 1 then
+                if anim.isShake then
+                    anim.obj.currentDrawX = nil
+                    anim.obj.currentDrawY = nil
+                elseif anim.bounceBack then
+                    anim.obj.q = anim.fromQ
+                    anim.obj.r = anim.fromR
+                    anim.obj.currentDrawX = nil
+                    anim.obj.currentDrawY = nil
+                else
+                    anim.obj.q = anim.toQ
+                    anim.obj.r = anim.toR
+                    anim.obj.currentDrawX = nil
+                    anim.obj.currentDrawY = nil
+                end
+                if anim.onComplete then anim.onComplete(anim.obj) end
+                table.remove(pushAnimations.queue, i)
+            else
+                allDone = false
+            end
+        end
+    end
+    if #pushAnimations.queue == 0 and allDone then
+        pushAnimations.active = false
+        if pushAnimations.globalCallback then
+            pushAnimations.globalCallback()
+            pushAnimations.globalCallback = nil
         end
     end
 end

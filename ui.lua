@@ -587,7 +587,7 @@ end
                     globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(totalDamage, firstTarget.health)
                 end
                 
-                if targetHex and not isEdge then
+                if targetHex and not isEdge and firstTarget.isPushable then
                     if not combat.getEntityAtHex(pushQ, pushR, entities) then
                         local pushX, pushY = getDrawCoords(pushQ, pushR)
                         ui.drawPushArrow(targetX, targetY, pushX, pushY, nil, nil, nil, nil, firstTarget.q, firstTarget.r, pushQ, pushR)

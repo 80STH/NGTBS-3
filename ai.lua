@@ -548,6 +548,9 @@ function isCellDangerousForEntity(q, r, entity)
         return false
     end
     for _, st in ipairs(cellStatuses) do
+        if st == "dig_site" then
+            return true
+        end
         if st == "fire" or st == "acid" then
             if not status.hasEntityStatus(entity, st) then
                 return true
