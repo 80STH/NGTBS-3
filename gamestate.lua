@@ -40,16 +40,6 @@ function GameState.new()
     self.actionHistory = {}
     self.maxUndoCount = 0
 
-    self.windTorrent = nil
-    self.windTorrentUI = {
-        active = false,
-        button = { x = 10, y = 225, width = 120, height = 30, isHovered = false },
-    }
-
-    self.healAbility = { hasBeenUsed = false }
-    self.healUI = { active = false }
-    self.extraMoveAbility = { hasBeenUsed = false }
-    self.extraMoveUI = { active = false }
 
     self.restartButton = {
         x = 10, y = 295, width = 120, height = 30,
@@ -95,42 +85,6 @@ function GameState:getLivingEnemies()
         end
     end
     return enemies
-end
-
-function GameState:getEntityAtHex(q, r)
-    for _, e in ipairs(self.entities) do
-        if e.q == q and e.r == r then
-            return e
-        end
-    end
-    return nil
-end
-
-function GameState:countPlayableActors()
-    local count = 0
-    for _, e in ipairs(self.entities) do
-        if e.isPlayable then
-            count = count + 1
-        end
-    end
-    return count
-end
-
-function GameState:getDrawCoords(q, r)
-    local x, y = self.hex:hexToPixel(q, r)
-    if self.terrainMap and self.terrainMap[q] and self.terrainMap[q][r] == "water" then
-        y = y + config.WATER_Y_OFFSET
-    end
-    return x, y
-end
-
-function GameState:isPositionOccupied(q, r, movingEntity)
-    if not self.hex:isActiveHex(q, r) then return true end
-    if self.terrainMap and self.terrainMap[q] and self.terrainMap[q][r] == "water" then return true end
-    for _, e in ipairs(self.entities) do
-        if e ~= movingEntity and e.q == q and e.r == r then return true end
-    end
-    return false
 end
 
 function GameState:hasLivingEnemies()

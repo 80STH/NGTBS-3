@@ -34,7 +34,8 @@ function restartGame()
         currentPreparingEnemy = nil,
         enemyAttackQueue = {},
         enemyAttackTimer = 0,
-        delayBetweenAttacks = 0.4
+        delayBetweenAttacks = 0.4,
+        pendingDigProcessing = false,
     }
 
     for _, e in ipairs(entities) do
@@ -65,21 +66,20 @@ function restartGame()
         end
     end
 
-    windTorrent = combat.WindTorrentAttack.new()
-    healAbility = { hasBeenUsed = false }
-    healUI = { active = false }
-    extraMoveAbility = { hasBeenUsed = false }
-    extraMoveUI = { active = false }
+    global_abilities.reset()
     dpiScale = love.window.getDPIScale()
 
+    flipTargetActor = nil
     attackMode = false
     selectedAttack = nil
     attackButtons = {}
     actionHistory = {}
     pushAnimations = { queue = {}, active = false }
     visual.effects = {}
+    decayMessageTimer = 0
 
     updateAttackButtons(selectedActor)
+    maxUndoCount = countPlayableActors()
 
     turnCount = 0
     gameActive = true

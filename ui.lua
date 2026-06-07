@@ -4,14 +4,15 @@
 local ui = {}
 local pathfinding = require("pathfinding")
 local combat = require("combat")
-local visual = require("visual_effects")    -- если ещё нет
+local visual = require("visual_effects")
 local hex_utils = require("hex_utils")
+require("ui_buttons")(ui)
+require("ui_status_effects")(ui)
 
 -- ============================================================
 -- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПРЕДПРОСМОТРА АТАК
 -- ============================================================
 
-local buttonFont = love.graphics.newFont(11)
 local hazardTexture = nil
 
 -- Возвращает реальные координаты для отрисовки сущности (с учётом анимаций)
@@ -23,9 +24,7 @@ local function getEntityDisplayPosition(entity, hex)
     return getDrawCoords(entity.q, entity.r)
 end
 
-ui.getHazardTexture = nil -- forward ref
-
-local function getHazardTexture()
+function ui.getHazardTexture()
     if hazardTexture then return hazardTexture end
     local size = 64
     local canvas = love.graphics.newCanvas(size, size)
@@ -43,16 +42,6 @@ local function getHazardTexture()
     return hazardTexture
 end
 
--- Получить сущность на гексе (глобальная функция из main.lua, дублируем для безопасности)
-local function getEntityAtHex(q, r, entities)
-    for _, e in ipairs(entities) do
-        if e.q == q and e.r == r then
-            return e
-        end
-    end
-    return nil
-end
-
 -- Проверка, может ли актор дойти до клетки (с учётом препятствий и длины пути)
 function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     if not hex:isActiveHex(targetQ, targetR) then return false end
@@ -63,7 +52,6 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     end
     
     -- Клетка не должна быть занята (врагом или препятствием)
-    -- isPositionOccupied - глобальная функция из main.lua
     if isPositionOccupied(targetQ, targetR, actor) then
         return false
     end
@@ -223,202 +211,117 @@ end
 -- ОСНОВНЫЕ UI-ФУНКЦИИ, ВЫЗЫВАЕМЫЕ ИЗ MAIN.LUA
 -- ============================================================
 function ui.drawPreparedAttacks(hex, entities)
+    local threatMap = {}
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.preparedAttack then
-            local attack = e.preparedAttack
-            local targetCell = nil
+            local cell = ui.getPreparedAttackTarget(e, entities, hex)
+            if cell then
+                local key = cell.q .. "," .. cell.r
+                if not threatMap[key] then threatMap[key] = 0 end
+                threatMap[key] = threatMap[key] + 1
 
-            -- Для атак, которые ищут первую цель на линии (Ghost, Shoot, Dash, Piercing)
-            if attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
-                if e.attackDirection then
-                    local step = e.attackDirection
-                    local curQ, curR = e.q, e.r
-                    local lastValidQ, lastValidR = curQ, curR
-                    while true do
-                        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
-                        if not hex:isActiveHex(nextQ, nextR) then
-                            break
-                        end
-                        local ent = getEntityAtHex(nextQ, nextR, entities)
-                        if ent and ent ~= e and ent.health > 0 then
-                            lastValidQ, lastValidR = nextQ, nextR
-                            break
-                        end
-                        lastValidQ, lastValidR = nextQ, nextR
-                        curQ, curR = nextQ, nextR
-                    end
-                    if (lastValidQ ~= e.q or lastValidR ~= e.r) then
-                        targetCell = {q = lastValidQ, r = lastValidR}
-                    end
+                local targetEntity = getEntityAtHex(cell.q, cell.r, entities)
+                local x, y
+                if targetEntity and targetEntity.currentDrawX and targetEntity.currentDrawY then
+                    x, y = targetEntity.currentDrawX, targetEntity.currentDrawY
+                else
+                    x, y = getDrawCoords(cell.q, cell.r)
                 end
-
-            elseif attack.name == "Bite" then
-                if e.preparedTargetOffset then
-                    local targetQ, targetR = hex_utils.applyCubeDiff(e.q, e.r,
-                        e.preparedTargetOffset.dx,
-                        e.preparedTargetOffset.dy,
-                        e.preparedTargetOffset.dz)
-                    if hex:isActiveHex(targetQ, targetR) then
-                        targetCell = {q = targetQ, r = targetR}
-                    end
+                if targetEntity and targetEntity.health > 0 then
+                    drawHealthBar(targetEntity, x, y, e.preparedAttack.damage)
                 end
-
-            elseif attack.name == "Magic Bolt" then
-                if e.preparedTargetOffset then
-                    local targetQ, targetR = hex_utils.applyCubeDiff(e.q, e.r,
-                        e.preparedTargetOffset.dx,
-                        e.preparedTargetOffset.dy,
-                        e.preparedTargetOffset.dz)
-                    if hex:isActiveHex(targetQ, targetR) then
-                        targetCell = {q = targetQ, r = targetR}
-                    end
-                end
-            end
-
-if targetCell then
-    local targetEntity = getEntityAtHex(targetCell.q, targetCell.r, entities)
-    local x, y
-    if targetEntity and targetEntity.currentDrawX and targetEntity.currentDrawY then
-        x, y = targetEntity.currentDrawX, targetEntity.currentDrawY
-    else
-        x, y = getDrawCoords(targetCell.q, targetCell.r)
-    end
-
-                    if targetEntity and targetEntity.health > 0 then
-                        drawHealthBar(targetEntity, x, y, attack.damage)
-                    end
-
-                    local vertices = hex:drawHexagon(x, y, hex.radius)
-    
-    -- Подсчёт количества атак на эту цель (от разных врагов)
-    local threatCount = 0
-    for _, other in ipairs(entities) do
-        if other:isCharacter() and not other.isPlayable and other.hasPreparedAttack and other.preparedAttack then
-            local otherAttack = other.preparedAttack
-            local otherTarget = nil
-            -- Аналогично определяем целевую клетку для other
-            if otherAttack.name == "Ghost Bolt" or otherAttack.name == "Shoot" or otherAttack.name == "Dash" or otherAttack.name == "Piercing Shot" then
-                if other.attackDirection then
-                    local step = other.attackDirection
-                    local curQ, curR = other.q, other.r
-                    while true do
-                        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
-                        if not hex:isActiveHex(nextQ, nextR) then break end
-                        local ent = getEntityAtHex(nextQ, nextR, entities)
-                        if ent and ent ~= other and ent.health > 0 then
-                            otherTarget = {q = nextQ, r = nextR}
-                            break
-                        end
-                        curQ, curR = nextQ, nextR
-                    end
-                end
-            elseif otherAttack.name == "Bite" or otherAttack.name == "Magic Bolt" then
-                if other.preparedTargetOffset then
-                    local tq, tr = hex_utils.applyCubeDiff(other.q, other.r,
-                        other.preparedTargetOffset.dx, other.preparedTargetOffset.dy, other.preparedTargetOffset.dz)
-                    if hex:isActiveHex(tq, tr) then
-                        otherTarget = {q = tq, r = tr}
-                    end
-                end
-            end
-            if otherTarget and otherTarget.q == targetCell.q and otherTarget.r == targetCell.r then
-                threatCount = threatCount + 1
             end
         end
     end
-    threatCount = math.min(threatCount, 3)  -- ограничиваем до 3
-    
-    -- Настройки отрисовки в зависимости от количества атак
-    local alpha, r, g, b, scaleMod
-    if threatCount == 1 then
-        alpha = 0.5
-        r, g, b = 1, 0.5, 0.2
-        scaleMod = 1.0
-    elseif threatCount == 2 then
-        alpha = 0.75
-        r, g, b = 1, 0.3, 0.1
-        scaleMod = 1.2
-    else -- threatCount >= 3
-        alpha = 1.0
-        r, g, b = 1, 0, 0
-        scaleMod = 1.4
-    end
-    
-    -- Пульсация (только для 1 и 2 атак)
-    local pulse = 1.0
-    if threatCount <= 2 then
-        local t = love.timer.getTime()
-        pulse = 0.7 + 0.3 * math.sin(t * (5 + threatCount * 3))
-        alpha = alpha * pulse
-    end
-    
-    love.graphics.stencil(function()
-        love.graphics.polygon("fill", vertices)
-    end, "replace", 1)
-    love.graphics.setStencilTest("greater", 0)
-    
-    local tex = getHazardTexture()
-    love.graphics.setColor(r, g, b, alpha)
-    -- Рисуем текстуру, возможно, несколько раз с наложением для усиления
-    if threatCount >= 2 then
-        -- Для 2+ атак рисуем дважды со сдвигом (имитация плотности)
-        love.graphics.draw(tex, x - hex.radius - 2, y - hex.radius - 2, 0,
-                           hex.radius * 2 / tex:getWidth() * scaleMod,
-                           hex.radius * 2 / tex:getHeight() * scaleMod)
-        love.graphics.draw(tex, x - hex.radius + 2, y - hex.radius + 2, 0,
-                           hex.radius * 2 / tex:getWidth() * scaleMod,
-                           hex.radius * 2 / tex:getHeight() * scaleMod)
-    end
-    love.graphics.draw(tex, x - hex.radius, y - hex.radius, 0,
-                       hex.radius * 2 / tex:getWidth() * scaleMod,
-                       hex.radius * 2 / tex:getHeight() * scaleMod)
-    
-    love.graphics.setStencilTest()
-    love.graphics.setColor(1, 1, 1, 1)
-end
+
+    for cellKey, count in pairs(threatMap) do
+        local q, r = cellKey:match("^(%d+),(%d+)$")
+        q, r = tonumber(q), tonumber(r)
+        local x, y = getDrawCoords(q, r)
+        local vertices = hex:drawHexagon(x, y, hex.radius)
+        local threatCount = math.min(count, 3)
+
+        local alpha, rCol, gCol, bCol, scaleMod
+        if threatCount == 1 then
+            alpha, rCol, gCol, bCol, scaleMod = 0.5, 1, 0.5, 0.2, 1.0
+        elseif threatCount == 2 then
+            alpha, rCol, gCol, bCol, scaleMod = 0.75, 1, 0.3, 0.1, 1.2
+        else
+            alpha, rCol, gCol, bCol, scaleMod = 1.0, 1, 0, 0, 1.4
         end
+
+        local pulse = 1.0
+        if threatCount <= 2 then
+            local t = love.timer.getTime()
+            pulse = 0.7 + 0.3 * math.sin(t * (5 + threatCount * 3))
+            alpha = alpha * pulse
+        end
+
+        love.graphics.stencil(function()
+            love.graphics.polygon("fill", vertices)
+        end, "replace", 1)
+        love.graphics.setStencilTest("greater", 0)
+
+        local tex = ui.getHazardTexture()
+        love.graphics.setColor(rCol, gCol, bCol, alpha)
+        if threatCount >= 2 then
+            love.graphics.draw(tex, x - hex.radius - 2, y - hex.radius - 2, 0,
+                               hex.radius * 2 / tex:getWidth() * scaleMod,
+                               hex.radius * 2 / tex:getHeight() * scaleMod)
+            love.graphics.draw(tex, x - hex.radius + 2, y - hex.radius + 2, 0,
+                               hex.radius * 2 / tex:getWidth() * scaleMod,
+                               hex.radius * 2 / tex:getHeight() * scaleMod)
+        end
+        love.graphics.draw(tex, x - hex.radius, y - hex.radius, 0,
+                           hex.radius * 2 / tex:getWidth() * scaleMod,
+                           hex.radius * 2 / tex:getHeight() * scaleMod)
+
+        love.graphics.setStencilTest()
+        love.graphics.setColor(1, 1, 1, 1)
     end
 end
 
--- Collects prepared attack overlay data into out table (keyed by "q,r", value = {threatCount})
+function ui.getPreparedAttackTarget(enemy, entities, hex)
+    if not enemy or not enemy.preparedAttack then return nil end
+    local attack = enemy.preparedAttack
+    if attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
+        if enemy.attackDirection then
+            local step = enemy.attackDirection
+            local curQ, curR = enemy.q, enemy.r
+            local lastValidQ, lastValidR = curQ, curR
+            while true do
+                local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
+                if not hex:isActiveHex(nextQ, nextR) then break end
+                local ent = getEntityAtHex(nextQ, nextR, entities)
+                if ent and ent ~= enemy and ent.health > 0 then
+                    lastValidQ, lastValidR = nextQ, nextR
+                    break
+                end
+                lastValidQ, lastValidR = nextQ, nextR
+                curQ, curR = nextQ, nextR
+            end
+            if lastValidQ ~= enemy.q or lastValidR ~= enemy.r then
+                return {q = lastValidQ, r = lastValidR}
+            end
+        end
+    elseif attack.name == "Bite" or attack.name == "Magic Bolt" then
+        if enemy.preparedTargetOffset then
+            local targetQ, targetR = hex_utils.applyCubeDiff(enemy.q, enemy.r,
+                enemy.preparedTargetOffset.dx,
+                enemy.preparedTargetOffset.dy,
+                enemy.preparedTargetOffset.dz)
+            if hex:isActiveHex(targetQ, targetR) then
+                return {q = targetQ, r = targetR}
+            end
+        end
+    end
+    return nil
+end
+
 function ui.collectPreparedAttackOverlays(hex, entities, out)
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.preparedAttack then
-            local attack = e.preparedAttack
-            local targetCell = nil
-            if attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
-                if e.attackDirection then
-                    local step = e.attackDirection
-                    local curQ, curR = e.q, e.r
-                    local lastValidQ, lastValidR = curQ, curR
-                    while true do
-                        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
-                        if not hex:isActiveHex(nextQ, nextR) then break end
-                        local ent = getEntityAtHex(nextQ, nextR, entities)
-                        if ent and ent ~= e and ent.health > 0 then
-                            lastValidQ, lastValidR = nextQ, nextR
-                            break
-                        end
-                        lastValidQ, lastValidR = nextQ, nextR
-                        curQ, curR = nextQ, nextR
-                    end
-                    if (lastValidQ ~= e.q or lastValidR ~= e.r) then
-                        targetCell = {q = lastValidQ, r = lastValidR}
-                    end
-                end
-            elseif attack.name == "Bite" then
-                if e.preparedTargetOffset then
-                    local tq, tr = hex_utils.applyCubeDiff(e.q, e.r,
-                        e.preparedTargetOffset.dx, e.preparedTargetOffset.dy, e.preparedTargetOffset.dz)
-                    if hex:isActiveHex(tq, tr) then targetCell = {q = tq, r = tr} end
-                end
-            elseif attack.name == "Magic Bolt" then
-                if e.preparedTargetOffset then
-                    local tq, tr = hex_utils.applyCubeDiff(e.q, e.r,
-                        e.preparedTargetOffset.dx, e.preparedTargetOffset.dy, e.preparedTargetOffset.dz)
-                    if hex:isActiveHex(tq, tr) then targetCell = {q = tq, r = tr} end
-                end
-            end
+            local targetCell = ui.getPreparedAttackTarget(e, entities, hex)
             if targetCell then
                 local key = targetCell.q .. "," .. targetCell.r
                 if not out[key] then out[key] = {threatCount = 0} end
@@ -442,54 +345,64 @@ function ui.collectFlipDestOverlays(hex, selectedActor, flipTargetActor, attack,
     end
 end
 
--- Collects attackable cell overlays into out table (keyed by "q,r", value = true)
-function ui.collectAttackableCellOverlays(hex, attacker, attack, entities, terrainMap, out)
-    if not attacker or not attack then return end
-    if attacker.hasActedThisTurn then return end
+function ui.getAttackableCellKeys(hex, attacker, attack, entities)
+    local keys = {}
+    if not attacker or not attack then return keys end
+    if attacker.hasActedThisTurn then return keys end
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
-            if hex:isActiveHex(q, r) then
-                local dist = hex:getDistance(attacker.q, attacker.r, q, r)
-                if dist <= attack.range then
-                    local canApply = false
-                    if attack.name == "Bite" then
-                        if dist == 1 then
-                            local target = getEntityAtHex(q, r, entities)
-                            if target and target:isCharacter() and not target.isPlayable then canApply = true end
-                        end
-                    elseif attack.name == "Flip" then
-                        if dist == 1 then
-                            local target = getEntityAtHex(q, r, entities)
-                            if target and target:isCharacter() and not target:isBuilding() then
-                                local cells = attack:getFlipCells(attacker, q, r, hex, entities)
-                                if #cells > 0 then canApply = true end
-                            end
-                        end
-                    elseif attack.name == "Stone Throw" or attack.name == "Cone Blast" then
-                        local minRange = attack.minRange or 1
-                        if dist >= minRange then
-                            local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
-                            if stepX then canApply = true end
-                        end
-                    elseif attack.name == "Magic Bolt" then
-                        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
-                        if stepX then
-                            local target = getEntityAtHex(q, r, entities)
-                            if target and (target:isCharacter() and not target.isPlayable or target:isBuilding()) then canApply = true end
-                        end
-                    elseif attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
-                        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
-                        if stepX then
-                            local firstTarget, _ = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-                            if firstTarget then canApply = true end
-                        end
-                    end
-                    if canApply then
-                        out[q .. "," .. r] = true
+            if not hex:isActiveHex(q, r) then
+                goto continue
+            end
+            local dist = hex:getDistance(attacker.q, attacker.r, q, r)
+            if dist > attack.range then goto continue end
+
+            local canApply = false
+            if attack.name == "Bite" then
+                if dist == 1 then
+                    local target = getEntityAtHex(q, r, entities)
+                    if target and target:isCharacter() and not target.isPlayable then canApply = true end
+                end
+            elseif attack.name == "Flip" then
+                if dist == 1 then
+                    local target = getEntityAtHex(q, r, entities)
+                    if target and target:isCharacter() and not target:isBuilding() then
+                        local cells = attack:getFlipCells(attacker, q, r, hex, entities)
+                        if #cells > 0 then canApply = true end
                     end
                 end
+            elseif attack.name == "Stone Throw" or attack.name == "Cone Blast" then
+                local minRange = attack.minRange or 1
+                if dist >= minRange then
+                    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                    if stepX then canApply = true end
+                end
+            elseif attack.name == "Magic Bolt" then
+                local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                if stepX then
+                    local target = getEntityAtHex(q, r, entities)
+                    if target and (target:isCharacter() and not target.isPlayable or target:isBuilding()) then canApply = true end
+                end
+            elseif attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
+                local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                if stepX then
+                    local firstTarget, _ = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+                    if firstTarget then canApply = true end
+                end
             end
+            if canApply then
+                keys[q .. "," .. r] = true
+            end
+            ::continue::
         end
+    end
+    return keys
+end
+
+function ui.collectAttackableCellOverlays(hex, attacker, attack, entities, terrainMap, out)
+    local keys = ui.getAttackableCellKeys(hex, attacker, attack, entities)
+    for key in pairs(keys) do
+        out[key] = true
     end
 end
 
@@ -498,38 +411,7 @@ function ui.drawPreparedAttackHealthBars(hex, entities)
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.preparedAttack then
             local attack = e.preparedAttack
-            local targetCell = nil
-            if attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
-                if e.attackDirection then
-                    local step = e.attackDirection
-                    local curQ, curR = e.q, e.r
-                    local lastValidQ, lastValidR = curQ, curR
-                    while true do
-                        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
-                        if not hex:isActiveHex(nextQ, nextR) then break end
-                        local ent = getEntityAtHex(nextQ, nextR, entities)
-                        if ent and ent ~= e and ent.health > 0 then
-                            lastValidQ, lastValidR = nextQ, nextR
-                            break
-                        end
-                        lastValidQ, lastValidR = nextQ, nextR
-                        curQ, curR = nextQ, nextR
-                    end
-                    if (lastValidQ ~= e.q or lastValidR ~= e.r) then targetCell = {q = lastValidQ, r = lastValidR} end
-                end
-            elseif attack.name == "Bite" then
-                if e.preparedTargetOffset then
-                    local tq, tr = hex_utils.applyCubeDiff(e.q, e.r,
-                        e.preparedTargetOffset.dx, e.preparedTargetOffset.dy, e.preparedTargetOffset.dz)
-                    if hex:isActiveHex(tq, tr) then targetCell = {q = tq, r = tr} end
-                end
-            elseif attack.name == "Magic Bolt" then
-                if e.preparedTargetOffset then
-                    local tq, tr = hex_utils.applyCubeDiff(e.q, e.r,
-                        e.preparedTargetOffset.dx, e.preparedTargetOffset.dy, e.preparedTargetOffset.dz)
-                    if hex:isActiveHex(tq, tr) then targetCell = {q = tq, r = tr} end
-                end
-            end
+            local targetCell = ui.getPreparedAttackTarget(e, entities, hex)
             if targetCell then
                 local targetEntity = getEntityAtHex(targetCell.q, targetCell.r, entities)
                 local x, y
@@ -1035,147 +917,7 @@ function ui.drawMovementRange(hex, actor, entities, terrainMap)
 end
 
 -- Кнопка Undo
-function ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
-    local canUndo = #actionHistory > 0
-    love.graphics.setColor(canUndo and 0.2 or 0.5, 0.2, 0.8, 0.8)
-    love.graphics.rectangle("fill", 10, 190, 120, 30, 5)
-    love.graphics.setColor(1, 1, 1, 1)
-    local old = love.graphics.getFont()
-    love.graphics.setFont(buttonFont)
-    love.graphics.printf("Undo (U)", 10, 199, 120, "center")
-    love.graphics.setFont(old)
-    if not canUndo then
-        love.graphics.setColor(0, 0, 0, 0.6)
-        love.graphics.rectangle("fill", 10, 190, 120, 30, 5)
-    end
-end
 
--- Кнопка End Turn
-function ui.drawDecayButton(mouseX, mouseY, turnCount, maxTurns, phase)
-    local decayActive = turnCount >= maxTurns
-    local text = decayActive and "Decay active!" or ("Decay in: " .. (maxTurns - turnCount))
-    local btnW, btnH = 140, 22
-    local x = 10
-    local y = (logicalH - btnH) / 2
-
-    local isHover = mouseX >= x and mouseX <= x + btnW and mouseY >= y and mouseY <= y + btnH
-
-    if decayActive then
-        local pulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 3)
-        love.graphics.setColor(pulse, 0.2, 0.2, 0.9)
-    else
-        love.graphics.setColor(isHover and 0.5 or 0.35, 0.35, 0.25, 0.85)
-    end
-    love.graphics.rectangle("fill", x, y, btnW, btnH, 4)
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print(text, x + 6, y + 4)
-
-    if isHover then
-        local tooltipW, tooltipH = 300, 82
-        local tx, ty = x + btnW + 6, y
-        if tx + tooltipW > logicalW - 10 then
-            tx = x - tooltipW - 6
-        end
-        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
-        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
-
-        love.graphics.setColor(1, 1, 0.6, 1)
-        love.graphics.print("Turn " .. turnCount .. " / " .. maxTurns .. "  |  Phase: " .. phase, tx + 8, ty + 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.print("All enemies gain Decay (1 dmg/end),", tx + 8, ty + 26)
-        love.graphics.print("dig sites are cleared, and new ones", tx + 8, ty + 42)
-        love.graphics.print("stop appearing. Defeat all to win.", tx + 8, ty + 58)
-        love.graphics.setColor(1, 1, 1, 1)
-    end
-
-    return isHover
-end
-
-function ui.drawEndTurnButton(turnState, entities)
-    local isPlayerTurn = (turnState.phase == "player")
-    local btn = endTurnButton
-    local isPressed = btn.isHeld
-    local pressedOffset = isPressed and 2 or 0
-
-    love.graphics.setColor(isPlayerTurn and (isPressed and 0.5 or 0.8) or 0.4, 0.2, 0.2, 0.8)
-    love.graphics.rectangle("fill", 10, 260 + pressedOffset, 120, 30 - pressedOffset, 5)
-
-    if isPressed then
-        local progress = math.min(btn.holdTimer / 0.7, 1)
-        love.graphics.setColor(0.9, 0.3, 0.2, 0.6)
-        love.graphics.rectangle("fill", 10, 260 + pressedOffset, 120 * progress, 30 - pressedOffset, 5)
-    end
-
-    love.graphics.setColor(1, 1, 1, 1)
-    local old = love.graphics.getFont()
-    love.graphics.setFont(buttonFont)
-    love.graphics.printf("End Turn (E)", 10, 269 + pressedOffset, 120, "center")
-    love.graphics.setFont(old)
-    if not isPlayerTurn then
-        love.graphics.setColor(0, 0, 0, 0.6)
-        love.graphics.rectangle("fill", 10, 260, 120, 30, 5)
-    end
-
-    if btn.isHovered and isPlayerTurn then
-        local unitsLeft = {}
-        for _, e in ipairs(entities) do
-            if e.isPlayable and e.health > 0 and not e.hasActedThisTurn then
-                table.insert(unitsLeft, e.name)
-            end
-        end
-        if #unitsLeft > 0 then
-            local names = table.concat(unitsLeft, ", ")
-            local tooltipW, tooltipH = 260, 48
-            local tx, ty = 10 + 120 + 6, 260
-            if tx + tooltipW > logicalW - 10 then
-                tx = 10 - tooltipW - 6
-            end
-            love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
-            love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
-            love.graphics.setColor(0.8, 0.8, 0.8, 1)
-            love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
-            love.graphics.setColor(1, 0.8, 0.4, 1)
-            love.graphics.print("Hold to end turn:", tx + 8, ty + 6)
-            love.graphics.setColor(0.9, 0.9, 0.9, 1)
-            love.graphics.print(names, tx + 8, ty + 26)
-        end
-    end
-end
-
--- Интерфейс Wind Torrent
-function ui.drawWindTorrentUI(windTorrent, windTorrentUI, turnState)
-    local available = (turnState.phase == "player" and windTorrent and not windTorrent.hasBeenUsed)
-    love.graphics.setColor(available and 0.2 or 0.5, 0.6, 0.8, 0.8)
-    love.graphics.rectangle("fill", windTorrentUI.button.x, windTorrentUI.button.y, windTorrentUI.button.width, windTorrentUI.button.height, 5)
-    love.graphics.setColor(1, 1, 1, 1)
-    local old = love.graphics.getFont()
-    love.graphics.setFont(buttonFont)
-    love.graphics.printf("Wind Torrent (W)", windTorrentUI.button.x, windTorrentUI.button.y + 9, windTorrentUI.button.width, "center")
-    love.graphics.setFont(old)
-
-    if windTorrentUI.active then
-        love.graphics.setColor(0, 0, 0, 0.7)
-        love.graphics.rectangle("fill", 0, 0, logicalW, logicalH)
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print("Select wind direction:", logicalW/2 - 80, 50)
-        local old = love.graphics.getFont()
-        love.graphics.setFont(buttonFont)
-        for dirName, dir in pairs(windTorrentUI.directions) do
-            love.graphics.setColor(0.3, 0.5, 0.9, 0.9)
-            love.graphics.rectangle("fill", dir.x, dir.y, 70, 30, 5)
-            love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.printf(dirName, dir.x, dir.y + 9, 70, "center")
-        end
-        local cx, cy = logicalW/2 - 40, logicalH - 80
-        love.graphics.setColor(0.8, 0.2, 0.2, 0.9)
-        love.graphics.rectangle("fill", cx, cy, 80, 30, 5)
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.printf("Cancel (ESC)", cx, cy + 9, 80, "center")
-        love.graphics.setFont(old)
-    end
-end
 
 -- Полоска глобального здоровья (ячейками)
 function ui.drawGlobalHealthBar(globalHealth, mouseX, mouseY)
@@ -1245,118 +987,6 @@ function ui.drawGlobalHealthBar(globalHealth, mouseX, mouseY)
         love.graphics.setColor(1, 1, 1, 1)
     end
 end
-
--- Панель атак
-function ui.drawAttackPanel(selectedActor, attackButtons, selectedAttack, attackMode)
-    if not selectedActor or selectedActor.hasActedThisTurn then return end
-    if #attackButtons == 0 then return end
-
-    for i, btn in ipairs(attackButtons) do
-        local isSelected = (selectedAttack == btn.attack and attackMode)
-        love.graphics.setColor(isSelected and 0.9 or 0.3, 0.7, 0.3, 0.8)
-        love.graphics.rectangle("fill", btn.x, btn.y, btn.width, btn.height, 5)
-        love.graphics.setColor(1, 1, 1, 1)
-        local prefix = i .. "."
-        love.graphics.print(prefix .. " " .. btn.name .. (isSelected and " ✓" or ""), btn.x + 5, btn.y + 8)
-        if isSelected then
-            love.graphics.setColor(1, 1, 0.5, 0.9)
-            love.graphics.print(btn.desc, btn.x + 5, btn.y - 18)
-        end
-    end
-end
-
-function ui.drawEnemyOrderButton(mouseX, mouseY)
-    local btnW, btnH = 100, 30
-    local x = logicalW - btnW - 10
-    local y = logicalH - btnH - 10
-    local isHover = mouseX >= x and mouseX <= x + btnW and mouseY >= y and mouseY <= y + btnH
-
-    love.graphics.setColor(isHover and 0.6 or 0.3, 0.4, 0.6, 0.8)
-    love.graphics.rectangle("fill", x, y, btnW, btnH, 5)
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("Order (O)", x + 13, y + 8)
-
-    if isHover then
-        local tooltipW, tooltipH = 260, 96
-        local tx, ty = x - tooltipW - 6, y
-        if tx < 10 then tx = x + btnW + 6 end
-        if ty + tooltipH > logicalH - 10 then
-            ty = logicalH - tooltipH - 10
-        end
-        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
-        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
-        love.graphics.setColor(1, 1, 0.6, 1)
-        love.graphics.print("Enemy Turn Order", tx + 8, ty + 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.print("1. Effects: fire & decay apply", tx + 8, ty + 26)
-        love.graphics.print("   simultaneously to all units", tx + 8, ty + 42)
-        love.graphics.print("2. Enemies attack in sequence", tx + 8, ty + 58)
-        love.graphics.print("3. Dig sites damage simultaneously", tx + 8, ty + 74)
-        love.graphics.setColor(1, 1, 1, 1)
-    end
-
-    return isHover
-end
-
--- ui.lua (добавить в конец)
-
-local function getTime()
-    return love.timer.getTime()
-end
-
-function ui.drawFireOnHex(x, y, radius, time)
-    local t = time * 5
-    love.graphics.setBlendMode("add")
-    for i = 1, 5 do
-        local angle = (i / 5) * math.pi * 2 + t * 2
-        local lenVar = 0.5 + 0.3 * math.sin(t * 3 + i)
-        local height = radius * 0.6 * lenVar
-        local width = radius * 0.3 * (0.7 + 0.3 * math.sin(t * 5 + i))
-        
-        local tipX = x + math.cos(angle) * width * 0.5
-        local tipY = y - height * 0.8
-        local baseLeftX = x + math.cos(angle - 0.3) * width
-        local baseLeftY = y + math.sin(angle - 0.3) * width * 0.5
-        local baseRightX = x + math.cos(angle + 0.3) * width
-        local baseRightY = y + math.sin(angle + 0.3) * width * 0.5
-        
-        local rCol = 1
-        local gCol = 0.3 + 0.7 * (lenVar - 0.5) * 2
-        love.graphics.setColor(rCol, gCol, 0, 0.8)
-        love.graphics.polygon("fill", tipX, tipY, baseLeftX, baseLeftY, baseRightX, baseRightY)
-    end
-    love.graphics.setBlendMode("alpha")
-    love.graphics.setColor(1, 0.6, 0, 0.9)
-    love.graphics.circle("fill", x, y, radius * 0.2)
-end
-
-function ui.drawAcidOnHex(x, y, radius, time)
-    local t = time * 2
-    love.graphics.setColor(0.3, 0.8, 0.2, 0.7 + 0.3 * math.sin(t))
-    love.graphics.circle("fill", x, y, radius * 0.4)
-    for i = 1, 4 do
-        local angle = (i * 1.5 + t) % (math.pi * 2)
-        local bx = x + math.cos(angle) * radius * 0.5
-        local by = y + math.sin(angle) * radius * 0.6
-        local size = radius * 0.15 * (0.7 + 0.3 * math.sin(t * 3 + i))
-        love.graphics.setColor(0.5, 0.9, 0.3, 0.8)
-        love.graphics.circle("fill", bx, by, size)
-    end
-end
-
-function ui.drawCellStatusEffects(x, y, radius, statuses, time)
-    for _, st in ipairs(statuses) do
-        if st == "fire" then
-            ui.drawFireOnHex(x, y, radius, time)
-        elseif st == "acid" then
-            ui.drawAcidOnHex(x, y, radius, time)
-        end
-    end
-end
-
--- ui.lua (новая функция)
 
 function ui.getEffectiveStatuses(entity)
     local statuses = {}
@@ -1615,296 +1245,13 @@ end
 
 -- Предпросмотр Wind Torrent: рисует стрелки от каждого подвижного объекта к его новому положению
 -- ui.lua
-function ui.collectWindTorrentOverlays(hex, direction, entities, terrainMap, cellOverlays)
-    local stepMap = {
-        E  = {dx = 1, dy = -1, dz = 0},
-        NE = {dx = 1, dy = 0, dz = -1},
-        NW = {dx = 0, dy = 1, dz = -1},
-        W  = {dx = -1, dy = 1, dz = 0},
-        SW = {dx = -1, dy = 0, dz = 1},
-        SE = {dx = 0, dy = -1, dz = 1},
-    }
-    local step = stepMap[direction]
-    if not step then return end
 
-    local function axialToCube(q, r)
-        local x = q - (r - (r % 2)) / 2
-        local z = r
-        local y = -x - z
-        return x, y, z
-    end
-    local function cubeToAxial(x, y, z)
-        local q = x + (z - (z % 2)) / 2
-        local r = z
-        return q, r
-    end
-    local function applyStep(q, r)
-        local x, y, z = axialToCube(q, r)
-        return cubeToAxial(x + step.dx, y + step.dy, z + step.dz)
-    end
-    local function isValid(q, r) return hex:isActiveHex(q, r) end
 
-    for _, entity in ipairs(entities) do
-        if entity.isPushable and entity.health > 0 then
-            local newQ, newR = applyStep(entity.q, entity.r)
-            if isValid(newQ, newR) then
-                local key = newQ .. "," .. newR
-                if not cellOverlays[key] then
-                    cellOverlays[key] = { windTorrentDest = true }
-                end
-            end
-        end
-    end
-end
 
-function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
-    local stepMap = {
-        E  = {dx = 1, dy = -1, dz = 0},
-        NE = {dx = 1, dy = 0, dz = -1},
-        NW = {dx = 0, dy = 1, dz = -1},
-        W  = {dx = -1, dy = 1, dz = 0},
-        SW = {dx = -1, dy = 0, dz = 1},
-        SE = {dx = 0, dy = -1, dz = 1},
-    }
-    local step = stepMap[direction]
-    if not step then return end
 
-    local function axialToCube(q, r)
-        local x = q - (r - (r % 2)) / 2
-        local z = r
-        local y = -x - z
-        return x, y, z
-    end
-    local function cubeToAxial(x, y, z)
-        local q = x + (z - (z % 2)) / 2
-        local r = z
-        return q, r
-    end
-    local function applyStep(q, r)
-        local x, y, z = axialToCube(q, r)
-        return cubeToAxial(x + step.dx, y + step.dy, z + step.dz)
-    end
-    local function isValid(q, r) return hex:isActiveHex(q, r) end
 
-    -- Собираем подвижные объекты
-    local movableObjects = {}
-    for _, entity in ipairs(entities) do
-        if entity.isPushable and entity.health > 0 then
-            table.insert(movableObjects, entity)
-        end
-    end
 
-    -- Сортировка по дальности
-    table.sort(movableObjects, function(a, b)
-        local function getProjection(obj)
-            local x, y, z = axialToCube(obj.q, obj.r)
-            return x * step.dx + y * step.dy + z * step.dz
-        end
-        return getProjection(a) > getProjection(b)
-    end)
 
-    -- Карта неподвижных объектов (здания, препятствия)
-    local immovableMap = {}
-    for _, entity in ipairs(entities) do
-        if not entity.isPushable and entity.health > 0 then
-            local key = entity.q .. "," .. entity.r
-            immovableMap[key] = entity
-        end
-    end
-
-    local targetMap = {}
-    local previewData = {}
-    local damagedEntities = {} -- { entity, damage, x, y }
-
-    for _, obj in ipairs(movableObjects) do
-        if obj.health <= 0 then goto continue end
-
-        local newQ, newR = applyStep(obj.q, obj.r)
-        local fromX, fromY = getDrawCoords(obj.q, obj.r)
-        local toX, toY = getDrawCoords(newQ, newR)
-        local damage = 0
-        local entryFromQ, entryFromR = obj.q, obj.r
-        local entryToQ, entryToR = newQ, newR
-
-        if not isValid(newQ, newR) then
-            -- Вылет за край – урон только движущемуся
-            damage = 1
-            table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isEdge=true, entity=obj, fromQ=entryFromQ, fromR=entryFromR, toQ=entryToQ, toR=entryToR})
-            table.insert(damagedEntities, {entity=obj, damage=damage, x=fromX, y=fromY})
-        else
-            local immovableKey = newQ .. "," .. newR
-            if immovableMap[immovableKey] then
-                -- Столкновение с неподвижным объектом – урон обоим
-                damage = 1
-                table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true, entity=obj, fromQ=entryFromQ, fromR=entryFromR, toQ=entryToQ, toR=entryToR})
-                table.insert(damagedEntities, {entity=obj, damage=damage, x=fromX, y=fromY})
-                -- Добавляем урон для неподвижного объекта
-                local immX, immY = getDrawCoords(immovableMap[immovableKey].q, immovableMap[immovableKey].r)
-                table.insert(damagedEntities, {entity=immovableMap[immovableKey], damage=damage, x=immX, y=immY})
-            else
-                local targetOcc = targetMap[newQ .. "," .. newR]
-                if targetOcc then
-                    -- Столкновение двух подвижных – урон обоим
-                    damage = 1
-                    table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true, doubleDamage=true, entity=obj, with=targetOcc, fromQ=entryFromQ, fromR=entryFromR, toQ=entryToQ, toR=entryToR})
-                    table.insert(damagedEntities, {entity=obj, damage=damage, x=fromX, y=fromY})
-                    local otherX, otherY = getDrawCoords(targetOcc.q, targetOcc.r)
-                    table.insert(damagedEntities, {entity=targetOcc, damage=damage, x=otherX, y=otherY})
-                else
-                    -- Свободное перемещение
-                    targetMap[newQ .. "," .. newR] = obj
-                    table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=0, entity=obj, fromQ=entryFromQ, fromR=entryFromR, toQ=entryToQ, toR=entryToR})
-                end
-            end
-        end
-        ::continue::
-    end
-
-    -- Отрисовка стрелок
-    for _, pd in ipairs(previewData) do
-        ui.drawPushArrow(pd.fromX, pd.fromY, pd.toX, pd.toY, nil, nil, nil, nil, pd.fromQ, pd.fromR, pd.toQ, pd.toR)
-    end
-
-    -- Отрисовка мигающих полосок здоровья для всех, кто получит урон
-    for _, dmg in ipairs(damagedEntities) do
-        if dmg.entity and dmg.entity.health > 0 then
-            drawHealthBar(dmg.entity, dmg.x, dmg.y, dmg.damage)
-        end
-    end
-end
-
-function ui.drawHealAbilityButton(healAbility, healUI, turnState, mouseX, mouseY)
-    local available = (turnState.phase == "player" and not healAbility.hasBeenUsed)
-    love.graphics.setColor(available and 0.2 or 0.5, 0.8, 0.3, healUI.active and 0.5 or 0.8)
-    local x, y = 10, 120
-    love.graphics.rectangle("fill", x, y, 120, 30, 5)
-    love.graphics.setColor(1, 1, 1, 1)
-    local old = love.graphics.getFont()
-    love.graphics.setFont(buttonFont)
-    love.graphics.printf(healUI.active and "Select target (H)" or "Heal (H)", x, y + 9, 120, "center")
-    love.graphics.setFont(old)
-
-    local isHover = mouseX and mouseY and mouseX >= x and mouseX <= x + 120 and mouseY >= y and mouseY <= y + 30
-    if isHover then
-        local usedText = healAbility.hasBeenUsed and " (used)" or ""
-        local tooltipW, tooltipH = 260, 64
-        local tx, ty = x + 120 + 6, y
-        if tx + tooltipW > logicalW - 10 then tx = x - tooltipW - 6 end
-        if ty + tooltipH > logicalH - 10 then ty = logicalH - tooltipH - 10 end
-        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
-        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
-        love.graphics.setColor(1, 1, 0.6, 1)
-        love.graphics.print("Heal" .. usedText, tx + 8, ty + 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.print("Fully restore HP and remove all", tx + 8, ty + 26)
-        love.graphics.print("debuffs for one allied unit.", tx + 8, ty + 42)
-        love.graphics.setColor(1, 1, 1, 1)
-    end
-end
-
-function ui.drawExtraMoveAbilityButton(extraMoveAbility, extraMoveUI, turnState, mouseX, mouseY)
-    local available = (turnState.phase == "player" and not extraMoveAbility.hasBeenUsed)
-    love.graphics.setColor(available and 0.2 or 0.5, 0.4, 0.8, extraMoveUI.active and 0.5 or 0.8)
-    local x, y = 10, 155
-    love.graphics.rectangle("fill", x, y, 120, 30, 5)
-    love.graphics.setColor(1, 1, 1, 1)
-    local old = love.graphics.getFont()
-    love.graphics.setFont(buttonFont)
-    love.graphics.printf(extraMoveUI.active and "Select target (X)" or "Extra Move (X)", x, y + 9, 120, "center")
-    love.graphics.setFont(old)
-
-    local isHover = mouseX and mouseY and mouseX >= x and mouseX <= x + 120 and mouseY >= y and mouseY <= y + 30
-    if isHover then
-        local usedText = extraMoveAbility.hasBeenUsed and " (used)" or ""
-        local tooltipW, tooltipH = 260, 64
-        local tx, ty = x + 120 + 6, y
-        if tx + tooltipW > logicalW - 10 then tx = x - tooltipW - 6 end
-        if ty + tooltipH > logicalH - 10 then ty = logicalH - tooltipH - 10 end
-        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
-        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
-        love.graphics.setColor(1, 1, 0.6, 1)
-        love.graphics.print("Extra Move" .. usedText, tx + 8, ty + 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.print("Allow one ally who has already", tx + 8, ty + 26)
-        love.graphics.print("acted to move again.", tx + 8, ty + 42)
-        love.graphics.setColor(1, 1, 1, 1)
-    end
-end
-
-function ui.drawAbilityTargets(hex, entities, healUI, extraMoveUI, terrainMap)
-    if not healUI.active and not extraMoveUI.active then return end
-    for _, e in ipairs(entities) do
-        if e.isPlayable and e.health > 0 then
-            local isValid = false
-            local color
-            if healUI.active and not extraMoveUI.active then
-                local hasDebuffs = #ui.getEffectiveStatuses(e) > 0
-                isValid = e.health < e.maxHealth or hasDebuffs
-                color = { 0.2, 0.8, 0.3 }
-            elseif extraMoveUI.active and not healUI.active then
-                isValid = e.hasActedThisTurn
-                color = { 0.3, 0.5, 0.9 }
-            end
-            if isValid then
-                local x, y = getDrawCoords(e.q, e.r)
-                local vertices = hex:drawHexagon(x, y, hex.radius)
-
-                love.graphics.setColor(color[1], color[2], color[3], 0.3)
-                love.graphics.polygon("fill", vertices)
-                love.graphics.setColor(color[1], color[2], color[3], 0.7)
-                love.graphics.polygon("line", vertices)
-            end
-        end
-    end
-    love.graphics.setColor(1, 1, 1, 1)
-end
-
-function ui.drawWindTorrentButton(windTorrent, windTorrentUI, turnState, mouseX, mouseY)
-    local available = (turnState.phase == "player" and windTorrent and not windTorrent.hasBeenUsed)
-    local bx, by, bw, bh = windTorrentUI.button.x, windTorrentUI.button.y, windTorrentUI.button.width, windTorrentUI.button.height
-    love.graphics.setColor(available and 0.2 or 0.5, 0.6, 0.8, 0.8)
-    love.graphics.rectangle("fill", bx, by, bw, bh, 5)
-    love.graphics.setColor(1, 1, 1, 1)
-    local old = love.graphics.getFont()
-    love.graphics.setFont(buttonFont)
-    love.graphics.printf("Wind Torrent (W)", bx, by + 9, bw, "center")
-    love.graphics.setFont(old)
-
-    local isHover = mouseX and mouseY and mouseX >= bx and mouseX <= bx + bw and mouseY >= by and mouseY <= by + bh
-    if isHover then
-        local usedText = windTorrent and windTorrent.hasBeenUsed and " (used)" or ""
-        local tooltipW, tooltipH = 260, 80
-        local tx, ty = bx + bw + 6, by
-        if tx + tooltipW > logicalW - 10 then tx = bx - tooltipW - 6 end
-        if ty + tooltipH > logicalH - 10 then ty = logicalH - tooltipH - 10 end
-        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
-        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
-        love.graphics.setColor(1, 1, 0.6, 1)
-        love.graphics.print("Wind Torrent" .. usedText, tx + 8, ty + 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.print("Click on any hex to push all", tx + 8, ty + 26)
-        love.graphics.print("units (friend and foe) away from", tx + 8, ty + 42)
-        love.graphics.print("that hex in a line.", tx + 8, ty + 58)
-        love.graphics.setColor(1, 1, 1, 1)
-    end
-end
-
-function ui.drawRestartButton(button, turnState)
-    local canRestart = (turnState.phase == "player") or true  -- можно в любой момент
-    love.graphics.setColor(0.4, 0.2, 0.6, 0.8)
-    love.graphics.rectangle("fill", button.x, button.y, button.width, button.height, 5)
-    love.graphics.setColor(1, 1, 1, 1)
-    local old = love.graphics.getFont()
-    love.graphics.setFont(buttonFont)
-    love.graphics.printf(button.text .. " (R)", button.x, button.y + 9, button.width, "center")
-    love.graphics.setFont(old)
-end
 
 -- ui.lua
 function ui.drawCellTooltip(q, r, terrain, hex)
@@ -2187,202 +1534,20 @@ function ui.drawDottedArc(x1, y1, x2, y2, cx, cy, dotRadius, step, time)
 end
 
 function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
-    if not attacker or not attack then return end
-    if attacker.hasActedThisTurn then return end
-
-    for q = 0, hex.gridWidth - 1 do
-        for r = 0, hex.gridHeight - 1 do
-            if not hex:isActiveHex(q, r) then
-                -- клетка неактивна, пропускаем
-            else
-                local dist = hex:getDistance(attacker.q, attacker.r, q, r)
-                if dist <= attack.range then
-                    local canApply = false
-
-                    -- 1. Bite
-                    if attack.name == "Bite" then
-                        if dist == 1 then
-                            local target = getEntityAtHex(q, r, entities)
-                            if target and target:isCharacter() and not target.isPlayable then
-                                canApply = true
-                            end
-                        end
-
-                    -- 2. Flip
-                    elseif attack.name == "Flip" then
-                        if dist == 1 then
-                            local target = getEntityAtHex(q, r, entities)
-                            if target and target:isCharacter() and not target:isBuilding() then
-                                local cells = attack:getFlipCells(attacker, q, r, hex, entities)
-                                if #cells > 0 then
-                                    canApply = true
-                                end
-                            end
-                        end
-
-                    -- 3. Stone Throw и Cone Blast
-                    elseif attack.name == "Stone Throw" or attack.name == "Cone Blast" then
-                        local minRange = attack.minRange or 1
-                        if dist >= minRange then
-                            local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
-                            if stepX then
-                                canApply = true
-                            end
-                        end
-
-                    -- 4. Magic Bolt
-                    elseif attack.name == "Magic Bolt" then
-                        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
-                        if stepX then
-                            local target = getEntityAtHex(q, r, entities)
-                            if target and (target:isCharacter() and not target.isPlayable or target:isBuilding()) then
-                                canApply = true
-                            end
-                        end
-
-                    -- 5. Ghost Bolt, Shoot, Dash, Piercing Shot
-                    elseif attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
-                        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
-                        if stepX then
-                            local firstTarget, _ = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-                            if firstTarget then
-                                canApply = true
-                            end
-                        end
-                    end
-
-                    if canApply then
-                        local x, y = getDrawCoords(q, r)
-                        local vertices = hex:drawHexagon(x, y, hex.radius)
-        
-                        love.graphics.setColor(0.9, 0.8, 0.2, 0.25)
-                        love.graphics.polygon("fill", vertices)
-                        love.graphics.setColor(0.9, 0.8, 0.2, 0.7)
-                        love.graphics.polygon("line", vertices)
-                    end
-                end
-            end
-        end
+    local keys = ui.getAttackableCellKeys(hex, attacker, attack, entities)
+    for key in pairs(keys) do
+        local q, r = key:match("^(%d+),(%d+)$")
+        q, r = tonumber(q), tonumber(r)
+        local x, y = getDrawCoords(q, r)
+        local vertices = hex:drawHexagon(x, y, hex.radius)
+        love.graphics.setColor(0.9, 0.8, 0.2, 0.25)
+        love.graphics.polygon("fill", vertices)
+        love.graphics.setColor(0.9, 0.8, 0.2, 0.7)
+        love.graphics.polygon("line", vertices)
     end
 end
 
 -- ======================================================
--- ВИЗУАЛЬНЫЕ ЭФФЕКТЫ СТАТУСОВ НА ЮНИТАХ (НЕ НА КЛЕТКАХ)
--- ======================================================
-
-function ui.drawFireOnEntity(x, y, radius, time)
-    local t = time * 8
-    love.graphics.setBlendMode("add")
-    -- Внешнее свечение
-    for i = 1, 3 do
-        local size = radius * (0.6 + 0.2 * math.sin(t * 2 + i))
-        love.graphics.setColor(1, 0.3, 0, 0.2)
-        love.graphics.circle("fill", x, y, size)
-    end
-    -- Языки пламени, вырывающиеся вверх
-    for i = 1, 5 do
-        local angle = -math.pi/2 + (i-2)*0.5 + math.sin(t*10+i)*0.3
-        local len = radius * (0.5 + 0.2 * math.sin(t * 6 + i))
-        local tipX = x + math.cos(angle) * len * 0.5
-        local tipY = y + math.sin(angle) * len - radius * 0.3
-        local baseX1 = x + math.cos(angle - 0.4) * (len * 0.3)
-        local baseY1 = y + math.sin(angle - 0.4) * (len * 0.3)
-        local baseX2 = x + math.cos(angle + 0.4) * (len * 0.3)
-        local baseY2 = y + math.sin(angle + 0.4) * (len * 0.3)
-        local rCol = 1
-        local gCol = 0.3 + 0.5 * (math.sin(t * 8 + i) * 0.5 + 0.5)
-        love.graphics.setColor(rCol, gCol, 0, 0.9)
-        love.graphics.polygon("fill", tipX, tipY, baseX1, baseY1, baseX2, baseY2)
-    end
-    -- Искры
-    for i = 1, 4 do
-        local sparkAngle = t * 15 + i * 1.2
-        local dist = radius * 0.4
-        local sparkX = x + math.cos(sparkAngle) * dist
-        local sparkY = y - radius * 0.4 + math.sin(sparkAngle) * dist * 0.5
-        love.graphics.setColor(1, 0.7, 0.1, 0.9)
-        love.graphics.circle("fill", sparkX, sparkY, radius * 0.07)
-    end
-    love.graphics.setBlendMode("alpha")
-end
-
-function ui.drawAcidOnEntity(x, y, radius, time)
-    local t = time * 3
-    love.graphics.setBlendMode("add")
-    -- Кислотная лужа под ногами
-    love.graphics.setColor(0.3, 0.8, 0.2, 0.5)
-    love.graphics.ellipse("fill", x, y + radius*0.2, radius*0.8, radius*0.3)
-    -- Пузыри, поднимающиеся вверх
-    for i = 1, 4 do
-        local bubbleAngle = t * 4 + i * 1.5
-        local dist = radius * 0.5 * math.sin(t * 3 + i)
-        local bx = x + math.cos(bubbleAngle) * dist * 0.5
-        local by = y - radius * 0.4 + math.sin(bubbleAngle) * dist * 0.3
-        local size = radius * 0.1 * (0.6 + 0.4 * math.sin(t * 7 + i))
-        love.graphics.setColor(0.4, 1, 0.2, 0.8)
-        love.graphics.circle("fill", bx, by, size)
-        love.graphics.setColor(0.8, 1, 0.4, 0.5)
-        love.graphics.circle("line", bx, by, size * 1.2)
-    end
-    love.graphics.setBlendMode("alpha")
-end
-
-function ui.drawDecayOnEntity(x, y, radius, time)
-    local t = time * 2
-    love.graphics.setBlendMode("add")
-    -- Гнилостное облако
-    love.graphics.setColor(0.4, 0.1, 0.5, 0.6)
-    love.graphics.circle("fill", x, y, radius * 0.9)
-    love.graphics.setColor(0.2, 0.05, 0.3, 0.4)
-    love.graphics.circle("fill", x, y, radius * 1.1)
-    -- Вращающиеся тёмные частицы
-    for i = 1, 6 do
-        local angle = t * 2 + (i / 6) * math.pi * 2
-        local rDist = radius * 0.5 + math.sin(t * 3 + i) * radius * 0.2
-        local px = x + math.cos(angle) * rDist
-        local py = y + math.sin(angle) * rDist * 0.6
-        love.graphics.setColor(0.5, 0.2, 0.7, 0.7)
-        love.graphics.circle("fill", px, py, radius * 0.08)
-    end
-    love.graphics.setBlendMode("alpha")
-end
-
-function ui.drawEntityStatusEffects(x, y, entity, radius, time)
-    if not entity:isCharacter() then return end
-    
-    local statuses = status.getEntityStatuses(entity)
-    if #statuses == 0 then return end
-    
-    -- Рисуем эффект наложением поверх спрайта (приоритет: fire > decay > acid)
-    if status.hasEntityStatus(entity, "fire") then
-        ui.drawFireOnEntity(x, y, radius, time)
-    elseif status.hasEntityStatus(entity, "decay") then
-        ui.drawDecayOnEntity(x, y, radius, time)
-    elseif status.hasEntityStatus(entity, "acid") then
-        ui.drawAcidOnEntity(x, y, radius, time)
-    end
-end
-
--- Возвращает цвет для мигания в зависимости от статусов (приоритет: fire > decay > acid)
-function ui.getEntityStatusColor(entity, time)
-    local statuses = status.getEntityStatuses(entity)
-    if not statuses or #statuses == 0 then return nil end
-
-    local pulse = 0.4 + 0.4 * math.sin(time * 8)  -- пульсация 0..0.8
-    local color = nil
-
-    -- Приоритет статусов
-    if status.hasEntityStatus(entity, "fire") then
-        color = {1, 0.2, 0.1, pulse}
-    elseif status.hasEntityStatus(entity, "decay") then
-        color = {0.6, 0.2, 0.8, pulse}
-    elseif status.hasEntityStatus(entity, "acid") then
-        color = {0.2, 0.9, 0.2, pulse}
-    end
-
-    return color
-end
-
 -- ============================================================
 -- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ УПРАВЛЕНИЯ ВЫБОРОМ
 -- ============================================================
@@ -2428,8 +1593,6 @@ function restoreSelectedActor()
     end
 end
 
--- Expose internal functions for renderer
-ui.getHazardTexture = getHazardTexture
 
 -- Collects attack preview hex overlays into out table
 function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, entities, out)
@@ -2522,54 +1685,6 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
             end
         end
         return
-    end
-end
-
--- Collects ability target overlays (Heal/Extra Move) into out table (keyed by "q,r", value = color)
-function ui.collectAbilityTargetOverlays(entities, healUI, extraMoveUI, out)
-    if not healUI.active and not extraMoveUI.active then return end
-    for _, e in ipairs(entities) do
-        if e.isPlayable and e.health > 0 then
-            local isValid = false
-            local color
-            if healUI.active and not extraMoveUI.active then
-                local hasDebuffs = #ui.getEffectiveStatuses(e) > 0
-                isValid = e.health < e.maxHealth or hasDebuffs
-                color = { 0.2, 0.8, 0.3 }
-            elseif extraMoveUI.active and not healUI.active then
-                isValid = e.hasActedThisTurn
-                color = { 0.3, 0.5, 0.9 }
-            end
-            if isValid then
-                out[e.q .. "," .. e.r] = {fill = {color[1], color[2], color[3], 0.3}, line = {color[1], color[2], color[3], 0.7}}
-            end
-        end
-    end
-end
-
--- Test view button (для тестирования визуала, легко удалить)
-function ui.drawTestViewButton(mx, my)
-    local x = logicalW - 130
-    local y = 10
-    local w, h = 120, 22
-    local isHover = mx >= x and mx <= x + w and my >= y and my <= y + h
-    love.graphics.setColor(testViewActive and 0.3 or 0.4, 0.3, 0.5, 0.85)
-    love.graphics.rectangle("fill", x, y, w, h, 4)
-    love.graphics.setColor(1, 1, 1, 1)
-    local txt = testViewActive and ("Cell: " .. string.format("%.0f", testViewOffsetY)) or "Test Cell (T)"
-    love.graphics.print(txt, x + 4, y + 4)
-    if isHover and testViewActive then
-        local tooltipW, tooltipH = 260, 48
-        local tx, ty = x + w + 6, y
-        if tx + tooltipW > logicalW - 10 then tx = x - tooltipW - 6 end
-        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
-        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
-        love.graphics.setColor(1, 1, 0.6, 1)
-        love.graphics.print("Center cell oscillates: " .. string.format("%.0f", testViewOffsetY), tx + 8, ty + 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.print("T or click: toggle", tx + 8, ty + 26)
     end
 end
 

@@ -6,6 +6,7 @@ local visual = require("visual_effects")
 local status = require("status")
 local combat = require("combat")
 local hex_utils = require("hex_utils")
+local global_abilities = require("global_abilities")
 
 function renderer.draw(state)
     if not state or not state.hex then return end
@@ -17,16 +18,10 @@ function renderer.draw(state)
     if state.attackMode and not state.flipTargetActor and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn then
         ui.collectAttackableCellOverlays(hex, state.selectedActor, state.selectedAttack, state.entities, state.terrainMap, cellOverlays)
     end
-    ui.collectAbilityTargetOverlays(state.entities, state.healUI, state.extraMoveUI, cellOverlays)
     if state.flipTargetActor then
         ui.collectFlipDestOverlays(state.hex, state.selectedActor, state.flipTargetActor, state.selectedAttack, state.entities, cellOverlays)
     end
-    if state.windTorrentUI.active and hex.hoverQ >= 0 and hex.hoverR >= 0 then
-        local direction = getWindDirectionFromHex(hex.hoverQ, hex.hoverR, hex.centerQ, hex.centerR, hex)
-        if direction then
-            ui.collectWindTorrentOverlays(hex, direction, state.entities, state.terrainMap, cellOverlays)
-        end
-    end
+    global_abilities.collectOverlays(hex, cellOverlays, state)
     if state.attackMode and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local ovCells = {}
         ui.collectAttackPreviewOverlays(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities, ovCells)
@@ -176,12 +171,10 @@ function renderer.draw(state)
     mx = mx / state.dpiScale
     my = my / state.dpiScale
 
-    ui.drawHealAbilityButton(state.healAbility, state.healUI, state.turnState, mx, my)
-    ui.drawExtraMoveAbilityButton(state.extraMoveAbility, state.extraMoveUI, state.turnState, mx, my)
     ui.drawUndoButton(state.actionHistory, state.maxUndoCount, state.selectedActor)
     ui.drawEndTurnButton(state.turnState, state.entities)
     ui.drawRestartButton(state.restartButton, state.turnState)
-    ui.drawWindTorrentButton(state.windTorrent, state.windTorrentUI, state.turnState, mx, my)
+    global_abilities.drawButtons(mx, my, state)
     ui.drawTestViewButton(mx, my)
 
     ui.drawGlobalHealthBar(state.globalHealth, mx, my)
@@ -229,12 +222,7 @@ function renderer.draw(state)
         end
     end
 
-    if state.windTorrentUI.active and hex.hoverQ >= 0 and hex.hoverR >= 0 then
-        local direction = getWindDirectionFromHex(hex.hoverQ, hex.hoverR, hex.centerQ, hex.centerR, hex)
-        if direction then
-            ui.drawWindTorrentPreview(hex, direction, state.entities, state.terrainMap)
-        end
-    end
+    global_abilities.drawPreview(hex, state)
 
     if not state.gameActive then
         local width = logicalW

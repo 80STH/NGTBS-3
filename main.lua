@@ -19,11 +19,10 @@ local hex_utils = require("hex_utils")
 local renderer = require("renderer")
 local input = require("input")
 local turnManager = require("turn_manager")
+global_abilities = require("global_abilities")
 require("game")
 
 pushAnimations = state.pushAnimations
-
-windTorrent = nil
 dpiScale = 1
 logicalW = 0
 logicalH = 0
@@ -50,8 +49,6 @@ function syncStateToGlobals()
     sounds = state.sounds
     actionHistory = state.actionHistory
     maxUndoCount = state.maxUndoCount
-    windTorrent = state.windTorrent
-    windTorrentUI = state.windTorrentUI
     restartButton = state.restartButton
     endTurnButton = state.endTurnButton
     undoButton = state.undoButton
@@ -62,10 +59,6 @@ function syncStateToGlobals()
     showEnemyOrder = state.showEnemyOrder
     dpiScale = state.dpiScale
     DEBUG_COMBAT = state.DEBUG_COMBAT
-    healAbility = state.healAbility
-    healUI = state.healUI
-    extraMoveAbility = state.extraMoveAbility
-    extraMoveUI = state.extraMoveUI
 end
 
 function syncGlobalsToState()
@@ -87,8 +80,6 @@ function syncGlobalsToState()
     state.sounds = sounds
     state.actionHistory = actionHistory
     state.maxUndoCount = maxUndoCount
-    state.windTorrent = windTorrent
-    state.windTorrentUI = windTorrentUI
     state.restartButton = restartButton
     state.endTurnButton = endTurnButton
     state.undoButton = undoButton
@@ -98,91 +89,22 @@ function syncGlobalsToState()
     state.pushAnimations = pushAnimations
     state.dpiScale = dpiScale
     state.showEnemyOrder = showEnemyOrder
-    state.healAbility = healAbility
-    state.healUI = healUI
-    state.extraMoveAbility = extraMoveAbility
-    state.extraMoveUI = extraMoveUI
 end
 
 function love.load()
-    selectedAttack = nil
-    attackMode = false
-    flipTargetActor = nil
-    attackButtons = {}
     dpiScale = love.window.getDPIScale()
+    sti = require 'libraries/sti'
+    maxTurns = 5
+
     restartButton = {
         x = 10, y = 295, width = 120, height = 30,
         text = "Restart Game", isHovered = false
     }
-    sti = require 'libraries/sti'
-    local hexStatuses
-    terrainMap, entities, width, height, hexStatuses = environment.loadMapFromTiled('maps/map1.lua')
-    hex = require("hexgrid").new(
-        config.HEX_RADIUS,
-        width, height,
-        config.ACTIVE_RADIUS,
-        config.CENTER_Q,
-        config.CENTER_R
-    )
-
-    turnCount = 0
-    maxTurns = 5
-    decayAppliedForTurnLimit = false
-    decayMessageTimer = 0
-    gameActive = true
-    win = false
-    loss = false
-    fireAppliedForTurnLimit = false
-
-    windTorrentUI = {
-        active = false,
-        button = { x = 10, y = 225, width = 120, height = 30 }
+    endTurnButton = {
+        x = 10, y = 260, width = 120, height = 30,
+        text = "End Turn", isHovered = false,
+        holdTimer = 0, isHeld = false,
     }
-    hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
-
-    status.initHexStatuses(hexStatuses)
-
-    globalHealth = { current = 5, max = 5, initial = 5 }
-    combat.globalHealth = globalHealth
-
-    turnState = {
-        phase = "enemy_prepare",
-        enemyPrepareQueue = {},
-        currentPreparingEnemy = nil,
-        enemyAttackQueue = {},
-        enemyAttackTimer = 0,
-        delayBetweenAttacks = 0.4,
-        pendingDigProcessing = false
-    }
-
-    for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable then
-            e.hasPreparedAttack = false
-            e.preparePos = nil
-            e.preparedTarget = nil
-            e.movementFinished = false
-        end
-    end
-
-    selectedActor = nil
-    for _, a in ipairs(entities) do
-        if a.isPlayable and a.health > 0 then
-            selectedActor = a
-            hex.selectedQ, hex.selectedR = a.q, a.r
-            break
-        end
-    end
-
-    for _, a in ipairs(entities) do
-        if a.isPlayable then
-            a.hasActedThisTurn = false
-            a.hasMovedThisTurn = false
-        end
-    end
-
-    turnManager.startGame()
-
-    hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
 
     sounds = {}
     sounds.undo = love.audio.newSource("sounds/hover.wav", "static")
@@ -194,27 +116,8 @@ function love.load()
     sounds.collision = love.audio.newSource("sounds/blip.wav", "static")
     sounds.collision:setVolume(0.6)
 
-    maxUndoCount = countPlayableActors()
-    actionHistory = {}
-
-    endTurnButton = {
-        x = 10, y = 260, width = 120, height = 30,
-        text = "End Turn", isHovered = false,
-        holdTimer = 0, isHeld = false,
-    }
-
-    windTorrent = combat.WindTorrentAttack.new()
-
-    healAbility = { hasBeenUsed = false }
-    healUI = { active = false }
-    extraMoveAbility = { hasBeenUsed = false }
-    extraMoveUI = { active = false }
-
-    windTorrentUI.button = { x = 10, y = 225, width = 120, height = 30, isHovered = false }
-
     showEnemyOrder = false
-
-    syncGlobalsToState()
+    restartGame()
 end
 
 function getDrawCoords(q, r)
@@ -225,41 +128,7 @@ function getDrawCoords(q, r)
     return x, y
 end
 
-function getWindDirectionFromHex(q, r, centerQ, centerR, hex)
-    local cx, cy, cz = hex_utils.axialToCube(centerQ, centerR)
-    local x, y, z = hex_utils.axialToCube(q, r)
-    local dx, dy, dz = x - cx, y - cy, z - cz
 
-    if dx == 0 and dy == 0 and dz == 0 then
-        return nil
-    end
-
-    local absDx, absDy, absDz = math.abs(dx), math.abs(dy), math.abs(dz)
-    local maxVal = math.max(absDx, absDy, absDz)
-
-    local ndx = math.floor(dx / maxVal + 0.5)
-    local ndy = math.floor(dy / maxVal + 0.5)
-    local ndz = math.floor(dz / maxVal + 0.5)
-
-    if ndx + ndy + ndz ~= 0 then
-        return nil
-    end
-
-    local directionMap = {
-        {dx=1, dy=-1, dz=0, name="E"},
-        {dx=1, dy=0, dz=-1, name="NE"},
-        {dx=0, dy=1, dz=-1, name="NW"},
-        {dx=-1, dy=1, dz=0, name="W"},
-        {dx=-1, dy=0, dz=1, name="SW"},
-        {dx=0, dy=-1, dz=1, name="SE"},
-    }
-    for _, dir in ipairs(directionMap) do
-        if dir.dx == ndx and dir.dy == ndy and dir.dz == ndz then
-            return dir.name
-        end
-    end
-    return nil
-end
 
 function love.mousepressed(x, y, button)
     input.mousepressed(x / dpiScale, y / dpiScale, button)
@@ -344,8 +213,6 @@ function love.update(dt)
     undoButton.isHovered = (mx >= 10 and mx <= 130 and my >= 190 and my <= 220)
     endTurnButton.isHovered = (mx >= endTurnButton.x and mx <= endTurnButton.x + endTurnButton.width and
                                my >= endTurnButton.y and my <= endTurnButton.y + endTurnButton.height)
-    windTorrentUI.button.isHovered = (mx >= windTorrentUI.button.x and mx <= windTorrentUI.button.x + windTorrentUI.button.width and
-                                      my >= windTorrentUI.button.y and my <= windTorrentUI.button.y + windTorrentUI.button.height)
 end
 
 function love.resize(w, h)
