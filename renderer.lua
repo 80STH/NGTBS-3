@@ -21,6 +21,12 @@ function renderer.draw(state)
     if state.flipTargetActor then
         ui.collectFlipDestOverlays(state.hex, state.selectedActor, state.flipTargetActor, state.selectedAttack, state.entities, cellOverlays)
     end
+    if state.windTorrentUI.active and hex.hoverQ >= 0 and hex.hoverR >= 0 then
+        local direction = getWindDirectionFromHex(hex.hoverQ, hex.hoverR, hex.centerQ, hex.centerR, hex)
+        if direction then
+            ui.collectWindTorrentOverlays(hex, direction, state.entities, state.terrainMap, cellOverlays)
+        end
+    end
     if state.attackMode and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local ovCells = {}
         ui.collectAttackPreviewOverlays(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities, ovCells)
@@ -84,6 +90,8 @@ function renderer.draw(state)
         elseif info.flipDest then
             local pulse = 0.6 + 0.4 * math.sin(t * 4)
             cellOverlays[key] = {fill = {0.2, 0.7, 1, 0.25 * pulse}, line = {0.2, 0.7, 1, 0.8 * pulse}}
+        elseif info.windTorrentDest then
+            cellOverlays[key] = {fill = {0.3, 0.6, 1, 0.4}, line = {0.3, 0.6, 1, 0.8}}
         end
     end
 
@@ -391,6 +399,9 @@ function drawHealthBar(entity, x, y, damage)
     local startY = y - 28
 
     damage = damage or 0
+    if status.hasEntityStatus(entity, "acid") then
+        damage = damage * 2
+    end
     local damageClamped = math.min(damage, entity.health)
 
     -- Рамка вокруг всех ячеек

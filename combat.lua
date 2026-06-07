@@ -1335,6 +1335,15 @@ function undoLastAction()
         status.setEntityStatuses(actor, action.statusesBefore)
     end
 
+    -- Restore hex statuses at the destination (e.g. acid consumed on step)
+    if action.destHexStatuses then
+        for st, _ in pairs(action.destHexStatuses) do
+            if not status.hasAtHex(action.toQ, action.toR, st) then
+                status.applyToHex(action.toQ, action.toR, st)
+            end
+        end
+    end
+
     if actor.health > 0 then
         local found = false
         for _, e in ipairs(entities) do
@@ -1365,6 +1374,10 @@ end
 
 function addToHistory(actor, fromQ, fromR, toQ, toR)
     if not actor.isPlayable then return end
+    local destHexStatuses = {}
+    for _, st in ipairs(status.getAtHex(toQ, toR) or {}) do
+        destHexStatuses[st] = true
+    end
     table.insert(actionHistory, {
         actor = actor,
         fromQ = fromQ, fromR = fromR,
@@ -1372,6 +1385,7 @@ function addToHistory(actor, fromQ, fromR, toQ, toR)
         type = "move",
         healthBefore = actor.health,
         statusesBefore = status.copyEntityStatuses(actor),
+        destHexStatuses = destHexStatuses,
     })
     print("Move recorded. History size: " .. #actionHistory)
 end

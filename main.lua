@@ -197,7 +197,8 @@ function love.load()
 
     endTurnButton = {
         x = 10, y = 260, width = 120, height = 30,
-        text = "End Turn", isHovered = false
+        text = "End Turn", isHovered = false,
+        holdTimer = 0, isHeld = false,
     }
 
     windTorrent = combat.WindTorrentAttack.new()
@@ -262,6 +263,10 @@ function love.mousepressed(x, y, button)
     input.mousepressed(x / dpiScale, y / dpiScale, button)
 end
 
+function love.mousereleased(x, y, button)
+    input.mousereleased(x / dpiScale, y / dpiScale, button)
+end
+
 function isPositionOccupied(q, r, movingEntity)
     if not hex:isActiveHex(q, r) then
         return true
@@ -302,6 +307,15 @@ function love.update(dt)
     end
     if decayMessageTimer > 0 then
         decayMessageTimer = decayMessageTimer - dt
+    end
+
+    if endTurnButton.isHeld then
+        endTurnButton.holdTimer = endTurnButton.holdTimer + dt
+        if endTurnButton.holdTimer >= 0.7 then
+            endTurnButton.isHeld = false
+            endTurnButton.holdTimer = 0
+            endTurn()
+        end
     end
 
     if screenShake.timer > 0 then

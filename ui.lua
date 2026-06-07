@@ -1072,9 +1072,9 @@ function ui.drawDecayButton(mouseX, mouseY, turnCount, maxTurns, phase)
 
     if isHover then
         local tooltipW, tooltipH = 300, 82
-        local tx, ty = x, y + btnH + 4
-        if ty + tooltipH > logicalH - 10 then
-            ty = y - tooltipH - 4
+        local tx, ty = x + btnW + 6, y
+        if tx + tooltipW > logicalW - 10 then
+            tx = x - tooltipW - 6
         end
         love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
         love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
@@ -1095,16 +1095,52 @@ end
 
 function ui.drawEndTurnButton(turnState, entities)
     local isPlayerTurn = (turnState.phase == "player")
-    love.graphics.setColor(isPlayerTurn and 0.8 or 0.4, 0.2, 0.2, 0.8)
-    love.graphics.rectangle("fill", 10, 260, 120, 30, 5)
+    local btn = endTurnButton
+    local isPressed = btn.isHeld
+    local pressedOffset = isPressed and 2 or 0
+
+    love.graphics.setColor(isPlayerTurn and (isPressed and 0.5 or 0.8) or 0.4, 0.2, 0.2, 0.8)
+    love.graphics.rectangle("fill", 10, 260 + pressedOffset, 120, 30 - pressedOffset, 5)
+
+    if isPressed then
+        local progress = math.min(btn.holdTimer / 0.7, 1)
+        love.graphics.setColor(0.9, 0.3, 0.2, 0.6)
+        love.graphics.rectangle("fill", 10, 260 + pressedOffset, 120 * progress, 30 - pressedOffset, 5)
+    end
+
     love.graphics.setColor(1, 1, 1, 1)
     local old = love.graphics.getFont()
     love.graphics.setFont(buttonFont)
-    love.graphics.printf("End Turn (E)", 10, 269, 120, "center")
+    love.graphics.printf("End Turn (E)", 10, 269 + pressedOffset, 120, "center")
     love.graphics.setFont(old)
     if not isPlayerTurn then
         love.graphics.setColor(0, 0, 0, 0.6)
         love.graphics.rectangle("fill", 10, 260, 120, 30, 5)
+    end
+
+    if btn.isHovered and isPlayerTurn then
+        local unitsLeft = {}
+        for _, e in ipairs(entities) do
+            if e.isPlayable and e.health > 0 and not e.hasActedThisTurn then
+                table.insert(unitsLeft, e.name)
+            end
+        end
+        if #unitsLeft > 0 then
+            local names = table.concat(unitsLeft, ", ")
+            local tooltipW, tooltipH = 260, 48
+            local tx, ty = 10 + 120 + 6, 260
+            if tx + tooltipW > logicalW - 10 then
+                tx = 10 - tooltipW - 6
+            end
+            love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
+            love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
+            love.graphics.setColor(0.8, 0.8, 0.8, 1)
+            love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
+            love.graphics.setColor(1, 0.8, 0.4, 1)
+            love.graphics.print("Hold to end turn:", tx + 8, ty + 6)
+            love.graphics.setColor(0.9, 0.9, 0.9, 1)
+            love.graphics.print(names, tx + 8, ty + 26)
+        end
     end
 end
 
@@ -1193,12 +1229,9 @@ function ui.drawGlobalHealthBar(globalHealth, mouseX, mouseY)
 
     if isHover then
         local tooltipW, tooltipH = 280, 64
-        local tx, ty = x, y + pipHeight + 6
-        if ty + tooltipH > logicalH - 10 then
-            ty = y - tooltipH - 6
-        end
+        local tx, ty = x + totalW + 6, y
         if tx + tooltipW > logicalW - 10 then
-            tx = logicalW - tooltipW - 10
+            tx = x - tooltipW - 6
         end
         love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
         love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
@@ -1582,6 +1615,48 @@ end
 
 -- Предпросмотр Wind Torrent: рисует стрелки от каждого подвижного объекта к его новому положению
 -- ui.lua
+function ui.collectWindTorrentOverlays(hex, direction, entities, terrainMap, cellOverlays)
+    local stepMap = {
+        E  = {dx = 1, dy = -1, dz = 0},
+        NE = {dx = 1, dy = 0, dz = -1},
+        NW = {dx = 0, dy = 1, dz = -1},
+        W  = {dx = -1, dy = 1, dz = 0},
+        SW = {dx = -1, dy = 0, dz = 1},
+        SE = {dx = 0, dy = -1, dz = 1},
+    }
+    local step = stepMap[direction]
+    if not step then return end
+
+    local function axialToCube(q, r)
+        local x = q - (r - (r % 2)) / 2
+        local z = r
+        local y = -x - z
+        return x, y, z
+    end
+    local function cubeToAxial(x, y, z)
+        local q = x + (z - (z % 2)) / 2
+        local r = z
+        return q, r
+    end
+    local function applyStep(q, r)
+        local x, y, z = axialToCube(q, r)
+        return cubeToAxial(x + step.dx, y + step.dy, z + step.dz)
+    end
+    local function isValid(q, r) return hex:isActiveHex(q, r) end
+
+    for _, entity in ipairs(entities) do
+        if entity.isPushable and entity.health > 0 then
+            local newQ, newR = applyStep(entity.q, entity.r)
+            if isValid(newQ, newR) then
+                local key = newQ .. "," .. newR
+                if not cellOverlays[key] then
+                    cellOverlays[key] = { windTorrentDest = true }
+                end
+            end
+        end
+    end
+end
+
 function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
     local stepMap = {
         E  = {dx = 1, dy = -1, dz = 0},
@@ -1694,19 +1769,6 @@ function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
     for _, dmg in ipairs(damagedEntities) do
         if dmg.entity and dmg.entity.health > 0 then
             drawHealthBar(dmg.entity, dmg.x, dmg.y, dmg.damage)
-        end
-    end
-
-    -- Подсветка клеток назначения
-    for _, pd in ipairs(previewData) do
-        local q, r = hex:pixelToHex(pd.toX, pd.toY)
-        if hex:isValidHex(q, r) then
-            local vertices = hex:drawHexagon(pd.toX, pd.toY, hex.radius)
-
-            love.graphics.setColor(0.3, 0.6, 1, 0.4)
-            love.graphics.polygon("fill", vertices)
-            love.graphics.setColor(0.3, 0.6, 1, 0.8)
-            love.graphics.polygon("line", vertices)
         end
     end
 end

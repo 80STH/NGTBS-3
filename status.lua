@@ -103,6 +103,17 @@ function status.getEntityStatuses(entity)
     return status.entityStatuses[entity] or {}
 end
 
+-- Проверка наличия негативных статусов на гексе (огонь, кислота, разложение)
+function status.hasNegativeHexStatus(q, r)
+    local hexStatuses = status.getAtHex(q, r)
+    for _, st in ipairs(hexStatuses) do
+        if st == "fire" or st == "acid" or st == "decay" then
+            return true
+        end
+    end
+    return false
+end
+
 -- Множитель урона от статусов
 function status.getDamageMultiplier(entity)
     if status.hasEntityStatus(entity, "acid") then

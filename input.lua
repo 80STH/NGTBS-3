@@ -143,7 +143,19 @@ function input.mousepressed(x, y, button)
     if x >= endTurnButton.x and x <= endTurnButton.x + endTurnButton.width and
        y >= endTurnButton.y and y <= endTurnButton.y + endTurnButton.height then
         if turnState.phase == "player" then
-            endTurn()
+            local hasActive = false
+            for _, e in ipairs(entities) do
+                if e.isPlayable and e.health > 0 and not e.hasActedThisTurn then
+                    hasActive = true
+                    break
+                end
+            end
+            if hasActive then
+                endTurnButton.isHeld = true
+                endTurnButton.holdTimer = 0
+            else
+                endTurn()
+            end
         else
             print("Not your turn")
         end
@@ -457,6 +469,14 @@ function tryUseExtraMoveAbility(target)
     actionHistory = {}
     print(tostring(target.name) .. " can now move after attacking!")
     return true
+end
+
+function input.mousereleased(x, y, button)
+    if button ~= 1 then return end
+    if endTurnButton.isHeld then
+        endTurnButton.isHeld = false
+        endTurnButton.holdTimer = 0
+    end
 end
 
 return input

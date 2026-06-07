@@ -58,6 +58,7 @@ function GameState.new()
     self.endTurnButton = {
         x = 10, y = 260, width = 120, height = 30,
         text = "End Turn", isHovered = false,
+        holdTimer = 0, isHeld = false,
     }
     self.undoButton = { isHovered = false }
 

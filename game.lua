@@ -210,7 +210,7 @@ function processDigSites()
             end
         end
         local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
-        if not occupied and terrain ~= "water" then
+        if not occupied and terrain ~= "water" and not status.hasNegativeHexStatus(dig.q, dig.r) then
             local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
             table.insert(entities, newEnemy)
             local x, y = hex:hexToPixel(dig.q, dig.r)
@@ -247,7 +247,7 @@ function processDigSites()
                                 break
                             end
                         end
-                        if not occupied and not status.hasDigSite(q, r) then
+                        if not occupied and not status.hasDigSite(q, r) and not status.hasNegativeHexStatus(q, r) then
                             table.insert(candidates, {q = q, r = r})
                         end
                     end
