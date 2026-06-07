@@ -14,10 +14,13 @@ function renderer.draw(state)
     -- Collect cell overlays for grid rendering
     local cellOverlays = {}
     ui.collectPreparedAttackOverlays(hex, state.entities, cellOverlays)
-    if state.attackMode and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn then
+    if state.attackMode and not state.flipTargetActor and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn then
         ui.collectAttackableCellOverlays(hex, state.selectedActor, state.selectedAttack, state.entities, state.terrainMap, cellOverlays)
     end
     ui.collectAbilityTargetOverlays(state.entities, state.healUI, state.extraMoveUI, cellOverlays)
+    if state.flipTargetActor then
+        ui.collectFlipDestOverlays(state.hex, state.selectedActor, state.flipTargetActor, state.selectedAttack, state.entities, cellOverlays)
+    end
     if state.attackMode and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local ovCells = {}
         ui.collectAttackPreviewOverlays(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities, ovCells)
@@ -78,6 +81,9 @@ function renderer.draw(state)
                     hexRadius * 2 / hazardTex:getHeight() * scaleMod)
                 love.graphics.setStencilTest()
             end
+        elseif info.flipDest then
+            local pulse = 0.6 + 0.4 * math.sin(t * 4)
+            cellOverlays[key] = {fill = {0.2, 0.7, 1, 0.25 * pulse}, line = {0.2, 0.7, 1, 0.8 * pulse}}
         end
     end
 
@@ -158,27 +164,25 @@ function renderer.draw(state)
         end
     end
 
-    ui.drawHealAbilityButton(state.healAbility, state.healUI, state.turnState)
-    ui.drawExtraMoveAbilityButton(state.extraMoveAbility, state.extraMoveUI, state.turnState)
+    local mx, my = love.mouse.getPosition()
+    mx = mx / state.dpiScale
+    my = my / state.dpiScale
+
+    ui.drawHealAbilityButton(state.healAbility, state.healUI, state.turnState, mx, my)
+    ui.drawExtraMoveAbilityButton(state.extraMoveAbility, state.extraMoveUI, state.turnState, mx, my)
     ui.drawUndoButton(state.actionHistory, state.maxUndoCount, state.selectedActor)
     ui.drawEndTurnButton(state.turnState, state.entities)
     ui.drawRestartButton(state.restartButton, state.turnState)
-    ui.drawWindTorrentButton(state.windTorrent, state.windTorrentUI, state.turnState)
-    ui.drawGlobalHealthBar(state.globalHealth)
-    ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
+    ui.drawWindTorrentButton(state.windTorrent, state.windTorrentUI, state.turnState, mx, my)
 
-    love.graphics.setColor(1, 1, 1, 1)
-    local decayActive = state.turnCount >= state.maxTurns
-    local decayStr = decayActive and "Decay active!" or ("Decay in: " .. (state.maxTurns - state.turnCount))
-    love.graphics.print(decayStr .. "  |  Phase: " .. state.turnState.phase, 10, 5)
+    ui.drawGlobalHealthBar(state.globalHealth, mx, my)
+    ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
+    ui.drawDecayButton(mx, my, state.turnCount, state.maxTurns, state.turnState.phase)
     if state.selectedActor then
         love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 23)
     end
     love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 95)
 
-    local mx, my = love.mouse.getPosition()
-    mx = mx / state.dpiScale
-    my = my / state.dpiScale
     local hoverOrder = ui.drawEnemyOrderButton(mx, my)
     local showOrder = hoverOrder or state.showEnemyOrder
     if showOrder then

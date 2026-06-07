@@ -28,6 +28,8 @@ function turnManager.endPlayerTurn()
             a.hasActedThisTurn = true
         end
     end
+
+    -- Step 1: Simultaneous effects (fire, decay) — no digging
     effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
     checkGameEnd()
 
@@ -38,6 +40,7 @@ function turnManager.endPlayerTurn()
         status.clearAllDigSites()
     end
 
+    -- Step 2: Queue enemy attacks
     local attackers = {}
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 and not e.isDying then
@@ -88,6 +91,7 @@ end
 
 function updateAttackPhase(dt)
     if #turnState.enemyAttackQueue == 0 then
+        -- Step 3: Simultaneous digging
         if turnState.pendingDigProcessing then
             processDigSites()
             turnState.pendingDigProcessing = false
@@ -95,7 +99,6 @@ function updateAttackPhase(dt)
         turnCount = turnCount + 1
         print("Turn count increased to: " .. turnCount .. "/" .. maxTurns)
         turnState.phase = "enemy_prepare"
-        effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
         startEnemyPreparePhase()
         return
     end

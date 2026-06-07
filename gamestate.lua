@@ -33,6 +33,7 @@ function GameState.new()
     self.selectedActor = nil
     self.selectedAttack = nil
     self.attackMode = false
+    self.flipTargetActor = nil
     self.attackButtons = {}
     self.sounds = {}
 

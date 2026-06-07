@@ -21,9 +21,9 @@ local gidToEntity = {
     [34] = { type = "character", name = "Warrior", isPlayable = true,  maxHealth = 5, moveRange = 3, attacks = "warrior" },
     [31] = { type = "character", name = "Mage",    isPlayable = true,  maxHealth = 3, moveRange = 4, attacks = "mage" },
     [30] = { type = "character", name = "Rogue",   isPlayable = true,  maxHealth = 4, moveRange = 5, attacks = "rogue" },
-    [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 3, moveRange = 1, attacks = "ghost" },
-    [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 3, moveRange = 2, attacks = "zombie" },
-    [27] = { type = "character", name = "Lich",    isPlayable = false, maxHealth = 2, moveRange = 1, attacks = "lich" },
+    [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "ghost" },
+    [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
+    [27] = { type = "character", name = "Lich",    isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "lich" },
     [11] = { type = "obstacle",  name = "SuperMountain", health = 999 },
     [12] = { type = "building",  name = "SmallBuilding", health = 1, globalHealthCost = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2, globalHealthCost = 2 },
@@ -525,22 +525,22 @@ function environment.createEnemyByType(enemyType, q, r)
         attacks = environment.getGhostAttacks()
         name = "Ghost"
         maxHealth = 3
-        moveRange = 1
+        moveRange = 3
     elseif enemyType == "Zombie" then
         attacks = environment.getZombieAttacks()
         name = "Zombie"
         maxHealth = 3
-        moveRange = 2
+        moveRange = 3
     elseif enemyType == "Lich" then
         attacks = environment.getLichAttacks()
         name = "Lich"
         maxHealth = 2
-        moveRange = 1
+        moveRange = 3
     else
         attacks = environment.getZombieAttacks()
         name = "Zombie"
         maxHealth = 3
-        moveRange = 2
+        moveRange = 3
     end
 
     local sprite = environment.enemySpriteCache[enemyType]

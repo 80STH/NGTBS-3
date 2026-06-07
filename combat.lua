@@ -213,63 +213,84 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     return true
 end
 
--- 2. ПЕРЕВОРОТ (Flip) – без урона, но с перемещением
+-- 2. ПЕРЕВОРОТ (Flip) – 1 урон, переброс на 3 клетки на выбор
 combat.FlipAttack = setmetatable({}, combat.Attack)
 combat.FlipAttack.__index = combat.FlipAttack
 function combat.FlipAttack.new()
-    local self = combat.Attack.new("Flip", "Flip the target behind the attacker", 1, 0, {})
+    local self = combat.Attack.new("Flip", "Flip target behind (1 dmg), choose destination", 1, 1, {})
     return setmetatable(self, combat.FlipAttack)
+end
+
+-- Возвращает 3 возможные клетки для переброса: за спиной, слева и справа
+-- (только свободные и активные)
+function combat.FlipAttack:getFlipCells(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) ~= 1 then return {} end
+    local targetActor = combat.getEntityAtHex(targetQ, targetR, entities)
+    if not targetActor or not targetActor:isCharacter() then
+        return {}
+    end
+    local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
+    local tX, tY, tZ = hex_utils.axialToCube(targetQ, targetR)
+    local dirX, dirY, dirZ = aX - tX, aY - tY, aZ - tZ
+    -- Три направления: прямо назад, поворот влево, поворот вправо
+    local dirs = {
+        {dirX, dirY, dirZ},
+        {-dirY, -dirZ, -dirX},  -- поворот влево
+        {-dirZ, -dirX, -dirY},  -- поворот вправо
+    }
+    local cells = {}
+    for _, d in ipairs(dirs) do
+        local flipX, flipY, flipZ = aX + d[1], aY + d[2], aZ + d[3]
+        local flipQ, flipR = hex_utils.cubeToAxial(flipX, flipY, flipZ)
+        if hex:isActiveHex(flipQ, flipR) and not combat.getEntityAtHex(flipQ, flipR, entities) then
+            table.insert(cells, {q = flipQ, r = flipR})
+        end
+    end
+    return cells
 end
 
 function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
     if distance ~= 1 then return false, "Target must be adjacent!" end
     local targetActor = combat.getEntityAtHex(targetQ, targetR, entities)
-    -- ДОБАВЛЕНО: цель должна быть вражеским персонажем (не зданием и не препятствием)
     if not targetActor then return false, "No entity at that hex!" end
-    if not targetActor:isCharacter() or targetActor.isPlayable then
-        return false, "Target must be an enemy character!"
+    if not targetActor:isCharacter() then
+        return false, "Target must be a character!"
     end
-    local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
-    local tX, tY, tZ = hex_utils.axialToCube(targetQ, targetR)
-    local dirX, dirY, dirZ = aX - tX, aY - tY, aZ - tZ
-    local behindX, behindY, behindZ = aX + dirX, aY + dirY, aZ + dirZ
-    local behindQ, behindR = hex_utils.cubeToAxial(behindX, behindY, behindZ)
-    -- Проверка, что клетка за атакующим существует, активна и не занята ничем
-    if not hex:isActiveHex(behindQ, behindR) then
-        return false, "No free space behind the attacker!"
+    -- Determine destination: use _flipDestCell if set, else default (behind)
+    local destQ, destR
+    if self._flipDestCell then
+        destQ, destR = self._flipDestCell.q, self._flipDestCell.r
+        self._flipDestCell = nil
+    else
+        local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
+        local tX, tY, tZ = hex_utils.axialToCube(targetQ, targetR)
+        local dirX, dirY, dirZ = aX - tX, aY - tY, aZ - tZ
+        destQ, destR = hex_utils.cubeToAxial(aX + dirX, aY + dirY, aZ + dirZ)
     end
-    if combat.getEntityAtHex(behindQ, behindR, entities) then
-        return false, "Cell behind attacker is occupied!"
+    if not hex:isActiveHex(destQ, destR) then
+        return false, "Destination cell is not active!"
     end
-    attack_effects.flip(attacker, targetActor, behindQ, behindR, hex)
-    combat.addPushAnimation(targetActor, targetQ, targetR, behindQ, behindR)
+    if combat.getEntityAtHex(destQ, destR, entities) then
+        return false, "Destination cell is occupied!"
+    end
+    -- Наносим 1 урон
+    self:dealDamageToTarget(targetActor, attacker, 1, entities, sounds, nil, globalHealth)
+    -- Перемещение
+    attack_effects.flip(attacker, targetActor, destQ, destR, hex)
+    combat.addPushAnimation(targetActor, targetQ, targetR, destQ, destR)
     combat.startPushAnimations(hex)
-    print(string.format("%s flips %s behind them!", attacker.name, targetActor.name))
+    print(string.format("%s flips %s to (%d,%d)!", attacker.name, targetActor.name, destQ, destR))
     if sounds and sounds.attack then sounds.attack:play() end
     attacker.hasActedThisTurn = true
     return true
 end
--- Предпросмотр переворота: куда переместится цель
-function combat.FlipAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
-    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) ~= 1 then return nil end
-    local targetActor = combat.getEntityAtHex(targetQ, targetR, entities)
-    if not targetActor or not targetActor:isCharacter() or targetActor.isPlayable then
-        return nil
-    end
-    local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
-    local tX, tY, tZ = hex_utils.axialToCube(targetQ, targetR)
-    local dirX, dirY, dirZ = aX - tX, aY - tY, aZ - tZ
-    local behindX, behindY, behindZ = aX + dirX, aY + dirY, aZ + dirZ
-    local behindQ, behindR = hex_utils.cubeToAxial(behindX, behindY, behindZ)
-    if not hex:isActiveHex(behindQ, behindR) then return nil end
-    if combat.getEntityAtHex(behindQ, behindR, entities) then return nil end
-    return {q = behindQ, r = behindR}
-end
 
--- function combat.FlipAttack:getLineDirection(fromQ, fromR, toQ, toR, hex)
---     return nil
--- end
+-- Для обратной совместимости с кодом, вызывающим getPushCell
+function combat.FlipAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
+    local cells = self:getFlipCells(attacker, targetQ, targetR, hex, entities)
+    return cells[1]  -- первая клетка = прямо за спиной
+end
 
 -- 3. ВЫСТРЕЛ (Shoot)
 combat.ShootAttack = setmetatable({}, combat.Attack)

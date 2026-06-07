@@ -176,14 +176,49 @@ function input.mousepressed(x, y, button)
     end
 
     if attackMode and selectedAttack and selectedActor and not selectedActor.hasActedThisTurn then
-        print("[DEBUG] Attack mode active, attempting attack at hex", tq, tr)
-        local success, msg = performAttackWithSelectedAttack(selectedActor, tq, tr, selectedAttack)
+        -- Flip: first select target (any adjacent character), then choose destination cell
+        if selectedAttack.name == "Flip" then
+            if flipTargetActor then
+                -- Step 2: clicked on a destination cell
+                local destQ, destR = tq, tr
+                local actorQ, actorR = selectedActor.q, selectedActor.r
+                local targetQ, targetR = flipTargetActor.q, flipTargetActor.r
+                local cells = selectedAttack:getFlipCells(selectedActor, targetQ, targetR, hex, entities)
+                local isValidDest = false
+                for _, c in ipairs(cells) do
+                    if c.q == destQ and c.r == destR then
+                        isValidDest = true
+                        break
+                    end
+                end
+                if isValidDest then
+                    selectedAttack._flipDestCell = {q = destQ, r = destR}
+                    local success, msg = performAttackWithSelectedAttack(selectedActor, targetQ, targetR, selectedAttack)
+                    if not success then print("Attack failed: " .. msg) end
+                    attackMode = false
+                    selectedAttack = nil
+                    flipTargetActor = nil
+                    globalHealth.previewDamage = 0
+                else
+                    -- Clicked elsewhere — cancel destination choice, stay in attackMode
+                    flipTargetActor = nil
+                end
+            else
+                -- Step 1: click on any adjacent character (ally or enemy) to select as flip target
+                local clicked = getEntityAtHex(tq, tr)
+                if clicked and clicked:isCharacter() and clicked ~= selectedActor and
+                   hex:getDistance(selectedActor.q, selectedActor.r, tq, tr) == 1 then
+                    flipTargetActor = clicked
+                end
+            end
+            return
+        else
+            local success, msg = performAttackWithSelectedAttack(selectedActor, tq, tr, selectedAttack)
+            if not success then print("Attack failed: " .. msg) end
+        end
         attackMode = false
         selectedAttack = nil
         globalHealth.previewDamage = 0
-        if not success then
-            print("Attack failed: " .. msg)
-        end
         return
     end
 
@@ -230,6 +265,9 @@ function input.keypressed(key)
             windTorrentUI.active = false
             restoreSelectedActor()
             print("Wind Torrent cancelled")
+        elseif flipTargetActor then
+            flipTargetActor = nil
+            print("Flip target cancelled")
         elseif attackMode then
             attackMode = false
             selectedAttack = nil

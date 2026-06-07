@@ -25,16 +25,6 @@ function effects.applyAllCellEffects(entity, q, r, terrainMap, entities, globalH
         print(string.format(" %s caught fire from cell!", entity.name))
     end
 
-    if status.hasEntityStatus(entity, "decay") then
-        local damage = 1
-        print(string.format(" %s decays for %d damage!", entity.name, damage))
-        local wasDestroyed = entity:takeDamage(damage, globalHealth)
-        if sounds and sounds.decay then sounds.decay:play() end
-        if wasDestroyed then
-            entity:startDeath()
-        end
-    end
-
     -- 3. Кислота с клетки накладывает эффект кислоты и исчезает с земли
     if status.hasAtHex(q, r, "acid") and not status.hasEntityStatus(entity, "acid") then
         status.applyToEntity(entity, "acid")

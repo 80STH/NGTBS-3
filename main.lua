@@ -43,6 +43,7 @@ function syncStateToGlobals()
     selectedActor = state.selectedActor
     selectedAttack = state.selectedAttack
     attackMode = state.attackMode
+    flipTargetActor = state.flipTargetActor
     attackButtons = state.attackButtons
     sounds = state.sounds
     actionHistory = state.actionHistory
@@ -79,6 +80,7 @@ function syncGlobalsToState()
     state.selectedActor = selectedActor
     state.selectedAttack = selectedAttack
     state.attackMode = attackMode
+    state.flipTargetActor = flipTargetActor
     state.attackButtons = attackButtons
     state.sounds = sounds
     state.actionHistory = actionHistory
@@ -103,6 +105,7 @@ end
 function love.load()
     selectedAttack = nil
     attackMode = false
+    flipTargetActor = nil
     attackButtons = {}
     dpiScale = love.window.getDPIScale()
     restartButton = {

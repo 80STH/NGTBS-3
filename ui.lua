@@ -431,6 +431,17 @@ function ui.collectPreparedAttackOverlays(hex, entities, out)
     end
 end
 
+-- Collects Flip destination overlays into out table when flipTargetActor is selected
+function ui.collectFlipDestOverlays(hex, selectedActor, flipTargetActor, attack, entities, out)
+    if not selectedActor or not flipTargetActor or not attack then return end
+    if attack.name ~= "Flip" then return end
+    local cells = attack:getFlipCells(selectedActor, flipTargetActor.q, flipTargetActor.r, hex, entities)
+    for _, cell in ipairs(cells) do
+        local key = cell.q .. "," .. cell.r
+        out[key] = {flipDest = true}
+    end
+end
+
 -- Collects attackable cell overlays into out table (keyed by "q,r", value = true)
 function ui.collectAttackableCellOverlays(hex, attacker, attack, entities, terrainMap, out)
     if not attacker or not attack then return end
@@ -449,12 +460,9 @@ function ui.collectAttackableCellOverlays(hex, attacker, attack, entities, terra
                     elseif attack.name == "Flip" then
                         if dist == 1 then
                             local target = getEntityAtHex(q, r, entities)
-                            if target and target:isCharacter() and not target.isPlayable then
-                                local pushCell = attack:getPushCell(attacker, q, r, hex, entities)
-                                if pushCell and hex:isActiveHex(pushCell.q, pushCell.r) then
-                                    local occupant = getEntityAtHex(pushCell.q, pushCell.r, entities)
-                                    if not occupant then canApply = true end
-                                end
+                            if target and target:isCharacter() and not target:isBuilding() then
+                                local cells = attack:getFlipCells(attacker, q, r, hex, entities)
+                                if #cells > 0 then canApply = true end
                             end
                         end
                     elseif attack.name == "Stone Throw" or attack.name == "Cone Blast" then
@@ -556,18 +564,22 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
     -- Анализируем тип атаки и получаем детали предпросмотра
     local previewData = nil
 
-    -- Flip обрабатываем отдельно, чтобы не было ложных срабатываний
+    -- Flip: 1 урон, 3 клетки для переброса
     if attack.name == "Flip" then
         local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
         if distance == 1 then
             local target = getEntityAtHex(hoverQ, hoverR, entities)
-            if target then
-                local pushCell = attack:getPushCell(attacker, hoverQ, hoverR, hex, entities)
-                if pushCell then
-                    -- Стрелка переворота
-                    local fromX, fromY = getDrawCoords(target.q, target.r)
-                    local toX, toY = getDrawCoords(pushCell.q, pushCell.r)
-                    ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, target.q, target.r, pushCell.q, pushCell.r)
+            if target and target.health > 0 then
+                local targetX, targetY = getDrawCoords(hoverQ, hoverR)
+                drawHealthBar(target, targetX, targetY, 1)
+                if target:isBuilding() then
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(1, target.health)
+                end
+                local cells = attack:getFlipCells(attacker, hoverQ, hoverR, hex, entities)
+                local fromX, fromY = getDrawCoords(target.q, target.r)
+                for _, cell in ipairs(cells) do
+                    local toX, toY = getDrawCoords(cell.q, cell.r)
+                    ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, target.q, target.r, cell.q, cell.r)
                 end
             end
         end
@@ -583,7 +595,7 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
                 local x, y = getDrawCoords(targetHex.q, targetHex.r)
                 drawHealthBar(firstTarget, x, y, attack.damage)
                 if firstTarget:isBuilding() then
-                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + attack.damage
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(attack.damage, firstTarget.health)
                 end
             end
         end
@@ -599,7 +611,7 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
                 local x, y = getDrawCoords(hoverQ, hoverR)
                 drawHealthBar(target, x, y, attack.damage)
                 if target:isBuilding() then
-                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + attack.damage
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(attack.damage, target.health)
                 end
             end
         end
@@ -624,7 +636,7 @@ if attack.name == "Magic Bolt" then
                     local dmg = attack.damage or 1
                     drawHealthBar(target, toX, toY, dmg)
                     if target:isBuilding() then
-                        globalHealth.previewDamage = (globalHealth.previewDamage or 0) + dmg
+                        globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(dmg, target.health)
                     end
                 end
             end
@@ -670,23 +682,31 @@ end
             if firstTarget then
                 local targetX, targetY = getDrawCoords(firstTarget.q, firstTarget.r)
                 local totalDamage = attack.damage or 1
+                local pushQ, pushR, isEdge
                 if targetHex then
-                    local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-                    if hex:isActiveHex(pushQ, pushR) then
+                    pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+                    isEdge = not hex:isActiveHex(pushQ, pushR)
+                    if not isEdge then
                         local collisionDamage, reason, second = ui.checkCollisionDamage(
                             firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities
                         )
                         totalDamage = totalDamage + (collisionDamage or 0)
+                        if collisionDamage > 0 and second and reason == "collision_both" then
+                            local secX, secY = getDrawCoords(second.q, second.r)
+                            drawHealthBar(second, secX, secY, 1)
+                            if second:isBuilding() then
+                                globalHealth.previewDamage = (globalHealth.previewDamage or 0) + 1
+                            end
+                        end
                     end
                 end
                 drawHealthBar(firstTarget, targetX, targetY, totalDamage)
                 if firstTarget:isBuilding() then
-                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + totalDamage
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(totalDamage, firstTarget.health)
                 end
                 
-                if targetHex then
-                    local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-                    if hex:isActiveHex(pushQ, pushR) and not combat.getEntityAtHex(pushQ, pushR, entities) then
+                if targetHex and not isEdge then
+                    if not combat.getEntityAtHex(pushQ, pushR, entities) then
                         local pushX, pushY = getDrawCoords(pushQ, pushR)
                         ui.drawPushArrow(targetX, targetY, pushX, pushY, nil, nil, nil, nil, firstTarget.q, firstTarget.r, pushQ, pushR)
                     else
@@ -908,25 +928,48 @@ end
         end
     end
 
-    -- Отрисовка для каждой цели
+    -- Build set of all preview targets (to know which have their own health bar)
+    local previewTargetKeys = {}
+    for _, pd in ipairs(previewData) do
+        if pd.target and pd.target.health > 0 then
+            previewTargetKeys[pd.target.q .. "," .. pd.target.r] = true
+        end
+    end
+
+    -- First pass: accumulate all damage per entity (base + all collisions)
+    local entityDamage = {}
     for _, pd in ipairs(previewData) do
         local target = pd.target
         if target and target.health > 0 then
-            local fromX, fromY = getDrawCoords(pd.fromCell.q, pd.fromCell.r)
-
-            -- Вычисляем общий урон (атака + возможное столкновение)
-            local totalDamage = pd.attackDamage
+            local key = target.q .. "," .. target.r
+            local dmg = pd.attackDamage or 0
             if pd.pushTo then
                 local collisionDamage, reason, second = ui.checkCollisionDamage(
                     target, pd.fromCell.q, pd.fromCell.r,
                     pd.pushTo.q, pd.pushTo.r, hex, entities
                 )
-                totalDamage = totalDamage + (collisionDamage or 0)
+                dmg = dmg + (collisionDamage or 0)
+                if collisionDamage > 0 and second then
+                    local secKey = second.q .. "," .. second.r
+                    entityDamage[secKey] = (entityDamage[secKey] or 0) + 1
+                end
             end
+            entityDamage[key] = (entityDamage[key] or 0) + dmg
+        end
+    end
+
+    -- Second pass: draw health bars with total damage, then push visuals
+    for _, pd in ipairs(previewData) do
+        local target = pd.target
+        if target and target.health > 0 then
+            local fromX, fromY = getDrawCoords(pd.fromCell.q, pd.fromCell.r)
+            local key = target.q .. "," .. target.r
+            local totalDamage = entityDamage[key] or 0
+
             if totalDamage > 0 then
                 drawHealthBar(target, fromX, fromY, totalDamage)
                 if target:isBuilding() then
-                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + totalDamage
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(totalDamage, target.health)
                 end
             end
 
@@ -945,7 +988,9 @@ end
                         local secX, secY = getDrawCoords(second.q, second.r)
                         ui.drawCollisionIcon(secX, secY, 1, true)
                         ui.drawCollisionIcon(crashX, crashY, 1, true)
-                        drawHealthBar(second, secX, secY, 1)
+                        if not previewTargetKeys[second.q .. "," .. second.r] then
+                            drawHealthBar(second, secX, secY, 1)
+                        end
                         if second:isBuilding() and not directBuildingIds[second.q .. "," .. second.r] then
                             globalHealth.previewDamage = (globalHealth.previewDamage or 0) + 1
                         end
@@ -953,7 +998,9 @@ end
                         ui.drawCollisionIcon(crashX, crashY, 1, false)
                         if second then
                             local secX, secY = getDrawCoords(second.q, second.r)
-                            drawHealthBar(second, secX, secY, 1)
+                            if not previewTargetKeys[second.q .. "," .. second.r] then
+                                drawHealthBar(second, secX, secY, 1)
+                            end
                             if second:isBuilding() and not directBuildingIds[second.q .. "," .. second.r] then
                                 globalHealth.previewDamage = (globalHealth.previewDamage or 0) + 1
                             end
@@ -1004,6 +1051,48 @@ function ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
 end
 
 -- Кнопка End Turn
+function ui.drawDecayButton(mouseX, mouseY, turnCount, maxTurns, phase)
+    local decayActive = turnCount >= maxTurns
+    local text = decayActive and "Decay active!" or ("Decay in: " .. (maxTurns - turnCount))
+    local btnW, btnH = 140, 22
+    local x = 10
+    local y = (logicalH - btnH) / 2
+
+    local isHover = mouseX >= x and mouseX <= x + btnW and mouseY >= y and mouseY <= y + btnH
+
+    if decayActive then
+        local pulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 3)
+        love.graphics.setColor(pulse, 0.2, 0.2, 0.9)
+    else
+        love.graphics.setColor(isHover and 0.5 or 0.35, 0.35, 0.25, 0.85)
+    end
+    love.graphics.rectangle("fill", x, y, btnW, btnH, 4)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(text, x + 6, y + 4)
+
+    if isHover then
+        local tooltipW, tooltipH = 300, 82
+        local tx, ty = x, y + btnH + 4
+        if ty + tooltipH > logicalH - 10 then
+            ty = y - tooltipH - 4
+        end
+        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
+        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
+
+        love.graphics.setColor(1, 1, 0.6, 1)
+        love.graphics.print("Turn " .. turnCount .. " / " .. maxTurns .. "  |  Phase: " .. phase, tx + 8, ty + 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.print("All enemies gain Decay (1 dmg/end),", tx + 8, ty + 26)
+        love.graphics.print("dig sites are cleared, and new ones", tx + 8, ty + 42)
+        love.graphics.print("stop appearing. Defeat all to win.", tx + 8, ty + 58)
+        love.graphics.setColor(1, 1, 1, 1)
+    end
+
+    return isHover
+end
+
 function ui.drawEndTurnButton(turnState, entities)
     local isPlayerTurn = (turnState.phase == "player")
     love.graphics.setColor(isPlayerTurn and 0.8 or 0.4, 0.2, 0.2, 0.8)
@@ -1053,7 +1142,7 @@ function ui.drawWindTorrentUI(windTorrent, windTorrentUI, turnState)
 end
 
 -- Полоска глобального здоровья (ячейками)
-function ui.drawGlobalHealthBar(globalHealth)
+function ui.drawGlobalHealthBar(globalHealth, mouseX, mouseY)
     local previewDamage = globalHealth.previewDamage or 0
     globalHealth.previewDamage = 0
     local pipWidth = 16
@@ -1069,6 +1158,14 @@ function ui.drawGlobalHealthBar(globalHealth)
     love.graphics.rectangle("fill", x - 2, y - 2, totalW + 4, pipHeight + 4, 3)
     love.graphics.setColor(0.6, 0.6, 0.6, 0.9)
     love.graphics.rectangle("line", x - 2, y - 2, totalW + 4, pipHeight + 4, 3)
+
+    local hoverAreaX, hoverAreaY = x - 2, y - 18
+    local hoverAreaW = totalW + 4
+    local hoverAreaH = pipHeight + 22
+    local isHover = mouseX and mouseY
+        and mouseX >= hoverAreaX and mouseX <= hoverAreaX + hoverAreaW
+        and mouseY >= hoverAreaY and mouseY <= hoverAreaY + hoverAreaH
+
     for i = 0, globalHealth.max - 1 do
         local px = x + (pipWidth + pipSpacing) * i
         local py = y
@@ -1093,6 +1190,27 @@ function ui.drawGlobalHealthBar(globalHealth)
     end
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.print(globalHealth.current .. "/" .. globalHealth.max, x + totalW + 8, y + pipHeight / 2 - 4)
+
+    if isHover then
+        local tooltipW, tooltipH = 280, 64
+        local tx, ty = x, y + pipHeight + 6
+        if ty + tooltipH > logicalH - 10 then
+            ty = y - tooltipH - 6
+        end
+        if tx + tooltipW > logicalW - 10 then
+            tx = logicalW - tooltipW - 10
+        end
+        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
+        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print("Global Health: " .. globalHealth.current .. "/" .. globalHealth.max, tx + 8, ty + 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.print("Represents the faction's total health.", tx + 8, ty + 26)
+        love.graphics.print("When it reaches 0, the game is lost.", tx + 8, ty + 42)
+        love.graphics.setColor(1, 1, 1, 1)
+    end
 end
 
 -- Панель атак
@@ -1124,6 +1242,27 @@ function ui.drawEnemyOrderButton(mouseX, mouseY)
     love.graphics.rectangle("fill", x, y, btnW, btnH, 5)
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.print("Order (O)", x + 13, y + 8)
+
+    if isHover then
+        local tooltipW, tooltipH = 260, 96
+        local tx, ty = x - tooltipW - 6, y
+        if tx < 10 then tx = x + btnW + 6 end
+        if ty + tooltipH > logicalH - 10 then
+            ty = logicalH - tooltipH - 10
+        end
+        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
+        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(1, 1, 0.6, 1)
+        love.graphics.print("Enemy Turn Order", tx + 8, ty + 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.print("1. Effects: fire & decay apply", tx + 8, ty + 26)
+        love.graphics.print("   simultaneously to all units", tx + 8, ty + 42)
+        love.graphics.print("2. Enemies attack in sequence", tx + 8, ty + 58)
+        love.graphics.print("3. Dig sites damage simultaneously", tx + 8, ty + 74)
+        love.graphics.setColor(1, 1, 1, 1)
+    end
 
     return isHover
 end
@@ -1572,26 +1711,66 @@ function ui.drawWindTorrentPreview(hex, direction, entities, terrainMap)
     end
 end
 
-function ui.drawHealAbilityButton(healAbility, healUI, turnState)
+function ui.drawHealAbilityButton(healAbility, healUI, turnState, mouseX, mouseY)
     local available = (turnState.phase == "player" and not healAbility.hasBeenUsed)
     love.graphics.setColor(available and 0.2 or 0.5, 0.8, 0.3, healUI.active and 0.5 or 0.8)
-    love.graphics.rectangle("fill", 10, 120, 120, 30, 5)
+    local x, y = 10, 120
+    love.graphics.rectangle("fill", x, y, 120, 30, 5)
     love.graphics.setColor(1, 1, 1, 1)
     local old = love.graphics.getFont()
     love.graphics.setFont(buttonFont)
-    love.graphics.printf(healUI.active and "Select target (H)" or "Heal (H)", 10, 129, 120, "center")
+    love.graphics.printf(healUI.active and "Select target (H)" or "Heal (H)", x, y + 9, 120, "center")
     love.graphics.setFont(old)
+
+    local isHover = mouseX and mouseY and mouseX >= x and mouseX <= x + 120 and mouseY >= y and mouseY <= y + 30
+    if isHover then
+        local usedText = healAbility.hasBeenUsed and " (used)" or ""
+        local tooltipW, tooltipH = 260, 64
+        local tx, ty = x + 120 + 6, y
+        if tx + tooltipW > logicalW - 10 then tx = x - tooltipW - 6 end
+        if ty + tooltipH > logicalH - 10 then ty = logicalH - tooltipH - 10 end
+        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
+        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(1, 1, 0.6, 1)
+        love.graphics.print("Heal" .. usedText, tx + 8, ty + 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.print("Fully restore HP and remove all", tx + 8, ty + 26)
+        love.graphics.print("debuffs for one allied unit.", tx + 8, ty + 42)
+        love.graphics.setColor(1, 1, 1, 1)
+    end
 end
 
-function ui.drawExtraMoveAbilityButton(extraMoveAbility, extraMoveUI, turnState)
+function ui.drawExtraMoveAbilityButton(extraMoveAbility, extraMoveUI, turnState, mouseX, mouseY)
     local available = (turnState.phase == "player" and not extraMoveAbility.hasBeenUsed)
     love.graphics.setColor(available and 0.2 or 0.5, 0.4, 0.8, extraMoveUI.active and 0.5 or 0.8)
-    love.graphics.rectangle("fill", 10, 155, 120, 30, 5)
+    local x, y = 10, 155
+    love.graphics.rectangle("fill", x, y, 120, 30, 5)
     love.graphics.setColor(1, 1, 1, 1)
     local old = love.graphics.getFont()
     love.graphics.setFont(buttonFont)
-    love.graphics.printf(extraMoveUI.active and "Select target (X)" or "Extra Move (X)", 10, 164, 120, "center")
+    love.graphics.printf(extraMoveUI.active and "Select target (X)" or "Extra Move (X)", x, y + 9, 120, "center")
     love.graphics.setFont(old)
+
+    local isHover = mouseX and mouseY and mouseX >= x and mouseX <= x + 120 and mouseY >= y and mouseY <= y + 30
+    if isHover then
+        local usedText = extraMoveAbility.hasBeenUsed and " (used)" or ""
+        local tooltipW, tooltipH = 260, 64
+        local tx, ty = x + 120 + 6, y
+        if tx + tooltipW > logicalW - 10 then tx = x - tooltipW - 6 end
+        if ty + tooltipH > logicalH - 10 then ty = logicalH - tooltipH - 10 end
+        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
+        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(1, 1, 0.6, 1)
+        love.graphics.print("Extra Move" .. usedText, tx + 8, ty + 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.print("Allow one ally who has already", tx + 8, ty + 26)
+        love.graphics.print("acted to move again.", tx + 8, ty + 42)
+        love.graphics.setColor(1, 1, 1, 1)
+    end
 end
 
 function ui.drawAbilityTargets(hex, entities, healUI, extraMoveUI, terrainMap)
@@ -1622,15 +1801,36 @@ function ui.drawAbilityTargets(hex, entities, healUI, extraMoveUI, terrainMap)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function ui.drawWindTorrentButton(windTorrent, windTorrentUI, turnState)
+function ui.drawWindTorrentButton(windTorrent, windTorrentUI, turnState, mouseX, mouseY)
     local available = (turnState.phase == "player" and windTorrent and not windTorrent.hasBeenUsed)
+    local bx, by, bw, bh = windTorrentUI.button.x, windTorrentUI.button.y, windTorrentUI.button.width, windTorrentUI.button.height
     love.graphics.setColor(available and 0.2 or 0.5, 0.6, 0.8, 0.8)
-    love.graphics.rectangle("fill", windTorrentUI.button.x, windTorrentUI.button.y, windTorrentUI.button.width, windTorrentUI.button.height, 5)
+    love.graphics.rectangle("fill", bx, by, bw, bh, 5)
     love.graphics.setColor(1, 1, 1, 1)
     local old = love.graphics.getFont()
     love.graphics.setFont(buttonFont)
-    love.graphics.printf("Wind Torrent (W)", windTorrentUI.button.x, windTorrentUI.button.y + 9, windTorrentUI.button.width, "center")
+    love.graphics.printf("Wind Torrent (W)", bx, by + 9, bw, "center")
     love.graphics.setFont(old)
+
+    local isHover = mouseX and mouseY and mouseX >= bx and mouseX <= bx + bw and mouseY >= by and mouseY <= by + bh
+    if isHover then
+        local usedText = windTorrent and windTorrent.hasBeenUsed and " (used)" or ""
+        local tooltipW, tooltipH = 260, 80
+        local tx, ty = bx + bw + 6, by
+        if tx + tooltipW > logicalW - 10 then tx = bx - tooltipW - 6 end
+        if ty + tooltipH > logicalH - 10 then ty = logicalH - tooltipH - 10 end
+        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
+        love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
+        love.graphics.setColor(1, 1, 0.6, 1)
+        love.graphics.print("Wind Torrent" .. usedText, tx + 8, ty + 6)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.print("Click on any hex to push all", tx + 8, ty + 26)
+        love.graphics.print("units (friend and foe) away from", tx + 8, ty + 42)
+        love.graphics.print("that hex in a line.", tx + 8, ty + 58)
+        love.graphics.setColor(1, 1, 1, 1)
+    end
 end
 
 function ui.drawRestartButton(button, turnState)
@@ -1950,13 +2150,10 @@ function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
                     elseif attack.name == "Flip" then
                         if dist == 1 then
                             local target = getEntityAtHex(q, r, entities)
-                            if target and target:isCharacter() and not target.isPlayable then
-                                local pushCell = attack:getPushCell(attacker, q, r, hex, entities)
-                                if pushCell and hex:isActiveHex(pushCell.q, pushCell.r) then
-                                    local occupant = getEntityAtHex(pushCell.q, pushCell.r, entities)
-                                    if not occupant then
-                                        canApply = true
-                                    end
+                            if target and target:isCharacter() and not target:isBuilding() then
+                                local cells = attack:getFlipCells(attacker, q, r, hex, entities)
+                                if #cells > 0 then
+                                    canApply = true
                                 end
                             end
                         end

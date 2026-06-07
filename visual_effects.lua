@@ -65,13 +65,25 @@ function visual.draw()
             love.graphics.circle("fill", e.x, e.y, 15 * (1 - t))
 
         elseif e.type == "push" then
-            -- ваш код для push (если есть)
             love.graphics.setColor(0.7, 0.9, 1, alpha)
             love.graphics.setLineWidth(3)
             local fromX, fromY = e.fromX, e.fromY
             local toX, toY = e.endX, e.endY
             love.graphics.line(fromX, fromY, toX, toY)
             love.graphics.setLineWidth(1)
+            local angle = math.atan2(toY - fromY, toX - fromX)
+            local headLen = 12
+            local headWidth = headLen * 0.5
+            local lx = toX + math.cos(angle + math.pi * 0.85) * headWidth
+            local ly = toY + math.sin(angle + math.pi * 0.85) * headWidth
+            local rx = toX + math.cos(angle - math.pi * 0.85) * headWidth
+            local ry = toY + math.sin(angle - math.pi * 0.85) * headWidth
+            local tipX = toX + math.cos(angle) * headLen
+            local tipY = toY + math.sin(angle) * headLen
+            love.graphics.setColor(0.7, 0.9, 1, alpha * 0.35)
+            love.graphics.polygon("fill", tipX + 1, tipY + 1, lx + 1, ly + 1, rx + 1, ry + 1)
+            love.graphics.setColor(0.7, 0.9, 1, alpha)
+            love.graphics.polygon("fill", tipX, tipY, lx, ly, rx, ry)
 
         elseif e.type == "collision" then
             local radius = 8 + t * 20
