@@ -145,7 +145,36 @@ function processNextEnemyPrepare()
     end
 end
 
+function moveShips()
+    for _, e in ipairs(entities) do
+        if e.waterWalker and e.health > 0 then
+            local neighbors = hex:getNeighbors(e.q, e.r)
+            local waterCells = {}
+            for _, n in ipairs(neighbors) do
+                if hex:isActiveHex(n.q, n.r) and terrainMap and terrainMap[n.q] and terrainMap[n.q][n.r] == "water" then
+                    local occupied = false
+                    for _, other in ipairs(entities) do
+                        if other ~= e and other.q == n.q and other.r == n.r then
+                            occupied = true
+                            break
+                        end
+                    end
+                    if not occupied then
+                        table.insert(waterCells, {q = n.q, r = n.r})
+                    end
+                end
+            end
+            if #waterCells > 0 then
+                local dest = waterCells[math.random(#waterCells)]
+                combat.addPushAnimation(e, e.q, e.r, dest.q, dest.r)
+            end
+        end
+    end
+    combat.startPushAnimations(hex)
+end
+
 function startEnemyPreparePhase()
+    moveShips()
     local enemies = {}
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.health > 0 then

@@ -3,16 +3,19 @@
 -- Функции — глобальные (используются другими модулями через _G).
 
 local turnManager = require("turn_manager")
+local objectives = require("objectives")
 
 function endTurn()
     turnManager.endPlayerTurn()
 end
 
-function restartGame()
-    print("=== RESTARTING GAME ===")
+function restartGame(mapPath)
+    mapPath = mapPath or selectedMapPath or 'maps/map1.lua'
+    selectedMapPath = mapPath
+    print("=== RESTARTING GAME: " .. mapPath .. " ===")
 
     local hexStatuses
-    terrainMap, entities, width, height, hexStatuses = environment.loadMapFromTiled('maps/map1.lua')
+    terrainMap, entities, width, height, hexStatuses = environment.loadMapFromTiled(mapPath)
 
     hex = require("hexgrid").new(
         config.HEX_RADIUS,
@@ -89,8 +92,12 @@ function restartGame()
     decayAppliedForTurnLimit = false
     status.clearAllDigSites()
 
+    objectives.reset()
+    objectives.update(entities)
+
     turnManager.startGame()
 
+    gamePhase = "playing"
     syncGlobalsToState()
     print("=== GAME RESTARTED ===")
 end
@@ -131,6 +138,7 @@ function checkGameEnd()
     if not anyEnemy and decayAppliedForTurnLimit then
         win = true
         gameActive = false
+        objectives.checkOnVictory(entities)
         print("VICTORY: All enemies defeated after turn limit!")
         syncGlobalsToState()
         return
@@ -139,6 +147,7 @@ function checkGameEnd()
     if turnCount >= maxTurns and not anyEnemy then
         win = true
         gameActive = false
+        objectives.checkOnVictory(entities)
         print("VICTORY: Turn limit reached and all enemies defeated!")
         syncGlobalsToState()
     end

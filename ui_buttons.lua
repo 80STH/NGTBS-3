@@ -142,7 +142,7 @@ return function(ui)
         love.graphics.print("Order (O)", x + 13, y + 8)
 
         if isHover then
-            local tooltipW, tooltipH = 260, 96
+            local tooltipW, tooltipH = 260, 112
             local tx, ty = x - tooltipW - 6, y
             if tx < 10 then tx = x + btnW + 6 end
             if ty + tooltipH > logicalH - 10 then
@@ -153,12 +153,13 @@ return function(ui)
             love.graphics.setColor(0.8, 0.8, 0.8, 1)
             love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
             love.graphics.setColor(1, 1, 0.6, 1)
-            love.graphics.print("Enemy Turn Order", tx + 8, ty + 6)
+            love.graphics.print("Turn Order", tx + 8, ty + 6)
             love.graphics.setColor(0.8, 0.8, 0.8, 1)
-            love.graphics.print("1. Effects: fire & decay apply", tx + 8, ty + 26)
-            love.graphics.print("   simultaneously to all units", tx + 8, ty + 42)
-            love.graphics.print("2. Enemies attack in sequence", tx + 8, ty + 58)
-            love.graphics.print("3. Dig sites damage simultaneously", tx + 8, ty + 74)
+            love.graphics.print("1. Ships & neutral NPCs move", tx + 8, ty + 26)
+            love.graphics.print("2. Effects: fire & decay apply", tx + 8, ty + 42)
+            love.graphics.print("   simultaneously to all units", tx + 8, ty + 58)
+            love.graphics.print("3. Enemies attack in sequence", tx + 8, ty + 74)
+            love.graphics.print("4. Dig sites damage simultaneously", tx + 8, ty + 90)
             love.graphics.setColor(1, 1, 1, 1)
         end
 

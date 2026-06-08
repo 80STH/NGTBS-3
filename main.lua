@@ -19,6 +19,8 @@ local hex_utils = require("hex_utils")
 local renderer = require("renderer")
 local input = require("input")
 local turnManager = require("turn_manager")
+local menu = require("menu")
+local objectives = require("objectives")
 global_abilities = require("global_abilities")
 require("game")
 
@@ -29,6 +31,8 @@ logicalH = 0
 screenShake = { timer = 0, intensity = 6, duration = 0.3 }
 testViewActive = false
 testViewOffsetY = 0
+gamePhase = "menu"
+selectedMapPath = nil
 
 function syncStateToGlobals()
     entities = state.entities
@@ -117,7 +121,7 @@ function love.load()
     sounds.collision:setVolume(0.6)
 
     showEnemyOrder = false
-    restartGame()
+    gamePhase = "menu"
 end
 
 function getDrawCoords(q, r)
@@ -131,7 +135,13 @@ end
 
 
 function love.mousepressed(x, y, button)
-    input.mousepressed(x / dpiScale, y / dpiScale, button)
+    if button ~= 1 then return end
+    local lx, ly = x / dpiScale, y / dpiScale
+    if gamePhase == "menu" then
+        menu.mousepressed(lx, ly)
+    else
+        input.mousepressed(lx, ly, button)
+    end
 end
 
 function love.mousereleased(x, y, button)
@@ -143,7 +153,11 @@ function isPositionOccupied(q, r, movingEntity)
         return true
     end
     if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
-        return true
+        if movingEntity and movingEntity.waterWalker then
+            -- ok
+        else
+            return true
+        end
     end
     for _, e in ipairs(entities) do
         if e ~= movingEntity and e.q == q and e.r == r then
@@ -163,6 +177,8 @@ function getEntityAtHex(q, r)
 end
 
 function love.update(dt)
+    if gamePhase ~= "playing" then return end
+
     visual.update(dt)
     updateDeathAnimations(dt)
     for _, actor in ipairs(entities) do
@@ -198,6 +214,7 @@ function love.update(dt)
     end
 
     turnManager.update(dt)
+    objectives.update(entities)
 
     local mx, my = love.mouse.getPosition()
     mx = mx / dpiScale
@@ -217,22 +234,30 @@ end
 
 function love.resize(w, h)
     dpiScale = love.window.getDPIScale()
-    hex:centerOnScreen(w / dpiScale, h / dpiScale)
+    if hex then
+        hex:centerOnScreen(w / dpiScale, h / dpiScale)
+    end
 end
 
 function love.draw()
     love.graphics.push()
     love.graphics.scale(dpiScale)
-    if screenShake.timer > 0 then
-        local t = screenShake.timer / screenShake.duration
-        local ease = (1 - t) * (1 - t)
-        local offsetY = screenShake.intensity * ease * math.sin(t * math.pi * 12)
-        love.graphics.translate(0, offsetY)
-    end
     logicalW = love.graphics.getWidth() / dpiScale
     logicalH = love.graphics.getHeight() / dpiScale
-    syncGlobalsToState()
-    renderer.draw(state)
+
+    if gamePhase == "menu" then
+        menu.draw()
+    else
+        if screenShake.timer > 0 then
+            local t = screenShake.timer / screenShake.duration
+            local ease = (1 - t) * (1 - t)
+            local offsetY = screenShake.intensity * ease * math.sin(t * math.pi * 12)
+            love.graphics.translate(0, offsetY)
+        end
+        syncGlobalsToState()
+        renderer.draw(state)
+    end
+
     love.graphics.pop()
 end
 
@@ -258,7 +283,13 @@ end
 
 function isCellPassable(q, r, movingEntity)
     if not hex:isActiveHex(q, r) then return false end
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then return false end
+    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
+        if movingEntity and movingEntity.waterWalker then
+            -- ok
+        else
+            return false
+        end
+    end
     for _, e in ipairs(entities) do
         if e ~= movingEntity and e.q == q and e.r == r then
             if not e.isPlayable then
@@ -280,5 +311,9 @@ function isCellOccupiedForStop(q, r, movingEntity)
 end
 
 function love.keypressed(key)
-    input.keypressed(key)
+    if gamePhase == "menu" then
+        menu.keypressed(key)
+    else
+        input.keypressed(key)
+    end
 end

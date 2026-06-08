@@ -46,6 +46,12 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     -- Для строительных объектов
     self.globalHealthCost = nil
     
+    -- Максимальный урон за один удар (nil = без ограничения)
+    self.maxDamagePerHit = nil
+    
+    -- Может ходить по воде
+    self.waterWalker = false
+    
     --  НЕПОДВИЖНОСТЬ: препятствия и здания не отталкиваются
     self.isPushable = (type == Entity.TYPES.CHARACTER)
     
@@ -98,6 +104,9 @@ end
 
 -- Применить урон
 function Entity:takeDamage(damage, globalHealth)
+    if self.maxDamagePerHit then
+        damage = math.min(damage, self.maxDamagePerHit)
+    end
     local actualDamage = math.min(damage, self.health)
     self.health = self.health - actualDamage
     

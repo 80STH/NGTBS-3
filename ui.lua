@@ -383,12 +383,15 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
                     local target = getEntityAtHex(q, r, entities)
                     if target and (target:isCharacter() and not target.isPlayable or target:isBuilding()) then canApply = true end
                 end
-            elseif attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
+            elseif attack.name == "Ghost Bolt" or attack.name == "Dash" then
                 local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
                 if stepX then
                     local firstTarget, _ = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
                     if firstTarget then canApply = true end
                 end
+            elseif attack.name == "Shoot" or attack.name == "Piercing Shot" then
+                local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                if stepX then canApply = true end
             end
             if canApply then
                 keys[q .. "," .. r] = true
@@ -530,35 +533,27 @@ end
     if attack.name == "Dash" then
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
         if stepX then
-            local firstTarget, targetHex, lastFree = attack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+            local firstTarget, targetHex = attack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
             
-            -- Рисуем путь (стрелку) от атакующего до lastFree
-            if lastFree then
-                local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
-                local toX, toY = getDrawCoords(lastFree.q, lastFree.r)
-                -- Светящийся след рывка
-                local trailPulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 6)
-                love.graphics.setLineWidth(6)
-                love.graphics.setColor(0.3, 1, 0.3, 0.15 * trailPulse)
-                love.graphics.line(fromX, fromY, toX, toY)
-                love.graphics.setLineWidth(2)
-                love.graphics.setColor(0.6, 1, 0.6, 0.4 * trailPulse)
-                love.graphics.line(fromX, fromY, toX, toY)
-                love.graphics.setLineWidth(1)
-                ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, attacker.q, attacker.r, lastFree.q, lastFree.r)
-                -- Силуэт атакующего на целевой клетке
-                local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
-                local alpha = 0.3 + 0.4 * pulse
-                if attacker.sprite then
-                    love.graphics.setColor(1, 1, 1, alpha)
-                    local sw, sh = attacker.sprite:getDimensions()
-                    local scale = 5.9
-                    love.graphics.draw(attacker.sprite, toX, toY, 0, scale, scale, sw/2, sh/2)
-                else
-                    love.graphics.setColor(0.2, 0.8, 0.2, alpha)
-                    love.graphics.circle("fill", toX, toY, hex.radius * 0.5)
-                end
-            end
+            -- Рисуем след рывка от атакующего к цели
+            local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
+            local toX, toY = getDrawCoords(hoverQ, hoverR)
+            local trailPulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 6)
+            love.graphics.setLineWidth(6)
+            love.graphics.setColor(0.3, 1, 0.3, 0.15 * trailPulse)
+            love.graphics.line(fromX, fromY, toX, toY)
+            love.graphics.setLineWidth(2)
+            love.graphics.setColor(0.6, 1, 0.6, 0.4 * trailPulse)
+            love.graphics.line(fromX, fromY, toX, toY)
+            love.graphics.setLineWidth(1)
+            ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, attacker.q, attacker.r, hoverQ, hoverR)
+            -- Маркер цели в точке удара
+            local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
+            local alpha = 0.4 + 0.4 * pulse
+            love.graphics.setColor(1, 1, 0.4, alpha)
+            love.graphics.setLineWidth(2)
+            love.graphics.circle("line", toX, toY, hex.radius * 0.35)
+            love.graphics.setLineWidth(1)
 
             -- Урон по первой цели + возможный урон от отталкивания
             if firstTarget then
@@ -609,8 +604,9 @@ end
         local pushCell = attack:getPushCell(attacker, hoverQ, hoverR, hex, entities)
         if pushCell then
             local firstTarget = nil
+            local stepX, stepY, stepZ
             if attack.getLineDirection then
-                local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+                stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
                 if stepX then
                     local target, targetHex = nil, nil
                     if attack.findFirstTargetOnLine then
@@ -623,7 +619,6 @@ end
             end
 
             if firstTarget then
-                -- Пунктирная линия от атакующего к цели
                 if attack.getLineDirection then
                     local fx, fy = getDrawCoords(attacker.q, attacker.r)
                     local tx, ty = getDrawCoords(firstTarget.q, firstTarget.r)
@@ -640,7 +635,6 @@ end
                 if attack.getPushCells then
                     local pushCells = attack:getPushCells(attacker, hoverQ, hoverR, hex, entities)
                     if #pushCells >= 2 then
-                        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
                         if stepX then
                             local _, _, secondTarget, secondHex = attack:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
                             if secondTarget then
@@ -654,6 +648,15 @@ end
                         end
                     end
                 end
+            elseif pushCell.farthest or pushCell.edge then
+                local fx, fy = getDrawCoords(attacker.q, attacker.r)
+                local tx, ty = getDrawCoords(pushCell.q, pushCell.r)
+                ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+                love.graphics.setColor(0.9, 0.7, 0.2, 0.5)
+                love.graphics.setLineWidth(2)
+                love.graphics.circle("line", tx, ty, hex.radius * 0.3)
+                love.graphics.setLineWidth(1)
+                love.graphics.setColor(1, 1, 1, 1)
             end
         end
     end
@@ -683,6 +686,16 @@ end
                         pushTo = isPushable and pushCells[2] or nil,
                         attackDamage = 1,
                     })
+                end
+                if not firstTarget and #pushCells > 0 and pushCells[1].farthest then
+                    local fx, fy = getDrawCoords(attacker.q, attacker.r)
+                    local tx, ty = getDrawCoords(pushCells[1].q, pushCells[1].r)
+                    ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+                    love.graphics.setColor(0.9, 0.7, 0.2, 0.5)
+                    love.graphics.setLineWidth(2)
+                    love.graphics.circle("line", tx, ty, hex.radius * 0.3)
+                    love.graphics.setLineWidth(1)
+                    love.graphics.setColor(1, 1, 1, 1)
                 end
             end
         end
@@ -1673,6 +1686,11 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
             end
             if firstTarget and targetHex then
                 table.insert(out, {q = targetHex.q, r = targetHex.r})
+            else
+                local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+                if endCell then
+                    table.insert(out, {q = endCell.q, r = endCell.r})
+                end
             end
             if attack.getPushCells then
                 local pushCells = attack:getPushCells(attacker, hoverQ, hoverR, hex, entities)

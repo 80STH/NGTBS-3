@@ -56,6 +56,20 @@ function combat.Attack:findFirstTargetOnLine(startQ, startR, stepX, stepY, stepZ
     return nil, nil
 end
 
+-- Крайняя активная клетка на линии (исключая стартовую)
+function combat.getFarthestActiveCellOnLine(startQ, startR, stepX, stepY, stepZ, hex)
+    local curQ, curR = startQ, startR
+    local lastQ, lastR = nil, nil
+    while true do
+        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if not hex:isActiveHex(nextQ, nextR) then break end
+        lastQ, lastR = nextQ, nextR
+        curQ, curR = nextQ, nextR
+    end
+    if lastQ == nil or (lastQ == startQ and lastR == startR) then return nil end
+    return {q = lastQ, r = lastR}
+end
+
 -- Поиск первых двух целей на линии
 function combat.Attack:findFirstTwoTargetsOnLine(startQ, startR, stepX, stepY, stepZ, hex, entities)
     local curQ, curR = startQ, startR
@@ -170,44 +184,31 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
 
-    local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+    local firstTarget, targetHex = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
-    attack_effects.dash(attacker, firstTarget, lastFree, hex)
-    --  Перемещение атакующего в последнюю свободную клетку
-    if lastFree and (lastFree.q ~= attacker.q or lastFree.r ~= attacker.r) then
-        combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
-    end
+    -- Визуальный эффект рывка (от атакующего к цели)
+    attack_effects.dash(attacker, firstTarget, targetQ, targetR, hex)
 
-    -- Наносим урон первой цели, если она есть
+    -- Наносим урон первой цели
     if firstTarget then
         self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
     end
 
-    -- Отталкивание цели (только для тех, кого можно толкать)
-    if firstTarget and targetHex and firstTarget.isPushable then
-        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-        local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
-        local isEdge = not hex:isActiveHex(pushQ, pushR)
-        if isEdge or occupant then
-            -- урон от столкновения
-            if firstTarget.health > 0 then
-                firstTarget.health = firstTarget.health - 1
-                print(firstTarget.name .. " takes 1 collision damage!")
-                if sounds and sounds.collision then sounds.collision:play() end
+    -- Анимация: атакующий делает выпад к цели и отскакивает назад.
+    -- В момент пика (t=0.8) — соприкосновение — запускаем отталкивание цели.
+    combat.addBounceAnimation(attacker, attacker.q, attacker.r, targetQ, targetR, 0.25, function()
+        if firstTarget and targetHex and firstTarget.isPushable and firstTarget.health and firstTarget.health > 0 then
+            local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+            local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
+            local isEdge = not hex:isActiveHex(pushQ, pushR)
+            if isEdge or occupant then
+                combat.addCollisionBounceAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities, sounds, globalHealth, occupant)
+            else
+                combat.addPushAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR)
             end
-            if occupant and occupant.isPushable and occupant.health > 0 then
-                occupant.health = occupant.health - 1
-                print(occupant.name .. " takes 1 collision damage!")
-                if sounds and sounds.collision then sounds.collision:play() end
-            end
-            if firstTarget.health <= 0 then firstTarget:startDeath() end
-            if occupant and occupant.isPushable and occupant.health <= 0 then occupant:startDeath() end
-            local effectX, effectY = getDrawCoords(targetHex.q, targetHex.r)
-            visual.addEffect(effectX, effectY, "slam")
-        else
-            self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+            combat.startPushAnimations(hex)
         end
-    end
+    end)
 
     combat.startPushAnimations(hex)
     return true
@@ -304,8 +305,15 @@ function combat.ShootAttack:execute(attacker, targetQ, targetR, hex, entities, s
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
     local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-    if not firstTarget then return false, "No target in that direction!" end
-    -- Вычисляем клетку отталкивания (если есть)
+    if not firstTarget then
+        local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+        if not endCell then return false, "No valid target cell!" end
+        local fx, fy = getDrawCoords(attacker.q, attacker.r)
+        local tx, ty = getDrawCoords(endCell.q, endCell.r)
+        visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.7, 0.2, 3, 1.0)
+        attacker.hasActedThisTurn = true
+        return true
+    end
     local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
     local pushValid = hex:isActiveHex(pushQ, pushR)
     attack_effects.shoot(attacker, firstTarget, nil, nil, hex)
@@ -327,6 +335,10 @@ function combat.ShootAttack:getPushCell(attacker, targetQ, targetR, hex, entitie
             return {q = pushQ, r = pushR, edge = true}
         end
     end
+    local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+    if endCell then
+        return {q = endCell.q, r = endCell.r, farthest = true}
+    end
     return nil
 end
 
@@ -341,23 +353,27 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
     local firstTarget, firstHex, secondTarget, secondHex = self:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if not firstTarget then
+        local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+        if not endCell then return false, "No valid target cell!" end
+        local fx, fy = getDrawCoords(attacker.q, attacker.r)
+        local tx, ty = getDrawCoords(endCell.q, endCell.r)
+        visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.7, 0.2, 3, 1.0)
+        attacker.hasActedThisTurn = true
+        return true
+    end
     attack_effects.piercingShoot(attacker, firstTarget, secondTarget, stepX, stepY, stepZ, hex)
-    if not firstTarget then return false, "No target in that direction!" end
-    -- Урон второй цели
     if secondTarget then
         self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil, globalHealth)
     end
-    -- Толкаем вторую (дальнюю) цель первой, чтобы освободить клетку для первой
     if secondTarget and secondTarget.isPushable ~= false and secondHex then
         local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
         self:pushTargetToHex(secondTarget, secondHex.q, secondHex.r, pushQ, pushR, hex, entities, sounds)
-        -- Сразу обновляем позицию в игровом состоянии, чтобы первая цель не видела коллизию
         secondTarget.q = pushQ
         secondTarget.r = pushR
         secondTarget.currentDrawX = nil
         secondTarget.currentDrawY = nil
     end
-    -- Затем толкаем первую (ближнюю) цель
     if firstTarget.isPushable ~= false then
         self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, entities, sounds)
     end
@@ -378,6 +394,12 @@ function combat.PiercingShootAttack:getPushCells(attacker, targetQ, targetR, hex
     if secondTarget and secondHex and secondTarget.isPushable ~= false then
         local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
         table.insert(cells, {q = pushQ, r = pushR, edge = not hex:isValidHex(pushQ, pushR)})
+    end
+    if #cells == 0 then
+        local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+        if endCell then
+            table.insert(cells, {q = endCell.q, r = endCell.r, farthest = true})
+        end
     end
     return cells
 end
@@ -903,6 +925,11 @@ function combat.updatePushAnimations(dt, hex)
                 anim.obj.currentDrawY = y
             end
 
+            if anim.bounceBack and anim.onPeak and t >= 0.8 and not anim._peakFired then
+                anim._peakFired = true
+                anim.onPeak(anim.obj)
+            end
+
             if t >= 1 then
                 if anim.isShake then
                     anim.obj.currentDrawX = nil
@@ -988,7 +1015,7 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
     return wasDestroyed
 end
 
-function combat.addBounceAnimation(obj, fromQ, fromR, toQ, toR, duration)
+function combat.addBounceAnimation(obj, fromQ, fromR, toQ, toR, duration, onPeak)
     table.insert(pushAnimations.queue, {
         obj = obj,
         fromQ = fromQ, fromR = fromR,
@@ -999,6 +1026,7 @@ function combat.addBounceAnimation(obj, fromQ, fromR, toQ, toR, duration)
         timer = 0,
         duration = duration or 0.2,
         isMoving = false,
+        onPeak = onPeak,
         onComplete = function() end
     })
 end

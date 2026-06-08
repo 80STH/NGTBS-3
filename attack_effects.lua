@@ -13,18 +13,15 @@ local function getHexCenter(entity, hex)
 end
 
 -- Эффект для Dash (рывок с ударом)
-function attack_effects.dash(attacker, target, lastFreeCell, hex)
-    -- Эффект движения от атакующего до последней свободной клетки
-    if lastFreeCell then
-        local fromX, fromY = getHexCenter(attacker, hex)
-        local toX, toY = hex:hexToPixel(lastFreeCell.q, lastFreeCell.r)
-        visual.addDashEffect(fromX, fromY, toX, toY)
-    end
+function attack_effects.dash(attacker, target, targetQ, targetR, hex)
+    -- Эффект движения от атакующего до целевой клетки
+    local fromX, fromY = getHexCenter(attacker, hex)
+    local toX, toY = hex:hexToPixel(targetQ, targetR)
+    visual.addDashEffect(fromX, fromY, toX, toY)
     -- Удар по цели
     if target then
         local x, y = getHexCenter(target, hex)
         visual.addEffect(x, y, "hit", 0.3)
-        -- Добавляем эффект "сдвиг воздуха"
         visual.addShockwave(x, y, 15)
     end
 end

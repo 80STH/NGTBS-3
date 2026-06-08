@@ -7,6 +7,7 @@ local status = require("status")
 local combat = require("combat")
 local hex_utils = require("hex_utils")
 local global_abilities = require("global_abilities")
+local objectives = require("objectives")
 
 function renderer.draw(state)
     if not state or not state.hex then return end
@@ -189,10 +190,22 @@ function renderer.draw(state)
     local showOrder = hoverOrder or state.showEnemyOrder
     if showOrder then
         local orderMap = getEnemyAttackOrder(state.entities, state.turnState)
+        local num = 0
+        for _, e in ipairs(state.entities) do
+            if e.waterWalker and e.health > 0 then
+                num = num + 1
+                local x, y = hex:hexToPixel(e.q, e.r)
+                love.graphics.setColor(1, 0.8, 0.2, 0.9)
+                love.graphics.circle("fill", x + 15, y - 20, 12)
+                love.graphics.setColor(0, 0, 0, 1)
+                love.graphics.print(tostring(num), x + 11, y - 28)
+            end
+        end
         for _, enemy in ipairs(state.entities) do
             if enemy:isCharacter() and not enemy.isPlayable and enemy.health > 0 then
-                local num = orderMap[enemy]
-                if num then
+                local n = orderMap[enemy]
+                if n then
+                    num = num + 1
                     local x, y = hex:hexToPixel(enemy.q, enemy.r)
                     love.graphics.setColor(1, 0.8, 0.2, 0.9)
                     love.graphics.circle("fill", x + 15, y - 20, 12)
@@ -224,6 +237,8 @@ function renderer.draw(state)
 
     global_abilities.drawPreview(hex, state)
 
+    objectives.draw()
+
     if not state.gameActive then
         local width = logicalW
         local height = logicalH
@@ -236,6 +251,11 @@ function renderer.draw(state)
         love.graphics.setFont(love.graphics.newFont(48))
         if state.win then
             love.graphics.printf("VICTORY!", 0, height/2 - 100, width, "center")
+            local total = objectives.getTotalCount()
+            local completed = objectives.getCompletedCount()
+            love.graphics.setFont(love.graphics.newFont(18))
+            love.graphics.setColor(0.8, 0.8, 0.8, 1)
+            love.graphics.printf("Objectives: " .. completed .. " / " .. total .. " completed", 0, height/2 - 50, width, "center")
         elseif state.loss then
             love.graphics.printf("DEFEAT!", 0, height/2 - 100, width, "center")
         end
@@ -386,6 +406,7 @@ function drawHealthBar(entity, x, y, damage)
 
     if not entity.maxHealth or entity.maxHealth <= 0 then return end
     if entity.maxHealth > 10 then return end
+    if entity.health <= 0 or entity.isDying then return end
 
     local pipW, pipH = 8, 16
     local spacing = 1

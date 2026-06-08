@@ -477,7 +477,11 @@ function ai.isPositionOccupied(q, r, movingEntity, entities, hex)
         return true
     end
     if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
-        return true
+        if movingEntity and movingEntity.waterWalker then
+            -- ok
+        else
+            return true
+        end
     end
     for _, e in ipairs(entities) do
         if e ~= movingEntity and e.q == q and e.r == r then

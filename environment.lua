@@ -23,10 +23,14 @@ local gidToEntity = {
     [30] = { type = "character", name = "Rogue",   isPlayable = true,  maxHealth = 4, moveRange = 5, attacks = "rogue" },
     [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "ghost" },
     [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
+    [21] = { type = "character", name = "PoisonousZombie", isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
     [27] = { type = "character", name = "Lich",    isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "lich" },
     [11] = { type = "obstacle",  name = "SuperMountain", health = 999 },
     [12] = { type = "building",  name = "SmallBuilding", health = 1, globalHealthCost = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2, globalHealthCost = 2 },
+    [6] = { type = "obstacle",  name = "WeakMountain",  health = 2, maxDamagePerHit = 1 },
+    [59] = { type = "building", name = "Ship",          health = 1, globalHealthCost = 1, moveRange = 1, waterWalker = true },
+    [29] = { type = "building", name = "Tower",         health = 1, globalHealthCost = 1, isObjective = true },
 }
 
 environment.enemySpriteCache = {}
@@ -158,48 +162,69 @@ local function generateCustomSprite(name, w, h)
     love.graphics.clear(0, 0, 0, 0)
 
     if name == "SuperMountain" then
-        -- Тёмная основа
         love.graphics.setColor(0.45, 0.4, 0.35)
         love.graphics.polygon("fill", 0, h, w/2, 0, w, h)
-        -- Светлая сторона (левая)
         love.graphics.setColor(0.55, 0.5, 0.45)
         love.graphics.polygon("fill", 0, h, w/2, 0, w/2, h)
-        -- Снежная шапка
         love.graphics.setColor(0.95, 0.95, 1)
         love.graphics.polygon("fill", w/2-2, 0, w/2+2, 0, w/2+1, 3, w/2-2, 3)
         love.graphics.polygon("fill", w/2-1, 1, w/2+1, 1, w/2, 3)
-        -- Тень у основания
         love.graphics.setColor(0.3, 0.25, 0.2)
         love.graphics.rectangle("fill", 0, h-2, w, 2)
 
+    elseif name == "WeakMountain" then
+        love.graphics.setColor(0.5, 0.45, 0.35)
+        love.graphics.polygon("fill", 0, h, w/2, 0, w, h)
+        love.graphics.setColor(0.6, 0.55, 0.45)
+        love.graphics.polygon("fill", 0, h, w/2, 0, w/2, h)
+        love.graphics.setColor(0.35, 0.3, 0.25)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+        love.graphics.setColor(0.5, 0.45, 0.35)
+
     elseif name == "SmallBuilding" then
-        -- Стена
         love.graphics.setColor(0.7, 0.55, 0.35)
         love.graphics.rectangle("fill", 1, 4, w-2, h-4)
-        -- Крыша (треугольная)
         love.graphics.setColor(0.6, 0.25, 0.15)
         love.graphics.polygon("fill", 0, 4, w/2, 1, w, 4)
-        -- Дверь
         love.graphics.setColor(0.4, 0.25, 0.15)
         love.graphics.rectangle("fill", w/2-2, h-4, 4, 4)
-        -- Окно
         love.graphics.setColor(0.85, 0.9, 1)
         love.graphics.rectangle("fill", 2, 6, 3, 3)
 
     elseif name == "BigBuilding" then
-        -- Стена
         love.graphics.setColor(0.5, 0.55, 0.6)
         love.graphics.rectangle("fill", 0, 2, w, h-2)
-        -- Плоская крыша
         love.graphics.setColor(0.4, 0.45, 0.5)
         love.graphics.rectangle("fill", 0, 0, w, 3)
-        -- Ряды окон
         love.graphics.setColor(0.8, 0.85, 1)
         for row = 0, 1 do
             for col = 0, 2 do
                 love.graphics.rectangle("fill", 2 + col * 4, 5 + row * 5, 2, 3)
             end
         end
+
+    elseif name == "Ship" then
+        love.graphics.setColor(0.5, 0.35, 0.2)
+        love.graphics.polygon("fill", 1, h-2, w/3, h-6, w*2/3, h-6, w-1, h-2)
+        love.graphics.setColor(0.4, 0.25, 0.1)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+        love.graphics.setColor(0.55, 0.4, 0.25)
+        love.graphics.rectangle("fill", w/3, h-6, w/3, h-8)
+        love.graphics.setColor(0.95, 0.95, 1)
+        love.graphics.polygon("fill", w*2/3-1, h-8, w*2/3-1, h-6, w-1, h-6)
+
+    elseif name == "Tower" then
+        love.graphics.setColor(0.55, 0.5, 0.45)
+        love.graphics.rectangle("fill", w/4, 2, w/2, h-2)
+        love.graphics.setColor(0.45, 0.4, 0.35)
+        love.graphics.rectangle("fill", w/4-1, 2, w/2+2, 3)
+        love.graphics.setColor(0.6, 0.55, 0.5)
+        love.graphics.rectangle("fill", w/4-2, 0, w/2+4, 3)
+        love.graphics.setColor(0.8, 0.75, 0.65)
+        love.graphics.polygon("fill", w/4, h-4, w/2, h-1, w*3/4, h-4)
+        love.graphics.setColor(1, 0.7, 0.3)
+        love.graphics.circle("fill", w/2, h/2, 2)
+
     end
 
     love.graphics.setCanvas()
@@ -215,7 +240,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
     local tileHeight = map.tileheight or 32
     local entitySprite
 
-    if def.name == "SuperMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" then
+    if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Ship" or def.name == "Tower" then
         entitySprite = generateCustomSprite(def.name, tileWidth, tileHeight)
     else
         entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)
@@ -269,10 +294,13 @@ local function createEntityFromGID(map, gid, gridX, gridY)
     elseif def.type == "obstacle" then
         local obstacle = Entity.new(def.name, Entity.TYPES.OBSTACLE, gridX, gridY, def.health, false, 0, nil, nil, {})
         obstacle.sprite = entitySprite
+        if def.maxDamagePerHit then obstacle.maxDamagePerHit = def.maxDamagePerHit end
         return obstacle
     elseif def.type == "building" then
-        local building = Entity.new(def.name, Entity.TYPES.BUILDING, gridX, gridY, def.health, false, 0, nil, nil, {})
+        local building = Entity.new(def.name, Entity.TYPES.BUILDING, gridX, gridY, def.health, false, (def.moveRange or 0), nil, nil, {})
         building.globalHealthCost = def.globalHealthCost
+        if def.waterWalker then building.waterWalker = true end
+        if def.isObjective then building.isObjective = true end
         building.sprite = entitySprite
         return building
     end
