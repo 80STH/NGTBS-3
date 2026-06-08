@@ -6,6 +6,67 @@ local global_abilities = require("global_abilities")
 function input.mousepressed(x, y, button)
     if button ~= 1 then return end
 
+    if gamePhase == "deploy" then
+        if state and state.deployConfirmBtn and #unplacedAllies == 0 then
+            local btn = state.deployConfirmBtn
+            if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
+                confirmDeploy()
+                return
+            end
+        end
+
+        if x >= restartButton.x and x <= restartButton.x + restartButton.width and
+           y >= restartButton.y and y <= restartButton.y + restartButton.height then
+            restartGame()
+            return
+        end
+
+        local tq, tr = hex:pixelToHex(x, y)
+        if not hex or not hex:isValidHex(tq, tr) then return end
+        if not hex:isActiveHex(tq, tr) then return end
+
+        if terrainMap and terrainMap[tq] and terrainMap[tq][tr] == "water" then return end
+
+        local occupant = getEntityAtHex(tq, tr)
+        if occupant and not occupant.isPlayable then return end
+
+        local placedIdx = nil
+        for i, ally in ipairs(placedAllies) do
+            if ally.q == tq and ally.r == tr then
+                placedIdx = i
+                break
+            end
+        end
+
+        if placedIdx then
+            if deploySelectedIdx then
+                if deploySelectedIdx == placedIdx then
+                    deploySelectedIdx = nil
+                else
+                    local a = placedAllies[deploySelectedIdx]
+                    local b = placedAllies[placedIdx]
+                    a.q, b.q = b.q, a.q
+                    a.r, b.r = b.r, a.r
+                    deploySelectedIdx = nil
+                end
+            else
+                deploySelectedIdx = placedIdx
+            end
+        elseif not occupant then
+            if deploySelectedIdx then
+                placedAllies[deploySelectedIdx].q = tq
+                placedAllies[deploySelectedIdx].r = tr
+                deploySelectedIdx = nil
+            elseif #unplacedAllies > 0 then
+                local ally = table.remove(unplacedAllies, 1)
+                ally.q = tq
+                ally.r = tr
+                table.insert(placedAllies, ally)
+            end
+        end
+        return
+    end
+
     if not gameActive then
         local width = logicalW
         local height = logicalH
@@ -159,6 +220,17 @@ function input.mousepressed(x, y, button)
 end
 
 function input.keypressed(key)
+    if gamePhase == "deploy" then
+        if (key == "return" or key == " ") and #unplacedAllies == 0 then
+            confirmDeploy()
+        elseif key == "escape" then
+            deploySelectedIdx = nil
+        elseif key == "r" or key == "R" then
+            restartGame()
+        end
+        return
+    end
+
     if not gameActive then
         if key == "return" or key == " " or key == "r" or key == "R" then
             restartGame()

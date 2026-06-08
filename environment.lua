@@ -25,6 +25,8 @@ local gidToEntity = {
     [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
     [21] = { type = "character", name = "PoisonousZombie", isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
     [27] = { type = "character", name = "Lich",    isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "lich" },
+    [40] = { type = "character", name = "Summoner", isPlayable = true,  maxHealth = 3, moveRange = 3, attacks = "none" },
+    [45] = { type = "character", name = "Divider",  isPlayable = true,  maxHealth = 4, moveRange = 4, attacks = "none" },
     [11] = { type = "obstacle",  name = "SuperMountain", health = 999 },
     [12] = { type = "building",  name = "SmallBuilding", health = 1, globalHealthCost = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2, globalHealthCost = 2 },
@@ -276,6 +278,8 @@ local function createEntityFromGID(map, gid, gridX, gridY)
             attacks = environment.getGhostAttacks()
         elseif def.attacks == "zombie" then
             attacks = environment.getZombieAttacks()
+        elseif def.attacks == "none" then
+            attacks = environment.getNoneAttacks()
         else
             attacks = {}
         end
@@ -484,15 +488,27 @@ function environment.loadMapFromTiled(filePath)
         end
     end
 
+    -- Separate playable characters for deployment phase
+    local deployableAllies = {}
+    local gameEntities = {}
+    for _, entity in ipairs(entities) do
+        if entity.isPlayable and entity:isCharacter() then
+            table.insert(deployableAllies, entity)
+        else
+            table.insert(gameEntities, entity)
+        end
+    end
+
     -- Сохраняем карту и текстуры для отрисовки
     environment.loadedMap = map
     environment.terrainTextures = terrainTextures
 
     print("\n--- LOADING COMPLETE ---")
     print(string.format("Active terrain cells: %d", (function() local count = 0 for _,row in pairs(terrainMap) do for _ in pairs(row) do count = count + 1 end end return count end)()))
-    print(string.format("Entities loaded: %d", #entities))
+    print(string.format("Entities loaded: %d", #gameEntities))
+    print(string.format("Allies for deploy: %d", #deployableAllies))
 
-    return terrainMap, entities, width, height, hexStatuses, walkable
+    return terrainMap, gameEntities, width, height, hexStatuses, walkable, deployableAllies
 end
 
 -- Функции атак (без изменений)
@@ -540,6 +556,66 @@ function environment.getLichAttacks()
     return {
         { attack = combat.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any target cell, ignores obstacles" },
     }
+end
+
+function environment.getNoneAttacks()
+    return {}
+end
+
+local unitSpriteCache = {}
+
+function environment.loadUnitSprites()
+    local workaroundPath = "maps/units_workaround.lua"
+    local info = love.filesystem.getInfo(workaroundPath)
+    if not info then
+        print("No units_workaround.lua found, squad units will use fallback colors")
+        return
+    end
+    local map = sti(workaroundPath)
+    local tileWidth = map.tilewidth or 16
+    local tileHeight = map.tileheight or 16
+    local gids = {30, 31, 34, 40, 45}
+    for _, gid in ipairs(gids) do
+        local sprite = loadTileSprite(map, gid, tileWidth, tileHeight)
+        if sprite then
+            unitSpriteCache[gid] = sprite
+        end
+    end
+    print("Unit sprites loaded: " .. #gids)
+end
+
+function environment.createSquadUnit(unitDef, q, r)
+    local Entity = require("entity")
+    local attacks = {}
+    if unitDef.attacks == "warrior" then
+        attacks = environment.getWarriorAttacks()
+    elseif unitDef.attacks == "mage" then
+        attacks = environment.getMageAttacks()
+    elseif unitDef.attacks == "rogue" then
+        attacks = environment.getRogueAttacks()
+    end
+
+    local nameToGid = {
+        Warrior = 34, Mage = 31, Rogue = 30,
+        Summoner = 40, Divider = 45,
+    }
+    local gid = nameToGid[unitDef.name]
+    local sprite = gid and unitSpriteCache[gid] or nil
+
+    local colors = {
+        Warrior = {0.8, 0.3, 0.2},
+        Mage = {0.2, 0.5, 0.8},
+        Rogue = {0.2, 0.8, 0.3},
+        Summoner = {0.8, 0.2, 0.8},
+        Divider = {0.9, 0.7, 0.1},
+    }
+
+    return Entity.new(
+        unitDef.name, Entity.TYPES.CHARACTER, q, r,
+        unitDef.maxHealth, true, unitDef.moveRange,
+        sprite, sprite and nil or (colors[unitDef.name] or {0.5, 0.5, 0.5}),
+        attacks
+    )
 end
 
 function environment.createEnemyByType(enemyType, q, r)

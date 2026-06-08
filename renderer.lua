@@ -534,4 +534,125 @@ function drawAllEntities(state)
     end
 end
 
+function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
+    if not state or not state.hex then return end
+    local hex = state.hex
+    local hexRadius = hex.radius
+
+    drawHexGrid(state, {})
+
+    for _, entity in ipairs(state.entities) do
+        drawEntity(entity, state)
+    end
+
+    for _, ally in ipairs(placedAllies) do
+        drawEntity(ally, state)
+    end
+
+    for q = 0, hex.gridWidth - 1 do
+        for r = 0, hex.gridHeight - 1 do
+            if hex:isActiveHex(q, r) then
+                local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
+                if terrain ~= "water" then
+                    local occupied = false
+                    for _, e in ipairs(state.entities) do
+                        if e.q == q and e.r == r then
+                            occupied = true
+                            break
+                        end
+                    end
+                    if not occupied then
+                        local hasAlly = false
+                        for _, ally in ipairs(placedAllies) do
+                            if ally.q == q and ally.r == r then
+                                hasAlly = true
+                                break
+                            end
+                        end
+                        if not hasAlly then
+                            local x, y = getDrawCoords(q, r)
+                            local verts = hex:drawHexagon(x, y, hexRadius)
+                            love.graphics.setColor(0.2, 0.8, 0.2, 0.15)
+                            love.graphics.polygon("fill", verts)
+                            love.graphics.setColor(0.2, 0.8, 0.2, 0.4)
+                            love.graphics.polygon("line", verts)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if deploySelectedIdx and placedAllies[deploySelectedIdx] then
+        local sel = placedAllies[deploySelectedIdx]
+        local x, y = getDrawCoords(sel.q, sel.r)
+        local verts = hex:drawHexagon(x, y, hexRadius)
+        love.graphics.setColor(1, 1, 0, 0.3)
+        love.graphics.polygon("fill", verts)
+        love.graphics.setColor(1, 1, 0, 0.8)
+        love.graphics.polygon("line", verts)
+    end
+
+    local panelX = 10
+    local panelY = 120
+    local panelW = 180
+    local panelH = 30 + #unplacedAllies * 22 + 10
+
+    love.graphics.setColor(0.1, 0.1, 0.2, 0.9)
+    love.graphics.rectangle("fill", panelX, panelY, panelW, panelH, 6)
+    love.graphics.setColor(0.6, 0.6, 0.6, 0.9)
+    love.graphics.rectangle("line", panelX, panelY, panelW, panelH, 6)
+
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print("To Deploy:", panelX + 8, panelY + 6)
+
+    for i, ally in ipairs(unplacedAllies) do
+        local ty = panelY + 26 + (i - 1) * 22
+        love.graphics.setColor(0.4, 0.9, 0.4, 1)
+        love.graphics.print(ally.name, panelX + 12, ty)
+    end
+
+    local mx, my = love.mouse.getPosition()
+    mx = mx / state.dpiScale
+    my = my / state.dpiScale
+
+    local infoY = panelY + panelH + 8
+    love.graphics.setColor(0.8, 0.8, 0.8, 1)
+    love.graphics.setFont(love.graphics.newFont(11))
+    love.graphics.print("Click green cells to place", panelX + 8, infoY)
+    love.graphics.print("Click placed unit to select", panelX + 8, infoY + 16)
+    love.graphics.print("Click two units to swap", panelX + 8, infoY + 32)
+    love.graphics.print("Click empty cell to move", panelX + 8, infoY + 48)
+    love.graphics.print("Enter/Space to confirm", panelX + 8, infoY + 64)
+
+    local canConfirm = #unplacedAllies == 0
+
+    local btnX = panelX
+    local btnY = infoY + 88
+    local btnW = panelW
+    local btnH = 30
+    local hover = canConfirm and mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH
+
+    if canConfirm then
+        love.graphics.setColor(hover and 0.3 or 0.2, hover and 0.7 or 0.5, hover and 0.3 or 0.2, 0.9)
+    else
+        love.graphics.setColor(0.2, 0.2, 0.2, 0.6)
+    end
+    love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 4)
+    if canConfirm then
+        love.graphics.setColor(0.4, 0.9, 0.4, hover and 0.8 or 0.5)
+    else
+        love.graphics.setColor(0.4, 0.4, 0.4, 0.4)
+    end
+    love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 4)
+    love.graphics.setColor(canConfirm and 1 or 0.5, 1, canConfirm and 1 or 0.5, canConfirm and 1 or 0.4)
+    love.graphics.setFont(love.graphics.newFont(12))
+    love.graphics.printf("Confirm Deployment" .. (canConfirm and "" or " (" .. #unplacedAllies .. " left)"), btnX, btnY + 6, btnW, "center")
+
+    state.deployConfirmBtn = canConfirm and {x = btnX, y = btnY, w = btnW, h = btnH} or nil
+
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print("DEPLOYMENT PHASE — Place your units", 10, 23)
+end
+
 return renderer

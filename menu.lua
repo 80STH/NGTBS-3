@@ -1,10 +1,31 @@
--- menu.lua
 local menu = {}
 
 local mapList = {"maps/map1.lua", "maps/test_polygon_1.lua"}
 
+local squads = {
+    {
+        name = "Old Guard",
+        units = {
+            { name = "Warrior", maxHealth = 5, moveRange = 3, attacks = "warrior" },
+            { name = "Mage",    maxHealth = 3, moveRange = 4, attacks = "mage" },
+            { name = "Rogue",   maxHealth = 4, moveRange = 5, attacks = "rogue" },
+        }
+    },
+    {
+        name = "New Blood",
+        units = {
+            { name = "Summoner", maxHealth = 3, moveRange = 3, attacks = "none" },
+            { name = "Divider",  maxHealth = 4, moveRange = 4, attacks = "none" },
+        }
+    },
+}
+
 function menu.getMapList()
     return mapList
+end
+
+function menu.getSquads()
+    return squads
 end
 
 function menu.draw()
@@ -17,11 +38,10 @@ function menu.draw()
     love.graphics.setColor(1, 1, 1, 1)
     local titleFont = love.graphics.newFont(math.max(18, math.floor(h * 0.05)))
     love.graphics.setFont(titleFont)
-    love.graphics.printf("Select Map", 0, h * 0.2, w, "center")
+    love.graphics.printf("Select Map", 0, h * 0.12, w, "center")
 
-    local bw, bh = 300, 60
-    local totalH = #mapList * (bh + 16)
-    local startY = h/2 - totalH/2
+    local bw, bh = 260, 50
+    local mapStartY = h * 0.20
     local bx = w/2 - bw/2
 
     local mx, my = love.mouse.getPosition()
@@ -29,7 +49,7 @@ function menu.draw()
     my = my / dpiScale
 
     for i, mapPath in ipairs(mapList) do
-        local by = startY + (i - 1) * (bh + 16)
+        local by = mapStartY + (i - 1) * (bh + 10)
         local hover = mx >= bx and mx <= bx + bw and my >= by and my <= by + bh
 
         love.graphics.setColor(hover and 0.3 or 0.15, hover and 0.5 or 0.25, hover and 0.7 or 0.35, 0.9)
@@ -39,34 +59,81 @@ function menu.draw()
 
         local name = mapPath:match("/([^/]+)%.lua$") or mapPath
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.setFont(love.graphics.newFont(14))
-        love.graphics.printf(name, bx + 10, by + bh/2 - 10, bw - 20, "center")
+        love.graphics.setFont(love.graphics.newFont(13))
+        love.graphics.printf(name, bx + 10, by + bh/2 - 8, bw - 20, "center")
     end
 
+    local squadStartY = mapStartY + #mapList * (bh + 10) + 30
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setFont(titleFont)
+    love.graphics.printf("Select Squad", 0, squadStartY - 24, w, "center")
+
+    local sbw, sbh = 200, 40
+    local sbx = w/2 - sbw/2
+
+    for i, squad in ipairs(squads) do
+        local sby = squadStartY + (i - 1) * (sbh + 8)
+        local hover = mx >= sbx and mx <= sbx + sbw and my >= sby and my <= sby + sbh
+        local isSelected = selectedSquad == i
+
+        love.graphics.setColor(hover and 0.35 or 0.2, hover and 0.25 or 0.15, isSelected and 0.5 or 0.2, 0.9)
+        love.graphics.rectangle("fill", sbx, sby, sbw, sbh, 6)
+        love.graphics.setColor(isSelected and 0.5 or 0.3, isSelected and 0.4 or 0.3, isSelected and 0.9 or 0.4, isSelected and 0.9 or 0.5)
+        love.graphics.rectangle("line", sbx, sby, sbw, sbh, 6)
+
+        local unitNames = ""
+        for j, u in ipairs(squad.units) do
+            if j > 1 then unitNames = unitNames .. ", " end
+            unitNames = unitNames .. u.name
+        end
+
+        love.graphics.setColor(1, 1, 1, 0.9)
+        love.graphics.setFont(love.graphics.newFont(12))
+        love.graphics.printf(squad.name, sbx + 6, sby + 2, sbw - 12, "left")
+        love.graphics.setColor(0.7, 0.7, 0.7, 0.7)
+        love.graphics.setFont(love.graphics.newFont(10))
+        love.graphics.printf(unitNames, sbx + 6, sby + 20, sbw - 12, "left")
+    end
+
+    local bottomY = squadStartY + #squads * (sbh + 8) + 20
     love.graphics.setFont(love.graphics.newFont(12))
     love.graphics.setColor(0.5, 0.5, 0.5, 1)
-    love.graphics.printf("Press Enter or click a map to start", 0, h * 0.8, w, "center")
+    love.graphics.printf("Click a map to start  |  R to restart", 0, bottomY, w, "center")
 end
 
 function menu.mousepressed(x, y)
-    local bw, bh = 300, 60
-    local totalH = #mapList * (bh + 16)
-    local startY = logicalH/2 - totalH/2
+    local bw, bh = 260, 50
+    local mapStartY = logicalH * 0.20
     local bx = logicalW/2 - bw/2
 
     for i, mapPath in ipairs(mapList) do
-        local by = startY + (i - 1) * (bh + 16)
+        local by = mapStartY + (i - 1) * (bh + 10)
         if x >= bx and x <= bx + bw and y >= by and y <= by + bh then
+            if not selectedSquad then selectedSquad = 1 end
             restartGame(mapPath)
             return true
         end
     end
+
+    local sbw, sbh = 200, 40
+    local squadStartY = mapStartY + #mapList * (bh + 10) + 30
+    local sbx = logicalW/2 - sbw/2
+
+    for i in ipairs(squads) do
+        local sby = squadStartY + (i - 1) * (sbh + 8)
+        if x >= sbx and x <= sbx + sbw and y >= sby and y <= sby + sbh then
+            selectedSquad = i
+            return true
+        end
+    end
+
     return false
 end
 
 function menu.keypressed(key)
     if key == "return" or key == " " then
         if #mapList > 0 then
+            if not selectedSquad then selectedSquad = 1 end
             restartGame(mapList[1])
             return true
         end

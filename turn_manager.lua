@@ -5,6 +5,9 @@
 local turnManager = {}
 
 function turnManager.startGame()
+    -- Выкопка с самого первого хода
+    processDigSites()
+
     turnState.phase = "enemy_prepare"
     local enemies = {}
     for _, e in ipairs(entities) do

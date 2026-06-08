@@ -19,7 +19,7 @@ local hex_utils = require("hex_utils")
 local renderer = require("renderer")
 local input = require("input")
 local turnManager = require("turn_manager")
-local menu = require("menu")
+menu = require("menu")
 local objectives = require("objectives")
 global_abilities = require("global_abilities")
 require("game")
@@ -33,6 +33,10 @@ testViewActive = false
 testViewOffsetY = 0
 gamePhase = "menu"
 selectedMapPath = nil
+selectedSquad = nil
+unplacedAllies = {}
+placedAllies = {}
+deploySelectedIdx = nil
 
 function syncStateToGlobals()
     entities = state.entities
@@ -99,6 +103,7 @@ function love.load()
     dpiScale = love.window.getDPIScale()
     sti = require 'libraries/sti'
     maxTurns = 5
+    environment.loadUnitSprites()
 
     restartButton = {
         x = 10, y = 295, width = 120, height = 30,
@@ -177,6 +182,19 @@ function getEntityAtHex(q, r)
 end
 
 function love.update(dt)
+    if gamePhase == "deploy" then
+        local mx, my = love.mouse.getPosition()
+        mx = mx / dpiScale
+        my = my / dpiScale
+        local hq, hr = hex:pixelToHex(mx, my)
+        if hex and hex:isActiveHex(hq, hr) then
+            hex.hoverQ, hex.hoverR = hq, hr
+        else
+            hex.hoverQ, hex.hoverR = -1, -1
+        end
+        return
+    end
+
     if gamePhase ~= "playing" then return end
 
     visual.update(dt)
@@ -247,6 +265,9 @@ function love.draw()
 
     if gamePhase == "menu" then
         menu.draw()
+    elseif gamePhase == "deploy" then
+        syncGlobalsToState()
+        renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
     else
         if screenShake.timer > 0 then
             local t = screenShake.timer / screenShake.duration

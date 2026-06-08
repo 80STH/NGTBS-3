@@ -184,19 +184,26 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
 
-    local firstTarget, targetHex = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+    local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
-    -- Визуальный эффект рывка (от атакующего к цели)
-    attack_effects.dash(attacker, firstTarget, targetQ, targetR, hex)
+    -- Визуальный эффект рывка (только в направлении до lastFree)
+    local fxEndQ, fxEndR
+    if lastFree then
+        fxEndQ, fxEndR = lastFree.q, lastFree.r
+    elseif targetHex then
+        fxEndQ, fxEndR = targetHex.q, targetHex.r
+    else
+        fxEndQ, fxEndR = targetQ, targetR
+    end
+    attack_effects.dash(attacker, firstTarget, fxEndQ, fxEndR, hex)
 
     -- Наносим урон первой цели
     if firstTarget then
         self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
     end
 
-    -- Анимация: атакующий делает выпад к цели и отскакивает назад.
-    -- В момент пика (t=0.8) — соприкосновение — запускаем отталкивание цели.
-    combat.addBounceAnimation(attacker, attacker.q, attacker.r, targetQ, targetR, 0.25, function()
+    -- Функция для пуша цели (вызывается в любом сценарии)
+    local function pushTarget()
         if firstTarget and targetHex and firstTarget.isPushable and firstTarget.health and firstTarget.health > 0 then
             local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
             local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
@@ -206,11 +213,30 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
             else
                 combat.addPushAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR)
             end
-            combat.startPushAnimations(hex)
         end
-    end)
+    end
 
-    combat.startPushAnimations(hex)
+    -- Если последняя свободная клетка — вода, юнит тонет (без возврата), цель всё равно пушится
+    if lastFree and terrainMap and terrainMap[lastFree.q] and terrainMap[lastFree.q][lastFree.r] == "water" and not attacker.waterWalker then
+        pushTarget()
+        combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
+        combat.startPushAnimations(hex)
+        return true
+    end
+
+    -- Анимация: атакующий рвётся в направлении до первого препятствия.
+    -- Вначале движение атакующего к lastFree, затем отталкивание цели.
+    if lastFree then
+        combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
+        combat.startPushAnimations(hex, function()
+            pushTarget()
+            combat.startPushAnimations(hex)
+        end)
+    else
+        -- Атакующий уже у цели, просто отталкиваем
+        pushTarget()
+        combat.startPushAnimations(hex)
+    end
     return true
 end
 

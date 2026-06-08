@@ -15,7 +15,8 @@ function restartGame(mapPath)
     print("=== RESTARTING GAME: " .. mapPath .. " ===")
 
     local hexStatuses
-    terrainMap, entities, width, height, hexStatuses = environment.loadMapFromTiled(mapPath)
+    local deployableAllies
+    terrainMap, entities, width, height, hexStatuses, _, deployableAllies = environment.loadMapFromTiled(mapPath)
 
     hex = require("hexgrid").new(
         config.HEX_RADIUS,
@@ -30,6 +31,166 @@ function restartGame(mapPath)
 
     globalHealth = { current = 5, max = 5, initial = 5 }
     combat.globalHealth = globalHealth
+
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable then
+            e.hasPreparedAttack = false
+            e.preparePos = nil
+            e.preparedTarget = nil
+            e.movementFinished = false
+            e.isMoving = false
+            e.path = {}
+            e.currentPathIndex = 0
+        end
+    end
+
+    -- Setup deploy phase
+    local skipDeploy = mapPath:match("test_polygon_1")
+    if selectedSquad then
+        local squads = menu.getSquads()
+        local squad = squads[selectedSquad]
+        unplacedAllies = {}
+        for _, unitDef in ipairs(squad.units) do
+            table.insert(unplacedAllies, environment.createSquadUnit(unitDef, -1, -1))
+        end
+    else
+        unplacedAllies = deployableAllies or {}
+    end
+    placedAllies = {}
+    deploySelectedIdx = nil
+
+    if not skipDeploy then
+        for _, ally in ipairs(unplacedAllies) do
+            ally.q = -1
+            ally.r = -1
+        end
+    end
+
+    selectedActor = nil
+    hex.selectedQ = -1
+    hex.selectedR = -1
+    hex.hoverQ = -1
+    hex.hoverR = -1
+
+    global_abilities.reset()
+    dpiScale = love.window.getDPIScale()
+
+    flipTargetActor = nil
+    attackMode = false
+    selectedAttack = nil
+    attackButtons = {}
+    actionHistory = {}
+    pushAnimations = { queue = {}, active = false }
+    visual.effects = {}
+    decayMessageTimer = 0
+
+    maxUndoCount = 0
+
+    turnCount = 0
+    gameActive = true
+    win = false
+    loss = false
+    fireAppliedForTurnLimit = false
+    decayAppliedForTurnLimit = false
+    status.clearAllDigSites()
+
+    objectives.reset()
+    objectives.update(entities)
+
+    if skipDeploy then
+        if selectedSquad then
+            local idx = 0
+            for q = 0, hex.gridWidth - 1 do
+                for r = 0, hex.gridHeight - 1 do
+                    if hex:isActiveHex(q, r) then
+                        local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+                        if terrain ~= "water" then
+                            local occupied = false
+                            for _, e in ipairs(entities) do
+                                if e.q == q and e.r == r then occupied = true; break end
+                            end
+                            if not occupied then
+                                idx = idx + 1
+                                if idx <= #unplacedAllies then
+                                    unplacedAllies[idx].q = q
+                                    unplacedAllies[idx].r = r
+                                else break end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        for _, ally in ipairs(unplacedAllies) do
+            table.insert(entities, ally)
+        end
+        unplacedAllies = {}
+        placedAllies = {}
+        selectedActor = nil
+        for _, a in ipairs(entities) do
+            if a.isPlayable and a.health > 0 then
+                selectedActor = a
+                hex.selectedQ, hex.selectedR = a.q, a.r
+                break
+            end
+        end
+        for _, a in ipairs(entities) do
+            if a.isPlayable then
+                a.hasActedThisTurn = false
+                a.hasMovedThisTurn = false
+            end
+        end
+        turnState = {
+            phase = "enemy_prepare",
+            enemyPrepareQueue = {},
+            currentPreparingEnemy = nil,
+            enemyAttackQueue = {},
+            enemyAttackTimer = 0,
+            delayBetweenAttacks = 0.4,
+            pendingDigProcessing = false,
+        }
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and not e.isPlayable then
+                e.hasPreparedAttack = false
+                e.preparePos = nil
+                e.preparedTarget = nil
+                e.movementFinished = false
+                e.isMoving = false
+                e.path = {}
+                e.currentPathIndex = 0
+            end
+        end
+        updateAttackButtons(selectedActor)
+        maxUndoCount = countPlayableActors()
+        turnManager.startGame()
+        gamePhase = "playing"
+    else
+        gamePhase = "deploy"
+    end
+    syncGlobalsToState()
+    print(skipDeploy and "=== MAP LOADED — GAME STARTED ===" or "=== MAP LOADED — DEPLOY YOUR ALLIES ===")
+end
+
+function confirmDeploy()
+    for _, ally in ipairs(placedAllies) do
+        table.insert(entities, ally)
+    end
+
+    selectedActor = nil
+    for _, a in ipairs(entities) do
+        if a.isPlayable and a.health > 0 then
+            selectedActor = a
+            hex.selectedQ, hex.selectedR = a.q, a.r
+            break
+        end
+    end
+
+    for _, a in ipairs(entities) do
+        if a.isPlayable then
+            a.hasActedThisTurn = false
+            a.hasMovedThisTurn = false
+        end
+    end
 
     turnState = {
         phase = "enemy_prepare",
@@ -53,53 +214,19 @@ function restartGame(mapPath)
         end
     end
 
-    selectedActor = nil
-    for _, a in ipairs(entities) do
-        if a.isPlayable and a.health > 0 then
-            selectedActor = a
-            hex.selectedQ, hex.selectedR = a.q, a.r
-            break
-        end
-    end
-
-    for _, a in ipairs(entities) do
-        if a.isPlayable then
-            a.hasActedThisTurn = false
-            a.hasMovedThisTurn = false
-        end
-    end
-
-    global_abilities.reset()
-    dpiScale = love.window.getDPIScale()
-
-    flipTargetActor = nil
-    attackMode = false
-    selectedAttack = nil
-    attackButtons = {}
-    actionHistory = {}
-    pushAnimations = { queue = {}, active = false }
-    visual.effects = {}
-    decayMessageTimer = 0
-
     updateAttackButtons(selectedActor)
     maxUndoCount = countPlayableActors()
-
-    turnCount = 0
     gameActive = true
-    win = false
-    loss = false
-    fireAppliedForTurnLimit = false
-    decayAppliedForTurnLimit = false
-    status.clearAllDigSites()
-
-    objectives.reset()
-    objectives.update(entities)
 
     turnManager.startGame()
-
     gamePhase = "playing"
+
+    unplacedAllies = {}
+    placedAllies = {}
+    deploySelectedIdx = nil
+
     syncGlobalsToState()
-    print("=== GAME RESTARTED ===")
+    print("=== DEPLOY CONFIRMED — GAME STARTED ===")
 end
 
 function checkGameEnd()
