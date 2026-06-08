@@ -857,6 +857,26 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
     })
 end
 
+-- Анимация перемещения без проверки коллизий (для способностей, где коллизии уже обработаны заранее, напр. Wind Torrent)
+function combat.addDirectPushAnimation(obj, fromQ, fromR, toQ, toR)
+    local startX, startY = getDrawCoords(fromQ, fromR)
+    local endX, endY = getDrawCoords(toQ, toR)
+    visual.addPushEffect(startX, startY, endX, endY, 0.25)
+    table.insert(pushAnimations.queue, {
+        obj = obj, fromQ = fromQ, fromR = fromR, toQ = toQ, toR = toR,
+        startX = 0, startY = 0, endX = 0, endY = 0, timer = 0, duration = 0.2,
+        isMoving = false,
+        onComplete = function(pushedObj)
+            pushedObj.q = toQ
+            pushedObj.r = toR
+            if terrainMap then
+                local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities, globalHealth)
+                if died then pushedObj:startDeath() end
+            end
+        end
+    })
+end
+
 function combat.startPushAnimations(hex, callback)
     if #pushAnimations.queue == 0 then if callback then callback() end; return end
     pushAnimations.active = true

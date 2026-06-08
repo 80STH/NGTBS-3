@@ -182,8 +182,8 @@ function HealAbility:onClickHex(q, r, hex, state)
         end
     end
 
-    if not target or not target.isPlayable or target.health <= 0 then
-        print("No valid ally targeted!")
+    if not target or target.health <= 0 or target:isBuilding() then
+        print("No valid target!")
         return true
     end
 
@@ -563,7 +563,7 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
                     combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, globalHealth, targetOcc)
                     occupied[fromKey] = obj
                 else
-                    combat.addPushAnimation(obj, obj.q, obj.r, newQ, newR)
+                    combat.addDirectPushAnimation(obj, obj.q, obj.r, newQ, newR)
                     occupied[newQ .. "," .. newR] = obj
                 end
             end
