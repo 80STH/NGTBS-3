@@ -368,6 +368,54 @@ function combat.ShootAttack:getPushCell(attacker, targetQ, targetR, hex, entitie
     return nil
 end
 
+-- 3.5 ТОЛЧОК (Push — без урона)
+combat.PushAttack = setmetatable({}, combat.Attack)
+combat.PushAttack.__index = combat.PushAttack
+function combat.PushAttack.new(range)
+    local self = combat.Attack.new("Push", "Push the first enemy in line (no damage)", range or 999, 0, {})
+    return setmetatable(self, combat.PushAttack)
+end
+
+function combat.PushAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if not firstTarget then
+        local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+        if not endCell then return false, "No valid target cell!" end
+        local fx, fy = getDrawCoords(attacker.q, attacker.r)
+        local tx, ty = getDrawCoords(endCell.q, endCell.r)
+        visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.7, 0.2, 3, 1.0)
+        attacker.hasActedThisTurn = true
+        return true
+    end
+    local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+    attack_effects.shoot(attacker, firstTarget, nil, nil, hex)
+    self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+    combat.startPushAnimations(hex)
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.PushAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if firstTarget and targetHex then
+        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+        if hex:isValidHex(pushQ, pushR) then
+            return {q = pushQ, r = pushR}
+        else
+            return {q = pushQ, r = pushR, edge = true}
+        end
+    end
+    local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+    if endCell then
+        return {q = endCell.q, r = endCell.r, farthest = true}
+    end
+    return nil
+end
+
 -- 4. ПРОНЗАЮЩИЙ ВЫСТРЕЛ (Piercing Shoot)
 combat.PiercingShootAttack = setmetatable({}, combat.Attack)
 combat.PiercingShootAttack.__index = combat.PiercingShootAttack
@@ -818,9 +866,111 @@ function combat.ZombieBiteAttack:getTargetCell(attacker, targetQ, targetR, hex, 
 end
 
 -- ============================================================
--- WIND TORRENT (глобальное заклинание, без изменений)
+-- SUMMON (призыв миньона)
 -- ============================================================
+combat.SummonAttack = setmetatable({}, combat.Attack)
+combat.SummonAttack.__index = combat.SummonAttack
+function combat.SummonAttack.new(range)
+    local self = combat.Attack.new("Summon", "Summon a minion at target cell", range or 5, 0, {})
+    self.minRange = 2
+    return setmetatable(self, combat.SummonAttack)
+end
 
+function combat.SummonAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance < self.minRange then return false, "Target too close! (minimum 2)" end
+    if not hex:isActiveHex(targetQ, targetR) then return false, "Target cell not active" end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+    local occupant = combat.getEntityAtHex(targetQ, targetR, entities)
+    if occupant then return false, "Cell occupied" end
+
+    local Entity = require("entity")
+    local env = require("environment")
+    local sprite = env.unitSpriteCache and env.unitSpriteCache[42] or nil
+    local minion = Entity.new("Summoned", Entity.TYPES.CHARACTER, targetQ, targetR, 2, true, 2, sprite, sprite and nil or {0.6, 0.3, 0.9}, {
+        { attack = combat.PushAttack.new(5), name = "Push", description = "Push first enemy in line" },
+    })
+    minion.lifetime = -1
+    table.insert(entities, minion)
+
+    local fx, fy = getDrawCoords(targetQ, targetR)
+    visual.addMagicExplosion(fx, fy, 0.6, 0.2, 1.0)
+    if sounds and sounds.attack then sounds.attack:play() end
+
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.SummonAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance < self.minRange then return nil end
+    if not hex:isActiveHex(targetQ, targetR) then return nil end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    local occupant = combat.getEntityAtHex(targetQ, targetR, entities)
+    if occupant then return nil end
+    return {q = targetQ, r = targetR}
+end
+
+-- ============================================================
+-- DIVIDER (разделение)
+-- ============================================================
+combat.DividerAttack = setmetatable({}, combat.Attack)
+combat.DividerAttack.__index = combat.DividerAttack
+function combat.DividerAttack.new(range)
+    local self = combat.Attack.new("Split", "Split into two Divided units", range or 5, 0, {})
+    self.minRange = 2
+    return setmetatable(self, combat.DividerAttack)
+end
+
+function combat.DividerAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance < self.minRange then return false, "Target too close! (minimum 2)" end
+    if not hex:isActiveHex(targetQ, targetR) then return false, "Target cell not active" end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+    local occupant = combat.getEntityAtHex(targetQ, targetR, entities)
+    if occupant then return false, "Cell occupied" end
+
+    local Entity = require("entity")
+    local env = require("environment")
+    local sprite44 = env.unitSpriteCache and env.unitSpriteCache[44] or nil
+
+    -- Create Divided at target cell
+    local divided = Entity.new("Divided", Entity.TYPES.CHARACTER, targetQ, targetR, 2, true, 3, sprite44, sprite44 and nil or {0.6, 0.4, 0.1}, {})
+    divided.hasActedThisTurn = true
+    table.insert(entities, divided)
+
+    -- Transform attacker into Divided
+    attacker.name = "Divided"
+    attacker.maxHealth = 2
+    attacker.health = math.min(attacker.health, 2)
+    attacker.moveRange = 3
+    attacker.sprite = sprite44
+    attacker.color = sprite44 and nil or {0.6, 0.4, 0.1}
+    attacker.attacks = {}
+    attacker.hasActedThisTurn = true
+
+    local fx1, fy1 = getDrawCoords(attacker.q, attacker.r)
+    local fx2, fy2 = getDrawCoords(targetQ, targetR)
+    visual.addMagicExplosion(fx1, fy1, 0.9, 0.7, 0.1)
+    visual.addMagicExplosion(fx2, fy2, 0.9, 0.7, 0.1)
+    if sounds and sounds.attack then sounds.attack:play() end
+
+    return true
+end
+
+function combat.DividerAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance < self.minRange then return nil end
+    if not hex:isActiveHex(targetQ, targetR) then return nil end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    local occupant = combat.getEntityAtHex(targetQ, targetR, entities)
+    if occupant then return nil end
+    return {q = targetQ, r = targetR}
+end
 
 -- ============================================================
 -- АНИМАЦИОННАЯ ОЧЕРЕДЬ

@@ -14,8 +14,8 @@ local squads = {
     {
         name = "New Blood",
         units = {
-            { name = "Summoner", maxHealth = 3, moveRange = 3, attacks = "none" },
-            { name = "Divider",  maxHealth = 4, moveRange = 4, attacks = "none" },
+            { name = "Summoner", maxHealth = 3, moveRange = 3, attacks = "summoner" },
+            { name = "Divider",  maxHealth = 4, moveRange = 4, attacks = "divider" },
         }
     },
 }

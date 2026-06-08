@@ -181,6 +181,7 @@ function renderer.draw(state)
     ui.drawGlobalHealthBar(state.globalHealth, mx, my)
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
     ui.drawDecayButton(mx, my, state.turnCount, state.maxTurns, state.turnState.phase)
+    ui.drawAllyPanel(mx, my, state.entities, state.selectedActor)
     if state.selectedActor then
         love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 23)
     end

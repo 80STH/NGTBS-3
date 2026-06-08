@@ -389,9 +389,18 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
                     local firstTarget, _ = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
                     if firstTarget then canApply = true end
                 end
-            elseif attack.name == "Shoot" or attack.name == "Piercing Shot" then
+            elseif attack.name == "Shoot" or attack.name == "Piercing Shot" or attack.name == "Push" then
                 local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
                 if stepX then canApply = true end
+            elseif attack.name == "Summon" or attack.name == "Split" then
+                local minRange = attack.minRange or 1
+                if dist >= minRange then
+                    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                    if stepX then
+                        local occupant = getEntityAtHex(q, r, entities)
+                        if not occupant then canApply = true end
+                    end
+                end
             end
             if canApply then
                 keys[q .. "," .. r] = true
@@ -1703,6 +1712,75 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
             end
         end
         return
+    end
+end
+
+function ui.drawAllyPanel(mx, my, entities, selectedActor)
+    allyPanelButtons = {}
+    local allies = {}
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and e.isPlayable and e.health and e.health > 0 then
+            table.insert(allies, e)
+        end
+    end
+    if #allies == 0 then return end
+
+    local x = 10
+    local btnW = 145
+    local btnH = 32
+    local gap = 2
+    local bottomY = logicalH - 10
+    local totalH = #allies * (btnH + gap)
+    local startY = bottomY - totalH
+    if startY < 35 then startY = 35 end
+
+    for i, ally in ipairs(allies) do
+        local by = startY + (i - 1) * (btnH + gap)
+        local hover = mx >= x and mx <= x + btnW and my >= by and my <= by + btnH
+        local sel = selectedActor == ally
+
+        local btn = {x = x, y = by, w = btnW, h = btnH, entity = ally}
+        table.insert(allyPanelButtons, btn)
+
+        if sel then
+            love.graphics.setColor(0.25, 0.55, 0.25, 0.88)
+        elseif hover then
+            love.graphics.setColor(0.35, 0.4, 0.5, 0.85)
+        else
+            love.graphics.setColor(0.18, 0.2, 0.25, 0.82)
+        end
+        love.graphics.rectangle("fill", x, by, btnW, btnH, 4)
+        love.graphics.setColor(0.45, 0.5, 0.55, 0.5)
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", x, by, btnW, btnH, 4)
+
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print(ally.name, x + 5, by + 2)
+
+        local hpStr = tostring(ally.health) .. "/" .. tostring(ally.maxHealth)
+        local hpColor
+        if ally.health <= ally.maxHealth * 0.3 then
+            hpColor = {1, 0.25, 0.25}
+        elseif ally.health <= ally.maxHealth * 0.6 then
+            hpColor = {1, 0.8, 0.2}
+        else
+            hpColor = {0.5, 1, 0.5}
+        end
+        love.graphics.setColor(hpColor[1], hpColor[2], hpColor[3], 1)
+        love.graphics.print(hpStr, x + 5, by + btnH / 2 + 1)
+
+        local indX = x + btnW - 16
+        local indY = by + btnH / 2 - 1
+        if ally.hasActedThisTurn then
+            love.graphics.setColor(0.5, 0.5, 0.5, 1)
+            love.graphics.print("✗", indX, indY - 2)
+        elseif not ally.hasMovedThisTurn then
+            love.graphics.setColor(0.3, 1, 0.3, 1)
+            love.graphics.circle("fill", indX + 3, indY + 5, 4)
+        else
+            love.graphics.setColor(1, 0.9, 0.3, 1)
+            love.graphics.circle("fill", indX + 3, indY + 5, 4)
+        end
     end
 end
 

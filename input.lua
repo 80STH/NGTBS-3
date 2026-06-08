@@ -149,6 +149,20 @@ function input.mousepressed(x, y, button)
         end
     end
 
+    -- Ally panel buttons
+    if turnState.phase == "player" then
+        for _, btn in ipairs(allyPanelButtons) do
+            if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
+                selectedActor = btn.entity
+                hex.selectedQ, hex.selectedR = btn.entity.q, btn.entity.r
+                updateAttackButtons(selectedActor)
+                attackMode = false
+                selectedAttack = nil
+                return
+            end
+        end
+    end
+
     local tq, tr = hex:pixelToHex(x, y)
     if not hex:isValidHex(tq, tr) then
         return

@@ -37,6 +37,7 @@ selectedSquad = nil
 unplacedAllies = {}
 placedAllies = {}
 deploySelectedIdx = nil
+allyPanelButtons = {}
 
 function syncStateToGlobals()
     entities = state.entities

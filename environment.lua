@@ -25,8 +25,10 @@ local gidToEntity = {
     [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
     [21] = { type = "character", name = "PoisonousZombie", isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
     [27] = { type = "character", name = "Lich",    isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "lich" },
-    [40] = { type = "character", name = "Summoner", isPlayable = true,  maxHealth = 3, moveRange = 3, attacks = "none" },
-    [45] = { type = "character", name = "Divider",  isPlayable = true,  maxHealth = 4, moveRange = 4, attacks = "none" },
+    [40] = { type = "character", name = "Summoner", isPlayable = true,  maxHealth = 3, moveRange = 3, attacks = "summoner" },
+    [42] = { type = "character", name = "Summoned", isPlayable = true,  maxHealth = 2, moveRange = 2, attacks = "summoned" },
+    [44] = { type = "character", name = "Divided",  isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "none" },
+    [45] = { type = "character", name = "Divider",  isPlayable = true,  maxHealth = 4, moveRange = 4, attacks = "divider" },
     [11] = { type = "obstacle",  name = "SuperMountain", health = 999 },
     [12] = { type = "building",  name = "SmallBuilding", health = 1, globalHealthCost = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2, globalHealthCost = 2 },
@@ -278,6 +280,12 @@ local function createEntityFromGID(map, gid, gridX, gridY)
             attacks = environment.getGhostAttacks()
         elseif def.attacks == "zombie" then
             attacks = environment.getZombieAttacks()
+        elseif def.attacks == "summoner" then
+            attacks = environment.getSummonerAttacks()
+        elseif def.attacks == "summoned" then
+            attacks = environment.getSummonedAttacks()
+        elseif def.attacks == "divider" then
+            attacks = environment.getDividerAttacks()
         elseif def.attacks == "none" then
             attacks = environment.getNoneAttacks()
         else
@@ -562,7 +570,29 @@ function environment.getNoneAttacks()
     return {}
 end
 
+function environment.getDividerAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.DividerAttack.new(), name = "Split", description = "Split into two Divided units" },
+    }
+end
+
+function environment.getSummonerAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.SummonAttack.new(), name = "Summon", description = "Summon a minion at target cell" },
+    }
+end
+
+function environment.getSummonedAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.PushAttack.new(5), name = "Shoot", description = "Push first enemy in line (no damage)" },
+    }
+end
+
 local unitSpriteCache = {}
+environment.unitSpriteCache = unitSpriteCache
 
 function environment.loadUnitSprites()
     local workaroundPath = "maps/units_workaround.lua"
@@ -574,14 +604,66 @@ function environment.loadUnitSprites()
     local map = sti(workaroundPath)
     local tileWidth = map.tilewidth or 16
     local tileHeight = map.tileheight or 16
-    local gids = {30, 31, 34, 40, 45}
-    for _, gid in ipairs(gids) do
-        local sprite = loadTileSprite(map, gid, tileWidth, tileHeight)
-        if sprite then
-            unitSpriteCache[gid] = sprite
+
+    local entitiesTileset = nil
+    for _, ts in ipairs(map.tilesets) do
+        if ts.name == "entities" then
+            entitiesTileset = ts
+            break
         end
     end
-    print("Unit sprites loaded: " .. #gids)
+
+    if entitiesTileset then
+        local firstGid = entitiesTileset.firstgid
+        local lastGid = firstGid + (entitiesTileset.tilecount or 1) - 1
+        print("=== All entity GIDs from workaround ===")
+        for gid = firstGid, lastGid do
+            local sprite = loadTileSprite(map, gid, tileWidth, tileHeight)
+            local def = gidToEntity[gid]
+            local name = def and def.name or "nil"
+            local info = def and string.format("type=%s hp=%s", def.type, def.maxHealth or def.health or "?") or ""
+            if sprite then
+                unitSpriteCache[gid] = sprite
+                print(string.format("  [OK]   GID %3d -> %-20s %s", gid, name, info))
+            else
+                print(string.format("  [FAIL] GID %3d -> %-20s (no sprite)", gid, name, info))
+            end
+        end
+    end
+
+    print("=== Tile positions on workaround map ===")
+    for _, layer in ipairs(map.layers) do
+        if layer.type == "tilelayer" then
+            local data = layer.data
+            print(string.format("  Layer '%s' (%d x %d):", layer.name, layer.width, layer.height))
+            for y = 1, layer.height do
+                for x = 1, layer.width do
+                    local gid = nil
+                    if type(data) == "table" then
+                        if data[y] then
+                            if type(data[y]) == "table" then
+                                if data[y][x] then
+                                    if type(data[y][x]) == "table" and data[y][x].gid then
+                                        gid = data[y][x].gid
+                                    elseif type(data[y][x]) == "number" then
+                                        gid = data[y][x]
+                                    end
+                                end
+                            elseif type(data[y]) == "number" then
+                                local idx = (y - 1) * layer.width + x
+                                gid = data[idx]
+                            end
+                        end
+                    end
+                    if gid and gid > 0 then
+                        local def = gidToEntity[gid]
+                        local name = def and def.name or (gid < 21 and "terrain" or "entity")
+                        print(string.format("    (%d,%d) -> GID %d (%s)", x-1, y-1, gid, name))
+                    end
+                end
+            end
+        end
+    end
 end
 
 function environment.createSquadUnit(unitDef, q, r)
@@ -593,11 +675,15 @@ function environment.createSquadUnit(unitDef, q, r)
         attacks = environment.getMageAttacks()
     elseif unitDef.attacks == "rogue" then
         attacks = environment.getRogueAttacks()
+    elseif unitDef.attacks == "summoner" then
+        attacks = environment.getSummonerAttacks()
+    elseif unitDef.attacks == "divider" then
+        attacks = environment.getDividerAttacks()
     end
 
     local nameToGid = {
         Warrior = 34, Mage = 31, Rogue = 30,
-        Summoner = 40, Divider = 45,
+        Summoner = 40, Divider = 45, Summoned = 42, Divided = 44,
     }
     local gid = nameToGid[unitDef.name]
     local sprite = gid and unitSpriteCache[gid] or nil
@@ -608,6 +694,8 @@ function environment.createSquadUnit(unitDef, q, r)
         Rogue = {0.2, 0.8, 0.3},
         Summoner = {0.8, 0.2, 0.8},
         Divider = {0.9, 0.7, 0.1},
+        Summoned = {0.6, 0.3, 0.9},
+        Divided = {0.6, 0.4, 0.1},
     }
 
     return Entity.new(
