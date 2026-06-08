@@ -103,7 +103,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJyVzjsKACAMA9Bm6Njc/7g6VJAQ/AxBxNfUjIjscAYmKdkdO/VgT1470aYuFuZesgvmhOmm6fq17r8nz0frnHrK7HofzFoDCA=="
+      data = "eJyVzjEOACAIQ1EYGOn9j6sDJqapqMMfjE8kzCwqzFwU1O5Q5YPtPM/0MnmxLs5Jf50sz1b+16p9O49Hqxx70Nt1PwC/jgL7"
     },
     {
       type = "tilelayer",
@@ -114,7 +114,7 @@ return {
       id = 2,
       name = "entities",
       class = "",
-      visible = true,
+      visible = false,
       opacity = 1,
       offsetx = 0,
       offsety = 0,
