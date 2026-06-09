@@ -36,6 +36,12 @@ local gidToEntity = {
     [6] = { type = "obstacle",  name = "WeakMountain",  health = 2, maxDamagePerHit = 1 },
     [59] = { type = "building", name = "Ship",          health = 1, globalHealthCost = 1, moveRange = 1, waterWalker = true },
     [29] = { type = "building", name = "Tower",         health = 1, globalHealthCost = 1, isObjective = true },
+    [60] = { type = "character", name = "Brute",    isPlayable = false, maxHealth = 5, moveRange = 2, attacks = "brute" },
+    [62] = { type = "character", name = "Lancer",   isPlayable = false, maxHealth = 4, moveRange = 3, attacks = "lancer" },
+    [63] = { type = "character", name = "BogShaman", isPlayable = false, maxHealth = 3, moveRange = 2, attacks = "bogshaman" },
+    [23] = { type = "character", name = "Raider",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "raider" },
+    [28] = { type = "character", name = "Dervish",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "dervish" },
+    [66] = { type = "character", name = "Crusher",  isPlayable = false, maxHealth = 4, moveRange = 2, attacks = "crusher" },
 }
 
 environment.enemySpriteCache = {}
@@ -291,6 +297,18 @@ local function createEntityFromGID(map, gid, gridX, gridY)
             attacks = environment.getNoneAttacks()
         elseif def.attacks == "all" then
             attacks = environment.getAllAttacks()
+        elseif def.attacks == "brute" then
+            attacks = environment.getBruteAttacks()
+        elseif def.attacks == "lancer" then
+            attacks = environment.getLancerAttacks()
+        elseif def.attacks == "bogshaman" then
+            attacks = environment.getBogShamanAttacks()
+        elseif def.attacks == "raider" then
+            attacks = environment.getRaiderAttacks()
+        elseif def.attacks == "dervish" then
+            attacks = environment.getDervishAttacks()
+        elseif def.attacks == "crusher" then
+            attacks = environment.getCrusherAttacks()
         else
             attacks = {}
         end
@@ -303,6 +321,10 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         actor.sprite = entitySprite
         if not def.isPlayable then
             environment.enemySpriteCache[def.name] = entitySprite
+        end
+        -- Ауры для врагов
+        if def.attacks == "bogshaman" then
+            actor.aura = { type = "slow", radius = 1 }
         end
         return actor
 
@@ -592,6 +614,9 @@ function environment.getAllAttacks()
         { attack = combat.WideVortexAttack.new(), name = "Wide Vortex", description = "Shift 3 enemies in front right or left" },
         { attack = combat.PullHookAttack.new(), name = "Pull Hook", description = "Hook a target and pull it towards you" },
         { attack = combat.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning that damages everyone on the line" },
+        { attack = combat.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
+        { attack = combat.CleaveAttack.new(), name = "Cleave", description = "Melee 1 dmg to 3 targets in front" },
+        { attack = combat.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
     }
 end
 
@@ -605,7 +630,49 @@ end
 function environment.getSummonerAttacks()
     local combat = require("combat")
     return {
-        { attack = combat.SummonAttack.new(), name = "Summon", description = "Summon a minion at target cell" },
+        { attack = combat.SummonAttack.new(), name = "Summon", description = "Summon a minion at target cell (min 2)" },
+    }
+end
+
+function environment.getBruteAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
+    }
+end
+
+function environment.getDervishAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.CleaveAttack.new(), name = "Cleave", description = "Melee 1 dmg to 3 targets in front" },
+    }
+end
+
+function environment.getRaiderAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
+    }
+end
+
+function environment.getCrusherAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
+    }
+end
+
+function environment.getLancerAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
+    }
+end
+
+function environment.getBogShamanAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
     }
 end
 
@@ -741,6 +808,7 @@ function environment.createEnemyByType(enemyType, q, r)
     local name = ""
     local maxHealth = 3
     local moveRange = 2
+    local hasAura = nil
 
     if enemyType == "Ghost" then
         attacks = environment.getGhostAttacks()
@@ -757,6 +825,37 @@ function environment.createEnemyByType(enemyType, q, r)
         name = "Lich"
         maxHealth = 2
         moveRange = 3
+    elseif enemyType == "Brute" then
+        attacks = environment.getBruteAttacks()
+        name = "Brute"
+        maxHealth = 5
+        moveRange = 2
+    elseif enemyType == "Lancer" then
+        attacks = environment.getLancerAttacks()
+        name = "Lancer"
+        maxHealth = 4
+        moveRange = 3
+    elseif enemyType == "BogShaman" then
+        attacks = environment.getBogShamanAttacks()
+        name = "BogShaman"
+        maxHealth = 3
+        moveRange = 2
+        hasAura = { type = "slow", radius = 1 }
+    elseif enemyType == "Raider" then
+        attacks = environment.getRaiderAttacks()
+        name = "Raider"
+        maxHealth = 3
+        moveRange = 3
+    elseif enemyType == "Dervish" then
+        attacks = environment.getDervishAttacks()
+        name = "Dervish"
+        maxHealth = 3
+        moveRange = 3
+    elseif enemyType == "Crusher" then
+        attacks = environment.getCrusherAttacks()
+        name = "Crusher"
+        maxHealth = 4
+        moveRange = 2
     else
         attacks = environment.getZombieAttacks()
         name = "Zombie"
@@ -787,12 +886,15 @@ function environment.createEnemyByType(enemyType, q, r)
     end
 
     local entity = Entity.new(name, Entity.TYPES.CHARACTER, q, r, maxHealth, false, moveRange, sprite, nil, attacks)
+    if hasAura then
+        entity.aura = hasAura
+    end
     return entity
 end
 
 -- Создать случайного врага (из пула)
 function environment.createRandomEnemy(q, r)
-    local types = { "Ghost", "Zombie", "Lich" }
+    local types = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
     local rnd = love.math.random(1, #types)
     return environment.createEnemyByType(types[rnd], q, r)
 end

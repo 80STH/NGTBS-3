@@ -107,6 +107,17 @@ function global_abilities.drawButtons(mx, my, state)
     end
 end
 
+-- Начисление previewDamage только для зданий (для глобальных воздействий)
+function global_abilities.previewBuildingDamage(globalHealth, damagedEntities)
+    if not globalHealth then return end
+    for _, dmg in ipairs(damagedEntities) do
+        if dmg.entity and dmg.entity:isBuilding() and dmg.entity.health > 0 then
+            local actual = math.min(dmg.damage or 1, dmg.entity.health)
+            globalHealth.previewDamage = (globalHealth.previewDamage or 0) + actual
+        end
+    end
+end
+
 function global_abilities.drawAbilityButton(self, mx, my, state, cfg)
     local isActive = (global_abilities.activeAbility == self)
     local available = (state.turnState.phase == "player" and not self.hasBeenUsed)
@@ -482,6 +493,7 @@ function WindTorrent:drawPreview(hex, state)
             drawHealthBar(dmg.entity, dmg.x, dmg.y, dmg.damage)
         end
     end
+    global_abilities.previewBuildingDamage(state.globalHealth, damagedEntities)
 end
 
 function WindTorrent:drawButton(mx, my, state)

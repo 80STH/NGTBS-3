@@ -43,13 +43,18 @@ function ui.getHazardTexture()
 end
 
 -- Проверка, может ли актор дойти до клетки (с учётом препятствий и длины пути)
-function ui.getEffectiveMoveRange(actor)
+function ui.getEffectiveMoveRange(actor, entities, hex)
     local base = actor.moveRange or 0
     if status and status.hasEntityStatus and status.hasEntityStatus(actor, "empowered") then
         base = base + 1
     end
     if status and status.isWounded and status.isWounded(actor) then
         base = base - 1
+    end
+    if combat and combat.isInSlowingAura and entities and hex then
+        if combat.isInSlowingAura(actor, entities, hex) then
+            base = math.max(1, base - 2)
+        end
     end
     return math.max(0, base)
 end
@@ -68,7 +73,7 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     end
     
     -- Поиск пути с ограничением по дальности и блокировками
-    local effectiveRange = ui.getEffectiveMoveRange(actor)
+    local effectiveRange = ui.getEffectiveMoveRange(actor, entities, hex)
     local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, effectiveRange,
         function(q, r) return isPositionOccupied(q, r, actor) end, hex)
     
@@ -80,7 +85,7 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return end
     if not hex:isActiveHex(hoverQ, hoverR) then return end
 
-    local effectiveRange = ui.getEffectiveMoveRange(actor)
+    local effectiveRange = ui.getEffectiveMoveRange(actor, entities, hex)
     local dist = hex:getDistance(actor.q, actor.r, hoverQ, hoverR)
     if dist > effectiveRange then return end
 
@@ -366,6 +371,10 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
     local keys = {}
     if not attacker or not attack then return keys end
     if attacker.hasActedThisTurn then return keys end
+
+    -- Предвычисляем общие ключи для новых атак
+    local genericKeys = attack.getTargetCell and attack:getValidTargets(attacker, hex, entities) or nil
+
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
             if not hex:isActiveHex(q, r) then
@@ -433,6 +442,10 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
                 if dist >= minRange then
                     local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
                     if stepX then canApply = true end
+                end
+            elseif genericKeys then
+                if genericKeys[q .. "," .. r] then
+                    canApply = true
                 end
             end
             if canApply then
@@ -1119,6 +1132,23 @@ local hasTarget = target and target:isCharacter() and target.health > 0
     return
 end
 
+    -- Общий метод: getAffectedCells (для новых атак)
+    if attack.getAffectedCells then
+        local cells = attack:getAffectedCells(attacker, hoverQ, hoverR, hex, entities)
+        for _, c in ipairs(cells) do
+            local e = getEntityAtHex(c.q, c.r, entities)
+            if e and e.health > 0 then
+                local ex, ey = getDrawCoords(e.q, e.r)
+                local dmg = c.damage or 1
+                drawHealthBar(e, ex, ey, dmg)
+                if e:isBuilding() then
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(dmg, e.health)
+                end
+            end
+        end
+        return
+    end
+
     if not previewData or #previewData == 0 then
         return
     end
@@ -1323,7 +1353,7 @@ function ui.getEffectiveStatuses(entity)
     return statuses
 end
 
-function ui.drawEntityTooltip(entity, terrainMap, hex)
+function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
     local bgColor = {0.1, 0.1, 0.2, 0.9}
     local borderColor = {0.8, 0.8, 0.8, 1}
     if entity.isPlayable then
@@ -1372,7 +1402,7 @@ function ui.drawEntityTooltip(entity, terrainMap, hex)
     table.insert(lines, { text = entity.name .. "  " .. entity.health .. "/" .. entity.maxHealth, color = {1,1,1} })
     -- Дальность передвижения
     local baseMove = entity.moveRange or 0
-    local effMove = ui.getEffectiveMoveRange(entity)
+    local effMove = ui.getEffectiveMoveRange(entity, entities, hex)
     if effMove > baseMove then
         table.insert(lines, { text = "Move: " .. baseMove .. " -> " .. effMove, color = {1, 0.9, 0.2} })
     else
@@ -1575,6 +1605,46 @@ end
         return
     end
 
+    -- Общий метод для атак с getAffectedCells (Bash, Cleave, Lunge и др.)
+    if attack.getAffectedCells and enemy.preparedTargetOffset then
+        local targetQ, targetR = hex_utils.applyCubeDiff(
+            enemy.q, enemy.r,
+            enemy.preparedTargetOffset.dx,
+            enemy.preparedTargetOffset.dy,
+            enemy.preparedTargetOffset.dz
+        )
+        if hex:isActiveHex(targetQ, targetR) then
+            -- Показываем линию от врага к цели
+            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+            local toX, toY = getDrawCoords(targetQ, targetR)
+            local pulse = 0.5 + 0.5 * math.sin(time * 8)
+            local alpha = 0.5 + 0.3 * pulse
+            ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.2, 0.2, alpha, enemy.q, enemy.r, targetQ, targetR)
+            -- Штриховка всех поражённых клеток
+            local cells = attack:getAffectedCells(enemy, targetQ, targetR, hex, entities)
+            local hazardTex = ui.getHazardTexture()
+            local pulse = 0.5 + 0.5 * math.sin(time * 5)
+            for _, c in ipairs(cells) do
+                local cx, cy = getDrawCoords(c.q, c.r)
+                local vertices = hex:drawInsetHexagon(cx, cy, hex.radius, 0.92)
+                love.graphics.stencil(function()
+                    love.graphics.polygon("fill", vertices)
+                end, "replace", 1)
+                love.graphics.setStencilTest("greater", 0)
+                love.graphics.setColor(1, 0.3, 0.2, 0.5 + 0.3 * pulse)
+                love.graphics.draw(hazardTex, cx - hex.radius, cy - hex.radius, 0,
+                                   hex.radius * 2 / hazardTex:getWidth(),
+                                   hex.radius * 2 / hazardTex:getHeight())
+                love.graphics.setStencilTest()
+                love.graphics.setColor(1, 0.3, 0.2, 0.4 + 0.3 * pulse)
+                love.graphics.setLineWidth(2)
+                love.graphics.polygon("line", vertices)
+                love.graphics.setLineWidth(1)
+            end
+        end
+        return
+    end
+
     -- Для атак с направлением (Dash, Shoot, Piercing) – используем направление
     if enemy.attackDirection then
         local step = enemy.attackDirection
@@ -1702,7 +1772,7 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
             return false
         end
     end
-    local effectiveRange = ui.getEffectiveMoveRange(enemy)
+    local effectiveRange = ui.getEffectiveMoveRange(enemy, entities, hex)
     local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effectiveRange,
         function(q, r) return not isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex) end, hex)
     return path ~= nil and #path > 0
@@ -1972,6 +2042,7 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
         if not stepX then return end
     end
 
+    -- Специфичные ветки для существующих атак (обратная совместимость)
     if attack.name == "Flip" then
         if distance == 1 then
             local target = getEntityAtHex(hoverQ, hoverR, entities)
@@ -2078,6 +2149,15 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
                     end
                 end
             end
+        end
+        return
+    end
+
+    -- Общий метод: getAffectedCells (для новых атак)
+    if attack.getAffectedCells then
+        local cells = attack:getAffectedCells(attacker, hoverQ, hoverR, hex, entities)
+        for _, c in ipairs(cells) do
+            table.insert(out, {q = c.q, r = c.r})
         end
         return
     end

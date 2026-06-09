@@ -254,6 +254,7 @@ function renderer.draw(state)
     global_abilities.drawButtons(mx, my, state)
     ui.drawTestViewButton(mx, my)
 
+    global_abilities.drawPreview(hex, state)
     ui.drawGlobalHealthBar(state.globalHealth, mx, my)
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
     ui.drawDecayButton(mx, my, state.turnCount, state.maxTurns, state.turnState.phase)
@@ -296,7 +297,7 @@ function renderer.draw(state)
     if hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
         if hoverEntity and hoverEntity.health > 0 then
-            ui.drawEntityTooltip(hoverEntity, state.terrainMap, hex)
+            ui.drawEntityTooltip(hoverEntity, state.terrainMap, hex, state.entities)
         elseif hex:isActiveHex(hex.hoverQ, hex.hoverR) then
             local terrain = state.terrainMap and state.terrainMap[hex.hoverQ] and state.terrainMap[hex.hoverQ][hex.hoverR] or "grass"
             ui.drawCellTooltip(hex.hoverQ, hex.hoverR, terrain, hex)
@@ -308,8 +309,6 @@ function renderer.draw(state)
             ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
         end
     end
-
-    global_abilities.drawPreview(hex, state)
 
     objectives.draw()
 

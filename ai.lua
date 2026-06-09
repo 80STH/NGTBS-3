@@ -288,6 +288,60 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
             local toX, toY = getDrawCoords(targetQ, targetR)
             visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.7, 0.2, 3, 1.0)
         end
+    elseif attack.name == "Bash" or attack.name == "Lunge" then
+        if target then
+            local tx, ty = getDrawCoords(target.q, target.r)
+            visual.addLineEffect(getDrawCoords(enemy.q, enemy.r), tx, ty, 0.9, 0.5, 0.2, 4, 0.6)
+            visual.addEffect(tx, ty, "hit", 0.3)
+            -- Доп. цель для Bash (позади атакующего) и Lunge (позади цели)
+            local extraQ, extraR, extraTarget = nil, nil, nil
+            if attack.name == "Bash" then
+                local stepX, stepY, stepZ = attack:getLineDirection(target.q, target.r, enemy.q, enemy.r, hex)
+                if stepX then
+                    extraQ, extraR = hex_utils.applyCubeStep(enemy.q, enemy.r, stepX, stepY, stepZ)
+                end
+            else -- Lunge
+                local stepX, stepY, stepZ = attack:getLineDirection(enemy.q, enemy.r, target.q, target.r, hex)
+                if stepX then
+                    extraQ, extraR = hex_utils.applyCubeStep(target.q, target.r, stepX, stepY, stepZ)
+                end
+            end
+            if extraQ and extraR then
+                local e = combat.getEntityAtHex(extraQ, extraR, entities)
+                if e and e.health > 0 then
+                    extraTarget = e
+                    local ex, ey = getDrawCoords(extraQ, extraR)
+                    visual.addEffect(ex, ey, "hit", 0.3)
+                end
+            end
+            -- Отложим доп. цель для нанесения урона
+            enemy._extraAttackTarget = extraTarget
+        end
+    elseif attack.name == "Cleave" then
+        if targetQ and targetR then
+            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+            local toX, toY = getDrawCoords(targetQ, targetR)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.5, 0.2, 3, 0.6)
+        end
+        -- Две боковые цели (основная цель уже будет поражена)
+        local frontTargets = {}
+        local stepX, stepY, stepZ = attack:getLineDirection(enemy.q, enemy.r, targetQ, targetR, hex)
+        if stepX then
+            local sx1, sy1, sz1 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+            local sx2, sy2, sz2 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
+            local side1Q, side1R = hex_utils.applyCubeStep(enemy.q, enemy.r, sx1, sy1, sz1)
+            local side2Q, side2R = hex_utils.applyCubeStep(enemy.q, enemy.r, sx2, sy2, sz2)
+            local sideCells = {{q = side1Q, r = side1R}, {q = side2Q, r = side2R}}
+            for _, cell in ipairs(sideCells) do
+                local e = combat.getEntityAtHex(cell.q, cell.r, entities)
+                if e and e.health > 0 then
+                    table.insert(frontTargets, e)
+                end
+                local cx, cy = getDrawCoords(cell.q, cell.r)
+                visual.addEffect(cx, cy, "hit", 0.2)
+            end
+        end
+        enemy._cleaveTargets = frontTargets
     end
 
     -- ===== 3. Наносим урон, если цель есть =====
@@ -302,6 +356,32 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
     else
         debugPrint(string.format("%s attacks cell (%d,%d) but no valid target, animation only", 
                    enemy.name, targetQ or 0, targetR or 0))
+    end
+
+    -- Доп. урон для Bash/Lunge (вторая цель)
+    if enemy._extraAttackTarget and enemy._extraAttackTarget.health > 0 then
+        local extra = enemy._extraAttackTarget
+        local wasDestroyed = extra:takeDamage(attack.damage, globalHealth)
+        print(string.format("%s also hits %s for %d damage!", enemy.name, extra.name, attack.damage))
+        if sounds and sounds.attack then sounds.attack:play() end
+        if wasDestroyed then
+            extra:startDeath()
+        end
+        enemy._extraAttackTarget = nil
+    end
+
+    -- Множественный урон для Cleave
+    if enemy._cleaveTargets then
+        for _, ct in ipairs(enemy._cleaveTargets) do
+            if ct.health > 0 then
+                local wasDestroyed = ct:takeDamage(attack.damage, globalHealth)
+                print(string.format("%s cleaves %s for %d damage!", enemy.name, ct.name, attack.damage))
+                if wasDestroyed then
+                    ct:startDeath()
+                end
+            end
+        end
+        enemy._cleaveTargets = nil
     end
 
     -- ===== 4. Сбрасываем состояние атаки =====
@@ -398,7 +478,7 @@ function ai.performMoveTowards(enemy, target, entities, hex)
             end
             if not occupied then
                 local distToEnemy = hex:getDistance(enemy.q, enemy.r, neighbor.q, neighbor.r)
-                local effRange = ai.getEffectiveMoveRange(enemy)
+                local effRange = ai.getEffectiveMoveRange(enemy, hex, entities)
                 if distToEnemy <= effRange then
                     if not isCellDangerousForEntity(neighbor.q, neighbor.r, enemy) then
                         if isCellOnEnemyAttackLine(neighbor.q, neighbor.r, enemy, entities, hex) then
@@ -483,10 +563,15 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
     return false
 end
 
-function ai.getEffectiveMoveRange(enemy)
+function ai.getEffectiveMoveRange(enemy, hex, entities)
     local base = enemy.moveRange + (status.hasEntityStatus(enemy, "empowered") and 1 or 0)
     if status.isWounded and status.isWounded(enemy) then
         base = base - 1
+    end
+    if hex and entities and combat and combat.isInSlowingAura then
+        if combat.isInSlowingAura(enemy, entities, hex) then
+            base = math.max(1, base - 2)
+        end
     end
     return math.max(0, base)
 end
@@ -494,7 +579,7 @@ end
 function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
     if enemy.isMoving then return false end
     local distance = hex:getDistance(enemy.q, enemy.r, targetQ, targetR)
-    local effRange = ai.getEffectiveMoveRange(enemy)
+    local effRange = ai.getEffectiveMoveRange(enemy, hex, entities)
     if distance > effRange then return false end
 
     local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effRange,

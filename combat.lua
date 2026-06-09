@@ -190,6 +190,33 @@ function combat.Attack:getNeighborsInDirection(centerQ, centerR, dirQ, dirR, hex
 end
 
 -- ============================================================
+-- ОБЩИЕ МЕТОДЫ ДЛЯ ПРЕДПРОСМОТРА АТАК
+-- ============================================================
+
+-- Какие клетки будут поражены при атаке цели (targetQ, targetR)
+-- Возвращает массив {q, r, damage}
+function combat.Attack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
+    return {{q = targetQ, r = targetR, damage = self.damage}}
+end
+
+-- Все валидные клетки-цели для этой атаки
+-- Возвращает таблицу {["q,r"] = true}
+function combat.Attack:getValidTargets(attacker, hex, entities)
+    local keys = {}
+    for q = 0, hex.gridWidth - 1 do
+        for r = 0, hex.gridHeight - 1 do
+            if hex:isActiveHex(q, r) then
+                local cell = self:getTargetCell(attacker, q, r, hex, entities)
+                if cell then
+                    keys[q .. "," .. r] = true
+                end
+            end
+        end
+    end
+    return keys
+end
+
+-- ============================================================
 -- ТИПЫ АТАК (с поддержкой предпросмотра отталкивания)
 -- ============================================================
 -- Замените существующий класс DashAttack на этот
@@ -1147,6 +1174,224 @@ function combat.ElectricHookAttack:execute(attacker, targetQ, targetR, hex, enti
 end
 
 -- ============================================================
+-- BASH: рукопашная, 2 урона цели + 2 урона позади атакующего
+-- ============================================================
+combat.BashAttack = setmetatable({}, combat.Attack)
+combat.BashAttack.__index = combat.BashAttack
+
+function combat.BashAttack.new()
+    local self = combat.Attack.new("Bash", "Melee attack, 2 damage to target and behind attacker", 1, 2, {})
+    return setmetatable(self, combat.BashAttack)
+end
+
+function combat.BashAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+
+    local target = nil
+    for _, e in ipairs(entities) do
+        if e.q == targetQ and e.r == targetR and e.health > 0 then
+            target = e
+            break
+        end
+    end
+    if not target then return false, "No target at that hex" end
+
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+
+    -- Цель позади атакующего: направление от цели к атакующему, затем ещё шаг за атакующего
+    local stepX, stepY, stepZ = self:getLineDirection(targetQ, targetR, attacker.q, attacker.r, hex)
+    if stepX then
+        local behindQ, behindR = hex_utils.applyCubeStep(attacker.q, attacker.r, stepX, stepY, stepZ)
+        local behindEntity = nil
+        for _, e in ipairs(entities) do
+            if e.q == behindQ and e.r == behindR and e.health > 0 then
+                behindEntity = e
+                break
+            end
+        end
+        if behindEntity then
+            self:dealDamageToTarget(behindEntity, attacker, self.damage, entities, sounds, nil, globalHealth)
+        end
+    end
+
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.BashAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) == 1 then
+        for _, e in ipairs(entities) do
+            if e.q == targetQ and e.r == targetR and e.health > 0 then
+                return {q = targetQ, r = targetR}
+            end
+        end
+    end
+    return nil
+end
+
+function combat.BashAttack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
+    local cells = {{q = targetQ, r = targetR, damage = self.damage}}
+    -- Цель позади атакующего
+    local stepX, stepY, stepZ = self:getLineDirection(targetQ, targetR, attacker.q, attacker.r, hex)
+    if stepX then
+        local behindQ, behindR = hex_utils.applyCubeStep(attacker.q, attacker.r, stepX, stepY, stepZ)
+        table.insert(cells, {q = behindQ, r = behindR, damage = self.damage})
+    end
+    return cells
+end
+
+-- ============================================================
+-- CLEAVE: рукопашная, 1 урон трём целям впереди
+-- ============================================================
+combat.CleaveAttack = setmetatable({}, combat.Attack)
+combat.CleaveAttack.__index = combat.CleaveAttack
+
+function combat.CleaveAttack.new()
+    local self = combat.Attack.new("Cleave", "Melee attack, 1 damage to three targets in front", 1, 1, {})
+    return setmetatable(self, combat.CleaveAttack)
+end
+
+function combat.CleaveAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not on a straight line" end
+
+    -- Три клетки: центральная цель + две боковые (поворот направления на ±60°)
+    local cells = {{q = targetQ, r = targetR}}
+    local sx1, sy1, sz1 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+    local sx2, sy2, sz2 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
+    local side1Q, side1R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx1, sy1, sz1)
+    local side2Q, side2R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx2, sy2, sz2)
+    table.insert(cells, {q = side1Q, r = side1R})
+    table.insert(cells, {q = side2Q, r = side2R})
+
+    for _, cell in ipairs(cells) do
+        local target = nil
+        for _, e in ipairs(entities) do
+            if e.q == cell.q and e.r == cell.r and e.health > 0 then
+                target = e
+                break
+            end
+        end
+        if target then
+            self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+        end
+    end
+
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.CleaveAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) == 1 then
+        return {q = targetQ, r = targetR}
+    end
+    return nil
+end
+
+function combat.CleaveAttack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
+    local cells = {{q = targetQ, r = targetR, damage = self.damage}}
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local sx1, sy1, sz1 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+        local sx2, sy2, sz2 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
+        local side1Q, side1R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx1, sy1, sz1)
+        local side2Q, side2R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx2, sy2, sz2)
+        table.insert(cells, {q = side1Q, r = side1R, damage = self.damage})
+        table.insert(cells, {q = side2Q, r = side2R, damage = self.damage})
+    end
+    return cells
+end
+
+-- ============================================================
+-- LUNGE: рукопашная, 2 урона цели + 2 урона цели за ней
+-- ============================================================
+combat.LungeAttack = setmetatable({}, combat.Attack)
+combat.LungeAttack.__index = combat.LungeAttack
+
+function combat.LungeAttack.new()
+    local self = combat.Attack.new("Lunge", "Melee attack, 2 damage to target and the target behind it", 1, 2, {})
+    return setmetatable(self, combat.LungeAttack)
+end
+
+function combat.LungeAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+
+    local target = nil
+    for _, e in ipairs(entities) do
+        if e.q == targetQ and e.r == targetR and e.health > 0 then
+            target = e
+            break
+        end
+    end
+    if not target then return false, "No target at that hex" end
+
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+
+    -- Цель за целью: продолжаем линию от атакующего через цель
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local behindQ, behindR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+        local behindEntity = nil
+        for _, e in ipairs(entities) do
+            if e.q == behindQ and e.r == behindR and e.health > 0 then
+                behindEntity = e
+                break
+            end
+        end
+        if behindEntity then
+            self:dealDamageToTarget(behindEntity, attacker, self.damage, entities, sounds, nil, globalHealth)
+        end
+    end
+
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.LungeAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) == 1 then
+        for _, e in ipairs(entities) do
+            if e.q == targetQ and e.r == targetR and e.health > 0 then
+                return {q = targetQ, r = targetR}
+            end
+        end
+    end
+    return nil
+end
+
+function combat.LungeAttack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
+    local cells = {{q = targetQ, r = targetR, damage = self.damage}}
+    -- Цель позади цели
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local behindQ, behindR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+        table.insert(cells, {q = behindQ, r = behindR, damage = self.damage})
+    end
+    return cells
+end
+
+-- ============================================================
+-- AURA: трясина (пассивная, снижает скорость на 2, мин. 1)
+-- ============================================================
+
+-- Проверяет, находится ли entity в радиусе ауры врага
+function combat.isInSlowingAura(entity, entities, hex)
+    for _, e in ipairs(entities) do
+        if e ~= entity and e.health > 0 and e.aura and e.aura.type == "slow" then
+            local dist = hex:getDistance(entity.q, entity.r, e.q, e.r)
+            if dist <= e.aura.radius then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- ============================================================
 -- АНИМАЦИОННАЯ ОЧЕРЕДЬ
 -- ============================================================
 pushAnimations = { queue = {}, active = false }
@@ -1486,7 +1731,13 @@ function performMove(actor, targetQ, targetR)
     end
     if actor.q == targetQ and actor.r == targetR then return false end
     local distance = hex:getDistance(actor.q, actor.r, targetQ, targetR)
-    local effectiveRange = actor.moveRange + (status.hasEntityStatus(actor, "empowered") and 1 or 0)
+    local baseRange = actor.moveRange + (status.hasEntityStatus(actor, "empowered") and 1 or 0)
+    if combat.isInSlowingAura then
+        if combat.isInSlowingAura(actor, entities, hex) then
+            baseRange = math.max(1, baseRange - 2)
+        end
+    end
+    local effectiveRange = baseRange
     if distance > effectiveRange then
         print("Too far")
         return false

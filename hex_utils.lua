@@ -44,4 +44,14 @@ function hex_utils.applyCubeDiff(q, r, dx, dy, dz)
     return hex_utils.cubeToAxial(x + dx, y + dy, z + dz)
 end
 
+-- Поворот кубического направления на 60°
+-- clockwise=true: по часовой стрелке, false: против часовой
+function hex_utils.rotateCubeDir(dx, dy, dz, clockwise)
+    if clockwise then
+        return -dy, -dz, -dx
+    else
+        return -dz, -dx, -dy
+    end
+end
+
 return hex_utils
