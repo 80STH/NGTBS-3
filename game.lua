@@ -45,7 +45,7 @@ function restartGame(mapPath)
     end
 
     -- Setup deploy phase
-    local skipDeploy = mapPath:match("test_polygon_1")
+    local skipDeploy = mapPath:match("test_polygon_[12]")
     if selectedSquad then
         local squads = menu.getSquads()
         local squad = squads[selectedSquad]

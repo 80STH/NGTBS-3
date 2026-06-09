@@ -115,6 +115,73 @@ function renderer.draw(state)
         love.graphics.line(lx, ly - ls * 0.6, lx + ls * 0.25, ly - ls * 0.1, lx + ls * 0.05, ly + ls * 0.05, lx + ls * 0.3, ly + ls * 0.6)
         love.graphics.setLineWidth(1)
     end
+    if state.vortexTargetCell and state.selectedAttack then
+        local vx, vy = getDrawCoords(state.vortexTargetCell.q, state.vortexTargetCell.r)
+        local targetVerts = hex:drawInsetHexagon(vx, vy, hex.radius, 0.92)
+        love.graphics.setColor(0.2, 0.6, 1, 0.4)
+        love.graphics.polygon("fill", targetVerts)
+        love.graphics.setColor(0.2, 0.6, 1, 0.9)
+        love.graphics.setLineWidth(3)
+        love.graphics.polygon("line", targetVerts)
+        if state.selectedAttack.name == "Vortex Strike" then
+            local dests = state.selectedAttack:getShiftDestinations(state.selectedActor, state.vortexTargetCell.q, state.vortexTargetCell.r, hex)
+            for _, dc in ipairs(dests) do
+                local dx, dy = getDrawCoords(dc.q, dc.r)
+                local dv = hex:drawInsetHexagon(dx, dy, hex.radius, 0.92)
+                if dc.dir == "right" then
+                    love.graphics.setColor(0.4, 0.8, 1, 0.3)
+                    love.graphics.polygon("fill", dv)
+                    love.graphics.setColor(0.4, 0.8, 1, 0.8)
+                else
+                    love.graphics.setColor(1, 0.6, 0.3, 0.3)
+                    love.graphics.polygon("fill", dv)
+                    love.graphics.setColor(1, 0.6, 0.3, 0.8)
+                end
+                love.graphics.setLineWidth(2)
+                love.graphics.polygon("line", dv)
+                love.graphics.setLineWidth(1)
+            end
+        elseif state.selectedAttack.name == "Wide Vortex" then
+            local stepX, stepY, stepZ = state.selectedAttack:getLineDirection(state.selectedActor.q, state.selectedActor.r, state.vortexTargetCell.q, state.vortexTargetCell.r, hex)
+            local ax, ay, az = hex_utils.axialToCube(state.selectedActor.q, state.selectedActor.r)
+            local dests = state.selectedAttack:getShiftDestinations(state.selectedActor, state.vortexTargetCell.q, state.vortexTargetCell.r, hex)
+            for _, dc in ipairs(dests) do
+                local dx, dy = getDrawCoords(dc.q, dc.r)
+                local dv = hex:drawInsetHexagon(dx, dy, hex.radius, 0.92)
+                if dc.dir == "right" then
+                    love.graphics.setColor(0.4, 0.8, 1, 0.3)
+                    love.graphics.polygon("fill", dv)
+                    love.graphics.setColor(0.4, 0.8, 1, 0.8)
+                else
+                    love.graphics.setColor(1, 0.6, 0.3, 0.3)
+                    love.graphics.polygon("fill", dv)
+                    love.graphics.setColor(1, 0.6, 0.3, 0.8)
+                end
+                love.graphics.setLineWidth(2)
+                love.graphics.polygon("line", dv)
+                love.graphics.setLineWidth(1)
+                -- Second target B: 60° further around attacker
+                local occupant = getEntityAtHex(dc.q, dc.r)
+                if occupant and occupant:isCharacter() and occupant.health > 0 then
+                    local bq, br
+                    if dc.dir == "right" then
+                        bq, br = hex_utils.cubeToAxial(ax + stepZ, ay + stepX, az + stepY)
+                    else
+                        bq, br = hex_utils.cubeToAxial(ax + stepY, ay + stepZ, az + stepX)
+                    end
+                    if hex:isActiveHex(bq, br) then
+                        local bx, by = getDrawCoords(bq, br)
+                        local bv = hex:drawInsetHexagon(bx, by, hex.radius, 0.92)
+                        love.graphics.setColor(1, 1, 0.4, 0.3)
+                        love.graphics.polygon("fill", bv)
+                        love.graphics.setColor(1, 1, 0.4, 0.8)
+                        love.graphics.polygon("line", bv)
+                    end
+                end
+            end
+        end
+        love.graphics.setLineWidth(1)
+    end
     drawAllEntities(state)
     visual.draw()
 

@@ -29,6 +29,7 @@ local gidToEntity = {
     [42] = { type = "character", name = "Summoned", isPlayable = true,  maxHealth = 2, moveRange = 2, attacks = "summoned" },
     [44] = { type = "character", name = "Divided",  isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "none" },
     [45] = { type = "character", name = "Divider",  isPlayable = true,  maxHealth = 4, moveRange = 4, attacks = "divider" },
+    [68] = { type = "character", name = "AttackTest", isPlayable = true, maxHealth = 10, moveRange = 6, attacks = "all" },
     [11] = { type = "obstacle",  name = "SuperMountain", health = 999 },
     [12] = { type = "building",  name = "SmallBuilding", health = 1, globalHealthCost = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2, globalHealthCost = 2 },
@@ -288,6 +289,8 @@ local function createEntityFromGID(map, gid, gridX, gridY)
             attacks = environment.getDividerAttacks()
         elseif def.attacks == "none" then
             attacks = environment.getNoneAttacks()
+        elseif def.attacks == "all" then
+            attacks = environment.getAllAttacks()
         else
             attacks = {}
         end
@@ -570,6 +573,26 @@ function environment.getNoneAttacks()
     return {}
 end
 
+function environment.getAllAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.DashAttack.new(), name = "Dash", description = "Charge and push" },
+        { attack = combat.FlipAttack.new(), name = "Flip", description = "Flip enemy behind" },
+        { attack = combat.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
+        { attack = combat.PushAttack.new(5), name = "Push", description = "Push first enemy in line (no damage)" },
+        { attack = combat.PiercingShootAttack.new(), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
+        { attack = combat.AoePushAttack.new(), name = "Stone Throw", description = "Throw a stone that pushes enemies around" },
+        { attack = combat.AoeDirectionalAttack.new(), name = "Shockwave", description = "Pushes all 6 surrounding enemies away from the center" },
+        { attack = combat.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any target cell, ignores obstacles" },
+        { attack = combat.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, 2 damage" },
+        { attack = combat.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
+        { attack = combat.SummonAttack.new(), name = "Summon", description = "Summon a minion at target cell" },
+        { attack = combat.DividerAttack.new(), name = "Split", description = "Split into two Divided units" },
+        { attack = combat.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shift an enemy right or left and deal 1 damage" },
+        { attack = combat.WideVortexAttack.new(), name = "Wide Vortex", description = "Shift 3 enemies in front right or left" },
+    }
+end
+
 function environment.getDividerAttacks()
     local combat = require("combat")
     return {
@@ -679,11 +702,14 @@ function environment.createSquadUnit(unitDef, q, r)
         attacks = environment.getSummonerAttacks()
     elseif unitDef.attacks == "divider" then
         attacks = environment.getDividerAttacks()
+    elseif unitDef.attacks == "all" then
+        attacks = environment.getAllAttacks()
     end
 
     local nameToGid = {
         Warrior = 34, Mage = 31, Rogue = 30,
         Summoner = 40, Divider = 45, Summoned = 42, Divided = 44,
+        AttackTest = 68,
     }
     local gid = nameToGid[unitDef.name]
     local sprite = gid and unitSpriteCache[gid] or nil
@@ -696,6 +722,7 @@ function environment.createSquadUnit(unitDef, q, r)
         Divider = {0.9, 0.7, 0.1},
         Summoned = {0.6, 0.3, 0.9},
         Divided = {0.6, 0.4, 0.1},
+        AttackTest = {0.2, 0.9, 0.9},
     }
 
     return Entity.new(

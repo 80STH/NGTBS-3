@@ -172,7 +172,6 @@ function input.mousepressed(x, y, button)
         if selectedAttack.name == "Flip" then
             if flipTargetActor then
                 local destQ, destR = tq, tr
-                local actorQ, actorR = selectedActor.q, selectedActor.r
                 local targetQ, targetR = flipTargetActor.q, flipTargetActor.r
                 local cells = selectedAttack:getFlipCells(selectedActor, targetQ, targetR, hex, entities)
                 local isValidDest = false
@@ -198,6 +197,58 @@ function input.mousepressed(x, y, button)
                 if clicked and clicked:isCharacter() and clicked ~= selectedActor and
                    hex:getDistance(selectedActor.q, selectedActor.r, tq, tr) == 1 then
                     flipTargetActor = clicked
+                end
+            end
+            return
+        elseif selectedAttack.name == "Vortex Strike" then
+            if vortexTargetCell then
+                local destCells = selectedAttack:getShiftDestinations(selectedActor, vortexTargetCell.q, vortexTargetCell.r, hex)
+                local isValidDest = false
+                for _, dc in ipairs(destCells) do
+                    if dc.q == tq and dc.r == tr then
+                        selectedAttack._vortexDestCell = {q = dc.q, r = dc.r, dir = dc.dir}
+                        local success, msg = performAttackWithSelectedAttack(selectedActor, vortexTargetCell.q, vortexTargetCell.r, selectedAttack)
+                        if not success then print("Attack failed: " .. msg) end
+                        isValidDest = true
+                        break
+                    end
+                end
+                if isValidDest then
+                    attackMode = false
+                    selectedAttack = nil
+                    globalHealth.previewDamage = 0
+                end
+                vortexTargetCell = nil
+            else
+                local target = selectedAttack:getLineTarget(selectedActor, tq, tr, hex, entities)
+                if target then
+                    vortexTargetCell = {q = target.q, r = target.r}
+                end
+            end
+            return
+        elseif selectedAttack.name == "Wide Vortex" then
+            if vortexTargetCell then
+                local dests = selectedAttack:getShiftDestinations(selectedActor, vortexTargetCell.q, vortexTargetCell.r, hex)
+                local isValidDest = false
+                for _, dc in ipairs(dests) do
+                    if dc.q == tq and dc.r == tr then
+                        selectedAttack._vortexShiftDir = dc.dir
+                        local success, msg = performAttackWithSelectedAttack(selectedActor, vortexTargetCell.q, vortexTargetCell.r, selectedAttack)
+                        if not success then print("Attack failed: " .. msg) end
+                        isValidDest = true
+                        break
+                    end
+                end
+                if isValidDest then
+                    attackMode = false
+                    selectedAttack = nil
+                    globalHealth.previewDamage = 0
+                end
+                vortexTargetCell = nil
+            else
+                local target = selectedAttack:getLineTarget(selectedActor, tq, tr, hex, entities)
+                if target then
+                    vortexTargetCell = {q = target.q, r = target.r}
                 end
             end
             return
@@ -259,6 +310,9 @@ function input.keypressed(key)
         elseif flipTargetActor then
             flipTargetActor = nil
             print("Flip target cancelled")
+        elseif vortexTargetCell then
+            vortexTargetCell = nil
+            print("Vortex target cancelled")
         elseif attackMode then
             attackMode = false
             selectedAttack = nil

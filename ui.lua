@@ -415,6 +415,16 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
                         if not occupant then canApply = true end
                     end
                 end
+            elseif attack.name == "Vortex Strike" or attack.name == "Wide Vortex" then
+                if dist >= 1 and dist <= attack.range then
+                    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                    if stepX then
+                        local occupant = getEntityAtHex(q, r, entities)
+                        if occupant and occupant:isCharacter() and occupant.health > 0 and not occupant.isPlayable then
+                            canApply = true
+                        end
+                    end
+                end
             end
             if canApply then
                 keys[q .. "," .. r] = true
@@ -620,6 +630,149 @@ end
             end
             return
         end
+    end
+
+    -- Vortex Strike
+    if attack.name == "Vortex Strike" then
+        local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+        if distance ~= 1 then return end
+        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+        if not stepX then return end
+        if not vortexTargetCell then
+            -- First click phase: show direction cells only (no damage preview)
+            local target = getEntityAtHex(hoverQ, hoverR, entities)
+            if target and target:isCharacter() and target.health > 0 and not target.isPlayable then
+                local tx, ty = getDrawCoords(hoverQ, hoverR)
+                local dests = attack:getShiftDestinations(attacker, hoverQ, hoverR, hex)
+                for _, dc in ipairs(dests) do
+                    local dx, dy = getDrawCoords(dc.q, dc.r)
+                    local r, g, b = 0.4, 0.8, 1
+                    if dc.dir == "left" then r, g, b = 1, 0.6, 0.3 end
+                    love.graphics.setColor(r, g, b, 0.3)
+                    local dv = hex:drawInsetHexagon(dx, dy, hex.radius, 0.92)
+                    love.graphics.polygon("fill", dv)
+                    love.graphics.setColor(r, g, b, 0.8)
+                    love.graphics.setLineWidth(2)
+                    love.graphics.polygon("line", dv)
+                    love.graphics.setLineWidth(1)
+                end
+            end
+        elseif vortexTargetCell then
+            -- Second click phase: show push arrow on destination hover
+            local target = getEntityAtHex(vortexTargetCell.q, vortexTargetCell.r, entities)
+            if target then
+                local dests = attack:getShiftDestinations(attacker, vortexTargetCell.q, vortexTargetCell.r, hex)
+                local isDest = false
+                for _, dc in ipairs(dests) do
+                    if dc.q == hoverQ and dc.r == hoverR then
+                        isDest = true
+                        break
+                    end
+                end
+                if isDest then
+                    local tx, ty = getDrawCoords(vortexTargetCell.q, vortexTargetCell.r)
+                    local hx, hy = getDrawCoords(hoverQ, hoverR)
+                    local occupant = getEntityAtHex(hoverQ, hoverR, entities)
+                    ui.drawPushArrow(tx, ty, hx, hy, nil, nil, nil, nil, vortexTargetCell.q, vortexTargetCell.r, hoverQ, hoverR)
+                    if occupant then
+                        drawHealthBar(target, tx, ty, 2)
+                        drawHealthBar(occupant, hx, hy, 1)
+                    else
+                        drawHealthBar(target, tx, ty, 1)
+                    end
+                    if target:isBuilding() then
+                        globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(1, target.health)
+                    end
+                end
+            end
+        end
+        return
+    end
+
+    -- Wide Vortex
+    if attack.name == "Wide Vortex" then
+        local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+        if distance ~= 1 then return end
+        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+        if not stepX then return end
+        if not vortexTargetCell then
+            -- First click phase: show direction cells only
+            local target = getEntityAtHex(hoverQ, hoverR, entities)
+            if target and target:isCharacter() and target.health > 0 and not target.isPlayable then
+                local dests = attack:getShiftDestinations(attacker, hoverQ, hoverR, hex)
+                for _, dc in ipairs(dests) do
+                    local dx, dy = getDrawCoords(dc.q, dc.r)
+                    local r, g, b = 0.4, 0.8, 1
+                    if dc.dir == "left" then r, g, b = 1, 0.6, 0.3 end
+                    love.graphics.setColor(r, g, b, 0.3)
+                    local dv = hex:drawInsetHexagon(dx, dy, hex.radius, 0.92)
+                    love.graphics.polygon("fill", dv)
+                    love.graphics.setColor(r, g, b, 0.8)
+                    love.graphics.setLineWidth(2)
+                    love.graphics.polygon("line", dv)
+                    love.graphics.setLineWidth(1)
+                    -- Show B's further destination if occupant exists
+                    local occupant = getEntityAtHex(dc.q, dc.r, entities)
+                    if occupant and occupant:isCharacter() and occupant.health > 0 then
+                        local ax, ay, az = hex_utils.axialToCube(attacker.q, attacker.r)
+                        local bq, br
+                        if dc.dir == "right" then
+                            bq, br = hex_utils.cubeToAxial(ax + stepZ, ay + stepX, az + stepY)
+                        else
+                            bq, br = hex_utils.cubeToAxial(ax + stepY, ay + stepZ, az + stepX)
+                        end
+                        if hex:isActiveHex(bq, br) then
+                            local bx, by = getDrawCoords(bq, br)
+                            local bv = hex:drawInsetHexagon(bx, by, hex.radius, 0.92)
+                            love.graphics.setColor(1, 1, 0.4, 0.3)
+                            love.graphics.polygon("fill", bv)
+                            love.graphics.setColor(1, 1, 0.4, 0.8)
+                            love.graphics.polygon("line", bv)
+                        end
+                    end
+                end
+            end
+        elseif vortexTargetCell then
+            -- Second click phase: show arrows for A→dest and B→further
+            local target = getEntityAtHex(vortexTargetCell.q, vortexTargetCell.r, entities)
+            if target then
+                local dests = attack:getShiftDestinations(attacker, vortexTargetCell.q, vortexTargetCell.r, hex)
+                local isDest = false
+                local hoverDir
+                for _, dc in ipairs(dests) do
+                    if dc.q == hoverQ and dc.r == hoverR then
+                        isDest = true
+                        hoverDir = dc.dir
+                        break
+                    end
+                end
+                if isDest then
+                    local tx, ty = getDrawCoords(vortexTargetCell.q, vortexTargetCell.r)
+                    local hx, hy = getDrawCoords(hoverQ, hoverR)
+                    local occupant = getEntityAtHex(hoverQ, hoverR, entities)
+                    -- Arrow: A → destination
+                    ui.drawPushArrow(tx, ty, hx, hy, nil, nil, nil, nil, vortexTargetCell.q, vortexTargetCell.r, hoverQ, hoverR)
+                    -- Arrow: B (at destination) → further 60° around attacker
+                    if occupant and occupant:isCharacter() and occupant.health > 0 then
+                        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, vortexTargetCell.q, vortexTargetCell.r, hex)
+                        if stepX then
+                            local ax, ay, az = hex_utils.axialToCube(attacker.q, attacker.r)
+                            local bq, br
+                            if hoverDir == "right" then
+                                bq, br = hex_utils.cubeToAxial(ax + stepZ, ay + stepX, az + stepY)
+                            else
+                                bq, br = hex_utils.cubeToAxial(ax + stepY, ay + stepZ, az + stepX)
+                            end
+                            if hex:isActiveHex(bq, br) then
+                                local bx, by = getDrawCoords(bq, br)
+                                ui.drawPushArrow(hx, hy, bx, by, nil, nil, nil, nil, hoverQ, hoverR, bq, br)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return
     end
 
     -- Для атак, у которых есть getPushCell (Shoot и др.)
@@ -1713,6 +1866,19 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
         if distance >= minRange and distance <= attack.range then
             local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
             if stepX then table.insert(out, {q = hoverQ, r = hoverR}) end
+        end
+        return
+    end
+
+    if attack.name == "Vortex Strike" or attack.name == "Wide Vortex" then
+        if distance >= 1 and distance <= attack.range then
+            local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+            if stepX then
+                local occupant = getEntityAtHex(hoverQ, hoverR, entities)
+                if occupant and occupant:isCharacter() and occupant.health > 0 and not occupant.isPlayable then
+                    table.insert(out, {q = hoverQ, r = hoverR})
+                end
+            end
         end
         return
     end

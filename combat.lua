@@ -973,6 +973,156 @@ function combat.DividerAttack:getTargetCell(attacker, targetQ, targetR, hex, ent
 end
 
 -- ============================================================
+-- VORTEX STRIKE
+-- ============================================================
+combat.VortexStrikeAttack = setmetatable({}, combat.Attack)
+combat.VortexStrikeAttack.__index = combat.VortexStrikeAttack
+function combat.VortexStrikeAttack.new()
+    local self = combat.Attack.new("Vortex Strike", "Shift an enemy right or left and deal 1 damage", 1, 1, {})
+    return setmetatable(self, combat.VortexStrikeAttack)
+end
+
+function combat.VortexStrikeAttack:getLineTarget(attacker, targetQ, targetR, hex, entities)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return nil end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    local occupant = combat.getEntityAtHex(targetQ, targetR, entities)
+    if occupant and occupant:isCharacter() and occupant.health > 0 then
+        return {q = targetQ, r = targetR, entity = occupant}
+    end
+    return nil
+end
+
+function combat.VortexStrikeAttack:getShiftDestinations(attacker, targetQ, targetR, hex)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return {} end
+    local cells = {}
+    -- 60° rotation around attacker: right (CW) and left (CCW)
+    local rq, rr = hex_utils.applyCubeStep(attacker.q, attacker.r, -stepY, -stepZ, -stepX)
+    if hex:isActiveHex(rq, rr) then
+        table.insert(cells, {q = rq, r = rr, dir = "right"})
+    end
+    local lq, lr = hex_utils.applyCubeStep(attacker.q, attacker.r, -stepZ, -stepX, -stepY)
+    if hex:isActiveHex(lq, lr) then
+        table.insert(cells, {q = lq, r = lr, dir = "left"})
+    end
+    return cells
+end
+
+function combat.VortexStrikeAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+    if not hex:isActiveHex(targetQ, targetR) then return false, "Target cell not active" end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+    local target = combat.getEntityAtHex(targetQ, targetR, entities)
+    if not target or not target:isCharacter() or target.health <= 0 then
+        return false, "No valid enemy at target cell"
+    end
+    local destCell = self._vortexDestCell
+    if not destCell then return false, "No shift destination selected" end
+    self._vortexDestCell = nil
+    if not hex:isActiveHex(destCell.q, destCell.r) then return false, "Destination cell not active" end
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds)
+    if target.health > 0 then
+        local occupant = combat.getEntityAtHex(destCell.q, destCell.r, entities)
+        if occupant then
+            combat.addCollisionBounceAnimation(target, targetQ, targetR, destCell.q, destCell.r, hex, entities, sounds, globalHealth, occupant)
+        else
+            combat.addPushAnimation(target, targetQ, targetR, destCell.q, destCell.r)
+        end
+        combat.startPushAnimations(hex)
+    end
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.VortexStrikeAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
+    return {q = targetQ, r = targetR}
+end
+
+-- ============================================================
+-- WIDE VORTEX
+-- ============================================================
+combat.WideVortexAttack = setmetatable({}, combat.Attack)
+combat.WideVortexAttack.__index = combat.WideVortexAttack
+function combat.WideVortexAttack.new()
+    local self = combat.Attack.new("Wide Vortex", "Shift target enemy and a second enemy right or left", 1, 0, {})
+    return setmetatable(self, combat.WideVortexAttack)
+end
+
+function combat.WideVortexAttack:getLineTarget(attacker, targetQ, targetR, hex, entities)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return nil end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    local occupant = combat.getEntityAtHex(targetQ, targetR, entities)
+    if occupant and occupant:isCharacter() and occupant.health > 0 then
+        return {q = targetQ, r = targetR, entity = occupant}
+    end
+    return nil
+end
+
+function combat.WideVortexAttack:getShiftDestinations(attacker, targetQ, targetR, hex)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return {} end
+    local cells = {}
+    -- 60° rotation around attacker
+    local rq, rr = hex_utils.applyCubeStep(attacker.q, attacker.r, -stepY, -stepZ, -stepX)
+    if hex:isActiveHex(rq, rr) then
+        table.insert(cells, {q = rq, r = rr, dir = "right"})
+    end
+    local lq, lr = hex_utils.applyCubeStep(attacker.q, attacker.r, -stepZ, -stepX, -stepY)
+    if hex:isActiveHex(lq, lr) then
+        table.insert(cells, {q = lq, r = lr, dir = "left"})
+    end
+    return cells
+end
+
+function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+    if not hex:isActiveHex(targetQ, targetR) then return false, "Target cell not active" end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+    local shiftDir = self._vortexShiftDir
+    if not shiftDir then return false, "No shift direction selected" end
+    self._vortexShiftDir = nil
+    local ax, ay, az = hex_utils.axialToCube(attacker.q, attacker.r)
+    local cx, cy, cz = hex_utils.axialToCube(targetQ, targetR)
+    local dx, dy, dz = cx - ax, cy - ay, cz - az
+    local dirDX, dirDY, dirDZ
+    if shiftDir == "right" then
+        dirDX, dirDY, dirDZ = -dy, -dz, -dx
+    else
+        dirDX, dirDY, dirDZ = -dz, -dx, -dy
+    end
+    -- Primary target A: push to first destination
+    local destQ, destR = hex_utils.cubeToAxial(ax + dirDX, ay + dirDY, az + dirDZ)
+    local targetA = combat.getEntityAtHex(targetQ, targetR, entities)
+    if targetA and targetA:isCharacter() and targetA.health > 0 then
+        local occupantB = combat.getEntityAtHex(destQ, destR, entities)
+        if occupantB then
+            -- B shifts 60° further around attacker: cw² or ccw² from attacker
+            local b2q, b2r
+            if shiftDir == "right" then
+                b2q, b2r = hex_utils.cubeToAxial(ax + dz, ay + dx, az + dy)
+            else
+                b2q, b2r = hex_utils.cubeToAxial(ax + dy, ay + dz, az + dx)
+            end
+            if hex:isActiveHex(b2q, b2r) and not combat.getEntityAtHex(b2q, b2r, entities) then
+                combat.addPushAnimation(occupantB, destQ, destR, b2q, b2r)
+            end
+        end
+        combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
+        combat.startPushAnimations(hex)
+    end
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+-- ============================================================
 -- АНИМАЦИОННАЯ ОЧЕРЕДЬ
 -- ============================================================
 pushAnimations = { queue = {}, active = false }

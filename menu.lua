@@ -1,6 +1,6 @@
 local menu = {}
 
-local mapList = {"maps/map1.lua", "maps/test_polygon_1.lua"}
+local mapList = {"maps/map1.lua", "maps/test_polygon_1.lua", "maps/test_polygon_2.lua"}
 
 local squads = {
     {
@@ -16,6 +16,12 @@ local squads = {
         units = {
             { name = "Summoner", maxHealth = 3, moveRange = 3, attacks = "summoner" },
             { name = "Divider",  maxHealth = 4, moveRange = 4, attacks = "divider" },
+        }
+    },
+    {
+        name = "Attack Test",
+        units = {
+            { name = "AttackTest", maxHealth = 10, moveRange = 6, attacks = "all" },
         }
     },
 }
