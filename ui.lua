@@ -771,6 +771,88 @@ end
         return
     end
 
+    -- Pull Hook
+    if attack.name == "Pull Hook" then
+        if not pullHookTargetCell then
+            -- First click phase: highlight target on line
+            local target = attack:getLineTarget(attacker, hoverQ, hoverR, hex, entities)
+            if target then
+                local tx, ty = getDrawCoords(target.q, target.r)
+                local tv = hex:drawInsetHexagon(tx, ty, hex.radius, 0.92)
+                love.graphics.setColor(1, 0.8, 0.2, 0.3)
+                love.graphics.polygon("fill", tv)
+                love.graphics.setColor(1, 0.8, 0.2, 0.8)
+                love.graphics.setLineWidth(2)
+                love.graphics.polygon("line", tv)
+                love.graphics.setLineWidth(1)
+                local fx, fy = getDrawCoords(attacker.q, attacker.r)
+                ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+            end
+        else
+            -- Second click phase: show move cells and pull destination
+            local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, pullHookTargetCell.q, pullHookTargetCell.r, hex)
+            if stepX then
+                local moveCells = attack:getPullHookMoveCells(attacker, stepX, stepY, stepZ, pullHookTargetCell.q, pullHookTargetCell.r, hex, entities)
+                local hoverIsMoveCell = false
+                for _, c in ipairs(moveCells) do
+                    local cx, cy = getDrawCoords(c.q, c.r)
+                    local cv = hex:drawInsetHexagon(cx, cy, hex.radius, 0.92)
+                    love.graphics.setColor(0.4, 0.8, 1, 0.3)
+                    love.graphics.polygon("fill", cv)
+                    love.graphics.setColor(0.4, 0.8, 1, 0.8)
+                    love.graphics.setLineWidth(2)
+                    love.graphics.polygon("line", cv)
+                    love.graphics.setLineWidth(1)
+                    if c.q == hoverQ and c.r == hoverR then
+                        hoverIsMoveCell = true
+                        -- Show where target will be pulled
+                        local pullQ, pullR = hex_utils.applyCubeStep(c.q, c.r, stepX, stepY, stepZ)
+                        if hex:isActiveHex(pullQ, pullR) then
+                            local px, py = getDrawCoords(pullQ, pullR)
+                            local pv = hex:drawInsetHexagon(px, py, hex.radius, 0.92)
+                            love.graphics.setColor(1, 1, 0.4, 0.3)
+                            love.graphics.polygon("fill", pv)
+                            love.graphics.setColor(1, 1, 0.4, 0.8)
+                            love.graphics.polygon("line", pv)
+                            ui.drawPushArrow(cx, cy, px, py, nil, nil, nil, nil, c.q, c.r, pullQ, pullR)
+                        end
+                    end
+                end
+                -- Show target cell
+                local tx, ty = getDrawCoords(pullHookTargetCell.q, pullHookTargetCell.r)
+                local tv = hex:drawInsetHexagon(tx, ty, hex.radius, 0.92)
+                love.graphics.setColor(1, 0.8, 0.2, 0.3)
+                love.graphics.polygon("fill", tv)
+                love.graphics.setColor(1, 0.8, 0.2, 0.8)
+                love.graphics.setLineWidth(2)
+                love.graphics.polygon("line", tv)
+                love.graphics.setLineWidth(1)
+            end
+        end
+        return
+    end
+
+    -- Electric Hook
+    if attack.name == "Electric Hook" then
+        local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+        if dist >= 2 then
+            local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+            if stepX then
+                local tx, ty = getDrawCoords(hoverQ, hoverR)
+                local tv = hex:drawInsetHexagon(tx, ty, hex.radius, 0.92)
+                love.graphics.setColor(0.3, 0.8, 1, 0.3)
+                love.graphics.polygon("fill", tv)
+                love.graphics.setColor(0.3, 0.8, 1, 0.8)
+                love.graphics.setLineWidth(2)
+                love.graphics.polygon("line", tv)
+                love.graphics.setLineWidth(1)
+                local fx, fy = getDrawCoords(attacker.q, attacker.r)
+                ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+            end
+        end
+        return
+    end
+
     -- Для атак, у которых есть getPushCell (Shoot и др.)
     if attack.getPushCell then
         local pushCell = attack:getPushCell(attacker, hoverQ, hoverR, hex, entities)

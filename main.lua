@@ -55,6 +55,7 @@ function syncStateToGlobals()
     attackMode = state.attackMode
     flipTargetActor = state.flipTargetActor
     vortexTargetCell = state.vortexTargetCell
+    pullHookTargetCell = state.pullHookTargetCell
     attackButtons = state.attackButtons
     sounds = state.sounds
     actionHistory = state.actionHistory
@@ -87,6 +88,7 @@ function syncGlobalsToState()
     state.attackMode = attackMode
     state.flipTargetActor = flipTargetActor
     state.vortexTargetCell = vortexTargetCell
+    state.pullHookTargetCell = pullHookTargetCell
     state.attackButtons = attackButtons
     state.sounds = sounds
     state.actionHistory = actionHistory

@@ -256,6 +256,45 @@ function input.mousepressed(x, y, button)
                 end
             end
             return
+        elseif selectedAttack.name == "Pull Hook" then
+            if pullHookTargetCell then
+                local stepX, stepY, stepZ = selectedAttack:getLineDirection(selectedActor.q, selectedActor.r, pullHookTargetCell.q, pullHookTargetCell.r, hex)
+                if stepX then
+                    local moveCells = selectedAttack:getPullHookMoveCells(selectedActor, stepX, stepY, stepZ, pullHookTargetCell.q, pullHookTargetCell.r, hex, entities)
+                    local isValid = false
+                    for _, c in ipairs(moveCells) do
+                        if c.q == tq and c.r == tr then
+                            selectedAttack._pullHookTarget = {q = pullHookTargetCell.q, r = pullHookTargetCell.r}
+                            local success, msg = performAttackWithSelectedAttack(selectedActor, tq, tr, selectedAttack)
+                            if not success then print("Attack failed: " .. msg) end
+                            isValid = true
+                            break
+                        end
+                    end
+                    if isValid then
+                        attackMode = false
+                        selectedAttack = nil
+                        globalHealth.previewDamage = 0
+                    end
+                end
+                pullHookTargetCell = nil
+            else
+                local target = selectedAttack:getLineTarget(selectedActor, tq, tr, hex, entities)
+                if target then
+                    pullHookTargetCell = {q = target.q, r = target.r, entity = target.entity}
+                end
+            end
+            return
+        elseif selectedAttack.name == "Electric Hook" then
+            local dist = hex:getDistance(selectedActor.q, selectedActor.r, tq, tr)
+            if dist >= 2 then
+                local success, msg = performAttackWithSelectedAttack(selectedActor, tq, tr, selectedAttack)
+                if not success then print("Attack failed: " .. msg) end
+                attackMode = false
+                selectedAttack = nil
+                globalHealth.previewDamage = 0
+            end
+            return
         else
             local success, msg = performAttackWithSelectedAttack(selectedActor, tq, tr, selectedAttack)
             if not success then print("Attack failed: " .. msg) end
@@ -317,6 +356,9 @@ function input.keypressed(key)
         elseif vortexTargetCell then
             vortexTargetCell = nil
             print("Vortex target cancelled")
+        elseif pullHookTargetCell then
+            pullHookTargetCell = nil
+            print("Pull Hook cancelled")
         elseif attackMode then
             attackMode = false
             selectedAttack = nil

@@ -590,6 +590,8 @@ function environment.getAllAttacks()
         { attack = combat.DividerAttack.new(), name = "Split", description = "Split into two Divided units" },
         { attack = combat.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shift an enemy right or left and deal 1 damage" },
         { attack = combat.WideVortexAttack.new(), name = "Wide Vortex", description = "Shift 3 enemies in front right or left" },
+        { attack = combat.PullHookAttack.new(), name = "Pull Hook", description = "Hook a target and pull it towards you" },
+        { attack = combat.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning that damages everyone on the line" },
     }
 end
 

@@ -76,6 +76,8 @@ function restartGame(mapPath)
     dpiScale = love.window.getDPIScale()
 
     flipTargetActor = nil
+    vortexTargetCell = nil
+    pullHookTargetCell = nil
     attackMode = false
     selectedAttack = nil
     attackButtons = {}

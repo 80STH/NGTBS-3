@@ -1123,6 +1123,127 @@ function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entiti
 end
 
 -- ============================================================
+combat.PullHookAttack = setmetatable({}, combat.Attack)
+combat.PullHookAttack.__index = combat.PullHookAttack
+
+function combat.PullHookAttack.new()
+    local self = combat.Attack.new("Pull Hook", "Hook a target on a straight line, move to a chosen cell and pull it towards you", 999, 0, {})
+    return setmetatable(self, combat.PullHookAttack)
+end
+
+function combat.PullHookAttack:getLineTarget(attacker, targetQ, targetR, hex, entities)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if firstTarget and targetHex then
+        return {q = targetHex.q, r = targetHex.r, entity = firstTarget}
+    end
+    return nil
+end
+
+function combat.PullHookAttack:getPullHookMoveCells(attacker, stepX, stepY, stepZ, hookTargetQ, hookTargetR, hex, entities)
+    local cells = {}
+    local curQ, curR = attacker.q, attacker.r
+    while true do
+        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if not hex:isValidHex(nextQ, nextR) then break end
+        if nextQ == hookTargetQ and nextR == hookTargetR then break end
+        if hex:isActiveHex(nextQ, nextR) then
+            local occupied = false
+            for _, e in ipairs(entities) do
+                if e.health > 0 and e.q == nextQ and e.r == nextR then
+                    occupied = true
+                    break
+                end
+            end
+            if not occupied then
+                table.insert(cells, {q = nextQ, r = nextR})
+            end
+        end
+        curQ, curR = nextQ, nextR
+    end
+    return cells
+end
+
+function combat.PullHookAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local hookTarget = self._pullHookTarget
+    if not hookTarget then return false, "No hook target!" end
+    self._pullHookTarget = nil
+
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, hookTarget.q, hookTarget.r, hex)
+    if not stepX then return false, "Not a straight line!" end
+
+    local targetEntity = combat.getEntityAtHex(hookTarget.q, hookTarget.r, entities)
+    if not targetEntity or targetEntity.health <= 0 then return false, "Target is gone!" end
+
+    local moveQ, moveR = targetQ, targetR
+
+    -- Animate attacker moving to selected cell
+    combat.addDirectPushAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
+
+    -- After move completes, pull target
+    combat.startPushAnimations(hex, function()
+        local pullQ, pullR = hex_utils.applyCubeStep(moveQ, moveR, stepX, stepY, stepZ)
+        if hex:isActiveHex(pullQ, pullR) and not combat.getEntityAtHex(pullQ, pullR, entities) then
+            combat.addDirectPushAnimation(targetEntity, hookTarget.q, hookTarget.r, pullQ, pullR)
+            combat.startPushAnimations(hex)
+        end
+    end)
+
+    if sounds and sounds.attack then sounds.attack:play() end
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+-- ============================================================
+combat.ElectricHookAttack = setmetatable({}, combat.Attack)
+combat.ElectricHookAttack.__index = combat.ElectricHookAttack
+
+function combat.ElectricHookAttack.new()
+    local self = combat.Attack.new("Electric Hook", "Arc lightning that damages everyone between you and target", 999, 0, {})
+    self.minRange = 2
+    return setmetatable(self, combat.ElectricHookAttack)
+end
+
+function combat.ElectricHookAttack:getLineTarget(attacker, targetQ, targetR, hex, entities)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance < self.minRange then return nil end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    return {q = targetQ, r = targetR, entity = nil}
+end
+
+function combat.ElectricHookAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance < self.minRange then return false, "Target too close!" end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+
+    -- Deal 1 damage to everyone on the line (including attacker, excluding entities past target)
+    self:dealDamageToTarget(attacker, attacker, 1, entities, sounds, nil, globalHealth)
+    local curQ, curR = attacker.q, attacker.r
+    while true do
+        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if not hex:isValidHex(nextQ, nextR) then break end
+        local e = combat.getEntityAtHex(nextQ, nextR, entities)
+        if e and e.health > 0 and e ~= attacker then
+            self:dealDamageToTarget(e, attacker, 1, entities, sounds, nil, globalHealth)
+        end
+        if nextQ == targetQ and nextR == targetR then break end
+        curQ, curR = nextQ, nextR
+    end
+
+    -- Visual: arc along the line
+    local fx, fy = getDrawCoords(attacker.q, attacker.r)
+    local tx, ty = getDrawCoords(targetQ, targetR)
+    visual.addArcEffect(fx, fy, tx, ty, 0.3, 0.8, 1.0, 0.5)
+
+    if sounds and sounds.attack then sounds.attack:play() end
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+-- ============================================================
 -- АНИМАЦИОННАЯ ОЧЕРЕДЬ
 -- ============================================================
 pushAnimations = { queue = {}, active = false }
