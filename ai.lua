@@ -384,6 +384,8 @@ function ai.performMoveTowards(enemy, target, entities, hex)
     local neighbors = hex:getNeighbors(target.q, target.r)
     local bestCell = nil
     local bestDist = math.huge
+    local bestThreatenedCell = nil
+    local bestThreatenedDist = math.huge
 
     for _, neighbor in ipairs(neighbors) do
         if hex:isValidHex(neighbor.q, neighbor.r) then
@@ -397,10 +399,17 @@ function ai.performMoveTowards(enemy, target, entities, hex)
             if not occupied then
                 local distToEnemy = hex:getDistance(enemy.q, enemy.r, neighbor.q, neighbor.r)
                 local effRange = enemy.moveRange + (status.hasEntityStatus(enemy, "empowered") and 1 or 0)
-                if distToEnemy < bestDist and distToEnemy <= effRange then
+                if distToEnemy <= effRange then
                     if not isCellDangerousForEntity(neighbor.q, neighbor.r, enemy) then
-                        bestDist = distToEnemy
-                        bestCell = neighbor
+                        if isCellOnEnemyAttackLine(neighbor.q, neighbor.r, enemy, entities, hex) then
+                            if distToEnemy < bestThreatenedDist then
+                                bestThreatenedDist = distToEnemy
+                                bestThreatenedCell = neighbor
+                            end
+                        elseif distToEnemy < bestDist then
+                            bestDist = distToEnemy
+                            bestCell = neighbor
+                        end
                     end
                 end
             end
@@ -410,6 +419,10 @@ function ai.performMoveTowards(enemy, target, entities, hex)
     if bestCell then
         return ai.moveToCell(enemy, bestCell.q, bestCell.r, hex, entities)
     end
+    if bestThreatenedCell then
+        debugPrint(enemy.name .. " forced to move into threatened cell (enemy line)")
+        return ai.moveToCell(enemy, bestThreatenedCell.q, bestThreatenedCell.r, hex, entities)
+    end
 
     return ai.moveStepTowards(enemy, target.q, target.r, hex, entities)
 end
@@ -418,6 +431,8 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
     local neighbors = hex:getNeighbors(enemy.q, enemy.r)
     local bestNeighbor = nil
     local bestDist = math.huge
+    local threatenedNeighbor = nil
+    local threatenedDist = math.huge
     local dangerousNeighbor = nil
     local dangerousDist = math.huge
 
@@ -432,10 +447,17 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
             end
             if not occupied then
                 local dist = hex:getDistance(neighbor.q, neighbor.r, targetQ, targetR)
-                if dist < bestDist then
+                if dist < bestDist or dist < threatenedDist or dist < dangerousDist then
                     if not isCellDangerousForEntity(neighbor.q, neighbor.r, enemy) then
-                        bestDist = dist
-                        bestNeighbor = neighbor
+                        if isCellOnEnemyAttackLine(neighbor.q, neighbor.r, enemy, entities, hex) then
+                            if dist < threatenedDist then
+                                threatenedDist = dist
+                                threatenedNeighbor = neighbor
+                            end
+                        elseif dist < bestDist then
+                            bestDist = dist
+                            bestNeighbor = neighbor
+                        end
                     else
                         if dist < dangerousDist then
                             dangerousDist = dist
@@ -449,6 +471,10 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
 
     if bestNeighbor then
         return ai.moveToCell(enemy, bestNeighbor.q, bestNeighbor.r, hex, entities)
+    end
+    if threatenedNeighbor then
+        debugPrint(enemy.name .. " forced to move into threatened cell (enemy line)")
+        return ai.moveToCell(enemy, threatenedNeighbor.q, threatenedNeighbor.r, hex, entities)
     end
     if dangerousNeighbor then
         debugPrint(enemy.name .. " forced to move into dangerous cell (fire/acid)")
@@ -565,6 +591,49 @@ function isCellDangerousForEntity(q, r, entity)
         if st == "fire" or st == "acid" then
             if not status.hasEntityStatus(entity, st) then
                 return true
+            end
+        end
+    end
+    return false
+end
+
+-- Проверка, находится ли клетка на линии атаки другого врага (пониженный приоритет)
+function isCellOnEnemyAttackLine(q, r, movingEnemy, entities, hex)
+    for _, other in ipairs(entities) do
+        if other ~= movingEnemy and other:isCharacter() and not other.isPlayable and other.health > 0 then
+            local attack = getEnemyAttack(other)
+            if attack and hex:getDistance(other.q, other.r, q, r) <= attack.range then
+                if isOnStraightLine(other.q, other.r, q, r, hex) then
+                    if attackHitsFirstTarget(attack) then
+                        local stepX, stepY, stepZ = attack:getLineDirection(other.q, other.r, q, r, hex)
+                        if stepX then
+                            local curQ, curR = other.q, other.r
+                            local found = false
+                            while curQ ~= q or curR ~= r do
+                                local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+                                if not hex:isValidHex(nextQ, nextR) then break end
+                                local e = nil
+                                for _, ent in ipairs(entities) do
+                                    if ent.health > 0 and ent.q == nextQ and ent.r == nextR then
+                                        e = ent
+                                        break
+                                    end
+                                end
+                                if e and e ~= other then
+                                    if nextQ == q and nextR == r then
+                                        found = true
+                                    end
+                                    break
+                                end
+                                if nextQ == q and nextR == r then found = true; break end
+                                curQ, curR = nextQ, nextR
+                            end
+                            if found then return true end
+                        end
+                    else
+                        return true
+                    end
+                end
             end
         end
     end

@@ -128,15 +128,9 @@ function renderer.draw(state)
             for _, dc in ipairs(dests) do
                 local dx, dy = getDrawCoords(dc.q, dc.r)
                 local dv = hex:drawInsetHexagon(dx, dy, hex.radius, 0.92)
-                if dc.dir == "right" then
-                    love.graphics.setColor(0.4, 0.8, 1, 0.3)
-                    love.graphics.polygon("fill", dv)
-                    love.graphics.setColor(0.4, 0.8, 1, 0.8)
-                else
-                    love.graphics.setColor(1, 0.6, 0.3, 0.3)
-                    love.graphics.polygon("fill", dv)
-                    love.graphics.setColor(1, 0.6, 0.3, 0.8)
-                end
+                love.graphics.setColor(0.4, 0.8, 1, 0.3)
+                love.graphics.polygon("fill", dv)
+                love.graphics.setColor(0.4, 0.8, 1, 0.8)
                 love.graphics.setLineWidth(2)
                 love.graphics.polygon("line", dv)
                 love.graphics.setLineWidth(1)
@@ -148,15 +142,9 @@ function renderer.draw(state)
             for _, dc in ipairs(dests) do
                 local dx, dy = getDrawCoords(dc.q, dc.r)
                 local dv = hex:drawInsetHexagon(dx, dy, hex.radius, 0.92)
-                if dc.dir == "right" then
-                    love.graphics.setColor(0.4, 0.8, 1, 0.3)
-                    love.graphics.polygon("fill", dv)
-                    love.graphics.setColor(0.4, 0.8, 1, 0.8)
-                else
-                    love.graphics.setColor(1, 0.6, 0.3, 0.3)
-                    love.graphics.polygon("fill", dv)
-                    love.graphics.setColor(1, 0.6, 0.3, 0.8)
-                end
+                love.graphics.setColor(0.4, 0.8, 1, 0.3)
+                love.graphics.polygon("fill", dv)
+                love.graphics.setColor(0.4, 0.8, 1, 0.8)
                 love.graphics.setLineWidth(2)
                 love.graphics.polygon("line", dv)
                 love.graphics.setLineWidth(1)

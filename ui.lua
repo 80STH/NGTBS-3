@@ -646,12 +646,10 @@ end
                 local dests = attack:getShiftDestinations(attacker, hoverQ, hoverR, hex)
                 for _, dc in ipairs(dests) do
                     local dx, dy = getDrawCoords(dc.q, dc.r)
-                    local r, g, b = 0.4, 0.8, 1
-                    if dc.dir == "left" then r, g, b = 1, 0.6, 0.3 end
-                    love.graphics.setColor(r, g, b, 0.3)
+                    love.graphics.setColor(0.4, 0.8, 1, 0.3)
                     local dv = hex:drawInsetHexagon(dx, dy, hex.radius, 0.92)
                     love.graphics.polygon("fill", dv)
-                    love.graphics.setColor(r, g, b, 0.8)
+                    love.graphics.setColor(0.4, 0.8, 1, 0.8)
                     love.graphics.setLineWidth(2)
                     love.graphics.polygon("line", dv)
                     love.graphics.setLineWidth(1)
@@ -702,12 +700,10 @@ end
                 local dests = attack:getShiftDestinations(attacker, hoverQ, hoverR, hex)
                 for _, dc in ipairs(dests) do
                     local dx, dy = getDrawCoords(dc.q, dc.r)
-                    local r, g, b = 0.4, 0.8, 1
-                    if dc.dir == "left" then r, g, b = 1, 0.6, 0.3 end
-                    love.graphics.setColor(r, g, b, 0.3)
+                    love.graphics.setColor(0.4, 0.8, 1, 0.3)
                     local dv = hex:drawInsetHexagon(dx, dy, hex.radius, 0.92)
                     love.graphics.polygon("fill", dv)
-                    love.graphics.setColor(r, g, b, 0.8)
+                    love.graphics.setColor(0.4, 0.8, 1, 0.8)
                     love.graphics.setLineWidth(2)
                     love.graphics.polygon("line", dv)
                     love.graphics.setLineWidth(1)

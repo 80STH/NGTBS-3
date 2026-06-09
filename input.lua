@@ -21,7 +21,9 @@ function input.mousepressed(x, y, button)
             return
         end
 
-        local tq, tr = hex:pixelToHex(x, y)
+    if turnState.phase ~= "player" then return end
+
+    local tq, tr = hex:pixelToHex(x, y)
         if not hex or not hex:isValidHex(tq, tr) then return end
         if not hex:isActiveHex(tq, tr) then return end
 
@@ -162,6 +164,8 @@ function input.mousepressed(x, y, button)
             end
         end
     end
+
+    if turnState.phase ~= "player" then return end
 
     local tq, tr = hex:pixelToHex(x, y)
     if not hex:isValidHex(tq, tr) then
@@ -322,7 +326,7 @@ function input.keypressed(key)
     end
 
     if key == "u" or key == "U" then
-        if #actionHistory > 0 then undoLastAction() end
+        if turnState.phase == "player" and #actionHistory > 0 then undoLastAction() end
         return
     end
 
