@@ -865,8 +865,8 @@ function environment.createEnemyByType(enemyType, q, r)
 
     local sprite = environment.enemySpriteCache[enemyType]
     if not sprite then
-        -- Fallback: создаём цветной круг (на случай, если спрайт не загрузился)
-        local size = 64
+        -- Fallback: создаём цветной круг (16x16, scale 6 -> 96px на экране)
+        local size = 16
         local canvas = love.graphics.newCanvas(size, size)
         canvas:setFilter("nearest", "nearest")
         love.graphics.setCanvas(canvas)
@@ -880,7 +880,7 @@ function environment.createEnemyByType(enemyType, q, r)
         else
             love.graphics.setColor(1, 0.5, 0, 1)
         end
-        love.graphics.circle("fill", size/2, size/2, size/2 - 4)
+        love.graphics.circle("fill", size/2, size/2, size/2 - 1)
         love.graphics.setCanvas()
         sprite = canvas
     end

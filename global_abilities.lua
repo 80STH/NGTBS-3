@@ -8,11 +8,21 @@ local ui = require("ui")
 local combat = require("combat")
 local hex_utils = require("hex_utils")
 local status = require("status")
+local environment = require("environment")
 
 local global_abilities = {}
 
 global_abilities.registry = {}
 global_abilities.activeAbility = nil
+global_abilities.dropdownOpen = false
+global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay"}
+
+local function getDropdownHeader()
+    local screenW = love.graphics.getWidth()
+    local w = 145
+    local x = screenW - w - 200
+    return { x = x, y = 10, w = w, h = 26 }
+end
 
 function global_abilities.register(obj)
     global_abilities.registry[obj.name] = obj
@@ -26,22 +36,40 @@ function global_abilities.reset()
     end
 end
 
+local itemH = 28
+
+local function getAbilityItemRect(index)
+    local h = getDropdownHeader()
+    local itemY = h.y + h.h + (index - 1) * itemH
+    return h.x, itemY, h.w, itemH
+end
+
 function global_abilities.handleButtonClick(x, y, state)
-    for _, ab in pairs(global_abilities.registry) do
-        local btn = ab.button
-        if btn and x >= btn.x and x <= btn.x + btn.width and y >= btn.y and y <= btn.y + btn.height then
-            if state.turnState.phase == "player" and not ab.hasBeenUsed then
-                if global_abilities.activeAbility then
-                    global_abilities.activeAbility:onDeactivate(state)
+    local h = getDropdownHeader()
+    if x >= h.x and x <= h.x + h.w and y >= h.y and y <= h.y + h.h then
+        global_abilities.dropdownOpen = not global_abilities.dropdownOpen
+        return true
+    end
+    if not global_abilities.dropdownOpen then return false end
+    for i, name in ipairs(global_abilities.abilityOrder) do
+        local ab = global_abilities.registry[name]
+        if ab then
+            local ix, iy, iw, ih = getAbilityItemRect(i)
+            if x >= ix and x <= ix + iw and y >= iy and y <= iy + ih then
+                if state.turnState.phase == "player" and not ab.hasBeenUsed then
+                    if global_abilities.activeAbility then
+                        global_abilities.activeAbility:onDeactivate(state)
+                    end
+                    global_abilities.activeAbility = ab
+                    ab:onActivate(state)
+                    global_abilities.dropdownOpen = false
+                elseif ab.hasBeenUsed then
+                    print(ab.name .. " has already been used this game!")
+                elseif state.turnState.phase ~= "player" then
+                    print("Can only use abilities during your turn!")
                 end
-                global_abilities.activeAbility = ab
-                ab:onActivate(state)
-            elseif ab.hasBeenUsed then
-                print(ab.name .. " has already been used this game!")
-            elseif state.turnState.phase ~= "player" then
-                print("Can only use abilities during your turn!")
+                return true
             end
-            return true
         end
     end
     return false
@@ -102,9 +130,37 @@ function global_abilities.drawPreview(hex, state)
 end
 
 function global_abilities.drawButtons(mx, my, state)
-    for _, ab in pairs(global_abilities.registry) do
-        ab:drawButton(mx, my, state)
+    local h = getDropdownHeader()
+    local buttonFont = love.graphics.newFont(11)
+
+    -- Header
+    local isHover = mx and my and mx >= h.x and mx <= h.x + h.w and my >= h.y and my <= h.y + h.h
+    love.graphics.setColor(0.25, 0.25, 0.35, 0.95)
+    love.graphics.rectangle("fill", h.x, h.y, h.w, h.h, 4)
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.rectangle("line", h.x, h.y, h.w, h.h, 4)
+    local oldFont = love.graphics.getFont()
+    love.graphics.setFont(buttonFont)
+    love.graphics.setColor(1, 1, 1, 1)
+    local icon = global_abilities.dropdownOpen and "▼" or "▶"
+    love.graphics.printf("Abilities " .. icon, h.x, h.y + 7, h.w, "center")
+    love.graphics.setFont(oldFont)
+
+    if not global_abilities.dropdownOpen then return end
+
+    -- Items
+    for i, name in ipairs(global_abilities.abilityOrder) do
+        local ab = global_abilities.registry[name]
+        if ab then
+            local ix, iy, iw, ih = getAbilityItemRect(i)
+            ab.button.x = ix + 2
+            ab.button.y = iy + 2
+            ab.button.width = iw - 4
+            ab.button.height = ih - 4
+            ab:drawButton(mx, my, state)
+        end
     end
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 -- Начисление previewDamage только для зданий (для глобальных воздействий)
@@ -156,6 +212,242 @@ function global_abilities.drawAbilityButton(self, mx, my, state, cfg)
 end
 
 -- ============================================================
+-- UNEARTH: все выкопки немедленно срабатывают
+-- ============================================================
+local UnearthAbility = {}
+UnearthAbility.__index = UnearthAbility
+
+function UnearthAbility.new()
+    local self = {
+        name = "Unearth",
+        key = "u",
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }
+    return setmetatable(self, UnearthAbility)
+end
+
+function UnearthAbility:reset()
+    self.hasBeenUsed = false
+end
+
+function UnearthAbility:onActivate(state)
+    local spawned = 0
+    local digSites = status.getAllDigSites()
+    for _, site in ipairs(digSites) do
+        local occupied = false
+        for _, e in ipairs(state.entities) do
+            if e.q == site.q and e.r == site.r then
+                occupied = true
+                break
+            end
+        end
+        if not occupied then
+            local terrain = state.terrainMap and state.terrainMap[site.q] and state.terrainMap[site.q][site.r] or "grass"
+            if terrain ~= "water" and not status.hasNegativeHexStatus(site.q, site.r) then
+                local newEnemy = environment.createRandomEnemy(site.q, site.r)
+                table.insert(state.entities, newEnemy)
+                spawned = spawned + 1
+            end
+        end
+        status.removeDigSite(site.q, site.r)
+    end
+    self.hasBeenUsed = true
+    state.actionHistory = {}
+    global_abilities.activeAbility = nil
+    print("Unearth: " .. spawned .. " enemies emerged!")
+    if _G.checkGameEnd then _G.checkGameEnd() end
+end
+
+function UnearthAbility:onDeactivate(state)
+end
+
+function UnearthAbility:onClickHex(q, r, hex, state)
+    return false
+end
+
+function UnearthAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.7, 0.5, 0.2},
+        label = "Unearth (U)",
+        activeLabel = "Unearth (U)",
+        tooltipH = 64,
+        tooltipTitle = "Unearth",
+        tooltipLines = {
+            "All enemies in dig sites",
+            "immediately emerge.",
+        },
+    })
+end
+
+-- ============================================================
+-- MIND CONTROL: переместить врага на 1 клетку
+-- ============================================================
+local MindControlAbility = {}
+MindControlAbility.__index = MindControlAbility
+
+function MindControlAbility.new()
+    local self = {
+        name = "Mind Control",
+        key = "m",
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+        phase = nil,
+        target = nil,
+    }
+    return setmetatable(self, MindControlAbility)
+end
+
+function MindControlAbility:reset()
+    self.hasBeenUsed = false
+    self.phase = nil
+    self.target = nil
+end
+
+function MindControlAbility:onActivate(state)
+    self.phase = "select_enemy"
+    self.target = nil
+    print("Click on an enemy to mind control, or press ESC to cancel")
+end
+
+function MindControlAbility:onDeactivate(state)
+    self.phase = nil
+    self.target = nil
+    restoreSelectedActor()
+    print(self.name .. " cancelled")
+end
+
+function MindControlAbility:onClickHex(q, r, hex, state)
+    if self.phase == "select_enemy" then
+        local target = nil
+        for _, e in ipairs(state.entities) do
+            if e.q == q and e.r == r and e.health > 0 and e:isCharacter() and not e.isPlayable then
+                target = e
+                break
+            end
+        end
+        if not target then
+            print("No valid enemy at this cell!")
+            return true
+        end
+        self.target = target
+        self.phase = "select_dest"
+        print("Now click on an adjacent empty cell to move " .. tostring(target.name) .. " to")
+        return true
+    end
+
+    if self.phase == "select_dest" then
+        if not self.target then
+            self:onDeactivate(state)
+            return true
+        end
+        if q == self.target.q and r == self.target.r then
+            print("Target is already at this cell!")
+            return true
+        end
+        local dist = hex:getDistance(self.target.q, self.target.r, q, r)
+        if dist ~= 1 then
+            print("Destination must be adjacent!")
+            return true
+        end
+        if not hex:isActiveHex(q, r) then
+            print("Invalid destination!")
+            return true
+        end
+        local occupied = false
+        for _, e in ipairs(state.entities) do
+            if e.q == q and e.r == r and e.health > 0 then
+                occupied = true
+                break
+            end
+        end
+        if occupied then
+            print("Destination is occupied!")
+            return true
+        end
+        self.target.q = q
+        self.target.r = r
+        self.hasBeenUsed = true
+        state.actionHistory = {}
+        print(tostring(self.target.name) .. " moved by mind control!")
+        restoreSelectedActor()
+        global_abilities.activeAbility = nil
+        self.phase = nil
+        self.target = nil
+        return true
+    end
+
+    return false
+end
+
+function MindControlAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.8, 0.3, 0.8},
+        label = "Mind Control (M)",
+        activeLabel = self.phase == "select_dest" and "Choose destination (M)" or "Select enemy (M)",
+        tooltipH = 96,
+        tooltipTitle = "Mind Control",
+        tooltipLines = {
+            "Move an enemy 1 cell.",
+            "The enemy retains its",
+            "prepared attack direction.",
+        },
+    })
+end
+
+-- ============================================================
+-- ACCELERATE DECAY: уменьшает макс. ходов до decay на 1
+-- ============================================================
+local AccelerateDecayAbility = {}
+AccelerateDecayAbility.__index = AccelerateDecayAbility
+
+function AccelerateDecayAbility.new()
+    local self = {
+        name = "Accelerate Decay",
+        key = "d",
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }
+    return setmetatable(self, AccelerateDecayAbility)
+end
+
+function AccelerateDecayAbility:reset()
+    self.hasBeenUsed = false
+end
+
+function AccelerateDecayAbility:onActivate(state)
+    if state.maxTurns then
+        state.maxTurns = math.max(state.turnCount + 1, state.maxTurns - 1)
+        maxTurns = state.maxTurns
+        print("Decay accelerated! Max turns reduced to " .. state.maxTurns)
+    end
+    self.hasBeenUsed = true
+    state.actionHistory = {}
+    global_abilities.activeAbility = nil
+end
+
+function AccelerateDecayAbility:onDeactivate(state)
+end
+
+function AccelerateDecayAbility:onClickHex(q, r, hex, state)
+    return false
+end
+
+function AccelerateDecayAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.8, 0.2, 0.2},
+        label = "Accel. Decay (D)",
+        activeLabel = "Accel. Decay (D)",
+        tooltipH = 80,
+        tooltipTitle = "Accelerate Decay",
+        tooltipLines = {
+            "Reduce the number of turns",
+            "until Decay activates by 1.",
+        },
+    })
+end
+
+-- ============================================================
 -- HEAL
 -- ============================================================
 local HealAbility = {}
@@ -165,7 +457,7 @@ function HealAbility.new()
     local self = {
         name = "Heal",
         key = "h",
-        button = { x = 10, y = 120, width = 120, height = 30 },
+        button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
     }
     return setmetatable(self, HealAbility)
@@ -242,7 +534,7 @@ function ExtraMoveAbility.new()
     local self = {
         name = "Extra Move",
         key = "x",
-        button = { x = 10, y = 155, width = 120, height = 30 },
+        button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
     }
     return setmetatable(self, ExtraMoveAbility)
@@ -313,7 +605,7 @@ function WindTorrent.new()
     local self = {
         name = "Wind Torrent",
         key = "w",
-        button = { x = 10, y = 225, width = 120, height = 30 },
+        button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
     }
     return setmetatable(self, WindTorrent)
@@ -596,5 +888,8 @@ end
 global_abilities.register(HealAbility.new())
 global_abilities.register(ExtraMoveAbility.new())
 global_abilities.register(WindTorrent.new())
+global_abilities.register(UnearthAbility.new())
+global_abilities.register(MindControlAbility.new())
+global_abilities.register(AccelerateDecayAbility.new())
 
 return global_abilities
