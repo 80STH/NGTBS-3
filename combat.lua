@@ -133,6 +133,62 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
     end)
 end
 
+-- Shared: line-effect fallback when no target on line
+function combat.Attack:noTargetLineFallback(attacker, stepX, stepY, stepZ, hex)
+    local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+    if not endCell then return false end
+    local fx, fy = getDrawCoords(attacker.q, attacker.r)
+    local tx, ty = getDrawCoords(endCell.q, endCell.r)
+    visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.7, 0.2, 3, 1.0)
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+-- Shared: get push cell for line-based shot attacks
+function combat.Attack:getLineShotPushCell(attacker, targetQ, targetR, hex, entities)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if firstTarget and targetHex then
+        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+        if hex:isValidHex(pushQ, pushR) then
+            return {q = pushQ, r = pushR}
+        else
+            return {q = pushQ, r = pushR, edge = true}
+        end
+    end
+    local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+    if endCell then
+        return {q = endCell.q, r = endCell.r, farthest = true}
+    end
+    return nil
+end
+
+-- Shared: get neighbors sorted by direction (top 3)
+function combat.Attack:getNeighborsInDirection(centerQ, centerR, dirQ, dirR, hex)
+    if centerQ == nil or centerR == nil then return {} end
+    local neighbors = hex:getNeighbors(centerQ, centerR)
+    local validNeighbors = {}
+    for _, nb in ipairs(neighbors) do
+        if nb and nb.q ~= nil and nb.r ~= nil then
+            table.insert(validNeighbors, nb)
+        end
+    end
+    if #validNeighbors == 0 then return {} end
+    local dirVec = { q = dirQ or 0, r = dirR or 0 }
+    local function dot(a, b)
+        return (a.q or 0) * (b.q or 0) + (a.r or 0) * (b.r or 0)
+    end
+    table.sort(validNeighbors, function(a, b)
+        return dot(a, dirVec) > dot(b, dirVec)
+    end)
+    local top = {}
+    for i = 1, math.min(3, #validNeighbors) do
+        table.insert(top, validNeighbors[i])
+    end
+    return top
+end
+
 -- ============================================================
 -- ТИПЫ АТАК (с поддержкой предпросмотра отталкивания)
 -- ============================================================
@@ -320,100 +376,46 @@ function combat.FlipAttack:getPushCell(attacker, targetQ, targetR, hex, entities
 end
 
 -- 3. ВЫСТРЕЛ (Shoot)
-combat.ShootAttack = setmetatable({}, combat.Attack)
+combat.LineShotAttack = setmetatable({}, combat.Attack)
+combat.LineShotAttack.__index = combat.LineShotAttack
+
+function combat.LineShotAttack.new(name, desc, range, damage)
+    local self = combat.Attack.new(name, desc, range, damage, {})
+    return setmetatable(self, combat.LineShotAttack)
+end
+
+function combat.LineShotAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if not firstTarget then
+        return self:noTargetLineFallback(attacker, stepX, stepY, stepZ, hex)
+    end
+    attack_effects.shoot(attacker, firstTarget, nil, nil, hex)
+    if self.damage > 0 then
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
+    end
+    self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+    combat.startPushAnimations(hex)
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.LineShotAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
+    return self:getLineShotPushCell(attacker, targetQ, targetR, hex, entities)
+end
+
+-- Backward compatibility wrappers
+combat.ShootAttack = setmetatable({}, combat.LineShotAttack)
 combat.ShootAttack.__index = combat.ShootAttack
 function combat.ShootAttack.new(range)
-    local self = combat.Attack.new("Shoot", "Fire a projectile, pushing the first target", range or 999, 1, {})
-    return setmetatable(self, combat.ShootAttack)
-end
--- в combat.lua, внутри ShootAttack:execute
-function combat.ShootAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then return false, "Not a straight line!" end
-    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-    if not firstTarget then
-        local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
-        if not endCell then return false, "No valid target cell!" end
-        local fx, fy = getDrawCoords(attacker.q, attacker.r)
-        local tx, ty = getDrawCoords(endCell.q, endCell.r)
-        visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.7, 0.2, 3, 1.0)
-        attacker.hasActedThisTurn = true
-        return true
-    end
-    local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-    local pushValid = hex:isActiveHex(pushQ, pushR)
-    attack_effects.shoot(attacker, firstTarget, nil, nil, hex)
-    self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
-    self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
-    combat.startPushAnimations(hex)
-    attacker.hasActedThisTurn = true
-    return true
-end
-function combat.ShootAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then return nil end
-    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-    if firstTarget and targetHex then
-        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-        if hex:isValidHex(pushQ, pushR) then
-            return {q = pushQ, r = pushR}
-        else
-            return {q = pushQ, r = pushR, edge = true}
-        end
-    end
-    local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
-    if endCell then
-        return {q = endCell.q, r = endCell.r, farthest = true}
-    end
-    return nil
+    return setmetatable(combat.LineShotAttack.new("Shoot", "Fire a projectile, pushing the first target", range or 999, 1), combat.ShootAttack)
 end
 
--- 3.5 ТОЛЧОК (Push — без урона)
-combat.PushAttack = setmetatable({}, combat.Attack)
+combat.PushAttack = setmetatable({}, combat.LineShotAttack)
 combat.PushAttack.__index = combat.PushAttack
 function combat.PushAttack.new(range)
-    local self = combat.Attack.new("Push", "Push the first enemy in line (no damage)", range or 999, 0, {})
-    return setmetatable(self, combat.PushAttack)
-end
-
-function combat.PushAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then return false, "Not a straight line!" end
-    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-    if not firstTarget then
-        local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
-        if not endCell then return false, "No valid target cell!" end
-        local fx, fy = getDrawCoords(attacker.q, attacker.r)
-        local tx, ty = getDrawCoords(endCell.q, endCell.r)
-        visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.7, 0.2, 3, 1.0)
-        attacker.hasActedThisTurn = true
-        return true
-    end
-    local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-    attack_effects.shoot(attacker, firstTarget, nil, nil, hex)
-    self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
-    combat.startPushAnimations(hex)
-    attacker.hasActedThisTurn = true
-    return true
-end
-
-function combat.PushAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then return nil end
-    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-    if firstTarget and targetHex then
-        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-        if hex:isValidHex(pushQ, pushR) then
-            return {q = pushQ, r = pushR}
-        else
-            return {q = pushQ, r = pushR, edge = true}
-        end
-    end
-    local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
-    if endCell then
-        return {q = endCell.q, r = endCell.r, farthest = true}
-    end
-    return nil
+    return setmetatable(combat.LineShotAttack.new("Push", "Push the first enemy in line (no damage)", range or 999, 0), combat.PushAttack)
 end
 
 -- 4. ПРОНЗАЮЩИЙ ВЫСТРЕЛ (Piercing Shoot)
@@ -428,12 +430,8 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     if not stepX then return false, "Not a straight line!" end
     local firstTarget, firstHex, secondTarget, secondHex = self:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     if not firstTarget then
-        local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
-        if not endCell then return false, "No valid target cell!" end
-        local fx, fy = getDrawCoords(attacker.q, attacker.r)
-        local tx, ty = getDrawCoords(endCell.q, endCell.r)
-        visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.7, 0.2, 3, 1.0)
-        attacker.hasActedThisTurn = true
+        local ok = self:noTargetLineFallback(attacker, stepX, stepY, stepZ, hex)
+        if not ok then return false, "No valid target cell!" end
         return true
     end
     attack_effects.piercingShoot(attacker, firstTarget, secondTarget, stepX, stepY, stepZ, hex)
@@ -486,41 +484,6 @@ function combat.AoePushAttack.new()
     local self = combat.Attack.new("Stone Throw", "Throw a stone that pushes three enemies in a cone", math.huge, 0, {})
     self.minRange = 2
     return setmetatable(self, combat.AoePushAttack)
-end
-
--- Вспомогательная функция для получения трёх соседей в направлении
-function combat.AoePushAttack:getNeighborsInDirection(centerQ, centerR, dirQ, dirR, hex)
-    if centerQ == nil or centerR == nil then
-        return {}
-    end
-
-    local neighbors = hex:getNeighbors(centerQ, centerR)
-    local validNeighbors = {}
-    for _, nb in ipairs(neighbors) do
-        if nb and nb.q ~= nil and nb.r ~= nil then
-            table.insert(validNeighbors, nb)
-        end
-    end
-
-    if #validNeighbors == 0 then
-        return {}
-    end
-
-    local dirVec = { q = dirQ or 0, r = dirR or 0 }
-
-    local function dot(a, b)
-        return (a.q or 0) * (b.q or 0) + (a.r or 0) * (b.r or 0)
-    end
-
-    table.sort(validNeighbors, function(a, b)
-        return dot(a, dirVec) > dot(b, dirVec)
-    end)
-
-    local top = {}
-    for i = 1, math.min(3, #validNeighbors) do
-        table.insert(top, validNeighbors[i])
-    end
-    return top
 end
 
 function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
@@ -658,43 +621,7 @@ function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, en
     attacker.hasActedThisTurn = true
     return true
 end
-function combat.AoeDirectionalAttack:getNeighborsInDirection(centerQ, centerR, dirQ, dirR, hex)
-    -- Защита от некорректных аргументов
-    if centerQ == nil or centerR == nil then
-        return {}
-    end
 
-    local neighbors = hex:getNeighbors(centerQ, centerR)
-    local validNeighbors = {}
-
-    -- Отфильтровываем элементы с отсутствующими координатами
-    for _, nb in ipairs(neighbors) do
-        if nb and nb.q ~= nil and nb.r ~= nil then
-            table.insert(validNeighbors, nb)
-        end
-    end
-
-    if #validNeighbors == 0 then
-        return {}
-    end
-
-    local dirVec = { q = dirQ or 0, r = dirR or 0 }
-
-    local function dot(a, b)
-        return (a.q or 0) * (b.q or 0) + (a.r or 0) * (b.r or 0)
-    end
-
-    table.sort(validNeighbors, function(a, b)
-        return dot(a, dirVec) > dot(b, dirVec)
-    end)
-
-    local top = {}
-    for i = 1, math.min(3, #validNeighbors) do
-        table.insert(top, validNeighbors[i])
-    end
-    return top
-end
--- Предпросмотр для Cone Blast
 function combat.AoeDirectionalAttack:getPushCells(attacker, targetQ, targetR, hex, entities)
     local cells = {}
     local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
@@ -916,7 +843,7 @@ end
 -- ============================================================
 -- DIVIDER (разделение)
 -- ============================================================
-combat.DividerAttack = setmetatable({}, combat.Attack)
+combat.DividerAttack = setmetatable({}, combat.SummonAttack)
 combat.DividerAttack.__index = combat.DividerAttack
 function combat.DividerAttack.new(range)
     local self = combat.Attack.new("Split", "Split into two Divided units", range or 5, 0, {})
@@ -959,17 +886,6 @@ function combat.DividerAttack:execute(attacker, targetQ, targetR, hex, entities,
     if sounds and sounds.attack then sounds.attack:play() end
 
     return true
-end
-
-function combat.DividerAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
-    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    if distance < self.minRange then return nil end
-    if not hex:isActiveHex(targetQ, targetR) then return nil end
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then return nil end
-    local occupant = combat.getEntityAtHex(targetQ, targetR, entities)
-    if occupant then return nil end
-    return {q = targetQ, r = targetR}
 end
 
 -- ============================================================
@@ -1043,41 +959,13 @@ function combat.VortexStrikeAttack:getPushCell(attacker, targetQ, targetR, hex, 
 end
 
 -- ============================================================
--- WIDE VORTEX
+-- WIDE VORTEX (reuses getLineTarget and getShiftDestinations from VortexStrike)
 -- ============================================================
-combat.WideVortexAttack = setmetatable({}, combat.Attack)
+combat.WideVortexAttack = setmetatable({}, combat.VortexStrikeAttack)
 combat.WideVortexAttack.__index = combat.WideVortexAttack
 function combat.WideVortexAttack.new()
     local self = combat.Attack.new("Wide Vortex", "Shift target enemy and a second enemy right or left", 1, 0, {})
     return setmetatable(self, combat.WideVortexAttack)
-end
-
-function combat.WideVortexAttack:getLineTarget(attacker, targetQ, targetR, hex, entities)
-    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    if distance ~= 1 then return nil end
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then return nil end
-    local occupant = combat.getEntityAtHex(targetQ, targetR, entities)
-    if occupant and occupant:isCharacter() and occupant.health > 0 then
-        return {q = targetQ, r = targetR, entity = occupant}
-    end
-    return nil
-end
-
-function combat.WideVortexAttack:getShiftDestinations(attacker, targetQ, targetR, hex)
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then return {} end
-    local cells = {}
-    -- 60° rotation around attacker
-    local rq, rr = hex_utils.applyCubeStep(attacker.q, attacker.r, -stepY, -stepZ, -stepX)
-    if hex:isActiveHex(rq, rr) then
-        table.insert(cells, {q = rq, r = rr, dir = "right"})
-    end
-    local lq, lr = hex_utils.applyCubeStep(attacker.q, attacker.r, -stepZ, -stepX, -stepY)
-    if hex:isActiveHex(lq, lr) then
-        table.insert(cells, {q = lq, r = lr, dir = "left"})
-    end
-    return cells
 end
 
 function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
@@ -1112,10 +1000,15 @@ function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entiti
                 b2q, b2r = hex_utils.cubeToAxial(ax + dy, ay + dz, az + dx)
             end
             if hex:isActiveHex(b2q, b2r) and not combat.getEntityAtHex(b2q, b2r, entities) then
+                -- Add A first (processed second), B second (processed first)
+                combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
                 combat.addPushAnimation(occupantB, destQ, destR, b2q, b2r)
+            else
+                combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
             end
+        else
+            combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
         end
-        combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
         combat.startPushAnimations(hex)
     end
     attacker.hasActedThisTurn = true
@@ -1143,6 +1036,8 @@ end
 
 function combat.PullHookAttack:getPullHookMoveCells(attacker, stepX, stepY, stepZ, hookTargetQ, hookTargetR, hex, entities)
     local cells = {}
+    -- Attacker can always stay in place
+    table.insert(cells, {q = attacker.q, r = attacker.r})
     local curQ, curR = attacker.q, attacker.r
     while true do
         local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
@@ -1177,18 +1072,26 @@ function combat.PullHookAttack:execute(attacker, targetQ, targetR, hex, entities
     if not targetEntity or targetEntity.health <= 0 then return false, "Target is gone!" end
 
     local moveQ, moveR = targetQ, targetR
+    local isStationary = (moveQ == attacker.q and moveR == attacker.r)
 
-    -- Animate attacker moving to selected cell
-    combat.addDirectPushAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
-
-    -- After move completes, pull target
-    combat.startPushAnimations(hex, function()
+    if isStationary then
+        -- Attacker stays in place, pull target directly
         local pullQ, pullR = hex_utils.applyCubeStep(moveQ, moveR, stepX, stepY, stepZ)
         if hex:isActiveHex(pullQ, pullR) and not combat.getEntityAtHex(pullQ, pullR, entities) then
             combat.addDirectPushAnimation(targetEntity, hookTarget.q, hookTarget.r, pullQ, pullR)
             combat.startPushAnimations(hex)
         end
-    end)
+    else
+        -- Animate attacker moving to selected cell, then pull target
+        combat.addDirectPushAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
+        combat.startPushAnimations(hex, function()
+            local pullQ, pullR = hex_utils.applyCubeStep(moveQ, moveR, stepX, stepY, stepZ)
+            if hex:isActiveHex(pullQ, pullR) and not combat.getEntityAtHex(pullQ, pullR, entities) then
+                combat.addDirectPushAnimation(targetEntity, hookTarget.q, hookTarget.r, pullQ, pullR)
+                combat.startPushAnimations(hex)
+            end
+        end)
+    end
 
     if sounds and sounds.attack then sounds.attack:play() end
     attacker.hasActedThisTurn = true

@@ -21,7 +21,7 @@ function input.mousepressed(x, y, button)
             return
         end
 
-    if turnState.phase ~= "player" then return end
+    if turnState and turnState.phase ~= "player" then return end
 
     local tq, tr = hex:pixelToHex(x, y)
         if not hex or not hex:isValidHex(tq, tr) then return end

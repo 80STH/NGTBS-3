@@ -46,9 +46,12 @@ end
 function ui.getEffectiveMoveRange(actor)
     local base = actor.moveRange or 0
     if status and status.hasEntityStatus and status.hasEntityStatus(actor, "empowered") then
-        return base + 1
+        base = base + 1
     end
-    return base
+    if status and status.isWounded and status.isWounded(actor) then
+        base = base - 1
+    end
+    return math.max(0, base)
 end
 
 function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
@@ -424,6 +427,12 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
                             canApply = true
                         end
                     end
+                end
+            elseif attack.name == "Electric Hook" then
+                local minRange = attack.minRange or 2
+                if dist >= minRange then
+                    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                    if stepX then canApply = true end
                 end
             end
             if canApply then
@@ -817,6 +826,11 @@ end
                             ui.drawPushArrow(cx, cy, px, py, nil, nil, nil, nil, c.q, c.r, pullQ, pullR)
                         end
                     end
+                    -- Mark attacker's own cell with a special indicator
+                    if c.q == attacker.q and c.r == attacker.r then
+                        love.graphics.setColor(1, 1, 1, 0.5)
+                        love.graphics.circle("line", cx, cy, hex.radius * 0.2)
+                    end
                 end
                 -- Show target cell
                 local tx, ty = getDrawCoords(pullHookTargetCell.q, pullHookTargetCell.r)
@@ -838,16 +852,56 @@ end
         if dist >= 2 then
             local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
             if stepX then
-                local tx, ty = getDrawCoords(hoverQ, hoverR)
-                local tv = hex:drawInsetHexagon(tx, ty, hex.radius, 0.92)
-                love.graphics.setColor(0.3, 0.8, 1, 0.3)
-                love.graphics.polygon("fill", tv)
-                love.graphics.setColor(0.3, 0.8, 1, 0.8)
-                love.graphics.setLineWidth(2)
-                love.graphics.polygon("line", tv)
-                love.graphics.setLineWidth(1)
                 local fx, fy = getDrawCoords(attacker.q, attacker.r)
+                local tx, ty = getDrawCoords(hoverQ, hoverR)
+                -- Show damage preview for attacker
+                drawHealthBar(attacker, fx, fy, 1)
+                local totalPreviewDamage = 0
+                -- Highlight all cells on the line between attacker and target
+                local curQ, curR = attacker.q, attacker.r
+                while true do
+                    local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+                    if not hex:isValidHex(nextQ, nextR) then break end
+                    local cx, cy = getDrawCoords(nextQ, nextR)
+                    local cv = hex:drawInsetHexagon(cx, cy, hex.radius, 0.92)
+                    if nextQ == hoverQ and nextR == hoverR then
+                        -- Target cell
+                        love.graphics.setColor(0.3, 0.8, 1, 0.4)
+                        love.graphics.polygon("fill", cv)
+                        love.graphics.setColor(0.3, 0.8, 1, 0.9)
+                        love.graphics.setLineWidth(3)
+                        love.graphics.polygon("line", cv)
+                        love.graphics.setLineWidth(1)
+                        -- Damage preview for target
+                        local targetEntity = getEntityAtHex(nextQ, nextR, entities)
+                        if targetEntity and targetEntity.health > 0 then
+                            drawHealthBar(targetEntity, cx, cy, 1)
+                            if targetEntity:isBuilding() then
+                                totalPreviewDamage = totalPreviewDamage + math.min(1, targetEntity.health)
+                            end
+                        end
+                        break
+                    end
+                    -- Intermediate cell
+                    love.graphics.setColor(0.3, 0.8, 1, 0.4)
+                    love.graphics.polygon("fill", cv)
+                    love.graphics.setColor(0.3, 0.8, 1, 0.6)
+                    love.graphics.setLineWidth(2)
+                    love.graphics.polygon("line", cv)
+                    love.graphics.setLineWidth(1)
+                    -- Damage preview for entities on the line
+                    local ent = getEntityAtHex(nextQ, nextR, entities)
+                    if ent and ent.health > 0 then
+                        drawHealthBar(ent, cx, cy, 1)
+                        if ent:isBuilding() then
+                            totalPreviewDamage = totalPreviewDamage + math.min(1, ent.health)
+                        end
+                    end
+                    curQ, curR = nextQ, nextR
+                end
+                -- Dotted line from attacker to target
                 ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+                globalHealth.previewDamage = (globalHealth.previewDamage or 0) + totalPreviewDamage
             end
         end
         return
@@ -1263,10 +1317,13 @@ function ui.getEffectiveStatuses(entity)
     if status.hasDigSite(entity.q, entity.r) then
         table.insert(statuses, "dig_site")
     end
+    if status.isWounded and status.isWounded(entity) then
+        table.insert(statuses, "wounded")
+    end
     return statuses
 end
 
-function ui.drawUnitTooltip(entity, x, y, terrainMap)
+function ui.drawEntityTooltip(entity, terrainMap, hex)
     local bgColor = {0.1, 0.1, 0.2, 0.9}
     local borderColor = {0.8, 0.8, 0.8, 1}
     if entity.isPlayable then
@@ -1277,94 +1334,21 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
         borderColor = {0.9, 0.4, 0.4, 1}
     end
 
-    local lineHeight = 16
-    local titleHeight = 40
-    local moveHeight = 18
-    local terrainHeight = 20
-    local attackHeight = 0
-    local attackText = nil
-    
-    -- Для врагов берём первую атаку
-    if not entity.isPlayable and entity.attacks and #entity.attacks > 0 then
-        attackHeight = 36  -- название + описание
-        attackText = entity.attacks[1]
-    end
+    local font = love.graphics.getFont()
+    local pad = 8
+    local margin = 10
 
-    local prepareHeight = 0
-    local prepareText = nil
-    if entity.hasPreparedAttack and entity.preparePosCube and entity.preparedTargetCube then
-        prepareHeight = 20
-        local curX, curY, curZ = hex_utils.axialToCube(entity.q, entity.r)
-        local deltaX = curX - entity.preparePosCube.x
-        local deltaY = curY - entity.preparePosCube.y
-        local deltaZ = curZ - entity.preparePosCube.z
-        local targetX = entity.preparedTargetCube.x + deltaX
-        local targetY = entity.preparedTargetCube.y + deltaY
-        local targetZ = entity.preparedTargetCube.z + deltaZ
-        local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
-        prepareText = string.format(" Prepares: (%d,%d) → (%d,%d) for 1 dmg", entity.q, entity.r, targetQ, targetR)
-    end
-
-    local panelWidth = 200
-    local initialHeight = titleHeight + moveHeight + terrainHeight + attackHeight + prepareHeight
-
-    love.graphics.setColor(bgColor)
-    love.graphics.rectangle("fill", x, y, panelWidth, initialHeight, 8)
-    love.graphics.setColor(borderColor)
-    love.graphics.rectangle("line", x, y, panelWidth, initialHeight, 8)
-
-    -- Имя и здоровье
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print(entity.name, x + 8, y + 6)
-    love.graphics.print(" " .. entity.health .. "/" .. entity.maxHealth, x + 8, y + 24)
-
-    -- Дальность передвижения
-    local baseMove = entity.moveRange or 0
-    local effMove = ui.getEffectiveMoveRange(entity)
-    if effMove > baseMove then
-        love.graphics.setColor(1, 0.9, 0.2, 1)
-        love.graphics.print("Move: " .. baseMove .. " → " .. effMove, x + 8, y + 40)
-    else
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.print("Move: " .. baseMove, x + 8, y + 40)
-    end
-    -- Террейн
-    local terrain = "grass"
-    if terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] then
-        terrain = terrainMap[entity.q][entity.r]
-    end
-    love.graphics.setColor(0.9, 0.9, 0.7, 1)
-    love.graphics.print("Terrain: " .. terrain, x + 8, y + 56)
-
-    -- Атака врага (если есть)
-    if attackText then
-        love.graphics.setColor(0.9, 0.6, 0.3, 1)
-        love.graphics.print(" " .. attackText.name, x + 8, y + 56 + terrainHeight)
-        love.graphics.setColor(0.8, 0.8, 0.7, 1)
-        love.graphics.print(attackText.description, x + 12, y + 72 + terrainHeight)
-    end
-
-    -- Подготовленная атака (если есть)
-    if prepareText then
-        love.graphics.setColor(1, 0.5, 0, 1)
-        love.graphics.print(prepareText, x + 8, y + 40 + terrainHeight + attackHeight)
-    end
-end
-
-function ui.drawStatusDetails(entity, x, y)
-    local statuses = ui.getEffectiveStatuses(entity)
-    if #statuses == 0 then return end
-
+    -- Статусы
     local statusDescriptions = {
         fire = { name = "Fire", color = {1, 0.5, 0}, desc = "Burns for 1 damage at end of turn. Extinguished by water." },
         acid = { name = "Acid", color = {0.3, 0.9, 0.3}, desc = "Doubles all incoming damage." },
         decay = { name = "Decay", color = {0.7, 0.2, 0.8}, desc = "Takes 1 damage per move and at end of turn." },
         dig_site = { name = "Undermined", color = {0.8, 0.6, 0.2}, desc = "Standing on a dig site — enemy may spawn here!" },
         empowered = { name = "Empowered", color = {1, 0.9, 0.2}, desc = "Move +1, damage +1." },
+        wounded = { name = "Wounded", color = {1, 0.4, 0.2}, desc = "Health below max. Move range reduced by 1." },
     }
+    local statuses = ui.getEffectiveStatuses(entity)
 
-    local panelWidth = 220
-    local font = love.graphics.getFont()
     local function wrappedLines(text, maxW)
         local lines = {}
         for word in text:gmatch("%S+") do
@@ -1381,36 +1365,119 @@ function ui.drawStatusDetails(entity, x, y)
         end
         return lines
     end
-    local statusHeight = 20
-    for _, st in ipairs(statuses) do
-        local info = statusDescriptions[st] or { name = st, color = {1, 1, 1}, desc = "" }
-        local lines = wrappedLines(info.desc, panelWidth - 32)
-        statusHeight = statusHeight + 14 + #lines * 16 + 4
+
+    -- Собираем содержимое
+    local lines = {}
+    -- Имя + здоровье
+    table.insert(lines, { text = entity.name .. "  " .. entity.health .. "/" .. entity.maxHealth, color = {1,1,1} })
+    -- Дальность передвижения
+    local baseMove = entity.moveRange or 0
+    local effMove = ui.getEffectiveMoveRange(entity)
+    if effMove > baseMove then
+        table.insert(lines, { text = "Move: " .. baseMove .. " -> " .. effMove, color = {1, 0.9, 0.2} })
+    else
+        table.insert(lines, { text = "Move: " .. baseMove, color = {0.8, 0.8, 0.8} })
     end
-    local panelHeight = statusHeight
-    if y + panelHeight > logicalH - 10 then
-        y = logicalH - 10 - panelHeight
+    -- Террейн
+    local terrain = "grass"
+    if terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] then
+        terrain = terrainMap[entity.q][entity.r]
+    end
+    table.insert(lines, { text = "Terrain: " .. terrain, color = {0.9, 0.9, 0.7} })
+    -- Атака врага
+    local attackText = nil
+    if not entity.isPlayable and entity.attacks and #entity.attacks > 0 then
+        attackText = entity.attacks[1]
+    end
+    if attackText then
+        table.insert(lines, { text = attackText.name, color = {0.9, 0.6, 0.3} })
+        table.insert(lines, { text = attackText.description, color = {0.8, 0.8, 0.7} })
+    end
+    -- Подготовленная атака
+    if entity.hasPreparedAttack and entity.preparePosCube and entity.preparedTargetCube then
+        local curX, curY, curZ = hex_utils.axialToCube(entity.q, entity.r)
+        local deltaX = curX - entity.preparePosCube.x
+        local deltaY = curY - entity.preparePosCube.y
+        local deltaZ = curZ - entity.preparePosCube.z
+        local targetX = entity.preparedTargetCube.x + deltaX
+        local targetY = entity.preparedTargetCube.y + deltaY
+        local targetZ = entity.preparedTargetCube.z + deltaZ
+        local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
+        table.insert(lines, { text = string.format("Prepares: (%d,%d) -> (%d,%d) for 1 dmg", entity.q, entity.r, targetQ, targetR), color = {1, 0.5, 0} })
     end
 
-    love.graphics.setColor(0.15, 0.15, 0.25, 0.9)
-    love.graphics.rectangle("fill", x, y, panelWidth, panelHeight, 8)
-    love.graphics.setColor(0.6, 0.6, 0.8, 1)
-    love.graphics.rectangle("line", x, y, panelWidth, panelHeight, 8)
+    -- Вычисляем ширину (максимальная строка) + статусы
+    local minWidth = 180
+    local maxWidth = 320
+    local contentWidth = minWidth
+    for _, l in ipairs(lines) do
+        local w = font:getWidth(l.text)
+        if w > contentWidth then contentWidth = w end
+    end
+    contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
+    local wrapWidth = contentWidth - pad * 2 - 16
 
-    love.graphics.setColor(1, 0.8, 0.4, 1)
-    love.graphics.print("Status Effects:", x + 8, y + 4)
-
-    local curY = y + 24
-    for _, st in ipairs(statuses) do
-        local info = statusDescriptions[st] or { name = st, color = {1, 1, 1}, desc = "" }
-        love.graphics.setColor(info.color[1], info.color[2], info.color[3], 1)
-        love.graphics.print(info.name, x + 12, curY)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        local lines = wrappedLines(info.desc, panelWidth - 32)
-        for li, line in ipairs(lines) do
-            love.graphics.print(line, x + 16, curY + 14 + (li - 1) * 16)
+    -- Вычисляем высоту
+    local topY = pad
+    local lineH = 16
+    for _, l in ipairs(lines) do
+        topY = topY + lineH
+    end
+    if #lines > 0 then topY = topY + 4 end
+    local statusY = topY
+    if #statuses > 0 then
+        topY = topY + 4
+        for _, st in ipairs(statuses) do
+            local info = statusDescriptions[st] or { name = st, color = {1,1,1}, desc = "" }
+            local wl = wrappedLines(info.desc, wrapWidth)
+            topY = topY + 14 + #wl * lineH + 4
         end
-        curY = curY + 14 + #lines * 16 + 4
+    end
+    local panelHeight = topY + pad
+
+    -- Позиционирование: правый нижний угол, над кнопкой Enemy Order
+    local px = math.max(margin, logicalW - contentWidth - margin)
+    local py = math.max(margin, logicalH - panelHeight - 50)
+    -- Не налезаем на левые кнопки (x<155)
+    if px < 155 and px + contentWidth > 10 then
+        px = 155 + margin
+    end
+    -- Не налезаем на правые кнопки атак (x>logicalW-160, y<250)
+    if py < 250 and px + contentWidth > logicalW - 160 then
+        py = math.max(250, py)
+    end
+
+    -- Фон и рамка
+    love.graphics.setColor(bgColor)
+    love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
+    love.graphics.setColor(borderColor)
+    love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 8)
+
+    -- Рисуем содержимое
+    local curY = py + pad
+    for _, l in ipairs(lines) do
+        love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
+        love.graphics.print(l.text, px + pad, curY)
+        curY = curY + lineH
+    end
+    if #lines > 0 then curY = curY + 4 end
+
+    -- Статусы
+    if #statuses > 0 then
+        love.graphics.setColor(1, 0.8, 0.4, 1)
+        love.graphics.print("Status Effects:", px + pad, py + statusY)
+        local curY = py + statusY + 20
+        for _, st in ipairs(statuses) do
+            local info = statusDescriptions[st] or { name = st, color = {1,1,1}, desc = "" }
+            love.graphics.setColor(info.color[1], info.color[2], info.color[3], 1)
+            love.graphics.print(info.name, px + pad + 4, curY)
+            love.graphics.setColor(0.8, 0.8, 0.8, 1)
+            local wl = wrappedLines(info.desc, wrapWidth)
+            for li, w in ipairs(wl) do
+                love.graphics.print(w, px + pad + 8, curY + 14 + (li - 1) * lineH)
+            end
+            curY = curY + 14 + #wl * lineH + 4
+        end
     end
 end
 function ui.drawTerrainOnlyTooltip(terrain, x, y)
@@ -1534,7 +1601,9 @@ end
 
 -- ui.lua
 function ui.drawCellTooltip(q, r, terrain, hex)
-    local panelX = 10
+    local margin = 10
+    local pad = 8
+    local font = love.graphics.getFont()
     local statuses = status.getAtHex(q, r)
     local hasDig = status.hasDigSite(q, r)
     local digInfo = nil
@@ -1547,49 +1616,58 @@ function ui.drawCellTooltip(q, r, terrain, hex)
             end
         end
     end
-    
-    local lineHeight = 16
-    local titleHeight = 30
-    local statusHeight = #statuses > 0 and (20 + #statuses * lineHeight) or 0
-    local digHeight = hasDig and 40 or 0
+
     local lightningWarningHere = lightningWarning and lightningTargetQ == q and lightningTargetR == r
-    local lightningHeight = lightningWarningHere and 18 or 0
-    local panelWidth = 200
-    local panelHeight = titleHeight + statusHeight + digHeight + lightningHeight
-    local panelY = math.min(logicalH - 130, logicalH - 10 - panelHeight)
 
-    love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
-    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 5)
-    love.graphics.setColor(0.8, 0.8, 0.8, 1)
-    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 5)
-
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("Terrain: " .. terrain, panelX + 8, panelY + 6)
-
+    -- Собираем строки контента
+    local content = {}
+    table.insert(content, { text = "Terrain: " .. terrain, color = {1,1,1} })
     if #statuses > 0 then
-        love.graphics.setColor(1, 0.8, 0.4, 1)
-        love.graphics.print("Statuses:", panelX + 8, panelY + 28)
         local iconMap = { fire = "Fire", acid = "Acid" }
-        love.graphics.setColor(1, 0.9, 0.6, 1)
-        for i, st in ipairs(statuses) do
-            local text = iconMap[st] or st
-            love.graphics.print(text, panelX + 18, panelY + 28 + i * lineHeight)
+        for _, st in ipairs(statuses) do
+            table.insert(content, { text = "  " .. (iconMap[st] or st), color = {1, 0.9, 0.6} })
         end
     end
-
     if hasDig and digInfo then
-        local yOffset = titleHeight + statusHeight + 8
-        love.graphics.setColor(0.8, 0.6, 0.2, 1)
-        love.graphics.print("Dig Site", panelX + 8, panelY + yOffset)
-        love.graphics.setColor(1, 0.9, 0.5, 1)
-        love.graphics.print("Spawn in: " .. digInfo.timer .. " turn(s)", panelX + 18, panelY + yOffset + lineHeight)
-        love.graphics.print("Age: " .. digInfo.age .. " / 3", panelX + 18, panelY + yOffset + lineHeight * 2)
+        table.insert(content, { text = "Dig Site (" .. (digInfo.spawnType or "?") .. ")", color = {0.8, 0.6, 0.2} })
+        table.insert(content, { text = "  in " .. digInfo.timer .. " turn(s), age " .. digInfo.age .. "/3", color = {1, 0.9, 0.5} })
+    end
+    if lightningWarningHere then
+        table.insert(content, { text = "! Lightning target !", color = {1, 0.9, 0.2} })
     end
 
-    if lightningWarningHere then
-        local yOffset = titleHeight + statusHeight + digHeight + 8
-        love.graphics.setColor(1, 0.9, 0.2, 1)
-        love.graphics.print("⚡ Lightning target!", panelX + 8, panelY + yOffset)
+    if #content == 0 then return end
+
+    -- Ширина
+    local minWidth = 160
+    local maxWidth = 280
+    local contentWidth = minWidth
+    for _, l in ipairs(content) do
+        local w = font:getWidth(l.text)
+        if w > contentWidth then contentWidth = w end
+    end
+    contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
+
+    -- Высота
+    local panelHeight = pad + #content * 16 + pad
+
+    -- Позиционирование: правый нижний угол
+    local px = math.max(margin, logicalW - contentWidth - margin)
+    local py = math.max(margin, logicalH - panelHeight - 50)
+    if px < 155 and px + contentWidth > 10 then
+        px = 155 + margin
+    end
+
+    love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
+    love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 5)
+    love.graphics.setColor(0.8, 0.8, 0.8, 1)
+    love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 5)
+
+    local curY = py + pad
+    for _, l in ipairs(content) do
+        love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
+        love.graphics.print(l.text, px + pad, curY)
+        curY = curY + 16
     end
 end
 
@@ -1624,7 +1702,7 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
             return false
         end
     end
-    local effectiveRange = enemy.moveRange + (status.hasEntityStatus(enemy, "empowered") and 1 or 0)
+    local effectiveRange = ui.getEffectiveMoveRange(enemy)
     local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effectiveRange,
         function(q, r) return not isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex) end, hex)
     return path ~= nil and #path > 0
@@ -1956,6 +2034,17 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
                 if occupant and occupant:isCharacter() and occupant.health > 0 and not occupant.isPlayable then
                     table.insert(out, {q = hoverQ, r = hoverR})
                 end
+            end
+        end
+        return
+    end
+
+    if attack.name == "Electric Hook" then
+        local minRange = attack.minRange or 2
+        if distance >= minRange then
+            local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+            if stepX then
+                table.insert(out, {q = hoverQ, r = hoverR})
             end
         end
         return

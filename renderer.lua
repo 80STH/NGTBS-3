@@ -296,10 +296,7 @@ function renderer.draw(state)
     if hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
         if hoverEntity and hoverEntity.health > 0 then
-            local panelX = 10
-            local panelY = logicalH - 180
-            ui.drawUnitTooltip(hoverEntity, panelX, panelY, state.terrainMap)
-            ui.drawStatusDetails(hoverEntity, panelX, panelY + 125)
+            ui.drawEntityTooltip(hoverEntity, state.terrainMap, hex)
         elseif hex:isActiveHex(hex.hoverQ, hex.hoverR) then
             local terrain = state.terrainMap and state.terrainMap[hex.hoverQ] and state.terrainMap[hex.hoverQ][hex.hoverR] or "grass"
             ui.drawCellTooltip(hex.hoverQ, hex.hoverR, terrain, hex)

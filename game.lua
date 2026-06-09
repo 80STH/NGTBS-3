@@ -319,6 +319,45 @@ function countPlayableActors()
     return count
 end
 
+-- ============================================================
+-- ОБЩАЯ ГЕНЕРАЦИЯ СОБЫТИЙ (выкопки, молнии)
+-- ============================================================
+
+-- Находит N случайных пустых (не занятых, не вода) клеток
+function findRandomEmptyCells(count, excludeFn)
+    local candidates = {}
+    for q = 0, hex.gridWidth - 1 do
+        for r = 0, hex.gridHeight - 1 do
+            if hex:isActiveHex(q, r) then
+                local occupied = false
+                for _, e in ipairs(entities) do
+                    if e.q == q and e.r == r then
+                        occupied = true
+                        break
+                    end
+                end
+                if not occupied then
+                    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+                    if terrain ~= "water" then
+                        if not excludeFn or not excludeFn(q, r) then
+                            table.insert(candidates, {q = q, r = r})
+                        end
+                    end
+                end
+            end
+        end
+    end
+    for i = #candidates, 2, -1 do
+        local j = love.math.random(i)
+        candidates[i], candidates[j] = candidates[j], candidates[i]
+    end
+    local result = {}
+    for i = 1, math.min(count, #candidates) do
+        table.insert(result, candidates[i])
+    end
+    return result
+end
+
 function processDigSites()
     for _, entity in ipairs(entities) do
         if entity.health > 0 and status.hasDigSite(entity.q, entity.r) then
@@ -372,34 +411,14 @@ function processDigSites()
     end
     local needed = 7 - aliveEnemies
     if needed > 0 then
-        local candidates = {}
-        for q = 0, hex.gridWidth - 1 do
-            for r = 0, hex.gridHeight - 1 do
-                if hex:isActiveHex(q, r) then
-                    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain ~= "water" then
-                        local occupied = false
-                        for _, e in ipairs(entities) do
-                            if e.q == q and e.r == r then
-                                occupied = true
-                                break
-                            end
-                        end
-                        if not occupied and not status.hasDigSite(q, r) and not status.hasNegativeHexStatus(q, r) then
-                            table.insert(candidates, {q = q, r = r})
-                        end
-                    end
-                end
-            end
-        end
-        for i = #candidates, 2, -1 do
-            local j = love.math.random(i)
-            candidates[i], candidates[j] = candidates[j], candidates[i]
-        end
-        for i = 1, math.min(needed, #candidates) do
-            local spot = candidates[i]
-            status.setDigSite(spot.q, spot.r, 1)
-            print(string.format("New dig site at (%d,%d)", spot.q, spot.r))
+        local spots = findRandomEmptyCells(needed, function(q, r)
+            return status.hasDigSite(q, r) or status.hasNegativeHexStatus(q, r)
+        end)
+        for _, spot in ipairs(spots) do
+            local types = { "Ghost", "Zombie", "Lich" }
+            local spawnType = types[love.math.random(1, #types)]
+            status.setDigSite(spot.q, spot.r, 1, spawnType)
+            print(string.format("New dig site at (%d,%d) -> %s", spot.q, spot.r, spawnType))
         end
     end
 end
@@ -417,30 +436,10 @@ function selectLightningTarget()
     lightningWarning = false
     if not hex then return end
 
-    local candidates = {}
-    for q = 0, hex.gridWidth - 1 do
-        for r = 0, hex.gridHeight - 1 do
-            if hex:isActiveHex(q, r) then
-                local occupied = false
-                for _, e in ipairs(entities) do
-                    if e.q == q and e.r == r then
-                        occupied = true
-                        break
-                    end
-                end
-                if not occupied then
-                    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain == "water" then goto continue end
-                    table.insert(candidates, {q = q, r = r})
-                end
-                ::continue::
-            end
-        end
-    end
+    local spots = findRandomEmptyCells(1)
+    if #spots == 0 then return end
 
-    if #candidates == 0 then return end
-
-    local spot = candidates[love.math.random(#candidates)]
+    local spot = spots[1]
     lightningTargetQ = spot.q
     lightningTargetR = spot.r
     lightningWarning = true

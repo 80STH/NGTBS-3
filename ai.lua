@@ -398,7 +398,7 @@ function ai.performMoveTowards(enemy, target, entities, hex)
             end
             if not occupied then
                 local distToEnemy = hex:getDistance(enemy.q, enemy.r, neighbor.q, neighbor.r)
-                local effRange = enemy.moveRange + (status.hasEntityStatus(enemy, "empowered") and 1 or 0)
+                local effRange = ai.getEffectiveMoveRange(enemy)
                 if distToEnemy <= effRange then
                     if not isCellDangerousForEntity(neighbor.q, neighbor.r, enemy) then
                         if isCellOnEnemyAttackLine(neighbor.q, neighbor.r, enemy, entities, hex) then
@@ -484,7 +484,11 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
 end
 
 function ai.getEffectiveMoveRange(enemy)
-    return enemy.moveRange + (status.hasEntityStatus(enemy, "empowered") and 1 or 0)
+    local base = enemy.moveRange + (status.hasEntityStatus(enemy, "empowered") and 1 or 0)
+    if status.isWounded and status.isWounded(enemy) then
+        base = base - 1
+    end
+    return math.max(0, base)
 end
 
 function ai.moveToCell(enemy, targetQ, targetR, hex, entities)

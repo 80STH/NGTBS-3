@@ -122,6 +122,14 @@ function status.getDamageMultiplier(entity)
     return 1.0
 end
 
+-- Ранение: true для неп-противников со здоровьем меньше максимального
+function status.isWounded(entity)
+    if not entity or entity.isPlayable then return false end
+    if not entity:isCharacter() then return false end
+    if entity.health <= 0 then return false end
+    return entity.health < entity.maxHealth
+end
+
 function status.initHexStatuses(loadedStatuses)
     status.hexStatuses = loadedStatuses or {}
 end
@@ -146,13 +154,13 @@ function status.setEntityStatuses(entity, statuses)
     end
 end
 
--- Хранилище выкопок: ключ "q,r" -> { timer = 0, age = 0 }
+-- Хранилище выкопок: ключ "q,r" -> { timer = 0, age = 0, spawnType = nil }
 local digSites = {}
 
 -- Установить выкопку на клетку
-function status.setDigSite(q, r, timer)
+function status.setDigSite(q, r, timer, spawnType)
     local key = q .. "," .. r
-    digSites[key] = { timer = timer or 1, age = 0 }
+    digSites[key] = { timer = timer or 1, age = 0, spawnType = spawnType }
 end
 
 -- Удалить выкопку
@@ -172,7 +180,7 @@ function status.getAllDigSites()
     local sites = {}
     for key, data in pairs(digSites) do
         local q, r = key:match("(.-),(.*)")
-        table.insert(sites, { q = tonumber(q), r = tonumber(r), timer = data.timer, age = data.age })
+        table.insert(sites, { q = tonumber(q), r = tonumber(r), timer = data.timer, age = data.age, spawnType = data.spawnType })
     end
     return sites
 end
