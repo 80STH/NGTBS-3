@@ -123,7 +123,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJyTY2BgkAdiJSDWAGJdINYCYh0GVOCKhAkBUtTC1BOrjli1pAJamEuKmcSGmSsOjM1emBwAiA4HPg=="
+      data = "eJyTY2BgkAdiJSDWAGJdINYCYh0gdmFAAFckTAiQohamnlh1xKolFdDCXFLMJDbMXHFgbPbC5AABPQeC"
     },
     {
       type = "tilelayer",

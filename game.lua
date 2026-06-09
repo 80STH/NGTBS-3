@@ -401,3 +401,80 @@ function processDigSites()
         end
     end
 end
+
+-- ============================================================
+-- LIGHTNING
+-- ============================================================
+lightningTargetQ = -1
+lightningTargetR = -1
+lightningWarning = false
+
+function selectLightningTarget()
+    lightningTargetQ = -1
+    lightningTargetR = -1
+    lightningWarning = false
+    if not hex then return end
+
+    local candidates = {}
+    for q = 0, hex.gridWidth - 1 do
+        for r = 0, hex.gridHeight - 1 do
+            if hex:isActiveHex(q, r) then
+                local occupied = false
+                for _, e in ipairs(entities) do
+                    if e.q == q and e.r == r then
+                        occupied = true
+                        break
+                    end
+                end
+                if not occupied then
+                    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+                    if terrain == "water" then goto continue end
+                    table.insert(candidates, {q = q, r = r})
+                end
+                ::continue::
+            end
+        end
+    end
+
+    if #candidates == 0 then return end
+
+    local spot = candidates[love.math.random(#candidates)]
+    lightningTargetQ = spot.q
+    lightningTargetR = spot.r
+    lightningWarning = true
+    print(string.format("Lightning warning at (%d,%d)", spot.q, spot.r))
+end
+
+function strikeLightning()
+    if lightningTargetQ < 0 or lightningTargetR < 0 then
+        lightningWarning = false
+        return
+    end
+    if not hex or not getDrawCoords then
+        lightningWarning = false
+        return
+    end
+
+    local tq, tr = lightningTargetQ, lightningTargetR
+    local fx, fy = getDrawCoords(tq, tr)
+    if visual and visual.addLightning then
+        visual.addLightning(fx, fy, 0.3)
+    end
+
+    local target = getEntityAtHex(tq, tr)
+    if target and target.health > 0 then
+        local wasDestroyed = target:takeDamage(2, globalHealth)
+        if sounds and sounds.collision then sounds.collision:play() end
+        if not wasDestroyed then
+            status.applyToEntity(target, "empowered")
+            print("Lightning strikes " .. target.name .. "! 2 damage, Empowered applied")
+        else
+            target:startDeath()
+            print("Lightning destroys " .. target.name .. "!")
+        end
+    end
+
+    lightningTargetQ = -1
+    lightningTargetR = -1
+    lightningWarning = false
+end

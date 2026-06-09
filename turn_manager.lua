@@ -32,6 +32,10 @@ function turnManager.endPlayerTurn()
         end
     end
 
+    -- Step 0: Lightning strikes before fire/decay
+    strikeLightning()
+    checkGameEnd()
+
     -- Step 1: Simultaneous effects (fire, decay) — no digging
     effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
     checkGameEnd()
@@ -128,6 +132,7 @@ function processNextEnemyPrepare()
             end
         end
         actionHistory = {}
+        selectLightningTarget()
         print("=== PLAYER TURN ===")
         return
     end

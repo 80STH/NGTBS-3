@@ -208,6 +208,36 @@ elseif e.type == "ghost_hit" then
     love.graphics.setColor(0.9, 0.6, 1, alpha*0.8)
     love.graphics.circle("line", e.x, e.y, 16 + t*12)
 
+elseif e.type == "lightning" then
+    local t = e.timer / e.duration
+    local alpha = 1 - t
+    love.graphics.setBlendMode("add")
+    -- Flash
+    love.graphics.setColor(1, 1, 1, alpha * 0.5)
+    love.graphics.circle("fill", e.x, e.y, 14 + 8 * t)
+    -- Main bolt from top to target
+    local segments = 6
+    local prevX, prevY = e.x, 0
+    for i = 1, segments do
+        local p = i / segments
+        local bx = e.x + (math.random() - 0.5) * 18 * (1 - p) * (1 + 0.5 * math.sin(t * 20))
+        local by = e.y * p + (math.random() - 0.5) * 10 * (1 - p)
+        love.graphics.setColor(1, 0.9, 0.5, alpha)
+        love.graphics.setLineWidth(2.5 * (1 - p) + 0.5)
+        love.graphics.line(prevX, prevY, bx, by)
+        prevX, prevY = bx, by
+        -- Branch
+        if i % 2 == 0 then
+            local brX = bx + (math.random() - 0.5) * 14
+            local brY = by + math.random() * 10
+            love.graphics.setColor(0.8, 0.8, 1, alpha * 0.4)
+            love.graphics.setLineWidth(1)
+            love.graphics.line(bx, by, brX, brY)
+        end
+    end
+    love.graphics.setLineWidth(1)
+    love.graphics.setBlendMode("alpha")
+
 elseif e.type == "ground_slam" then
     local t = e.timer / e.duration
     local alpha = 1 - t
@@ -306,6 +336,14 @@ function visual.addGroundSlam(x, y, hex)
         x = x, y = y,
         hex = hex,
         timer = 0, duration = 0.35
+    })
+end
+
+function visual.addLightning(x, y, duration)
+    table.insert(visual.effects, {
+        type = "lightning",
+        x = x, y = y,
+        timer = 0, duration = duration or 0.3
     })
 end
 

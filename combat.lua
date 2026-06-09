@@ -1197,6 +1197,12 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
     multiplier = multiplier * statusMultiplier
 
     local finalDamage = math.floor(damage * multiplier)
+
+    -- Empowered: +1 damage to direct damage attacks only
+    if damage > 0 and status.hasEntityStatus(attacker, "empowered") then
+        finalDamage = finalDamage + 1
+    end
+
     if finalDamage < 1 and damage > 0 then finalDamage = 1 end
 
     local wasDestroyed = target:takeDamage(finalDamage, globalHealth)  -- ← передаём globalHealth
@@ -1306,7 +1312,8 @@ function performMove(actor, targetQ, targetR)
     end
     if actor.q == targetQ and actor.r == targetR then return false end
     local distance = hex:getDistance(actor.q, actor.r, targetQ, targetR)
-    if distance > actor.moveRange then
+    local effectiveRange = actor.moveRange + (status.hasEntityStatus(actor, "empowered") and 1 or 0)
+    if distance > effectiveRange then
         print("Too far")
         return false
     end
@@ -1314,7 +1321,7 @@ function performMove(actor, targetQ, targetR)
         print("Cell occupied")
         return false
     end
-    local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, actor.moveRange,
+    local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, effectiveRange,
         function(q, r) return not isCellPassable(q, r, actor) end, hex)
     if not path or #path == 0 then
         print("No valid path")

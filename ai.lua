@@ -7,6 +7,7 @@ local pathfinding = require("pathfinding")
 local hex_utils = require("hex_utils")
 local visual = require("visual_effects")
 local attack_effects = require("attack_effects")
+local status = require("status")
 
 ai.DEBUG = true
 
@@ -395,7 +396,8 @@ function ai.performMoveTowards(enemy, target, entities, hex)
             end
             if not occupied then
                 local distToEnemy = hex:getDistance(enemy.q, enemy.r, neighbor.q, neighbor.r)
-                if distToEnemy < bestDist and distToEnemy <= enemy.moveRange then
+                local effRange = enemy.moveRange + (status.hasEntityStatus(enemy, "empowered") and 1 or 0)
+                if distToEnemy < bestDist and distToEnemy <= effRange then
                     if not isCellDangerousForEntity(neighbor.q, neighbor.r, enemy) then
                         bestDist = distToEnemy
                         bestCell = neighbor
@@ -455,15 +457,20 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
     return false
 end
 
+function ai.getEffectiveMoveRange(enemy)
+    return enemy.moveRange + (status.hasEntityStatus(enemy, "empowered") and 1 or 0)
+end
+
 function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
     if enemy.isMoving then return false end
     local distance = hex:getDistance(enemy.q, enemy.r, targetQ, targetR)
-    if distance > enemy.moveRange then return false end
+    local effRange = ai.getEffectiveMoveRange(enemy)
+    if distance > effRange then return false end
 
-    local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, enemy.moveRange,
+    local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effRange,
         function(q, r) return ai.isPositionOccupied(q, r, enemy, entities, hex) end, hex)
 
-    if path and #path > 0 and #path <= enemy.moveRange then
+    if path and #path > 0 and #path <= effRange then
         enemy.path = path
         enemy.currentPathIndex = 1
         ai.startEnemyMove(enemy, hex)

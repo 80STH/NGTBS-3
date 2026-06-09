@@ -105,6 +105,23 @@ return function(ui)
         love.graphics.circle("fill", x, y, radius * 0.5)
     end
 
+    function ui.drawEmpoweredOnEntity(x, y, radius, time)
+        local t = time * 6
+        love.graphics.setBlendMode("add")
+        for i = 1, 6 do
+            local angle = (i / 6) * math.pi * 2 + t * 2
+            local len = radius * 0.5 + radius * 0.3 * math.sin(t * 3 + i)
+            local ex = x + math.cos(angle) * len
+            local ey = y + math.sin(angle) * len
+            local es = radius * 0.1 * (0.6 + 0.4 * math.sin(t * 5 + i * 2))
+            love.graphics.setColor(1, 0.9, 0.2, 0.5 + 0.3 * math.sin(t * 4 + i))
+            love.graphics.circle("fill", ex, ey, es)
+        end
+        love.graphics.setColor(1, 1, 0.5, 0.15 + 0.1 * math.sin(t))
+        love.graphics.circle("fill", x, y, radius * 0.8)
+        love.graphics.setBlendMode("alpha")
+    end
+
     function ui.drawEntityStatusEffects(x, y, entity, radius, time)
         local statuses = status.getEntityStatuses(entity)
         if #statuses == 0 then return end
@@ -116,6 +133,9 @@ return function(ui)
         end
         if status.hasEntityStatus(entity, "acid") then
             ui.drawAcidOnEntity(x, y, radius, time)
+        end
+        if status.hasEntityStatus(entity, "empowered") then
+            ui.drawEmpoweredOnEntity(x, y, radius, time)
         end
     end
 

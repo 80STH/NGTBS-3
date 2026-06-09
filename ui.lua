@@ -43,6 +43,14 @@ function ui.getHazardTexture()
 end
 
 -- Проверка, может ли актор дойти до клетки (с учётом препятствий и длины пути)
+function ui.getEffectiveMoveRange(actor)
+    local base = actor.moveRange or 0
+    if status and status.hasEntityStatus and status.hasEntityStatus(actor, "empowered") then
+        return base + 1
+    end
+    return base
+end
+
 function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     if not hex:isActiveHex(targetQ, targetR) then return false end
     
@@ -57,7 +65,8 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     end
     
     -- Поиск пути с ограничением по дальности и блокировками
-    local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, actor.moveRange,
+    local effectiveRange = ui.getEffectiveMoveRange(actor)
+    local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, effectiveRange,
         function(q, r) return isPositionOccupied(q, r, actor) end, hex)
     
     return path ~= nil and #path > 0
@@ -68,15 +77,16 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return end
     if not hex:isActiveHex(hoverQ, hoverR) then return end
 
+    local effectiveRange = ui.getEffectiveMoveRange(actor)
     local dist = hex:getDistance(actor.q, actor.r, hoverQ, hoverR)
-    if dist > actor.moveRange then return end
+    if dist > effectiveRange then return end
 
     -- Не показываем путь, если клетка занята (союзником или врагом)
     if isCellOccupiedForStop(hoverQ, hoverR, actor) then
         return
     end
 
-    local path = pathfinding.findPath(actor.q, actor.r, hoverQ, hoverR, actor.moveRange,
+    local path = pathfinding.findPath(actor.q, actor.r, hoverQ, hoverR, effectiveRange,
         function(q, r) return not isCellPassable(q, r, actor) end, hex)
 
     if not path or #path == 0 then return end
@@ -238,7 +248,7 @@ function ui.drawPreparedAttacks(hex, entities)
         local q, r = cellKey:match("^(%d+),(%d+)$")
         q, r = tonumber(q), tonumber(r)
         local x, y = getDrawCoords(q, r)
-        local vertices = hex:drawHexagon(x, y, hex.radius)
+        local vertices = hex:drawInsetHexagon(x, y, hex.radius, 0.92)
         local threatCount = math.min(count, 3)
 
         local alpha, rCol, gCol, bCol, scaleMod
@@ -277,6 +287,10 @@ function ui.drawPreparedAttacks(hex, entities)
                            hex.radius * 2 / tex:getHeight() * scaleMod)
 
         love.graphics.setStencilTest()
+        love.graphics.setColor(rCol, gCol, bCol, 0.8)
+        love.graphics.setLineWidth(3)
+        love.graphics.polygon("line", vertices)
+        love.graphics.setLineWidth(1)
         love.graphics.setColor(1, 1, 1, 1)
     end
 end
@@ -927,7 +941,7 @@ function ui.drawMovementRange(hex, actor, entities, terrainMap)
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) and ui.isCellReachable(actor, q, r, entities, terrainMap, hex) then
                 local x, y = getDrawCoords(q, r)
-                local vertices = hex:drawHexagon(x, y, hex.radius)
+                local vertices = hex:drawInsetHexagon(x, y, hex.radius, 0.92)
 
                 love.graphics.setColor(0.2, 0.8, 0.2, 0.2)
                 love.graphics.polygon("fill", vertices)
@@ -1034,6 +1048,7 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
 
     local lineHeight = 16
     local titleHeight = 40
+    local moveHeight = 18
     local terrainHeight = 20
     local attackHeight = 0
     local attackText = nil
@@ -1060,7 +1075,7 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
     end
 
     local panelWidth = 200
-    local initialHeight = titleHeight + terrainHeight + attackHeight + prepareHeight
+    local initialHeight = titleHeight + moveHeight + terrainHeight + attackHeight + prepareHeight
 
     love.graphics.setColor(bgColor)
     love.graphics.rectangle("fill", x, y, panelWidth, initialHeight, 8)
@@ -1072,20 +1087,30 @@ function ui.drawUnitTooltip(entity, x, y, terrainMap)
     love.graphics.print(entity.name, x + 8, y + 6)
     love.graphics.print(" " .. entity.health .. "/" .. entity.maxHealth, x + 8, y + 24)
 
+    -- Дальность передвижения
+    local baseMove = entity.moveRange or 0
+    local effMove = ui.getEffectiveMoveRange(entity)
+    if effMove > baseMove then
+        love.graphics.setColor(1, 0.9, 0.2, 1)
+        love.graphics.print("Move: " .. baseMove .. " → " .. effMove, x + 8, y + 40)
+    else
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.print("Move: " .. baseMove, x + 8, y + 40)
+    end
     -- Террейн
     local terrain = "grass"
     if terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] then
         terrain = terrainMap[entity.q][entity.r]
     end
     love.graphics.setColor(0.9, 0.9, 0.7, 1)
-    love.graphics.print("Terrain: " .. terrain, x + 8, y + 40)
+    love.graphics.print("Terrain: " .. terrain, x + 8, y + 56)
 
     -- Атака врага (если есть)
     if attackText then
         love.graphics.setColor(0.9, 0.6, 0.3, 1)
-        love.graphics.print(" " .. attackText.name, x + 8, y + 40 + terrainHeight)
+        love.graphics.print(" " .. attackText.name, x + 8, y + 56 + terrainHeight)
         love.graphics.setColor(0.8, 0.8, 0.7, 1)
-        love.graphics.print(attackText.description, x + 12, y + 56 + terrainHeight)
+        love.graphics.print(attackText.description, x + 12, y + 72 + terrainHeight)
     end
 
     -- Подготовленная атака (если есть)
@@ -1104,6 +1129,7 @@ function ui.drawStatusDetails(entity, x, y)
         acid = { name = "Acid", color = {0.3, 0.9, 0.3}, desc = "Doubles all incoming damage." },
         decay = { name = "Decay", color = {0.7, 0.2, 0.8}, desc = "Takes 1 damage per move and at end of turn." },
         dig_site = { name = "Undermined", color = {0.8, 0.6, 0.2}, desc = "Standing on a dig site — enemy may spawn here!" },
+        empowered = { name = "Empowered", color = {1, 0.9, 0.2}, desc = "Move +1, damage +1." },
     }
 
     local panelWidth = 220
@@ -1295,8 +1321,10 @@ function ui.drawCellTooltip(q, r, terrain, hex)
     local titleHeight = 30
     local statusHeight = #statuses > 0 and (20 + #statuses * lineHeight) or 0
     local digHeight = hasDig and 40 or 0
+    local lightningWarningHere = lightningWarning and lightningTargetQ == q and lightningTargetR == r
+    local lightningHeight = lightningWarningHere and 18 or 0
     local panelWidth = 200
-    local panelHeight = titleHeight + statusHeight + digHeight
+    local panelHeight = titleHeight + statusHeight + digHeight + lightningHeight
     local panelY = math.min(logicalH - 130, logicalH - 10 - panelHeight)
 
     love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
@@ -1326,6 +1354,12 @@ function ui.drawCellTooltip(q, r, terrain, hex)
         love.graphics.print("Spawn in: " .. digInfo.timer .. " turn(s)", panelX + 18, panelY + yOffset + lineHeight)
         love.graphics.print("Age: " .. digInfo.age .. " / 3", panelX + 18, panelY + yOffset + lineHeight * 2)
     end
+
+    if lightningWarningHere then
+        local yOffset = titleHeight + statusHeight + digHeight + 8
+        love.graphics.setColor(1, 0.9, 0.2, 1)
+        love.graphics.print("⚡ Lightning target!", panelX + 8, panelY + yOffset)
+    end
 end
 
 -- ui.lua
@@ -1337,7 +1371,7 @@ function ui.drawEnemyMovementRange(hex, enemy, entities, terrainMap)
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) and ui.isCellReachableForEnemy(enemy, q, r, entities, terrainMap, hex) then
                 local x, y = getDrawCoords(q, r)
-                local vertices = hex:drawHexagon(x, y, hex.radius)
+                local vertices = hex:drawInsetHexagon(x, y, hex.radius, 0.92)
 
                 love.graphics.setColor(0.8, 0.2, 0.2, 0.2)
                 love.graphics.polygon("fill", vertices)
@@ -1359,7 +1393,8 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
             return false
         end
     end
-    local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, enemy.moveRange,
+    local effectiveRange = enemy.moveRange + (status.hasEntityStatus(enemy, "empowered") and 1 or 0)
+    local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effectiveRange,
         function(q, r) return not isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex) end, hex)
     return path ~= nil and #path > 0
 end
@@ -1561,7 +1596,7 @@ function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
         local q, r = key:match("^(%d+),(%d+)$")
         q, r = tonumber(q), tonumber(r)
         local x, y = getDrawCoords(q, r)
-        local vertices = hex:drawHexagon(x, y, hex.radius)
+        local vertices = hex:drawInsetHexagon(x, y, hex.radius, 0.92)
         love.graphics.setColor(0.9, 0.8, 0.2, 0.25)
         love.graphics.polygon("fill", vertices)
         love.graphics.setColor(0.9, 0.8, 0.2, 0.7)

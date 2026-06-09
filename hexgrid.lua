@@ -107,12 +107,25 @@ function HexGrid:getDistance(q1, r1, q2, r2)
 end
 
 function HexGrid:drawHexagon(x, y, radius)
-    local drawRadius = radius
     local vertices = {}
     for i = 0, 5 do
         local angle = math.rad(60 * i + 30)
-        local vx = x + math.cos(angle) * drawRadius
-        local vy = y + math.sin(angle) * drawRadius
+        local vx = x + math.cos(angle) * radius
+        local vy = y + math.sin(angle) * radius
+        table.insert(vertices, vx)
+        table.insert(vertices, vy)
+    end
+    return vertices
+end
+
+function HexGrid:drawInsetHexagon(x, y, radius, scale)
+    scale = scale or 0.92
+    local r = radius * scale
+    local vertices = {}
+    for i = 0, 5 do
+        local angle = math.rad(60 * i + 30)
+        local vx = x + math.cos(angle) * r
+        local vy = y + math.sin(angle) * r
         table.insert(vertices, vx)
         table.insert(vertices, vy)
     end

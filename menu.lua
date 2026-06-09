@@ -63,10 +63,10 @@ function menu.draw()
         love.graphics.printf(name, bx + 10, by + bh/2 - 8, bw - 20, "center")
     end
 
-    local squadStartY = mapStartY + #mapList * (bh + 10) + 30
+    local squadStartY = mapStartY + #mapList * (bh + 10) + 160
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(titleFont)
-    love.graphics.printf("Select Squad", 0, squadStartY - 24, w, "center")
+    love.graphics.printf("Select Squad", 0, squadStartY - 80, w, "center")
 
     local sbw, sbh = 200, 40
     local sbx = w/2 - sbw/2
@@ -116,7 +116,7 @@ function menu.mousepressed(x, y)
     end
 
     local sbw, sbh = 200, 40
-    local squadStartY = mapStartY + #mapList * (bh + 10) + 30
+    local squadStartY = mapStartY + #mapList * (bh + 10) + 160
     local sbx = logicalW/2 - sbw/2
 
     for i in ipairs(squads) do

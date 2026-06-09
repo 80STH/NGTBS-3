@@ -60,6 +60,7 @@ function renderer.draw(state)
                 fillR, fillG, fillB, fillA = 1, 0, 0, 1
                 scaleMod = 1.4
             end
+            local baseA = fillA
             if threatCount <= 2 then
                 local pulse = 0.7 + 0.3 * math.sin(t * (5 + threatCount * 3))
                 fillA = fillA * pulse
@@ -82,6 +83,10 @@ function renderer.draw(state)
                     hexRadius * 2 / hazardTex:getWidth() * scaleMod,
                     hexRadius * 2 / hazardTex:getHeight() * scaleMod)
                 love.graphics.setStencilTest()
+                love.graphics.setColor(fillR, fillG, fillB, 0.9)
+                love.graphics.setLineWidth(3)
+                love.graphics.polygon("line", vertices)
+                love.graphics.setLineWidth(1)
             end
         elseif info.flipDest then
             local pulse = 0.6 + 0.4 * math.sin(t * 4)
@@ -94,6 +99,22 @@ function renderer.draw(state)
     drawHexGrid(state, cellOverlays)
     ui.drawPreparedAttackHealthBars(hex, state.entities)
     ui.drawDigSites(hex, status.getAllDigSites())
+    if lightningWarning and lightningTargetQ >= 0 and lightningTargetR >= 0 then
+        local wx, wy = getDrawCoords(lightningTargetQ, lightningTargetR)
+        local verts = hex:drawInsetHexagon(wx, wy, hex.radius, 0.92)
+        love.graphics.setColor(1, 0.9, 0.2, 0.3)
+        love.graphics.polygon("fill", verts)
+        love.graphics.setColor(1, 0.9, 0.2, 0.8)
+        love.graphics.setLineWidth(3)
+        love.graphics.polygon("line", verts)
+        love.graphics.setLineWidth(1)
+        local ls = hex.radius * 0.4
+        love.graphics.setColor(1, 0.9, 0.2, 1)
+        love.graphics.setLineWidth(3)
+        local lx, ly = wx, wy
+        love.graphics.line(lx, ly - ls * 0.6, lx + ls * 0.25, ly - ls * 0.1, lx + ls * 0.05, ly + ls * 0.05, lx + ls * 0.3, ly + ls * 0.6)
+        love.graphics.setLineWidth(1)
+    end
     drawAllEntities(state)
     visual.draw()
 
@@ -316,7 +337,7 @@ function drawHexGrid(state, cellOverlays)
         local cellKey = cell.q .. "," .. cell.r
         local overlay = cellOverlays and cellOverlays[cellKey]
         if overlay then
-            local verts = hex:drawHexagon(cell.x, drawY + yOffset, hex.radius)
+            local verts = hex:drawInsetHexagon(cell.x, drawY + yOffset, hex.radius, 0.92)
             if overlay.fill then
                 love.graphics.setColor(overlay.fill[1], overlay.fill[2], overlay.fill[3], overlay.fill[4])
                 love.graphics.polygon("fill", verts)
@@ -339,12 +360,21 @@ function drawHexGrid(state, cellOverlays)
         if isCurrentActor then
             love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
             love.graphics.polygon("fill", insetVerts)
+            love.graphics.setColor(0.2, 0.8, 0.2, 0.9)
+            love.graphics.setLineWidth(3)
+            love.graphics.polygon("line", insetVerts)
         elseif isSelected then
             love.graphics.setColor(0.2, 0.4, 0.8, 0.5)
             love.graphics.polygon("fill", insetVerts)
+            love.graphics.setColor(0.2, 0.4, 0.8, 0.9)
+            love.graphics.setLineWidth(3)
+            love.graphics.polygon("line", insetVerts)
         elseif isHovered then
             love.graphics.setColor(0.5, 0.8, 0.3, 0.5)
             love.graphics.polygon("fill", insetVerts)
+            love.graphics.setColor(0.5, 0.8, 0.3, 0.9)
+            love.graphics.setLineWidth(3)
+            love.graphics.polygon("line", insetVerts)
         end
         love.graphics.setLineWidth(1)
     end
@@ -572,7 +602,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
                         end
                         if not hasAlly then
                             local x, y = getDrawCoords(q, r)
-                            local verts = hex:drawHexagon(x, y, hexRadius)
+                            local verts = hex:drawInsetHexagon(x, y, hexRadius, 0.92)
                             love.graphics.setColor(0.2, 0.8, 0.2, 0.15)
                             love.graphics.polygon("fill", verts)
                             love.graphics.setColor(0.2, 0.8, 0.2, 0.4)
@@ -587,7 +617,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
     if deploySelectedIdx and placedAllies[deploySelectedIdx] then
         local sel = placedAllies[deploySelectedIdx]
         local x, y = getDrawCoords(sel.q, sel.r)
-        local verts = hex:drawHexagon(x, y, hexRadius)
+        local verts = hex:drawInsetHexagon(x, y, hexRadius, 0.92)
         love.graphics.setColor(1, 1, 0, 0.3)
         love.graphics.polygon("fill", verts)
         love.graphics.setColor(1, 1, 0, 0.8)
