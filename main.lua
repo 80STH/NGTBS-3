@@ -34,6 +34,7 @@ testViewOffsetY = 0
 gamePhase = "menu"
 selectedMapPath = nil
 selectedSquad = nil
+difficultyModifier = 1
 unplacedAllies = {}
 placedAllies = {}
 deploySelectedIdx = nil
@@ -69,6 +70,7 @@ function syncStateToGlobals()
     pushAnimations = state.pushAnimations
     showEnemyOrder = state.showEnemyOrder
     dpiScale = state.dpiScale
+    difficultyModifier = state.difficultyModifier
     DEBUG_COMBAT = state.DEBUG_COMBAT
 end
 
@@ -101,6 +103,7 @@ function syncGlobalsToState()
     state.fireAppliedForTurnLimit = fireAppliedForTurnLimit
     state.pushAnimations = pushAnimations
     state.dpiScale = dpiScale
+    state.difficultyModifier = difficultyModifier
     state.showEnemyOrder = showEnemyOrder
 end
 

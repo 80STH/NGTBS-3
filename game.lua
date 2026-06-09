@@ -44,6 +44,39 @@ function restartGame(mapPath)
         end
     end
 
+    -- For map1, spawn 5 random enemies if none are present (user cleared the entity layer)
+    if mapPath:match("map1%.lua$") then
+        local occupiedSet = {}
+        for _, e in ipairs(entities) do
+            local k = e.q .. "," .. e.r
+            occupiedSet[k] = true
+        end
+        local candidates = {}
+        for q = 0, width - 1 do
+            for r = 0, height - 1 do
+                if hex:isActiveHex(q, r) then
+                    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+                    if terrain ~= "water" and not occupiedSet[q .. "," .. r] then
+                        table.insert(candidates, {q = q, r = r})
+                    end
+                end
+            end
+        end
+        for i = #candidates, 2, -1 do
+            local j = love.math.random(i)
+            candidates[i], candidates[j] = candidates[j], candidates[i]
+        end
+        local spawned = 0
+        for _, cell in ipairs(candidates) do
+            if spawned >= 5 then break end
+            local enemy = environment.createRandomEnemy(cell.q, cell.r)
+            table.insert(entities, enemy)
+            spawned = spawned + 1
+            print(string.format("  Spawned random enemy %s at (%d,%d)", enemy.name, cell.q, cell.r))
+        end
+        print(string.format("Spawned %d random enemies on map1", spawned))
+    end
+
     -- Setup deploy phase
     local skipDeploy = mapPath:match("test_polygon_[12]")
     if selectedSquad then

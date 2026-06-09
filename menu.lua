@@ -101,7 +101,30 @@ function menu.draw()
         love.graphics.printf(unitNames, sbx + 6, sby + 20, sbw - 12, "left")
     end
 
-    local bottomY = squadStartY + #squads * (sbh + 8) + 20
+    -- Difficulty slider
+    local slideY = squadStartY + #squads * (sbh + 8) + 20
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setFont(love.graphics.newFont(12))
+    love.graphics.printf("Difficulty Modifier", 0, slideY, w, "center")
+
+    local sw, sh = 260, 16
+    local sx = w/2 - sw/2
+    local sy = slideY + 22
+    local knobW = 12
+    local knobX = sx + (difficultyModifier - 1) / 31 * (sw - knobW)
+
+    love.graphics.setColor(0.3, 0.3, 0.4, 0.9)
+    love.graphics.rectangle("fill", sx, sy, sw, sh, 4)
+    love.graphics.setColor(0.4, 0.6, 0.8, 0.6)
+    love.graphics.rectangle("line", sx, sy, sw, sh, 4)
+    love.graphics.setColor(0.8, 0.4, 0.2, 0.9)
+    love.graphics.rectangle("fill", knobX, sy - 2, knobW, sh + 4, 4)
+
+    love.graphics.setColor(1, 1, 1, 0.9)
+    love.graphics.setFont(love.graphics.newFont(11))
+    love.graphics.printf(tostring(difficultyModifier), 0, sy + sh + 4, w, "center")
+
+    local bottomY = sy + sh + 24
     love.graphics.setFont(love.graphics.newFont(12))
     love.graphics.setColor(0.5, 0.5, 0.5, 1)
     love.graphics.printf("Click a map to start  |  R to restart", 0, bottomY, w, "center")
@@ -131,6 +154,17 @@ function menu.mousepressed(x, y)
             selectedSquad = i
             return true
         end
+    end
+
+    -- Difficulty slider
+    local slideY = squadStartY + #squads * (sbh + 8) + 20
+    local sw, sh = 260, 16
+    local sx = logicalW/2 - sw/2
+    local sy = slideY + 22
+    if y >= sy - 4 and y <= sy + sh + 8 and x >= sx and x <= sx + sw then
+        local relX = (x - sx) / sw
+        difficultyModifier = math.max(1, math.min(32, math.floor(relX * 31) + 1))
+        return true
     end
 
     return false

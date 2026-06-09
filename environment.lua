@@ -38,7 +38,7 @@ local gidToEntity = {
     [29] = { type = "building", name = "Tower",         health = 1, globalHealthCost = 1, isObjective = true },
     [60] = { type = "character", name = "Brute",    isPlayable = false, maxHealth = 5, moveRange = 2, attacks = "brute" },
     [62] = { type = "character", name = "Lancer",   isPlayable = false, maxHealth = 4, moveRange = 3, attacks = "lancer" },
-    [63] = { type = "character", name = "BogShaman", isPlayable = false, maxHealth = 3, moveRange = 2, attacks = "bogshaman" },
+    [80] = { type = "character", name = "BogShaman", isPlayable = false, maxHealth = 3, moveRange = 2, attacks = "bogshaman" },
     [23] = { type = "character", name = "Raider",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "raider" },
     [28] = { type = "character", name = "Dervish",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "dervish" },
     [66] = { type = "character", name = "Crusher",  isPlayable = false, maxHealth = 4, moveRange = 2, attacks = "crusher" },
@@ -321,6 +321,11 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         actor.sprite = entitySprite
         if not def.isPlayable then
             environment.enemySpriteCache[def.name] = entitySprite
+        end
+        -- Apply level to non-playable characters
+        if not def.isPlayable then
+            local level = environment.getRandomLevel()
+            environment.applyLevelToEnemy(actor, level)
         end
         -- Ауры для врагов
         if def.attacks == "bogshaman" then
@@ -863,7 +868,13 @@ function environment.createEnemyByType(enemyType, q, r)
         moveRange = 3
     end
 
-    local sprite = environment.enemySpriteCache[enemyType]
+    local enemyTypeToGid = {
+        Ghost = 26, Zombie = 25, Lich = 27,
+        Brute = 60, Lancer = 62, BogShaman = 80,
+        Raider = 23, Dervish = 28, Crusher = 66,
+    }
+    local gid = enemyTypeToGid[enemyType]
+    local sprite = gid and environment.unitSpriteCache[gid]
     if not sprite then
         -- Fallback: создаём цветной круг (16x16, scale 6 -> 96px на экране)
         local size = 16
@@ -889,6 +900,8 @@ function environment.createEnemyByType(enemyType, q, r)
     if hasAura then
         entity.aura = hasAura
     end
+    local level = environment.getRandomLevel()
+    environment.applyLevelToEnemy(entity, level)
     return entity
 end
 
@@ -897,6 +910,60 @@ function environment.createRandomEnemy(q, r)
     local types = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
     local rnd = love.math.random(1, #types)
     return environment.createEnemyByType(types[rnd], q, r)
+end
+
+-- ============================================================
+-- LEVEL SYSTEM
+-- ============================================================
+-- Returns a level (1-4) based on difficultyModifier (1-32)
+function environment.getRandomLevel(difficultyModifier)
+    difficultyModifier = difficultyModifier or _G.difficultyModifier or 1
+    local pool
+    if difficultyModifier <= 8 then
+        pool = {1, 1, 2}
+    elseif difficultyModifier <= 16 then
+        pool = {1, 2, 3}
+    elseif difficultyModifier <= 24 then
+        pool = {2, 3, 4}
+    elseif difficultyModifier <= 31 then
+        pool = {3, 4}
+    else
+        pool = {4}
+    end
+    return pool[love.math.random(1, #pool)]
+end
+
+-- Applies level stat modifiers to an enemy entity
+function environment.applyLevelToEnemy(entity, level)
+    local levelNames = {[1] = "Weak", [2] = "Regular", [3] = "Hardened", [4] = "Leader"}
+    if levelNames[level] then
+        entity.name = levelNames[level] .. " " .. entity.name
+    end
+
+    if not level or level <= 1 then return end
+
+    if level >= 2 then
+        entity.maxHealth = entity.maxHealth + 1
+        entity.health = entity.health + 1
+        entity.moveRange = entity.moveRange + 1
+    end
+
+    if level >= 3 then
+        for _, at in ipairs(entity.attacks) do
+            at.attack.damage = (at.attack.damage or 1) + 2
+        end
+    end
+
+    if level >= 4 then
+        entity.maxHealth = entity.maxHealth + 3
+        entity.health = entity.health + 3
+        for _, at in ipairs(entity.attacks) do
+            at.attack.damage = (at.attack.damage or 1) + 2
+        end
+        entity.moveRange = entity.moveRange + 2
+    end
+
+    entity.level = level
 end
 
 return environment

@@ -20,7 +20,7 @@ global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth"
 local function getDropdownHeader()
     local screenW = love.graphics.getWidth()
     local w = 145
-    local x = screenW - w - 200
+    local x = screenW - w - 10
     return { x = x, y = 10, w = w, h = 26 }
 end
 

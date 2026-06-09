@@ -22,9 +22,9 @@
    eJyVzjEOACAIQ1EYGOn9j6sDJqapqMMfjE8kzCwqzFwU1O5Q5YPtPM/0MnmxLs5Jf50sz1b+16p9O49Hqxx70Nt1PwC/jgL7
   </data>
  </layer>
- <layer id="2" name="entities" width="11" height="11" visible="0">
+ <layer id="2" name="entities" width="11" height="11">
   <data encoding="base64" compression="zlib">
-   eJxzZWBgcEXC3FiwK5EYl1opIGYHYkkkMTks6tlIMJsHyWxXqNnsUHF5JPUwwI5DP7rZDEjugJmtBBVHV2uNJA7DkljUIZsNs5cdh5nYwoONgDpC4QUAz9sW/g==
+   eJxzZWBgcEXC3FiwK5EYl1oQYIfSyGLo6tlIMJsHyRxkO3jQzGZAksOmH91sBiR3MKCZga7WGs1PrjjUIcvB7GUnoBY5PNgIqCMUXgDC1BYG
   </data>
  </layer>
  <layer id="3" name="status" width="11" height="11" visible="0">
