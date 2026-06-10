@@ -62,9 +62,11 @@ end
 function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     if not hex:isActiveHex(targetQ, targetR) then return false end
     
-    -- Вода непроходима
+    -- Вода непроходима (кроме летающих)
     if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
-        return false
+        if not (actor and actor.flying) then
+            return false
+        end
     end
     
     -- Клетка не должна быть занята (врагом или препятствием)
@@ -74,8 +76,14 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     
     -- Поиск пути с ограничением по дальности и блокировками
     local effectiveRange = ui.getEffectiveMoveRange(actor, entities, hex)
+    local isBlockedFn
+    if actor.flying then
+        isBlockedFn = function(q, r) return not hex:isActiveHex(q, r) end
+    else
+        isBlockedFn = function(q, r) return isPositionOccupied(q, r, actor) end
+    end
     local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, effectiveRange,
-        function(q, r) return isPositionOccupied(q, r, actor) end, hex)
+        isBlockedFn, hex)
     
     return path ~= nil and #path > 0
 end
@@ -1764,7 +1772,9 @@ end
 function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMap, hex)
     if not hex:isActiveHex(targetQ, targetR) then return false end
     if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
-        return false
+        if not (enemy and enemy.flying) then
+            return false
+        end
     end
     -- Клетка не должна быть занята (союзником или врагом)
     for _, e in ipairs(entities) do
@@ -1773,14 +1783,29 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
         end
     end
     local effectiveRange = ui.getEffectiveMoveRange(enemy, entities, hex)
+    local isBlockedFn
+    if enemy.flying then
+        isBlockedFn = function(q, r) return not hex:isActiveHex(q, r) end
+    else
+        isBlockedFn = function(q, r) return not isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex) end
+    end
     local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effectiveRange,
-        function(q, r) return not isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex) end, hex)
+        isBlockedFn, hex)
     return path ~= nil and #path > 0
 end
 
 function isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
     if not hex:isActiveHex(q, r) then return false end
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then return false end
+    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
+        if enemy and enemy.flying then
+            -- ok
+        else
+            return false
+        end
+    end
+    if enemy and enemy.flying then
+        return true
+    end
     for _, e in ipairs(entities) do
         if e ~= enemy and e.q == q and e.r == r then
             return false  -- любые сущности (союзники, другие враги, здания) блокируют путь

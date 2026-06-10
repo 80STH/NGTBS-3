@@ -327,6 +327,9 @@ local function createEntityFromGID(map, gid, gridX, gridY)
             local level = environment.getRandomLevel()
             environment.applyLevelToEnemy(actor, level)
         end
+        if def.name == "Ghost" then
+            actor.flying = true
+        end
         -- Ауры для врагов
         if def.attacks == "bogshaman" then
             actor.aura = { type = "slow", radius = 1 }
@@ -897,6 +900,9 @@ function environment.createEnemyByType(enemyType, q, r)
     end
 
     local entity = Entity.new(name, Entity.TYPES.CHARACTER, q, r, maxHealth, false, moveRange, sprite, nil, attacks)
+    if enemyType == "Ghost" then
+        entity.flying = true
+    end
     if hasAura then
         entity.aura = hasAura
     end

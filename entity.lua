@@ -52,6 +52,9 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     -- Может ходить по воде
     self.waterWalker = false
     
+    -- Летающий юнит (игнорирует препятствия и воду при поиске пути)
+    self.flying = false
+    
     --  НЕПОДВИЖНОСТЬ: препятствия и здания не отталкиваются
     self.isPushable = (type == Entity.TYPES.CHARACTER)
     

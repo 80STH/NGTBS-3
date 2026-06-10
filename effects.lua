@@ -32,8 +32,8 @@ function effects.applyAllCellEffects(entity, q, r, terrainMap, entities, globalH
         print(string.format(" %s covered in acid from cell, ground acid consumed!", entity.name))
     end
 
-    -- 4. Утопление в воде (только для персонажей, не для препятствий)
-    if terrain == "water" and entity:isCharacter() then
+    -- 4. Утопление в воде (только для персонажей, не для препятствий, не для летающих)
+    if terrain == "water" and entity:isCharacter() and not entity.flying then
         print(string.format(" %s drowns in water!", entity.name))
         if sounds and sounds.collision then sounds.collision:play() end
         entity.health = 0
@@ -77,8 +77,8 @@ function effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
             end
             -- ====================================
 
-            -- Проверка утопления (если персонаж на воде и не мёртв)
-            if entity:isCharacter() then
+            -- Проверка утопления (если персонаж на воде и не мёртв, не летающий)
+            if entity:isCharacter() and not entity.flying then
                 local terrain = terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] or "grass"
                 if terrain == "water" and entity.health > 0 then
                     print(string.format(" %s drowns at end of turn!", entity.name))

@@ -166,7 +166,7 @@ function isPositionOccupied(q, r, movingEntity)
         return true
     end
     if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
-        if movingEntity and movingEntity.waterWalker then
+        if movingEntity and (movingEntity.waterWalker or movingEntity.flying) then
             -- ok
         else
             return true
@@ -313,11 +313,14 @@ end
 function isCellPassable(q, r, movingEntity)
     if not hex:isActiveHex(q, r) then return false end
     if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
-        if movingEntity and movingEntity.waterWalker then
+        if movingEntity and (movingEntity.waterWalker or movingEntity.flying) then
             -- ok
         else
             return false
         end
+    end
+    if movingEntity and movingEntity.flying then
+        return true
     end
     for _, e in ipairs(entities) do
         if e ~= movingEntity and e.q == q and e.r == r then

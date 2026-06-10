@@ -582,8 +582,14 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
     local effRange = ai.getEffectiveMoveRange(enemy, hex, entities)
     if distance > effRange then return false end
 
+    local isBlockedFn
+    if enemy.flying then
+        isBlockedFn = function(q, r) return not hex:isActiveHex(q, r) end
+    else
+        isBlockedFn = function(q, r) return ai.isPositionOccupied(q, r, enemy, entities, hex) end
+    end
     local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effRange,
-        function(q, r) return ai.isPositionOccupied(q, r, enemy, entities, hex) end, hex)
+        isBlockedFn, hex)
 
     if path and #path > 0 and #path <= effRange then
         enemy.path = path
@@ -599,7 +605,7 @@ function ai.isPositionOccupied(q, r, movingEntity, entities, hex)
         return true
     end
     if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
-        if movingEntity and movingEntity.waterWalker then
+        if movingEntity and (movingEntity.waterWalker or movingEntity.flying) then
             -- ok
         else
             return true
