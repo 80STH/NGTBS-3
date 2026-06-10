@@ -88,6 +88,23 @@ function renderer.draw(state)
                 love.graphics.polygon("line", vertices)
                 love.graphics.setLineWidth(1)
             end
+        elseif info.threatDirection then
+            local pulse = 0.5 + 0.5 * math.sin(t * 5)
+            info.draw = function(vertices, ox, oy)
+                love.graphics.stencil(function()
+                    love.graphics.polygon("fill", vertices)
+                end, "replace", 1)
+                love.graphics.setStencilTest("greater", 0)
+                love.graphics.setColor(1, 0.3, 0.2, 0.5 + 0.3 * pulse)
+                love.graphics.draw(hazardTex, ox - hexRadius, oy - hexRadius, 0,
+                    hexRadius * 2 / hazardTex:getWidth(),
+                    hexRadius * 2 / hazardTex:getHeight())
+                love.graphics.setStencilTest()
+                love.graphics.setColor(1, 0.3, 0.2, 0.4 + 0.3 * pulse)
+                love.graphics.setLineWidth(2)
+                love.graphics.polygon("line", vertices)
+                love.graphics.setLineWidth(1)
+            end
         elseif info.flipDest then
             local pulse = 0.6 + 0.4 * math.sin(t * 4)
             cellOverlays[key] = {fill = {0.2, 0.7, 1, 0.25 * pulse}, line = {0.2, 0.7, 1, 0.8 * pulse}}
@@ -169,6 +186,11 @@ function renderer.draw(state)
             end
         end
         love.graphics.setLineWidth(1)
+    end
+    for _, entity in ipairs(state.entities) do
+        if entity:isCharacter() and not entity.isPlayable and entity.hasPreparedAttack and entity.health > 0 then
+            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
+        end
     end
     drawAllEntities(state)
     visual.draw()
@@ -301,12 +323,6 @@ function renderer.draw(state)
         elseif hex:isActiveHex(hex.hoverQ, hex.hoverR) then
             local terrain = state.terrainMap and state.terrainMap[hex.hoverQ] and state.terrainMap[hex.hoverQ][hex.hoverR] or "grass"
             ui.drawCellTooltip(hex.hoverQ, hex.hoverR, terrain, hex)
-        end
-    end
-
-    for _, entity in ipairs(state.entities) do
-        if entity:isCharacter() and not entity.isPlayable and entity.hasPreparedAttack and entity.health > 0 then
-            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities, state.terrainMap)
         end
     end
 

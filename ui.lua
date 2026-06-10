@@ -354,6 +354,27 @@ function ui.collectPreparedAttackOverlays(hex, entities, out)
     for _, info in pairs(out) do
         info.threatCount = math.min(info.threatCount, 3)
     end
+    -- Collect direction hatching cells for each enemy's prepared attack
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.preparedAttack then
+            local attack = e.preparedAttack
+            if attack.getAffectedCells and e.preparedTargetOffset then
+                local targetQ, targetR = hex_utils.applyCubeDiff(
+                    e.q, e.r,
+                    e.preparedTargetOffset.dx,
+                    e.preparedTargetOffset.dy,
+                    e.preparedTargetOffset.dz
+                )
+                if hex:isActiveHex(targetQ, targetR) then
+                    local cells = attack:getAffectedCells(e, targetQ, targetR, hex, entities)
+                    for _, c in ipairs(cells) do
+                        local key = c.q .. "," .. c.r
+                        if not out[key] then out[key] = {threatDirection = true} end
+                    end
+                end
+            end
+        end
+    end
 end
 
 -- Collects Flip destination overlays into out table when flipTargetActor is selected
@@ -1523,7 +1544,7 @@ end
 
 
 
-function ui.drawPreparedAttackDirection(hex, enemy, time, entities, terrainMap)
+function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
     if not enemy.hasPreparedAttack then return end
     local attack = enemy.preparedAttack
     if not attack then return end
@@ -1620,30 +1641,6 @@ end
             local pulse = 0.5 + 0.5 * math.sin(time * 8)
             local alpha = 0.5 + 0.3 * pulse
             ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.2, 0.2, alpha, enemy.q, enemy.r, targetQ, targetR)
-            -- Штриховка всех поражённых клеток
-            local cells = attack:getAffectedCells(enemy, targetQ, targetR, hex, entities)
-            local hazardTex = ui.getHazardTexture()
-            local pulse = 0.5 + 0.5 * math.sin(time * 5)
-            for _, c in ipairs(cells) do
-                local isWater = terrainMap and terrainMap[c.q] and terrainMap[c.q][c.r] == "water"
-                if not isWater then
-                    local cx, cy = getDrawCoords(c.q, c.r)
-                    local vertices = hex:drawInsetHexagon(cx, cy, hex.radius, 0.92)
-                    love.graphics.stencil(function()
-                        love.graphics.polygon("fill", vertices)
-                    end, "replace", 1)
-                    love.graphics.setStencilTest("greater", 0)
-                    love.graphics.setColor(1, 0.3, 0.2, 0.5 + 0.3 * pulse)
-                    love.graphics.draw(hazardTex, cx - hex.radius, cy - hex.radius, 0,
-                                       hex.radius * 2 / hazardTex:getWidth(),
-                                       hex.radius * 2 / hazardTex:getHeight())
-                    love.graphics.setStencilTest()
-                    love.graphics.setColor(1, 0.3, 0.2, 0.4 + 0.3 * pulse)
-                    love.graphics.setLineWidth(2)
-                    love.graphics.polygon("line", vertices)
-                    love.graphics.setLineWidth(1)
-                end
-            end
         end
         return
     end
