@@ -26,6 +26,11 @@ require("game")
 
 pushAnimations = state.pushAnimations
 dpiScale = 1
+baseW = 1920
+baseH = 1080
+gameScale = 1
+gameOffsetX = 0
+gameOffsetY = 0
 logicalW = 0
 logicalH = 0
 screenShake = { timer = 0, intensity = 6, duration = 0.3 }
@@ -39,6 +44,10 @@ unplacedAllies = {}
 placedAllies = {}
 deploySelectedIdx = nil
 allyPanelButtons = {}
+
+function screenToGame(sx, sy)
+    return (sx - gameOffsetX) / gameScale, (sy - gameOffsetY) / gameScale
+end
 
 function syncStateToGlobals()
     entities = state.entities
@@ -69,7 +78,6 @@ function syncStateToGlobals()
     fireAppliedForTurnLimit = state.fireAppliedForTurnLimit
     pushAnimations = state.pushAnimations
     showEnemyOrder = state.showEnemyOrder
-    dpiScale = state.dpiScale
     difficultyModifier = state.difficultyModifier
     DEBUG_COMBAT = state.DEBUG_COMBAT
 end
@@ -102,13 +110,11 @@ function syncGlobalsToState()
     state.decayMessageTimer = decayMessageTimer
     state.fireAppliedForTurnLimit = fireAppliedForTurnLimit
     state.pushAnimations = pushAnimations
-    state.dpiScale = dpiScale
     state.difficultyModifier = difficultyModifier
     state.showEnemyOrder = showEnemyOrder
 end
 
 function love.load()
-    dpiScale = love.window.getDPIScale()
     sti = require 'libraries/sti'
     maxTurns = 5
     environment.loadUnitSprites()
@@ -135,6 +141,7 @@ function love.load()
 
     showEnemyOrder = false
     gamePhase = "menu"
+    gameCanvas = love.graphics.newCanvas(baseW, baseH)
 end
 
 function getDrawCoords(q, r)
@@ -149,7 +156,7 @@ end
 
 function love.mousepressed(x, y, button)
     if button ~= 1 then return end
-    local lx, ly = x / dpiScale, y / dpiScale
+    local lx, ly = screenToGame(x, y)
     if gamePhase == "menu" then
         menu.mousepressed(lx, ly)
     else
@@ -158,7 +165,8 @@ function love.mousepressed(x, y, button)
 end
 
 function love.mousereleased(x, y, button)
-    input.mousereleased(x / dpiScale, y / dpiScale, button)
+    local lx, ly = screenToGame(x, y)
+    input.mousereleased(lx, ly, button)
 end
 
 function isPositionOccupied(q, r, movingEntity)
@@ -191,9 +199,7 @@ end
 
 function love.update(dt)
     if gamePhase == "deploy" then
-        local mx, my = love.mouse.getPosition()
-        mx = mx / dpiScale
-        my = my / dpiScale
+        local mx, my = screenToGame(love.mouse.getPosition())
         local hq, hr = hex:pixelToHex(mx, my)
         if hex and hex:isActiveHex(hq, hr) then
             hex.hoverQ, hex.hoverR = hq, hr
@@ -242,9 +248,7 @@ function love.update(dt)
     turnManager.update(dt)
     objectives.update(entities)
 
-    local mx, my = love.mouse.getPosition()
-    mx = mx / dpiScale
-    my = my / dpiScale
+    local mx, my = screenToGame(love.mouse.getPosition())
     local hq, hr = hex:pixelToHex(mx, my)
     if hex:isActiveHex(hq, hr) then
         hex.hoverQ, hex.hoverR = hq, hr
@@ -259,17 +263,44 @@ function love.update(dt)
 end
 
 function love.resize(w, h)
-    dpiScale = love.window.getDPIScale()
     if hex then
-        hex:centerOnScreen(w / dpiScale, h / dpiScale)
+        hex:centerOnScreen(baseW, baseH)
     end
 end
 
 function love.draw()
+    local screenW = love.graphics.getWidth()
+    local screenH = love.graphics.getHeight()
+    gameScale = math.min(screenW / baseW, screenH / baseH)
+    local canvasW = baseW * gameScale
+    local canvasH = baseH * gameScale
+    gameOffsetX = (screenW - canvasW) / 2
+    gameOffsetY = (screenH - canvasH) / 2
+    logicalW = baseW
+    logicalH = baseH
+
+    -- letterbox bars
+    love.graphics.setColor(0, 0, 0, 1)
+    if gameOffsetX > 0 then
+        love.graphics.rectangle("fill", 0, 0, gameOffsetX, screenH)
+        love.graphics.rectangle("fill", gameOffsetX + canvasW, 0, gameOffsetX, screenH)
+    end
+    if gameOffsetY > 0 then
+        love.graphics.rectangle("fill", gameOffsetX, 0, canvasW, gameOffsetY)
+        love.graphics.rectangle("fill", gameOffsetX, gameOffsetY + canvasH, canvasW, gameOffsetY)
+    end
+
+    -- render to canvas at native resolution
+    love.graphics.setCanvas(gameCanvas)
+    love.graphics.clear()
     love.graphics.push()
-    love.graphics.scale(dpiScale)
-    logicalW = love.graphics.getWidth() / dpiScale
-    logicalH = love.graphics.getHeight() / dpiScale
+
+    if screenShake.timer > 0 and gamePhase ~= "menu" and gamePhase ~= "deploy" then
+        local t = screenShake.timer / screenShake.duration
+        local ease = (1 - t) * (1 - t)
+        local offsetY = screenShake.intensity * ease * math.sin(t * math.pi * 12)
+        love.graphics.translate(0, offsetY)
+    end
 
     if gamePhase == "menu" then
         menu.draw()
@@ -277,17 +308,16 @@ function love.draw()
         syncGlobalsToState()
         renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
     else
-        if screenShake.timer > 0 then
-            local t = screenShake.timer / screenShake.duration
-            local ease = (1 - t) * (1 - t)
-            local offsetY = screenShake.intensity * ease * math.sin(t * math.pi * 12)
-            love.graphics.translate(0, offsetY)
-        end
         syncGlobalsToState()
         renderer.draw(state)
     end
 
     love.graphics.pop()
+    love.graphics.setCanvas()
+
+    -- draw canvas to screen
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(gameCanvas, gameOffsetX, gameOffsetY, 0, gameScale, gameScale)
 end
 
 function getEnemyAttackOrder(entities, turnState)
@@ -340,6 +370,11 @@ function isCellOccupiedForStop(q, r, movingEntity)
 end
 
 function love.keypressed(key)
+    if key == "f11" then
+        local fs = love.window.getFullscreen()
+        love.window.setFullscreen(not fs, "desktop")
+        return
+    end
     if gamePhase == "menu" then
         menu.keypressed(key)
     else

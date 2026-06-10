@@ -266,9 +266,7 @@ function renderer.draw(state)
         end
     end
 
-    local mx, my = love.mouse.getPosition()
-    mx = mx / state.dpiScale
-    my = my / state.dpiScale
+    local mx, my = screenToGame(love.mouse.getPosition())
 
     ui.drawUndoButton(state.actionHistory, state.maxUndoCount, state.selectedActor)
     ui.drawEndTurnButton(state.turnState, state.entities)
@@ -710,9 +708,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
         love.graphics.print(ally.name, panelX + 12, ty)
     end
 
-    local mx, my = love.mouse.getPosition()
-    mx = mx / state.dpiScale
-    my = my / state.dpiScale
+    local mx, my = screenToGame(love.mouse.getPosition())
 
     local infoY = panelY + panelH + 8
     love.graphics.setColor(0.8, 0.8, 0.8, 1)

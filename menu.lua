@@ -50,9 +50,7 @@ function menu.draw()
     local mapStartY = h * 0.20
     local bx = w/2 - bw/2
 
-    local mx, my = love.mouse.getPosition()
-    mx = mx / dpiScale
-    my = my / dpiScale
+    local mx, my = screenToGame(love.mouse.getPosition())
 
     for i, mapPath in ipairs(mapList) do
         local by = mapStartY + (i - 1) * (bh + 10)

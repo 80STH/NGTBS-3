@@ -18,9 +18,8 @@ global_abilities.dropdownOpen = false
 global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay"}
 
 local function getDropdownHeader()
-    local screenW = love.graphics.getWidth()
     local w = 145
-    local x = screenW - w - 10
+    local x = logicalW - w - 10
     return { x = x, y = 10, w = w, h = 26 }
 end
 
@@ -179,7 +178,6 @@ function global_abilities.drawAbilityButton(self, mx, my, state, cfg)
     local available = (state.turnState.phase == "player" and not self.hasBeenUsed)
     local x, y, w, h = self.button.x, self.button.y, self.button.width, self.button.height
     local buttonFont = love.graphics.newFont(11)
-    local logicalW = love.graphics.getWidth()
 
     local cr, cg, cb = cfg.color[1], cfg.color[2], cfg.color[3]
     love.graphics.setColor(available and cr or 0.5, available and cg or 0.5, available and cb or 0.5, isActive and 0.5 or 0.8)

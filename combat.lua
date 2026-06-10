@@ -468,10 +468,14 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     if secondTarget and secondTarget.isPushable ~= false and secondHex then
         local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
         self:pushTargetToHex(secondTarget, secondHex.q, secondHex.r, pushQ, pushR, hex, entities, sounds)
-        secondTarget.q = pushQ
-        secondTarget.r = pushR
-        secondTarget.currentDrawX = nil
-        secondTarget.currentDrawY = nil
+        -- Only update position immediately if target cell was free (no occupant, not edge)
+        local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
+        if hex:isActiveHex(pushQ, pushR) and not occupant then
+            secondTarget.q = pushQ
+            secondTarget.r = pushR
+            secondTarget.currentDrawX = nil
+            secondTarget.currentDrawY = nil
+        end
     end
     if firstTarget.isPushable ~= false then
         self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, entities, sounds)

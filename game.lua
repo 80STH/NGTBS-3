@@ -25,7 +25,7 @@ function restartGame(mapPath)
         config.CENTER_Q,
         config.CENTER_R
     )
-    hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
+    hex:centerOnScreen(baseW, baseH)
 
     status.initHexStatuses(hexStatuses)
 
@@ -106,7 +106,6 @@ function restartGame(mapPath)
     hex.hoverR = -1
 
     global_abilities.reset()
-    dpiScale = love.window.getDPIScale()
 
     flipTargetActor = nil
     vortexTargetCell = nil
