@@ -41,6 +41,20 @@ function effects.applyAllCellEffects(entity, q, r, terrainMap, entities, globalH
         died = true
     end
 
+    -- 5. Глубокая вода (уничтожает всех юнитов, включая летающих)
+    if not entity.isHazard then
+        for _, e in ipairs(entities) do
+            if e.isHazard and e.q == q and e.r == r then
+                print(string.format(" %s destroyed by deep water!", entity.name))
+                if sounds and sounds.collision then sounds.collision:play() end
+                entity.health = 0
+                entity:startDeath()
+                died = true
+                break
+            end
+        end
+    end
+
     return died
 end
 
@@ -85,6 +99,19 @@ function effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
                     if sounds and sounds.collision then sounds.collision:play() end
                     entity.health = 0
                     entity:startDeath()
+                end
+            end
+
+            -- Глубокая вода в конце хода (уничтожает всех, включая летающих)
+            if not entity.isHazard and entity.health > 0 then
+                for _, e in ipairs(entities) do
+                    if e.isHazard and e.q == entity.q and e.r == entity.r then
+                        print(string.format(" %s destroyed by deep water at end of turn!", entity.name))
+                        if sounds and sounds.collision then sounds.collision:play() end
+                        entity.health = 0
+                        entity:startDeath()
+                        break
+                    end
                 end
             end
         end

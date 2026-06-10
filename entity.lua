@@ -55,6 +55,12 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     -- Летающий юнит (игнорирует препятствия и воду при поиске пути)
     self.flying = false
     
+    -- Неразрушимая сущность (игнорирует весь урон)
+    self.indestructible = false
+    
+    -- Опасная зона (не блокирует движение, но убивает зашедших)
+    self.isHazard = false
+    
     --  НЕПОДВИЖНОСТЬ: препятствия и здания не отталкиваются
     self.isPushable = (type == Entity.TYPES.CHARACTER)
     
@@ -107,6 +113,9 @@ end
 
 -- Применить урон
 function Entity:takeDamage(damage, globalHealth)
+    if self.indestructible then
+        return false
+    end
     if self.maxDamagePerHit then
         damage = math.min(damage, self.maxDamagePerHit)
     end

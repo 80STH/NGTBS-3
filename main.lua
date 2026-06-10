@@ -173,8 +173,10 @@ function isPositionOccupied(q, r, movingEntity)
         end
     end
     for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r then
-            return true
+        if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
+            if not (e:isCharacter() and e.isPlayable == movingEntity.isPlayable) then
+                return true
+            end
         end
     end
     return false
@@ -323,8 +325,8 @@ function isCellPassable(q, r, movingEntity)
         return true
     end
     for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r then
-            if not e.isPlayable then
+        if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
+            if not (e:isCharacter() and e.isPlayable == movingEntity.isPlayable) then
                 return false
             end
         end
@@ -335,7 +337,7 @@ end
 function isCellOccupiedForStop(q, r, movingEntity)
     if not hex:isActiveHex(q, r) then return true end
     for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r then
+        if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
             return true
         end
     end

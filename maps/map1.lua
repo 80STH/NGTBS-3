@@ -103,7 +103,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJyVzjEOACAIQ1EYGOn9j6sDJqapqMMfjE8kzCwqzFwU1O5Q5YPtPM/0MnmxLs5Jf50sz1b+16p9O49Hqxx70Nt1PwC/jgL7"
+      data = "eJyVziEOADAIA0AQSPr/586whDTAmKjqlWAiYhFtYpTcIeILO3k2GsYfNntNu64DuXwbhf+11b+Tx9JWjj1oe/sDT24CrQ=="
     },
     {
       type = "tilelayer",
@@ -114,7 +114,7 @@ return {
       id = 2,
       name = "entities",
       class = "",
-      visible = true,
+      visible = false,
       opacity = 1,
       offsetx = 0,
       offsety = 0,
@@ -123,7 +123,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJxzZWBgcEXC3FiwK5EYl1oQYIfSyGLo6tlIMJsHyRxkO3jQzGZAksOmH91sBiR3MKCZga7WGs1PrjjUIcvB7GUnoBY5PNgIqCMUXgDC1BYG"
+      data = "eJyFj0EKwCAMBLeXeKggfU/P+/8vtYEIS4ytsATWYaIEwMh4cxZhyig6frB+WszZI/HO2cab3c528czZop9u5w65U1/H6r6CN6xuFOyd/sSCo/CQve2HpbzDNpzyOco+Yi4S8A=="
     },
     {
       type = "tilelayer",

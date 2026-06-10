@@ -30,7 +30,9 @@ local gidToEntity = {
     [44] = { type = "character", name = "Divided",  isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "none" },
     [45] = { type = "character", name = "Divider",  isPlayable = true,  maxHealth = 4, moveRange = 4, attacks = "divider" },
     [68] = { type = "character", name = "AttackTest", isPlayable = true, maxHealth = 10, moveRange = 6, attacks = "all" },
-    [11] = { type = "obstacle",  name = "SuperMountain", health = 999 },
+    [11] = { type = "obstacle",  name = "SuperMountain", indestructible = true },
+    [15] = { type = "obstacle",  name = "MountainSlope", indestructible = true, noCollisionDamage = true },
+    [17] = { type = "obstacle",  name = "DeepWater", isHazard = true },
     [12] = { type = "building",  name = "SmallBuilding", health = 1, globalHealthCost = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2, globalHealthCost = 2 },
     [6] = { type = "obstacle",  name = "WeakMountain",  health = 2, maxDamagePerHit = 1 },
@@ -235,6 +237,18 @@ local function generateCustomSprite(name, w, h)
         love.graphics.polygon("fill", w/4, h-4, w/2, h-1, w*3/4, h-4)
         love.graphics.setColor(1, 0.7, 0.3)
         love.graphics.circle("fill", w/2, h/2, 2)
+    elseif name == "MountainSlope" then
+        love.graphics.setColor(0.55, 0.5, 0.45)
+        love.graphics.polygon("fill", 0, h, w*0.6, h*0.2, w, h)
+        love.graphics.setColor(0.65, 0.6, 0.55)
+        love.graphics.polygon("fill", 0, h, w*0.6, h*0.2, w*0.6, h)
+        love.graphics.setColor(0.4, 0.35, 0.3)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+    elseif name == "DeepWater" then
+        love.graphics.setColor(0.1, 0.1, 0.4, 1)
+        love.graphics.rectangle("fill", 0, 0, w, h)
+        love.graphics.setColor(0.2, 0.2, 0.6, 0.6)
+        love.graphics.ellipse("fill", w*0.3, h*0.3, w*0.2, h*0.1)
 
     end
 
@@ -251,7 +265,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
     local tileHeight = map.tileheight or 32
     local entitySprite
 
-    if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Ship" or def.name == "Tower" then
+        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Ship" or def.name == "Tower" or def.name == "MountainSlope" or def.name == "DeepWater" then
         entitySprite = generateCustomSprite(def.name, tileWidth, tileHeight)
     else
         entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)
@@ -337,9 +351,13 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         return actor
 
     elseif def.type == "obstacle" then
-        local obstacle = Entity.new(def.name, Entity.TYPES.OBSTACLE, gridX, gridY, def.health, false, 0, nil, nil, {})
+        local health = def.health or 999
+        local obstacle = Entity.new(def.name, Entity.TYPES.OBSTACLE, gridX, gridY, health, false, 0, nil, nil, {})
         obstacle.sprite = entitySprite
         if def.maxDamagePerHit then obstacle.maxDamagePerHit = def.maxDamagePerHit end
+        if def.indestructible then obstacle.indestructible = true end
+        if def.noCollisionDamage then obstacle.noCollisionDamage = true end
+        if def.isHazard then obstacle.isHazard = true end
         return obstacle
     elseif def.type == "building" then
         local building = Entity.new(def.name, Entity.TYPES.BUILDING, gridX, gridY, def.health, false, (def.moveRange or 0), nil, nil, {})

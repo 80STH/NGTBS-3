@@ -105,6 +105,19 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
     -- Проверяем занятость клетки
     local occupant = combat.getEntityAtHex(toQ, toR, entities)
     if occupant and occupant ~= target then
+        -- Склон горы — анимация отскока без урона
+        if occupant.noCollisionDamage then
+            combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, occupant)
+            if onComplete then onComplete(false) end
+            return
+        end
+        -- Глубокая вода — свободный проход, эффект применится после перемещения
+        if occupant.isHazard then
+            combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
+                if onComplete then onComplete(true) end
+            end)
+            return
+        end
         -- Столкновение → bounce + урон
         combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, occupant)
         if onComplete then onComplete(false) end
@@ -1412,9 +1425,9 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
         startX = 0, startY = 0, endX = 0, endY = 0, timer = 0, duration = 0.2,
         isMoving = false,
         onComplete = function(pushedObj)
-            -- Проверяем, свободна ли целевая клетка
+            -- Проверяем, свободна ли целевая клетка (пропускаем опасные зоны)
             local occupant = combat.getEntityAtHex(toQ, toR, entities)
-            if occupant and occupant ~= pushedObj and occupant.health > 0 then
+            if occupant and occupant ~= pushedObj and occupant.health > 0 and not occupant.isHazard then
                 -- Столкновение: урон обоим, перемещение отменяется
                 if pushedObj.health and pushedObj.health > 0 then
                     pushedObj.health = pushedObj.health - 1
@@ -1681,15 +1694,19 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
     local function applyDamage()
         local damage = 1
         if obj.health and obj.health > 0 then
-            local wasDestroyed = obj:takeDamage(damage, globalHealth)
-            if wasDestroyed then
-                obj:startDeath()
+            if not (withEntity and withEntity.noCollisionDamage) then
+                local wasDestroyed = obj:takeDamage(damage, globalHealth)
+                if wasDestroyed then
+                    obj:startDeath()
+                end
             end
         end
         if withEntity and withEntity.health and withEntity.health > 0 then
-            local wasDestroyed = withEntity:takeDamage(damage, globalHealth)
-            if wasDestroyed then
-                withEntity:startDeath()
+            if not withEntity.noCollisionDamage then
+                local wasDestroyed = withEntity:takeDamage(damage, globalHealth)
+                if wasDestroyed then
+                    withEntity:startDeath()
+                end
             end
         end
     end

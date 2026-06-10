@@ -69,8 +69,8 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
         end
     end
     
-    -- Клетка не должна быть занята (врагом или препятствием)
-    if isPositionOccupied(targetQ, targetR, actor) then
+    -- Клетка не должна быть занята (для остановки)
+    if isCellOccupiedForStop(targetQ, targetR, actor) then
         return false
     end
     
@@ -159,6 +159,10 @@ function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
     -- Проверяем, занята ли клетка другой сущностью
     local occupant = getEntityAtHex(toQ, toR, entities)
     if occupant then
+        -- Склон горы — урона нет
+        if occupant.noCollisionDamage then
+            return 0, nil, nil
+        end
         -- Столкновение с другой сущностью
         -- Обе получают урон, если обе являются персонажами
         if entity:isCharacter() then
@@ -1807,8 +1811,10 @@ function isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
         return true
     end
     for _, e in ipairs(entities) do
-        if e ~= enemy and e.q == q and e.r == r then
-            return false  -- любые сущности (союзники, другие враги, здания) блокируют путь
+        if e ~= enemy and e.q == q and e.r == r and not e.isHazard then
+            if not (e:isCharacter() and not e.isPlayable) then
+                return false  -- другие враги проходимы, всё остальное блокирует
+            end
         end
     end
     return true

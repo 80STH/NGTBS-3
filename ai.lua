@@ -471,9 +471,11 @@ function ai.performMoveTowards(enemy, target, entities, hex)
         if hex:isValidHex(neighbor.q, neighbor.r) then
             local occupied = false
             for _, e in ipairs(entities) do
-                if e ~= enemy and e.q == neighbor.q and e.r == neighbor.r then
-                    occupied = true
-                    break
+                if e ~= enemy and e.q == neighbor.q and e.r == neighbor.r and not e.isHazard then
+                    if not (e:isCharacter() and not e.isPlayable) then
+                        occupied = true
+                        break
+                    end
                 end
             end
             if not occupied then
@@ -520,9 +522,11 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
         if hex:isValidHex(neighbor.q, neighbor.r) and hex:isActiveHex(neighbor.q, neighbor.r) then
             local occupied = false
             for _, e in ipairs(entities) do
-                if e ~= enemy and e.q == neighbor.q and e.r == neighbor.r then
-                    occupied = true
-                    break
+                if e ~= enemy and e.q == neighbor.q and e.r == neighbor.r and not e.isHazard then
+                    if not (e:isCharacter() and not e.isPlayable) then
+                        occupied = true
+                        break
+                    end
                 end
             end
             if not occupied then
@@ -612,8 +616,10 @@ function ai.isPositionOccupied(q, r, movingEntity, entities, hex)
         end
     end
     for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r then
-            return true
+        if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
+            if not (e:isCharacter() and not e.isPlayable) then
+                return true
+            end
         end
     end
     return false
