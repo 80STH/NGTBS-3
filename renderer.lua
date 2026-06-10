@@ -306,7 +306,7 @@ function renderer.draw(state)
 
     for _, entity in ipairs(state.entities) do
         if entity:isCharacter() and not entity.isPlayable and entity.hasPreparedAttack and entity.health > 0 then
-            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
+            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities, state.terrainMap)
         end
     end
 

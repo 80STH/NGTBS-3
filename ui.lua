@@ -1523,7 +1523,7 @@ end
 
 
 
-function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
+function ui.drawPreparedAttackDirection(hex, enemy, time, entities, terrainMap)
     if not enemy.hasPreparedAttack then return end
     local attack = enemy.preparedAttack
     if not attack then return end
@@ -1625,21 +1625,24 @@ end
             local hazardTex = ui.getHazardTexture()
             local pulse = 0.5 + 0.5 * math.sin(time * 5)
             for _, c in ipairs(cells) do
-                local cx, cy = getDrawCoords(c.q, c.r)
-                local vertices = hex:drawInsetHexagon(cx, cy, hex.radius, 0.92)
-                love.graphics.stencil(function()
-                    love.graphics.polygon("fill", vertices)
-                end, "replace", 1)
-                love.graphics.setStencilTest("greater", 0)
-                love.graphics.setColor(1, 0.3, 0.2, 0.5 + 0.3 * pulse)
-                love.graphics.draw(hazardTex, cx - hex.radius, cy - hex.radius, 0,
-                                   hex.radius * 2 / hazardTex:getWidth(),
-                                   hex.radius * 2 / hazardTex:getHeight())
-                love.graphics.setStencilTest()
-                love.graphics.setColor(1, 0.3, 0.2, 0.4 + 0.3 * pulse)
-                love.graphics.setLineWidth(2)
-                love.graphics.polygon("line", vertices)
-                love.graphics.setLineWidth(1)
+                local isWater = terrainMap and terrainMap[c.q] and terrainMap[c.q][c.r] == "water"
+                if not isWater then
+                    local cx, cy = getDrawCoords(c.q, c.r)
+                    local vertices = hex:drawInsetHexagon(cx, cy, hex.radius, 0.92)
+                    love.graphics.stencil(function()
+                        love.graphics.polygon("fill", vertices)
+                    end, "replace", 1)
+                    love.graphics.setStencilTest("greater", 0)
+                    love.graphics.setColor(1, 0.3, 0.2, 0.5 + 0.3 * pulse)
+                    love.graphics.draw(hazardTex, cx - hex.radius, cy - hex.radius, 0,
+                                       hex.radius * 2 / hazardTex:getWidth(),
+                                       hex.radius * 2 / hazardTex:getHeight())
+                    love.graphics.setStencilTest()
+                    love.graphics.setColor(1, 0.3, 0.2, 0.4 + 0.3 * pulse)
+                    love.graphics.setLineWidth(2)
+                    love.graphics.polygon("line", vertices)
+                    love.graphics.setLineWidth(1)
+                end
             end
         end
         return
