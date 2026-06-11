@@ -114,7 +114,7 @@ return {
       id = 2,
       name = "entities",
       class = "",
-      visible = false,
+      visible = true,
       opacity = 1,
       offsetx = 0,
       offsety = 0,
@@ -123,7 +123,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJyFj0EKwCAMBLeXeKggfU/P+/8vtYEIS4ytsATWYaIEwMh4cxZhyig6frB+WszZI/HO2cab3c528czZop9u5w65U1/H6r6CN6xuFOyd/sSCo/CQve2HpbzDNpzyOco+Yi4S8A=="
+      data = "eJyFj0EKwDAIBPcUKQ2Evqfn/f+X2oAL1po2sAhmGJUA6Bl39iJMGUWPH+x85lV9JH5ybeHN7sn24FE178ut2frbgqPj7T6c1R7RjYI9000sOOLp1lz7YRn2aAsu8jmRvQAmNhKy"
     },
     {
       type = "tilelayer",

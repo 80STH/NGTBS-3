@@ -443,6 +443,39 @@ function drawHexGrid(state, cellOverlays)
             love.graphics.setLineWidth(3)
             love.graphics.polygon("line", insetVerts)
         end
+
+        -- Направленные сущности: цветовая маркировка граней (зелёный = безопасно, красный = опасно)
+        local cellEntity = getEntityAtHex(cell.q, cell.r)
+        if cellEntity and cellEntity.direction then
+            local edgeVerts = hex:drawHexagon(cell.x, drawY + yOffset, hex.radius - 1)
+            local edgeDirs = {
+                {dx = 0,  dy = 1,  dz = -1},  -- edge 0: SE
+                {dx = -1, dy = 1,  dz = 0},   -- edge 1: SW
+                {dx = -1, dy = 0,  dz = 1},   -- edge 2: W
+                {dx = 0,  dy = -1, dz = 1},   -- edge 3: NW
+                {dx = 1,  dy = -1, dz = 0},   -- edge 4: NE
+                {dx = 1,  dy = 0,  dz = -1},  -- edge 5: E
+            }
+            love.graphics.setLineWidth(4)
+            for edgeIdx = 1, 6 do
+                local dir = edgeDirs[edgeIdx]
+                local neighborQ, neighborR = hex_utils.applyCubeStep(cellEntity.q, cellEntity.r, dir.dx, dir.dy, dir.dz)
+                local safe = hex_utils.isPushFromSafeSide(cellEntity, neighborQ, neighborR)
+                local i1 = (edgeIdx - 1) * 2 + 1
+                local i2 = (edgeIdx % 6) * 2 + 1
+                local x1, y1 = edgeVerts[i1], edgeVerts[i1 + 1]
+                local x2, y2 = edgeVerts[i2], edgeVerts[i2 + 1]
+                if safe then
+                    love.graphics.setColor(0.2, 0.9, 0.3, 0.85)
+                else
+                    love.graphics.setColor(0.9, 0.2, 0.2, 0.85)
+                end
+                love.graphics.line(x1, y1, x2, y2)
+            end
+            love.graphics.setLineWidth(1)
+            love.graphics.setColor(1, 1, 1, 1)
+        end
+
         love.graphics.setLineWidth(1)
     end
     love.graphics.setColor(1, 1, 1, 1)

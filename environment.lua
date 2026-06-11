@@ -31,6 +31,7 @@ local gidToEntity = {
     [45] = { type = "character", name = "Divider",  isPlayable = true,  maxHealth = 4, moveRange = 4, attacks = "divider" },
     [68] = { type = "character", name = "AttackTest", isPlayable = true, maxHealth = 10, moveRange = 6, attacks = "all" },
     [11] = { type = "obstacle",  name = "SuperMountain", indestructible = true },
+    [9]  = { type = "obstacle",  name = "MountainSlope", health = 2, maxDamagePerHit = 1, direction = {dx = 1, dy = 0, dz = -1} },
     [15] = { type = "obstacle",  name = "MountainSlope", indestructible = true, noCollisionDamage = true },
     [17] = { type = "obstacle",  name = "DeepWater", isHazard = true },
     [12] = { type = "building",  name = "SmallBuilding", health = 1, globalHealthCost = 1 },
@@ -358,6 +359,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         if def.indestructible then obstacle.indestructible = true end
         if def.noCollisionDamage then obstacle.noCollisionDamage = true end
         if def.isHazard then obstacle.isHazard = true end
+        if def.direction then obstacle.direction = def.direction end
         return obstacle
     elseif def.type == "building" then
         local building = Entity.new(def.name, Entity.TYPES.BUILDING, gridX, gridY, def.health, false, (def.moveRange or 0), nil, nil, {})

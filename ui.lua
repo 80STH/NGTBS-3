@@ -159,9 +159,16 @@ function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
     -- Проверяем, занята ли клетка другой сущностью
     local occupant = getEntityAtHex(toQ, toR, entities)
     if occupant then
-        -- Склон горы — урона нет
+        -- Склон горы (неразрушимый) — урона нет
         if occupant.noCollisionDamage then
             return 0, nil, nil
+        end
+        -- Направленная сущность — проверка стороны
+        if occupant.direction then
+            local safe = hex_utils.isPushFromSafeSide(occupant, fromQ, fromR)
+            if safe then
+                return 0, nil, nil
+            end
         end
         -- Столкновение с другой сущностью
         -- Обе получают урон, если обе являются персонажами
@@ -1447,6 +1454,14 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         terrain = terrainMap[entity.q][entity.r]
     end
     table.insert(lines, { text = "Terrain: " .. terrain, color = {0.9, 0.9, 0.7} })
+    -- Направленная сущность (MountainSlope и т.п.)
+    if entity.direction then
+        table.insert(lines, { text = "Directional barrier", color = {0.4, 0.9, 0.4} })
+        table.insert(lines, { text = "Green = safe push, Red = damaging", color = {0.8, 0.8, 0.7} })
+        if entity.health and entity.health < 999 then
+            table.insert(lines, { text = "Takes damage from red side", color = {0.9, 0.5, 0.5} })
+        end
+    end
     -- Атака врага
     local attackText = nil
     if not entity.isPlayable and entity.attacks and #entity.attacks > 0 then

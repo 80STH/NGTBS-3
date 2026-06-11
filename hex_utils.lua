@@ -54,4 +54,26 @@ function hex_utils.rotateCubeDir(dx, dy, dz, clockwise)
     end
 end
 
+-- 6 направлений гекса в кубических координатах
+hex_utils.CUBE_DIRECTIONS = {
+    {dx = 1, dy = -1, dz = 0},
+    {dx = 1, dy = 0, dz = -1},
+    {dx = 0, dy = 1, dz = -1},
+    {dx = -1, dy = 1, dz = 0},
+    {dx = -1, dy = 0, dz = 1},
+    {dx = 0, dy = -1, dz = 1},
+}
+
+-- Проверка, безопасна ли сторона столкновения с направленной сущностью
+-- entity.direction — кубический вектор направления склона (downhill)
+-- fromQ, fromR — откуда прилетает толчок (координаты источника толчка)
+-- Возвращает true, если толчок с безопасной стороны (без урона)
+function hex_utils.isPushFromSafeSide(entity, fromQ, fromR)
+    if not entity.direction then return true end
+    local toQ, toR = entity.q, entity.r
+    local dx, dy, dz = hex_utils.getCubeDiff(toQ, toR, fromQ, fromR)
+    local dot = dx * entity.direction.dx + dy * entity.direction.dy + dz * entity.direction.dz
+    return dot <= 0
+end
+
 return hex_utils

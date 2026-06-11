@@ -61,6 +61,9 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     -- Опасная зона (не блокирует движение, но убивает зашедших)
     self.isHazard = false
     
+    -- Направление сущности (кубический вектор {dx, dy, dz})
+    self.direction = nil
+
     --  НЕПОДВИЖНОСТЬ: препятствия и здания не отталкиваются
     self.isPushable = (type == Entity.TYPES.CHARACTER)
     

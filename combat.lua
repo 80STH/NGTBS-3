@@ -105,9 +105,22 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
     -- Проверяем занятость клетки
     local occupant = combat.getEntityAtHex(toQ, toR, entities)
     if occupant and occupant ~= target then
-        -- Склон горы — анимация отскока без урона
+        -- Склон горы (неразрушимый) — анимация отскока без урона
         if occupant.noCollisionDamage then
-            combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, occupant)
+            combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, occupant, true)
+            if onComplete then onComplete(false) end
+            return
+        end
+        -- Направленная сущность (MountainSlope) — проверка стороны
+        if occupant.direction then
+            local safe = hex_utils.isPushFromSafeSide(occupant, fromQ, fromR)
+            if safe then
+                -- Безопасная сторона: отскок без урона
+                combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, occupant, true)
+            else
+                -- Опасная сторона: отскок с уроном
+                combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, occupant)
+            end
             if onComplete then onComplete(false) end
             return
         end
@@ -1684,7 +1697,7 @@ function combat.addShakeAnimation(obj, q, r)
     })
 end
 
-function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, withEntity)
+function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, withEntity, skipDamage)
     -- Эффект столкновения в целевой клетке (визуальный, без урона)
     local x, y = getDrawCoords(toQ, toR)
     visual.addEffect(x, y, "collision", 0.3)
@@ -1692,6 +1705,12 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
 
     -- Отложенное нанесение урона после анимации
     local function applyDamage()
+        if skipDamage then return end
+        -- Направленная сущность: безопасная сторона — без урона
+        if withEntity and withEntity.direction then
+            local safe = hex_utils.isPushFromSafeSide(withEntity, fromQ, fromR)
+            if safe then return end
+        end
         local damage = 1
         if obj.health and obj.health > 0 then
             if not (withEntity and withEntity.noCollisionDamage) then
