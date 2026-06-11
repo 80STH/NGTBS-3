@@ -390,7 +390,7 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     if distance ~= 1 then return false, "Target must be adjacent!" end
     local targetActor = combat.getEntityAtHex(targetQ, targetR, entities)
     if not targetActor then return false, "No entity at that hex!" end
-    if not targetActor:isCharacter() then
+    if not targetActor:isCharacter() or targetActor.isPushable == false then
         return false, "Target must be a character!"
     end
     -- Determine destination: use _flipDestCell if set, else default (behind)
@@ -998,7 +998,7 @@ function combat.VortexStrikeAttack:execute(attacker, targetQ, targetR, hex, enti
     self._vortexDestCell = nil
     if not hex:isActiveHex(destCell.q, destCell.r) then return false, "Destination cell not active" end
     self:dealDamageToTarget(target, attacker, self.damage, entities, sounds)
-    if target.health > 0 then
+    if target.health > 0 and target.isPushable ~= false then
         local occupant = combat.getEntityAtHex(destCell.q, destCell.r, entities)
         if occupant then
             combat.addCollisionBounceAnimation(target, targetQ, targetR, destCell.q, destCell.r, hex, entities, sounds, globalHealth, occupant)
@@ -1046,7 +1046,7 @@ function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entiti
     -- Primary target A: push to first destination
     local destQ, destR = hex_utils.cubeToAxial(ax + dirDX, ay + dirDY, az + dirDZ)
     local targetA = combat.getEntityAtHex(targetQ, targetR, entities)
-    if targetA and targetA:isCharacter() and targetA.health > 0 then
+    if targetA and targetA:isCharacter() and targetA.health > 0 and targetA.isPushable ~= false then
         local occupantB = combat.getEntityAtHex(destQ, destR, entities)
         if occupantB then
             -- B shifts 60° further around attacker: cw² or ccw² from attacker
@@ -1059,7 +1059,9 @@ function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entiti
             if hex:isActiveHex(b2q, b2r) and not combat.getEntityAtHex(b2q, b2r, entities) then
                 -- Add A first (processed second), B second (processed first)
                 combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
-                combat.addPushAnimation(occupantB, destQ, destR, b2q, b2r)
+                if occupantB.isPushable ~= false then
+                    combat.addPushAnimation(occupantB, destQ, destR, b2q, b2r)
+                end
             else
                 combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
             end
@@ -1126,7 +1128,7 @@ function combat.PullHookAttack:execute(attacker, targetQ, targetR, hex, entities
     if not stepX then return false, "Not a straight line!" end
 
     local targetEntity = combat.getEntityAtHex(hookTarget.q, hookTarget.r, entities)
-    if not targetEntity or targetEntity.health <= 0 then return false, "Target is gone!" end
+    if not targetEntity or targetEntity.health <= 0 or targetEntity.isPushable == false then return false, "Target is gone!" end
 
     local moveQ, moveR = targetQ, targetR
     local isStationary = (moveQ == attacker.q and moveR == attacker.r)
@@ -1405,6 +1407,121 @@ function combat.LungeAttack:getAffectedCells(attacker, targetQ, targetR, hex, en
 end
 
 -- ============================================================
+-- HEAVY PUNCH: 2 урона + отталкивание
+-- ============================================================
+combat.HeavyPunchAttack = setmetatable({}, combat.Attack)
+combat.HeavyPunchAttack.__index = combat.HeavyPunchAttack
+
+function combat.HeavyPunchAttack.new()
+    local self = combat.Attack.new("Heavy Punch", "Melee attack, 2 damage and pushes target away", 1, 2, {})
+    return setmetatable(self, combat.HeavyPunchAttack)
+end
+
+function combat.HeavyPunchAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+    if not hex:isActiveHex(targetQ, targetR) then return false, "Target cell not active" end
+
+    local target = combat.getEntityAtHex(targetQ, targetR, entities)
+    if not target or target.health <= 0 then return false, "No valid target at that hex" end
+
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+
+    if target.health > 0 then
+        local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+        if stepX then
+            local pushQ, pushR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+            self:pushTargetToHex(target, targetQ, targetR, pushQ, pushR, hex, entities, sounds)
+            combat.startPushAnimations(hex)
+        end
+    end
+
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.HeavyPunchAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance <= self.range then
+        local target = combat.getEntityAtHex(targetQ, targetR, entities)
+        if target and target.health > 0 then
+            return {q = targetQ, r = targetR}
+        end
+    end
+    return nil
+end
+
+function combat.HeavyPunchAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance > self.range then return nil end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local pushQ, pushR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+        return {q = pushQ, r = pushR, edge = not hex:isActiveHex(pushQ, pushR)}
+    end
+    return nil
+end
+
+-- ============================================================
+-- EMPOWER PUNCH: 1 урона + отталкивание + double damage next
+-- ============================================================
+combat.EmpowerPunchAttack = setmetatable({}, combat.Attack)
+combat.EmpowerPunchAttack.__index = combat.EmpowerPunchAttack
+
+function combat.EmpowerPunchAttack.new()
+    local self = combat.Attack.new("Empower Punch", "Melee attack, 1 damage, pushes target, doubles next attack damage", 1, 1, {})
+    return setmetatable(self, combat.EmpowerPunchAttack)
+end
+
+function combat.EmpowerPunchAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+    if not hex:isActiveHex(targetQ, targetR) then return false, "Target cell not active" end
+
+    local target = combat.getEntityAtHex(targetQ, targetR, entities)
+    if not target or target.health <= 0 then return false, "No valid target at that hex" end
+
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+
+    if target.health > 0 then
+        local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+        if stepX then
+            local pushQ, pushR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+            self:pushTargetToHex(target, targetQ, targetR, pushQ, pushR, hex, entities, sounds)
+            combat.startPushAnimations(hex)
+        end
+    end
+
+    -- Empower: следующий удар наносит удвоенный урон (одноразово)
+    status.applyToEntity(attacker, "double_damage")
+
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.EmpowerPunchAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance <= self.range then
+        local target = combat.getEntityAtHex(targetQ, targetR, entities)
+        if target and target.health > 0 then
+            return {q = targetQ, r = targetR}
+        end
+    end
+    return nil
+end
+
+function combat.EmpowerPunchAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance > self.range then return nil end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local pushQ, pushR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+        return {q = pushQ, r = pushR, edge = not hex:isActiveHex(pushQ, pushR)}
+    end
+    return nil
+end
+
+-- ============================================================
 -- AURA: трясина (пассивная, снижает скорость на 2, мин. 1)
 -- ============================================================
 
@@ -1441,13 +1558,13 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
             -- Проверяем, свободна ли целевая клетка (пропускаем опасные зоны)
             local occupant = combat.getEntityAtHex(toQ, toR, entities)
             if occupant and occupant ~= pushedObj and occupant.health > 0 and not occupant.isHazard then
-                -- Столкновение: урон обоим, перемещение отменяется
+                -- Столкновение: урон толкаемому юниту, недвижимые цели урон не получают
                 if pushedObj.health and pushedObj.health > 0 then
                     pushedObj.health = pushedObj.health - 1
-                    print(string.format(" %s collides with %s! Both take 1 damage!", pushedObj.name, occupant.name))
+                    print(string.format(" %s collides with %s! %s takes 1 damage!", pushedObj.name, occupant.name, pushedObj.name))
                     if sounds and sounds.collision then sounds.collision:play() end
                 end
-                if occupant.health then
+                if occupant.health and occupant.isPushable ~= false then
                     occupant.health = occupant.health - 1
                     if occupant.health <= 0 then
                         occupant:startDeath()
@@ -1650,6 +1767,12 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
     -- Empowered: +1 damage to direct damage attacks only
     if damage > 0 and status.hasEntityStatus(attacker, "empowered") then
         finalDamage = finalDamage + 1
+    end
+
+    -- Double damage next: удваивает урон (одноразово, снимается после атаки)
+    if damage > 0 and status.hasEntityStatus(attacker, "double_damage") then
+        finalDamage = finalDamage * 2
+        status.removeFromEntity(attacker, "double_damage")
     end
 
     if finalDamage < 1 and damage > 0 then finalDamage = 1 end

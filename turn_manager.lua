@@ -155,7 +155,7 @@ end
 
 function moveShips()
     for _, e in ipairs(entities) do
-        if e.waterWalker and e.health > 0 then
+        if e.waterWalker and e.health > 0 and e.isPushable ~= false then
             local neighbors = hex:getNeighbors(e.q, e.r)
             local waterCells = {}
             for _, n in ipairs(neighbors) do

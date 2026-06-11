@@ -645,6 +645,8 @@ function environment.getAllAttacks()
         { attack = combat.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
         { attack = combat.CleaveAttack.new(), name = "Cleave", description = "Melee 1 dmg to 3 targets in front" },
         { attack = combat.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
+        { attack = combat.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Melee 2 dmg and push target away" },
+        { attack = combat.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Melee 1 dmg, push target, double next attack damage" },
     }
 end
 

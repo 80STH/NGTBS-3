@@ -960,6 +960,51 @@ end
         return
     end
 
+    -- Heavy Punch / Empower Punch: melee + push
+    if attack.name == "Heavy Punch" or attack.name == "Empower Punch" then
+        if distance == 1 then
+            local target = getEntityAtHex(hoverQ, hoverR, entities)
+            if target and target.health > 0 then
+                local tx, ty = getDrawCoords(hoverQ, hoverR)
+                local totalDmg = attack.damage or 0
+                local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+                if stepX then
+                    local pushQ, pushR = hex_utils.applyCubeStep(hoverQ, hoverR, stepX, stepY, stepZ)
+                    local pushX, pushY
+                    if hex:isValidHex(pushQ, pushR) then
+                        pushX, pushY = getDrawCoords(pushQ, pushR)
+                    end
+                    ui.drawPushArrow(tx, ty, pushX or tx, pushY or ty, nil, nil, nil, nil, hoverQ, hoverR, pushQ, pushR)
+                    local colDmg, colReason, colOcc = ui.checkCollisionDamage(target, hoverQ, hoverR, pushQ, pushR, hex, entities)
+                    if colDmg > 0 then
+                        totalDmg = totalDmg + colDmg
+                        if colReason == "edge" then
+                            local crashX, crashY = pushX or tx, pushY or ty
+                            ui.drawCollisionIcon(crashX, crashY, 1, false)
+                        elseif colOcc then
+                            local occX, occY = getDrawCoords(colOcc.q, colOcc.r)
+                            drawHealthBar(colOcc, occX, occY, 1)
+                            if colReason == "collision_both" then
+                                ui.drawCollisionIcon(occX, occY, 1, true)
+                                ui.drawCollisionIcon(pushX or occX, pushY or occY, 1, true)
+                            else
+                                ui.drawCollisionIcon(pushX or occX, pushY or occY, 1, false)
+                            end
+                            if colOcc:isBuilding() then
+                                globalHealth.previewDamage = (globalHealth.previewDamage or 0) + 1
+                            end
+                        end
+                    end
+                end
+                drawHealthBar(target, tx, ty, totalDmg)
+                if target:isBuilding() then
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(totalDmg, target.health)
+                end
+            end
+        end
+        return
+    end
+
     -- Для атак, у которых есть getPushCell (Shoot и др.)
     if attack.getPushCell then
         local pushCell = attack:getPushCell(attacker, hoverQ, hoverR, hex, entities)
@@ -972,6 +1017,9 @@ end
                     local target, targetHex = nil, nil
                     if attack.findFirstTargetOnLine then
                         target, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+                    end
+                    if not target then
+                        target = getEntityAtHex(hoverQ, hoverR, entities)
                     end
                     if target then firstTarget = target end
                 end
@@ -1415,6 +1463,7 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         decay = { name = "Decay", color = {0.7, 0.2, 0.8}, desc = "Takes 1 damage per move and at end of turn." },
         dig_site = { name = "Undermined", color = {0.8, 0.6, 0.2}, desc = "Standing on a dig site — enemy may spawn here!" },
         empowered = { name = "Empowered", color = {1, 0.9, 0.2}, desc = "Move +1, damage +1." },
+        double_damage = { name = "Double Damage", color = {1, 0.5, 0.5}, desc = "Next attack deals double damage (one-time)." },
         wounded = { name = "Wounded", color = {1, 0.4, 0.2}, desc = "Health below max. Move range reduced by 1." },
     }
     local statuses = ui.getEffectiveStatuses(entity)

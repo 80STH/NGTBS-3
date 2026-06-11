@@ -472,10 +472,8 @@ function ai.performMoveTowards(enemy, target, entities, hex)
             local occupied = false
             for _, e in ipairs(entities) do
                 if e ~= enemy and e.q == neighbor.q and e.r == neighbor.r and not e.isHazard then
-                    if not (e:isCharacter() and not e.isPlayable) then
-                        occupied = true
-                        break
-                    end
+                    occupied = true
+                    break
                 end
             end
             if not occupied then
@@ -523,10 +521,8 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
             local occupied = false
             for _, e in ipairs(entities) do
                 if e ~= enemy and e.q == neighbor.q and e.r == neighbor.r and not e.isHazard then
-                    if not (e:isCharacter() and not e.isPlayable) then
-                        occupied = true
-                        break
-                    end
+                    occupied = true
+                    break
                 end
             end
             if not occupied then
@@ -582,6 +578,12 @@ end
 
 function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
     if enemy.isMoving then return false end
+    -- Конечная клетка: занята любой сущностью (кроме isHazard)
+    for _, e in ipairs(entities) do
+        if e ~= enemy and e.q == targetQ and e.r == targetR and not e.isHazard then
+            return false
+        end
+    end
     local distance = hex:getDistance(enemy.q, enemy.r, targetQ, targetR)
     local effRange = ai.getEffectiveMoveRange(enemy, hex, entities)
     if distance > effRange then return false end
@@ -617,7 +619,7 @@ function ai.isPositionOccupied(q, r, movingEntity, entities, hex)
     end
     for _, e in ipairs(entities) do
         if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
-            if not (e:isCharacter() and not e.isPlayable) then
+            if not (e:isCharacter() and e.isPlayable == movingEntity.isPlayable) then
                 return true
             end
         end
