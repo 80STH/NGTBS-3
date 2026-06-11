@@ -769,29 +769,31 @@ end
                     love.graphics.setLineWidth(2)
                     love.graphics.polygon("line", dv)
                     love.graphics.setLineWidth(1)
-                    -- Show B's further destination if occupant exists
+                    -- Show B's further destination / collision hint if occupant exists
                     local occupant = getEntityAtHex(dc.q, dc.r, entities)
-                    if occupant and occupant:isCharacter() and occupant.health > 0 then
-                        local ax, ay, az = hex_utils.axialToCube(attacker.q, attacker.r)
-                        local bq, br
-                        if dc.dir == "right" then
-                            bq, br = hex_utils.cubeToAxial(ax + stepZ, ay + stepX, az + stepY)
-                        else
-                            bq, br = hex_utils.cubeToAxial(ax + stepY, ay + stepZ, az + stepX)
-                        end
-                        if hex:isActiveHex(bq, br) then
-                            local bx, by = getDrawCoords(bq, br)
-                            local bv = hex:drawInsetHexagon(bx, by, hex.radius, 0.92)
-                            love.graphics.setColor(1, 1, 0.4, 0.3)
-                            love.graphics.polygon("fill", bv)
-                            love.graphics.setColor(1, 1, 0.4, 0.8)
-                            love.graphics.polygon("line", bv)
+                    if occupant and occupant.health > 0 then
+                        if occupant:isCharacter() and occupant.isPushable ~= false then
+                            local ax, ay, az = hex_utils.axialToCube(attacker.q, attacker.r)
+                            local bq, br
+                            if dc.dir == "right" then
+                                bq, br = hex_utils.cubeToAxial(ax + stepZ, ay + stepX, az + stepY)
+                            else
+                                bq, br = hex_utils.cubeToAxial(ax + stepY, ay + stepZ, az + stepX)
+                            end
+                            if hex:isActiveHex(bq, br) then
+                                local bx, by = getDrawCoords(bq, br)
+                                local bv = hex:drawInsetHexagon(bx, by, hex.radius, 0.92)
+                                love.graphics.setColor(1, 1, 0.4, 0.3)
+                                love.graphics.polygon("fill", bv)
+                                love.graphics.setColor(1, 1, 0.4, 0.8)
+                                love.graphics.polygon("line", bv)
+                            end
                         end
                     end
                 end
             end
         elseif vortexTargetCell then
-            -- Second click phase: show arrows for A→dest and B→further
+            -- Second click phase: show arrows for A→dest and B→further + damage preview
             local target = getEntityAtHex(vortexTargetCell.q, vortexTargetCell.r, entities)
             if target then
                 local dests = attack:getShiftDestinations(attacker, vortexTargetCell.q, vortexTargetCell.r, hex)
@@ -810,20 +812,63 @@ end
                     local occupant = getEntityAtHex(hoverQ, hoverR, entities)
                     -- Arrow: A → destination
                     ui.drawPushArrow(tx, ty, hx, hy, nil, nil, nil, nil, vortexTargetCell.q, vortexTargetCell.r, hoverQ, hoverR)
-                    -- Arrow: B (at destination) → further 60° around attacker
-                    if occupant and occupant:isCharacter() and occupant.health > 0 then
-                        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, vortexTargetCell.q, vortexTargetCell.r, hex)
-                        if stepX then
-                            local ax, ay, az = hex_utils.axialToCube(attacker.q, attacker.r)
-                            local bq, br
-                            if hoverDir == "right" then
-                                bq, br = hex_utils.cubeToAxial(ax + stepZ, ay + stepX, az + stepY)
-                            else
-                                bq, br = hex_utils.cubeToAxial(ax + stepY, ay + stepZ, az + stepX)
+
+                    local hasCollision = false
+                    local occDamaged = false
+                    local occDmgAmount = 1
+                    local b2BuildingDmg = 0
+
+                    if occupant then
+                        if occupant.isHazard then
+                            -- pass through, no damage
+                        elseif occupant.isPushable == false then
+                            -- Immovable (building/obstacle): collision, both take 1
+                            hasCollision = true
+                            occDamaged = true
+                        else
+                            -- Pushable character: try to show further arrow
+                            local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, vortexTargetCell.q, vortexTargetCell.r, hex)
+                            if stepX then
+                                local ax, ay, az = hex_utils.axialToCube(attacker.q, attacker.r)
+                                local bq, br
+                                if hoverDir == "right" then
+                                    bq, br = hex_utils.cubeToAxial(ax + stepZ, ay + stepX, az + stepY)
+                                else
+                                    bq, br = hex_utils.cubeToAxial(ax + stepY, ay + stepZ, az + stepX)
+                                end
+                                if hex:isActiveHex(bq, br) and not getEntityAtHex(bq, br) then
+                                    local bx, by = getDrawCoords(bq, br)
+                                    ui.drawPushArrow(hx, hy, bx, by, nil, nil, nil, nil, hoverQ, hoverR, bq, br)
+                                else
+                                    hasCollision = true
+                                    occDamaged = true
+                                    occDmgAmount = 2
+                                    -- Check if there's an entity at b2 for damage preview
+                                    local occupantAtB2 = hex:isActiveHex(bq, br) and getEntityAtHex(bq, br) or nil
+                                    if occupantAtB2 and not occupantAtB2.noCollisionDamage then
+                                        local b2x, b2y = getDrawCoords(bq, br)
+                                        drawHealthBar(occupantAtB2, b2x, b2y, 1)
+                                        if occupantAtB2:isBuilding() then
+                                            b2BuildingDmg = math.min(1, occupantAtB2.health)
+                                        end
+                                    end
+                                end
                             end
-                            if hex:isActiveHex(bq, br) then
-                                local bx, by = getDrawCoords(bq, br)
-                                ui.drawPushArrow(hx, hy, bx, by, nil, nil, nil, nil, hoverQ, hoverR, bq, br)
+                        end
+
+                        if hasCollision then
+                            drawHealthBar(target, tx, ty, 1)
+                            if occDamaged then
+                                drawHealthBar(occupant, hx, hy, occDmgAmount)
+                            end
+                            if target:isBuilding() then
+                                globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(1, target.health)
+                            end
+                            if occupant:isBuilding() then
+                                globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(1, occupant.health)
+                            end
+                            if b2BuildingDmg > 0 then
+                                globalHealth.previewDamage = (globalHealth.previewDamage or 0) + b2BuildingDmg
                             end
                         end
                     end

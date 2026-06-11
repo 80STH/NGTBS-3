@@ -1049,21 +1049,25 @@ function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entiti
     if targetA and targetA:isCharacter() and targetA.health > 0 and targetA.isPushable ~= false then
         local occupantB = combat.getEntityAtHex(destQ, destR, entities)
         if occupantB then
-            -- B shifts 60° further around attacker: cw² or ccw² from attacker
-            local b2q, b2r
-            if shiftDir == "right" then
-                b2q, b2r = hex_utils.cubeToAxial(ax + dz, ay + dx, az + dy)
-            else
-                b2q, b2r = hex_utils.cubeToAxial(ax + dy, ay + dz, az + dx)
-            end
-            if hex:isActiveHex(b2q, b2r) and not combat.getEntityAtHex(b2q, b2r, entities) then
-                -- Add A first (processed second), B second (processed first)
+            if occupantB.isHazard then
                 combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
-                if occupantB.isPushable ~= false then
-                    combat.addPushAnimation(occupantB, destQ, destR, b2q, b2r)
+            elseif occupantB.isPushable == false then
+                combat.addCollisionBounceAnimation(targetA, targetQ, targetR, destQ, destR, hex, entities, sounds, globalHealth, occupantB)
+            else
+                local b2q, b2r
+                if shiftDir == "right" then
+                    b2q, b2r = hex_utils.cubeToAxial(ax + dz, ay + dx, az + dy)
+                else
+                    b2q, b2r = hex_utils.cubeToAxial(ax + dy, ay + dz, az + dx)
                 end
-            else
-                combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
+                if hex:isActiveHex(b2q, b2r) and not combat.getEntityAtHex(b2q, b2r, entities) then
+                    combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
+                    combat.addPushAnimation(occupantB, destQ, destR, b2q, b2r)
+                else
+                    combat.addCollisionBounceAnimation(targetA, targetQ, targetR, destQ, destR, hex, entities, sounds, globalHealth, occupantB)
+                    local occupantAtB2 = hex:isActiveHex(b2q, b2r) and combat.getEntityAtHex(b2q, b2r, entities) or nil
+                    combat.addCollisionBounceAnimation(occupantB, destQ, destR, b2q, b2r, hex, entities, sounds, globalHealth, occupantAtB2)
+                end
             end
         else
             combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
