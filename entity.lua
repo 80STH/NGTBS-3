@@ -66,6 +66,13 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
 
     --  НЕПОДВИЖНОСТЬ: препятствия и здания не отталкиваются
     self.isPushable = (type == Entity.TYPES.CHARACTER)
+
+    -- Стержень призывания
+    self.isSummoningRod = false
+    self.summonCooldown = 0
+    self.summonTargetQ = nil
+    self.summonTargetR = nil
+    self.summonType = nil
     
     -- Анимация смерти
     self.isDying = false
@@ -141,6 +148,18 @@ function Entity:takeDamage(damage, globalHealth)
     else
         print(string.format("%s takes %d damage! (%d/%d HP)", 
               self.name, actualDamage, math.max(0, self.health), self.maxHealth))
+    end
+
+    -- Стержень призывания: любой урон отменяет призыв на 1 ход
+    if self.isSummoningRod then
+        self.summonCooldown = 1
+        if self.hasPreparedAttack then
+            self.hasPreparedAttack = false
+            self.preparedAttack = nil
+            self.summonTargetQ = nil
+            self.summonTargetR = nil
+            print("SummoningRod summon cancelled by damage!")
+        end
     end
     
     return self.health <= 0

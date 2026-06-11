@@ -48,8 +48,10 @@ function restartGame(mapPath)
     if mapPath:match("map1%.lua$") then
         local occupiedSet = {}
         for _, e in ipairs(entities) do
-            local k = e.q .. "," .. e.r
-            occupiedSet[k] = true
+            if not e.isSummoningRod then
+                local k = e.q .. "," .. e.r
+                occupiedSet[k] = true
+            end
         end
         local candidates = {}
         for q = 0, width - 1 do
@@ -75,6 +77,17 @@ function restartGame(mapPath)
             print(string.format("  Spawned random enemy %s at (%d,%d)", enemy.name, cell.q, cell.r))
         end
         print(string.format("Spawned %d random enemies on map1", spawned))
+
+        -- 50% chance to spawn SummoningRod
+        if love.math.random() < 0.5 then
+            local emptyCells = findRandomEmptyCells(1)
+            if #emptyCells > 0 then
+                local cell = emptyCells[1]
+                local rod = environment.createEnemyByType("SummoningRod", cell.q, cell.r)
+                table.insert(entities, rod)
+                print(string.format("  SummoningRod spawned at (%d,%d) with 50%% chance", cell.q, cell.r))
+            end
+        end
     end
 
     -- Setup deploy phase
@@ -438,7 +451,7 @@ function processDigSites()
 
     local aliveEnemies = 0
     for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable and e.health > 0 then
+        if e:isCharacter() and not e.isPlayable and e.health > 0 and not e.isSummoningRod then
             aliveEnemies = aliveEnemies + 1
         end
     end

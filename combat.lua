@@ -946,6 +946,51 @@ function combat.DividerAttack:execute(attacker, targetQ, targetR, hex, entities,
 end
 
 -- ============================================================
+-- SUMMON ENEMY (стержень призывания)
+-- ============================================================
+combat.SummonEnemyAttack = setmetatable({}, combat.Attack)
+combat.SummonEnemyAttack.__index = combat.SummonEnemyAttack
+
+function combat.SummonEnemyAttack.new()
+    local self = combat.Attack.new("Summon", "Summon a random enemy unit", 1, 0, {})
+    return setmetatable(self, combat.SummonEnemyAttack)
+end
+
+function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    if not attacker.isSummoningRod then return false end
+
+    local sq, sr = attacker.summonTargetQ, attacker.summonTargetR
+    if not sq or not sr then return false end
+
+    -- Если клетка занята — 2 урона occupant'у
+    local occupant = combat.getEntityAtHex(sq, sr, entities)
+    if occupant and occupant.health > 0 then
+        local wasDestroyed = occupant:takeDamage(2, globalHealth)
+        print(string.format("SummoningRod: %s takes 2 damage from occupied summon cell!", occupant.name))
+        if sounds and sounds.attack then sounds.attack:play() end
+        local fx, fy = getDrawCoords(sq, sr)
+        visual.addEffect(fx, fy, "hit", 0.4)
+        if wasDestroyed then occupant:startDeath() end
+        attacker.hasActedThisTurn = true
+        return true
+    end
+
+    -- Создаём случайного врага на целевой клетке
+    if hex:isActiveHex(sq, sr) then
+        local env = require("environment")
+        local newEnemy = env.createRandomEnemy(sq, sr)
+        table.insert(entities, newEnemy)
+        local fx, fy = getDrawCoords(sq, sr)
+        visual.addMagicExplosion(fx, fy, 0.6, 0.4, 0.2)
+        if sounds and sounds.attack then sounds.attack:play() end
+        print(string.format("SummoningRod summons %s at (%d,%d)!", newEnemy.name, sq, sr))
+    end
+
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+-- ============================================================
 -- VORTEX STRIKE
 -- ============================================================
 combat.VortexStrikeAttack = setmetatable({}, combat.Attack)

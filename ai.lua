@@ -192,6 +192,18 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
     local attack = enemy.preparedAttack
     if not attack then return false end
 
+    -- Стержень призывания: вызываем execute напрямую
+    if enemy.isSummoningRod then
+        if attack and attack.execute then
+            attack:execute(enemy, nil, nil, hex, entities, sounds)
+        end
+        enemy.hasPreparedAttack = false
+        enemy.summonTargetQ = nil
+        enemy.summonTargetR = nil
+        enemy.preparedAttack = nil
+        return true
+    end
+
     local target = nil
     local targetQ, targetR = nil, nil  -- целевая клетка (всегда будет определена)
 
@@ -424,6 +436,49 @@ function ai.moveAndPrepare(enemy, entities, hex)
     end
     if enemy.isMoving then
         return "moving"
+    end
+
+    -- Стержень призывания: не двигается, выбирает случайную пустую клетку
+    if enemy.isSummoningRod then
+        if enemy.summonCooldown and enemy.summonCooldown > 0 then
+            enemy.summonCooldown = enemy.summonCooldown - 1
+            return "failed"
+        end
+        -- Собираем свободные клетки в радиусе 1 от стержня
+        local freeCells = {}
+        local neighbors = hex:getNeighbors(enemy.q, enemy.r)
+        for _, nb in ipairs(neighbors) do
+            if hex:isActiveHex(nb.q, nb.r) then
+                local occupied = false
+                for _, e in ipairs(entities) do
+                    if e.q == nb.q and e.r == nb.r and e.health > 0 then
+                        occupied = true
+                        break
+                    end
+                end
+                if not occupied then
+                    local terrain = terrainMap and terrainMap[nb.q] and terrainMap[nb.q][nb.r] or "grass"
+                    if terrain ~= "water" then
+                        table.insert(freeCells, {q = nb.q, r = nb.r})
+                    end
+                end
+            end
+        end
+        if #freeCells > 0 then
+            local target = freeCells[love.math.random(1, #freeCells)]
+            enemy.summonTargetQ = target.q
+            enemy.summonTargetR = target.r
+            local env = require("environment")
+            local types = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
+            enemy.summonType = types[love.math.random(1, #types)]
+            enemy.hasPreparedAttack = true
+            if enemy.attacks and #enemy.attacks > 0 then
+                enemy.preparedAttack = enemy.attacks[1].attack
+            end
+            debugPrint(string.format("SummoningRod prepares summon at (%d,%d): %s", target.q, target.r, enemy.summonType))
+            return "prepared"
+        end
+        return "failed"
     end
 
     -- Если уже может атаковать – сразу готовим

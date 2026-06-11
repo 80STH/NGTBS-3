@@ -191,6 +191,18 @@ function renderer.draw(state)
         if entity:isCharacter() and not entity.isPlayable and entity.hasPreparedAttack and entity.health > 0 then
             ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
         end
+        -- Подсветка целевой клетки призыва стержня
+        if entity.isSummoningRod and entity.hasPreparedAttack and entity.summonTargetQ and entity.summonTargetR then
+            local sx, sy = getDrawCoords(entity.summonTargetQ, entity.summonTargetR)
+            local verts = hex:drawInsetHexagon(sx, sy, hex.radius, 0.92)
+            local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
+            love.graphics.setColor(0.8, 0.4, 0.2, 0.2 + 0.3 * pulse)
+            love.graphics.polygon("fill", verts)
+            love.graphics.setColor(0.8, 0.4, 0.2, 0.5 + 0.3 * pulse)
+            love.graphics.setLineWidth(3)
+            love.graphics.polygon("line", verts)
+            love.graphics.setLineWidth(1)
+        end
     end
     drawAllEntities(state)
     visual.draw()

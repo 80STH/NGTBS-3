@@ -91,26 +91,6 @@ return {
       y = 0,
       width = 11,
       height = 11,
-      id = 1,
-      name = "terrain",
-      class = "",
-      visible = true,
-      opacity = 1,
-      offsetx = 0,
-      offsety = 0,
-      parallaxx = 1,
-      parallaxy = 1,
-      properties = {},
-      encoding = "base64",
-      compression = "zlib",
-      data = "eJxjYBgFwx0AAAHkAAE="
-    },
-    {
-      type = "tilelayer",
-      x = 0,
-      y = 0,
-      width = 11,
-      height = 11,
       id = 2,
       name = "entities",
       class = "",
@@ -123,27 +103,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJyTY2BgkAdiJSDWAGJdINYCYh0gdgFiWwYIcAVicSAWBWJJIJYCYmkglgFiJyAOYEAAVyRMDCBFHbFqSQW0MJcUM4kNM1ccGJu9MDkAaIAIXQ=="
-    },
-    {
-      type = "tilelayer",
-      x = 0,
-      y = 0,
-      width = 11,
-      height = 11,
-      id = 3,
-      name = "status",
-      class = "",
-      visible = true,
-      opacity = 1,
-      offsetx = 0,
-      offsety = 0,
-      parallaxx = 1,
-      parallaxy = 1,
-      properties = {},
-      encoding = "base64",
-      compression = "zlib",
-      data = "eJwLYoCAIChGBuhi6PL4AClqiTWP2mYOZUBKWAAA0rADNQ=="
+      data = "eJyTY2BgkAdiJSDWAGJdINYCYh0gdgFiWwYIcAVicSAWBWJJIJYCYmkglgFiJyAOAOJgJLUwTAwgRR2xakkFtDCXFDOJDTNXHBibvTA5AOzICLA="
     }
   }
 }

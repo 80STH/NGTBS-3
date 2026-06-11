@@ -45,6 +45,7 @@ local gidToEntity = {
     [23] = { type = "character", name = "Raider",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "raider" },
     [28] = { type = "character", name = "Dervish",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "dervish" },
     [66] = { type = "character", name = "Crusher",  isPlayable = false, maxHealth = 4, moveRange = 2, attacks = "crusher" },
+    [83] = { type = "character", name = "SummoningRod", isPlayable = false, maxHealth = 4, moveRange = 0, attacks = "summoningrod" },
 }
 
 environment.enemySpriteCache = {}
@@ -324,6 +325,8 @@ local function createEntityFromGID(map, gid, gridX, gridY)
             attacks = environment.getDervishAttacks()
         elseif def.attacks == "crusher" then
             attacks = environment.getCrusherAttacks()
+        elseif def.attacks == "summoningrod" then
+            attacks = environment.getSummoningRodAttacks()
         else
             attacks = {}
         end
@@ -341,6 +344,15 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         if not def.isPlayable then
             local level = environment.getRandomLevel()
             environment.applyLevelToEnemy(actor, level)
+        end
+        if def.name == "SummoningRod" then
+            actor.isSummoningRod = true
+            actor.isPushable = false
+            actor.moveRange = 0
+            local healthMap = {[1] = 4, [2] = 5, [3] = 6, [4] = 7}
+            local level = actor.level or 1
+            actor.maxHealth = healthMap[level] or 4
+            actor.health = actor.maxHealth
         end
         if def.name == "Ghost" then
             actor.flying = true
@@ -692,6 +704,13 @@ function environment.getCrusherAttacks()
     }
 end
 
+function environment.getSummoningRodAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.SummonEnemyAttack.new(), name = "Summon", description = "Summon a random enemy" },
+    }
+end
+
 function environment.getLancerAttacks()
     local combat = require("combat")
     return {
@@ -886,6 +905,11 @@ function environment.createEnemyByType(enemyType, q, r)
         name = "Crusher"
         maxHealth = 4
         moveRange = 2
+    elseif enemyType == "SummoningRod" then
+        attacks = environment.getSummoningRodAttacks()
+        name = "SummoningRod"
+        maxHealth = 4
+        moveRange = 0
     else
         attacks = environment.getZombieAttacks()
         name = "Zombie"
@@ -897,26 +921,34 @@ function environment.createEnemyByType(enemyType, q, r)
         Ghost = 26, Zombie = 25, Lich = 27,
         Brute = 60, Lancer = 62, BogShaman = 80,
         Raider = 23, Dervish = 28, Crusher = 66,
+        SummoningRod = 83,
     }
     local gid = enemyTypeToGid[enemyType]
     local sprite = gid and environment.unitSpriteCache[gid]
     if not sprite then
-        -- Fallback: создаём цветной круг (16x16, scale 6 -> 96px на экране)
         local size = 16
         local canvas = love.graphics.newCanvas(size, size)
         canvas:setFilter("nearest", "nearest")
         love.graphics.setCanvas(canvas)
         love.graphics.clear(0, 0, 0, 0)
-        if enemyType == "Ghost" then
+        if enemyType == "SummoningRod" then
+            love.graphics.setColor(0.6, 0.4, 0.2, 1)
+            love.graphics.rectangle("fill", size/2-3, 2, 6, size-4)
+            love.graphics.setColor(0.8, 0.6, 0.3, 1)
+            love.graphics.circle("fill", size/2, 3, 3)
+        elseif enemyType == "Ghost" then
             love.graphics.setColor(0.7, 0.3, 1, 1)
+            love.graphics.circle("fill", size/2, size/2, size/2 - 1)
         elseif enemyType == "Zombie" then
             love.graphics.setColor(0.3, 0.7, 0.2, 1)
+            love.graphics.circle("fill", size/2, size/2, size/2 - 1)
         elseif enemyType == "Lich" then
             love.graphics.setColor(0.8, 0.2, 0.8, 1)
+            love.graphics.circle("fill", size/2, size/2, size/2 - 1)
         else
             love.graphics.setColor(1, 0.5, 0, 1)
+            love.graphics.circle("fill", size/2, size/2, size/2 - 1)
         end
-        love.graphics.circle("fill", size/2, size/2, size/2 - 1)
         love.graphics.setCanvas()
         sprite = canvas
     end
@@ -930,6 +962,16 @@ function environment.createEnemyByType(enemyType, q, r)
     end
     local level = environment.getRandomLevel()
     environment.applyLevelToEnemy(entity, level)
+    -- Стержень призывания: переопределяем здоровье после applyLevelToEnemy
+    if enemyType == "SummoningRod" then
+        entity.isSummoningRod = true
+        entity.isPushable = false
+        entity.moveRange = 0
+        local healthMap = {[1] = 4, [2] = 5, [3] = 6, [4] = 7}
+        local lvl = entity.level or 1
+        entity.maxHealth = healthMap[lvl] or 4
+        entity.health = entity.maxHealth
+    end
     return entity
 end
 

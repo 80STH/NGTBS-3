@@ -1565,6 +1565,11 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         table.insert(lines, { text = attackText.name, color = {0.9, 0.6, 0.3} })
         table.insert(lines, { text = attackText.description, color = {0.8, 0.8, 0.7} })
     end
+    -- Стержень призывания: информация о призыве
+    if entity.isSummoningRod and entity.hasPreparedAttack and entity.summonTargetQ and entity.summonType then
+        table.insert(lines, { text = string.format("Summon: %s at (%d,%d)", entity.summonType, entity.summonTargetQ, entity.summonTargetR), color = {1, 0.6, 0.2} })
+    end
+
     -- Подготовленная атака
     if entity.hasPreparedAttack and entity.preparePosCube and entity.preparedTargetCube then
         local curX, curY, curZ = hex_utils.axialToCube(entity.q, entity.r)
