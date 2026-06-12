@@ -124,7 +124,37 @@ function menu.draw()
     love.graphics.setFont(love.graphics.newFont(11))
     love.graphics.printf(tostring(difficultyModifier), 0, sy + sh + 4, w, "center")
 
-    local bottomY = sy + sh + 24
+    -- Grid mode toggle
+    local modeY = sy + sh + 30
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setFont(love.graphics.newFont(12))
+    love.graphics.printf("Grid Mode", 0, modeY, w, "center")
+
+    local modeBtnW, modeBtnH = 140, 28
+    local modeBtnY = modeY + 20
+    local modeBtn1X = w/2 - modeBtnW - 6
+    local modeBtn2X = w/2 + 6
+
+    local mode1Hover = mx >= modeBtn1X and mx <= modeBtn1X + modeBtnW and my >= modeBtnY and my <= modeBtnY + modeBtnH
+    local mode2Hover = mx >= modeBtn2X and mx <= modeBtn2X + modeBtnW and my >= modeBtnY and my <= modeBtnY + modeBtnH
+
+    love.graphics.setColor(not gridRotationMode and (mode1Hover and 0.4 or 0.25) or 0.15, not gridRotationMode and 0.3 or 0.15, not gridRotationMode and 0.5 or 0.2, 0.9)
+    love.graphics.rectangle("fill", modeBtn1X, modeBtnY, modeBtnW, modeBtnH, 6)
+    love.graphics.setColor(not gridRotationMode and 0.5 or 0.3, not gridRotationMode and 0.4 or 0.3, not gridRotationMode and 0.8 or 0.4, not gridRotationMode and 0.9 or 0.5)
+    love.graphics.rectangle("line", modeBtn1X, modeBtnY, modeBtnW, modeBtnH, 6)
+    love.graphics.setColor(1, 1, 1, not gridRotationMode and 1 or 0.5)
+    love.graphics.setFont(love.graphics.newFont(11))
+    love.graphics.printf("Standard", modeBtn1X, modeBtnY + 6, modeBtnW, "center")
+
+    love.graphics.setColor(gridRotationMode and (mode2Hover and 0.4 or 0.25) or 0.15, gridRotationMode and 0.3 or 0.15, gridRotationMode and 0.5 or 0.2, 0.9)
+    love.graphics.rectangle("fill", modeBtn2X, modeBtnY, modeBtnW, modeBtnH, 6)
+    love.graphics.setColor(gridRotationMode and 0.5 or 0.3, gridRotationMode and 0.4 or 0.3, gridRotationMode and 0.8 or 0.4, gridRotationMode and 0.9 or 0.5)
+    love.graphics.rectangle("line", modeBtn2X, modeBtnY, modeBtnW, modeBtnH, 6)
+    love.graphics.setColor(1, 1, 1, gridRotationMode and 1 or 0.5)
+    love.graphics.setFont(love.graphics.newFont(11))
+    love.graphics.printf("Rotated", modeBtn2X, modeBtnY + 6, modeBtnW, "center")
+
+    local bottomY = modeBtnY + modeBtnH + 12
     love.graphics.setFont(love.graphics.newFont(12))
     love.graphics.setColor(0.5, 0.5, 0.5, 1)
     love.graphics.printf("Click a map to start  |  R to restart", 0, bottomY, w, "center")
@@ -165,6 +195,22 @@ function menu.mousepressed(x, y)
         local relX = (x - sx) / sw
         difficultyModifier = math.max(1, math.min(32, math.floor(relX * 31) + 1))
         return true
+    end
+
+    -- Grid mode toggle
+    local modeY = sy + sh + 30
+    local modeBtnW, modeBtnH = 140, 28
+    local modeBtnY = modeY + 20
+    local modeBtn1X = logicalW/2 - modeBtnW - 6
+    local modeBtn2X = logicalW/2 + 6
+    if y >= modeBtnY and y <= modeBtnY + modeBtnH then
+        if x >= modeBtn1X and x <= modeBtn1X + modeBtnW then
+            gridRotationMode = false
+            return true
+        elseif x >= modeBtn2X and x <= modeBtn2X + modeBtnW then
+            gridRotationMode = true
+            return true
+        end
     end
 
     return false

@@ -31,6 +31,7 @@ logicalH = 0
 screenShake = { timer = 0, intensity = 6, duration = 0.3 }
 testViewActive = false
 testViewOffsetY = 0
+gridRotationMode = false
 gamePhase = "menu"
 selectedMapPath = nil
 selectedSquad = nil

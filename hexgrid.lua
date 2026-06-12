@@ -17,6 +17,9 @@ function HexGrid.new(radius, gridWidth, gridHeight, activeRadius, centerQ, cente
     
     self.offsetX = 0
     self.offsetY = 0
+    self.rotation = 0
+    self.centerPixelX = 0
+    self.centerPixelY = 0
     
     self.hoverQ = -1
     self.hoverR = -1
@@ -29,6 +32,15 @@ end
 function HexGrid:pixelToHex(px, py)
     local x = px - self.offsetX
     local y = py - self.offsetY
+    
+    if self.rotation ~= 0 then
+        local cos_a = math.cos(-self.rotation)
+        local sin_a = math.sin(-self.rotation)
+        local dx = x - self.centerPixelX
+        local dy = y - self.centerPixelY
+        x = self.centerPixelX + dx * cos_a - dy * sin_a
+        y = self.centerPixelY + dx * sin_a + dy * cos_a
+    end
     
     local r = math.floor(y / self.hexHeight)
     local hexWidthFull = self.hexWidth
@@ -62,6 +74,14 @@ end
 function HexGrid:hexToPixel(q, r)
     local x = (q + (r % 2) * 0.5) * self.hexWidth
     local y = r * self.hexHeight
+    if self.rotation ~= 0 then
+        local cos_a = math.cos(self.rotation)
+        local sin_a = math.sin(self.rotation)
+        local dx = x - self.centerPixelX
+        local dy = y - self.centerPixelY
+        x = self.centerPixelX + dx * cos_a - dy * sin_a
+        y = self.centerPixelY + dx * sin_a + dy * cos_a
+    end
     return x + self.offsetX, y + self.offsetY
 end
 
@@ -108,8 +128,9 @@ end
 
 function HexGrid:drawHexagon(x, y, radius)
     local vertices = {}
+    local rot = self.rotation or 0
     for i = 0, 5 do
-        local angle = math.rad(60 * i + 30)
+        local angle = math.rad(60 * i + 30) + rot
         local vx = x + math.cos(angle) * radius
         local vy = y + math.sin(angle) * radius
         table.insert(vertices, vx)
@@ -122,8 +143,9 @@ function HexGrid:drawInsetHexagon(x, y, radius, scale)
     scale = scale or 0.92
     local r = radius * scale
     local vertices = {}
+    local rot = self.rotation or 0
     for i = 0, 5 do
-        local angle = math.rad(60 * i + 30)
+        local angle = math.rad(60 * i + 30) + rot
         local vx = x + math.cos(angle) * r
         local vy = y + math.sin(angle) * r
         table.insert(vertices, vx)
@@ -132,12 +154,13 @@ function HexGrid:drawInsetHexagon(x, y, radius, scale)
     return vertices
 end
 
--- hexgrid.lua
 function HexGrid:centerOnScreen(screenWidth, screenHeight)
     local mapWidth = (self.gridWidth + 0.5) * self.hexWidth
     local mapHeight = self.gridHeight * self.hexHeight
     self.offsetX = (screenWidth - mapWidth) / 2
     self.offsetY = (screenHeight - mapHeight) / 2
+    self.centerPixelX = (self.centerQ + (self.centerR % 2) * 0.5) * self.hexWidth
+    self.centerPixelY = self.centerR * self.hexHeight
 end
 
 function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
