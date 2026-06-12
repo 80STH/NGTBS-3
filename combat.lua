@@ -444,7 +444,11 @@ function combat.LineShotAttack:execute(attacker, targetQ, targetR, hex, entities
     if not firstTarget then
         return self:noTargetLineFallback(attacker, stepX, stepY, stepZ, hex)
     end
-    attack_effects.shoot(attacker, firstTarget, nil, nil, hex)
+    local pushQ, pushR
+    if firstTarget.isPushable ~= false then
+        pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+    end
+    attack_effects.shoot(attacker, firstTarget, pushQ, pushR, hex)
     if self.damage > 0 then
         self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
     end
@@ -487,7 +491,15 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
         if not ok then return false, "No valid target cell!" end
         return true
     end
-    attack_effects.piercingShoot(attacker, firstTarget, secondTarget, stepX, stepY, stepZ, hex)
+    local firstPushQ, firstPushR
+    if firstTarget.isPushable ~= false then
+        firstPushQ, firstPushR = hex_utils.applyCubeStep(firstHex.q, firstHex.r, stepX, stepY, stepZ)
+    end
+    local secondPushQ, secondPushR
+    if secondTarget and secondTarget.isPushable ~= false and secondHex then
+        secondPushQ, secondPushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
+    end
+    attack_effects.piercingShoot(attacker, firstTarget, secondTarget, firstPushQ, firstPushR, secondPushQ, secondPushR, hex)
     if secondTarget then
         self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil, globalHealth)
     end

@@ -1050,6 +1050,155 @@ end
         return
     end
 
+    -- Shoot: урон + отталкивание + коллизия
+    if attack.name == "Shoot" then
+        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+        if stepX then
+            local firstTarget, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+            if firstTarget and targetHex then
+                local fromX, fromY = getDrawCoords(targetHex.q, targetHex.r)
+                local fx, fy = getDrawCoords(attacker.q, attacker.r)
+                ui.drawDottedLine(fx, fy, fromX, fromY, 4, 20, love.timer.getTime())
+
+                local totalDamage = attack.damage or 1
+                local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+                local toX, toY = getDrawCoords(pushQ, pushR)
+
+                if firstTarget.isPushable ~= false then
+                    ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, targetHex.q, targetHex.r, pushQ, pushR)
+                    local collisionDamage, reason, second = ui.checkCollisionDamage(firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities)
+                    if collisionDamage > 0 then
+                        totalDamage = totalDamage + collisionDamage
+                        if reason == "edge" then
+                            ui.drawCollisionIcon(toX, toY, 1, false)
+                        elseif second then
+                            local secX, secY = getDrawCoords(second.q, second.r)
+                            drawHealthBar(second, secX, secY, 1)
+                            if reason == "collision_both" then
+                                ui.drawCollisionIcon(secX, secY, 1, true)
+                                ui.drawCollisionIcon(toX, toY, 1, true)
+                            else
+                                ui.drawCollisionIcon(toX, toY, 1, false)
+                            end
+                        end
+                    end
+                end
+
+                drawHealthBar(firstTarget, fromX, fromY, totalDamage)
+                if firstTarget:isBuilding() then
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(totalDamage, firstTarget.health)
+                end
+            else
+                local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+                if endCell then
+                    local fx, fy = getDrawCoords(attacker.q, attacker.r)
+                    local tx, ty = getDrawCoords(endCell.q, endCell.r)
+                    ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+                end
+            end
+        end
+        return
+    end
+
+    -- Piercing Shot: две цели, урон + отталкивание
+    if attack.name == "Piercing Shot" then
+        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+        if stepX then
+            local firstTarget, firstHex, secondTarget, secondHex = attack:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+
+            local fx, fy = getDrawCoords(attacker.q, attacker.r)
+            if secondTarget then
+                local tx, ty = getDrawCoords(secondTarget.q, secondTarget.r)
+                ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+            elseif firstTarget then
+                local tx, ty = getDrawCoords(firstTarget.q, firstTarget.r)
+                ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+            end
+
+            if firstTarget and firstHex then
+                local fromX, fromY = getDrawCoords(firstHex.q, firstHex.r)
+                local totalDamage = 0
+
+                if firstTarget.isPushable ~= false then
+                    local pushQ, pushR = hex_utils.applyCubeStep(firstHex.q, firstHex.r, stepX, stepY, stepZ)
+                    local toX, toY = getDrawCoords(pushQ, pushR)
+                    ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, firstHex.q, firstHex.r, pushQ, pushR)
+
+                    local collisionDamage, reason, second = ui.checkCollisionDamage(firstTarget, firstHex.q, firstHex.r, pushQ, pushR, hex, entities)
+                    if collisionDamage > 0 then
+                        totalDamage = totalDamage + collisionDamage
+                        if reason == "edge" then
+                            ui.drawCollisionIcon(toX, toY, 1, false)
+                        elseif second then
+                            local secX, secY = getDrawCoords(second.q, second.r)
+                            drawHealthBar(second, secX, secY, 1)
+                            if reason == "collision_both" then
+                                ui.drawCollisionIcon(secX, secY, 1, true)
+                                ui.drawCollisionIcon(toX, toY, 1, true)
+                            else
+                                ui.drawCollisionIcon(toX, toY, 1, false)
+                            end
+                        end
+                    end
+                end
+
+                if totalDamage > 0 then
+                    drawHealthBar(firstTarget, fromX, fromY, totalDamage)
+                    if firstTarget:isBuilding() then
+                        globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(totalDamage, firstTarget.health)
+                    end
+                end
+            end
+
+            if secondTarget and secondHex then
+                local fromX, fromY = getDrawCoords(secondHex.q, secondHex.r)
+                local totalDamage = 1
+
+                if secondTarget.isPushable ~= false then
+                    local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
+                    local toX, toY = getDrawCoords(pushQ, pushR)
+                    ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, secondHex.q, secondHex.r, pushQ, pushR)
+
+                    local collisionDamage, reason, second = ui.checkCollisionDamage(secondTarget, secondHex.q, secondHex.r, pushQ, pushR, hex, entities)
+                    if collisionDamage > 0 then
+                        totalDamage = totalDamage + collisionDamage
+                        if reason == "edge" then
+                            ui.drawCollisionIcon(toX, toY, 1, false)
+                        elseif second then
+                            local secX, secY = getDrawCoords(second.q, second.r)
+                            drawHealthBar(second, secX, secY, 1)
+                            if reason == "collision_both" then
+                                ui.drawCollisionIcon(secX, secY, 1, true)
+                                ui.drawCollisionIcon(toX, toY, 1, true)
+                            else
+                                ui.drawCollisionIcon(toX, toY, 1, false)
+                            end
+                        end
+                    end
+                end
+
+                drawHealthBar(secondTarget, fromX, fromY, totalDamage)
+                if secondTarget:isBuilding() then
+                    globalHealth.previewDamage = (globalHealth.previewDamage or 0) + math.min(totalDamage, secondTarget.health)
+                end
+            end
+
+            if not firstTarget then
+                local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+                if endCell then
+                    local tx, ty = getDrawCoords(endCell.q, endCell.r)
+                    ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+                    love.graphics.setColor(0.9, 0.7, 0.2, 0.5)
+                    love.graphics.setLineWidth(2)
+                    love.graphics.circle("line", tx, ty, hex.radius * 0.3)
+                    love.graphics.setLineWidth(1)
+                    love.graphics.setColor(1, 1, 1, 1)
+                end
+            end
+        end
+        return
+    end
+
     -- Для атак, у которых есть getPushCell (Shoot и др.)
     if attack.getPushCell then
         local pushCell = attack:getPushCell(attacker, hoverQ, hoverR, hex, entities)

@@ -134,7 +134,7 @@ return {
       id = 3,
       name = "status",
       class = "",
-      visible = false,
+      visible = true,
       opacity = 1,
       offsetx = 0,
       offsety = 0,
@@ -143,7 +143,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJwLYmBgCBpkWHMImk1LN1OKAX8IJkg="
+      data = "eJwLYmBgCCITa1KgFx9moJG5tDSblm6mFAMAxTElpA=="
     }
   }
 }

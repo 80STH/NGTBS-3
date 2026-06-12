@@ -1,5 +1,7 @@
 local menu = {}
 
+local playtestPhase = nil  -- nil, "select_difficulty"
+
 local mapList = {"maps/map1.lua", "maps/test_polygon_1.lua", "maps/test_polygon_2.lua"}
 
 local squads = {
@@ -41,7 +43,12 @@ function menu.draw()
     love.graphics.setColor(0.08, 0.08, 0.12, 1)
     love.graphics.rectangle("fill", 0, 0, w, h)
 
-    love.graphics.setColor(1, 1, 1, 1)
+    if playtestPhase == "select_difficulty" then
+        menu.drawPlaytestDifficulty()
+        return
+    end
+
+    -- Draw normal menu
     local titleFont = love.graphics.newFont(math.max(18, math.floor(h * 0.05)))
     love.graphics.setFont(titleFont)
     love.graphics.printf("Select Map", 0, h * 0.12, w, "center")
@@ -155,9 +162,76 @@ function menu.draw()
     love.graphics.printf("Rotated", modeBtn2X, modeBtnY + 6, modeBtnW, "center")
 
     local bottomY = modeBtnY + modeBtnH + 12
+
+    -- Full Playtest button
+    local ptY = bottomY + 30
+    local ptHover = mx >= bx and mx <= bx + bw and my >= ptY and my <= ptY + bh
+    love.graphics.setColor(ptHover and 0.4 or 0.2, ptHover and 0.3 or 0.15, ptHover and 0.2 or 0.1, 0.9)
+    love.graphics.rectangle("fill", bx, ptY, bw, bh, 8)
+    love.graphics.setColor(0.8, 0.4, 0.2, ptHover and 0.8 or 0.4)
+    love.graphics.rectangle("line", bx, ptY, bw, bh, 8)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setFont(love.graphics.newFont(13))
+    love.graphics.printf("Full Playtest", bx + 10, ptY + bh/2 - 8, bw - 20, "center")
+
     love.graphics.setFont(love.graphics.newFont(12))
     love.graphics.setColor(0.5, 0.5, 0.5, 1)
-    love.graphics.printf("Click a map to start  |  R to restart", 0, bottomY, w, "center")
+    love.graphics.printf("Click a map to start  |  R to restart", 0, ptY + bh + 12, w, "center")
+end
+
+function menu.drawPlaytestDifficulty()
+    local w = logicalW
+    local h = logicalH
+
+    love.graphics.setColor(1, 1, 1, 1)
+    local titleFont = love.graphics.newFont(math.max(18, math.floor(h * 0.05)))
+    love.graphics.setFont(titleFont)
+    love.graphics.printf("Full Playtest", 0, h * 0.20, w, "center")
+
+    love.graphics.setFont(love.graphics.newFont(14))
+    love.graphics.setColor(0.7, 0.7, 0.7, 1)
+    love.graphics.printf("Select Difficulty", 0, h * 0.28, w, "center")
+
+    local difficulties = {
+        { name = "Easy",   desc = "Spawn limit: 5", limit = 5, diff = 4 },
+        { name = "Medium", desc = "Spawn limit: 6", limit = 6, diff = 12 },
+        { name = "Hard",   desc = "Spawn limit: 7", limit = 7, diff = 24 },
+    }
+
+    local bw, bh = 220, 55
+    local bx = w/2 - bw/2
+    local startY = h * 0.38
+    local mx, my = love.mouse.getPosition()
+    mx = mx / dpiScale
+    my = my / dpiScale
+
+    for i, diff in ipairs(difficulties) do
+        local by = startY + (i - 1) * (bh + 12)
+        local hover = mx >= bx and mx <= bx + bw and my >= by and my <= by + bh
+
+        love.graphics.setColor(hover and 0.3 or 0.15, hover and 0.5 or 0.25, hover and 0.7 or 0.35, 0.9)
+        love.graphics.rectangle("fill", bx, by, bw, bh, 8)
+        love.graphics.setColor(0.4, 0.6, 0.8, hover and 0.8 or 0.4)
+        love.graphics.rectangle("line", bx, by, bw, bh, 8)
+
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setFont(love.graphics.newFont(14))
+        love.graphics.printf(diff.name, bx + 10, by + 4, bw - 20, "center")
+        love.graphics.setColor(0.7, 0.7, 0.7, 1)
+        love.graphics.setFont(love.graphics.newFont(11))
+        love.graphics.printf(diff.desc, bx + 10, by + 26, bw - 20, "center")
+    end
+
+    -- Back button
+    local backY = startY + #difficulties * (bh + 12) + 20
+    local backHover = mx >= bx and mx <= bx + 120 and my >= backY and my <= backY + 30
+    love.graphics.setColor(backHover and 0.4 or 0.2, backHover and 0.25 or 0.15, backHover and 0.2 or 0.1, 0.9)
+    love.graphics.rectangle("fill", bx, backY, 120, 30, 6)
+    love.graphics.setColor(0.6, 0.4, 0.2, backHover and 0.7 or 0.4)
+    love.graphics.rectangle("line", bx, backY, 120, 30, 6)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setFont(love.graphics.newFont(12))
+    love.graphics.printf("Back", bx, backY + 7, 120, "center")
 end
 
 function menu.mousepressed(x, y)
@@ -165,10 +239,47 @@ function menu.mousepressed(x, y)
     local mapStartY = logicalH * 0.20
     local bx = logicalW/2 - bw/2
 
+    if playtestPhase == "select_difficulty" then
+        local difficulties = {
+            { name = "Easy",   limit = 5, diff = 4 },
+            { name = "Medium", limit = 6, diff = 12 },
+            { name = "Hard",   limit = 7, diff = 24 },
+        }
+        local bw2, bh2 = 220, 55
+        local bx2 = logicalW/2 - bw2/2
+        local startY = logicalH * 0.38
+
+        for i, diff in ipairs(difficulties) do
+            local by = startY + (i - 1) * (bh2 + 12)
+            if x >= bx2 and x <= bx2 + bw2 and y >= by and y <= by + bh2 then
+                _G.playtestMode = true
+                _G.playtestSpawnLimit = diff.limit
+                _G.playtestEnemyTypes = { "Ghost", "Zombie", "PoisonousZombie", "Lich" }
+                selectedSquad = 1
+                difficultyModifier = diff.diff
+                playtestPhase = nil
+                restartGame("maps/map1.lua")
+                return true
+            end
+        end
+
+        -- Back button
+        local backY = startY + #difficulties * (bh2 + 12) + 20
+        if x >= bx2 and x <= bx2 + 120 and y >= backY and y <= backY + 30 then
+            playtestPhase = nil
+            return true
+        end
+
+        return false
+    end
+
     for i, mapPath in ipairs(mapList) do
         local by = mapStartY + (i - 1) * (bh + 10)
         if x >= bx and x <= bx + bw and y >= by and y <= by + bh then
             if not selectedSquad then selectedSquad = 1 end
+            _G.playtestMode = nil
+            _G.playtestSpawnLimit = nil
+            _G.playtestEnemyTypes = nil
             restartGame(mapPath)
             return true
         end
@@ -213,13 +324,26 @@ function menu.mousepressed(x, y)
         end
     end
 
+    -- Full Playtest button
+    local ptY = modeBtnY + modeBtnH + 12 + 30
+    if x >= bx and x <= bx + bw and y >= ptY and y <= ptY + bh then
+        playtestPhase = "select_difficulty"
+        return true
+    end
+
     return false
 end
 
 function menu.keypressed(key)
+    if playtestPhase == "select_difficulty" then
+        return false
+    end
     if key == "return" or key == " " then
         if #mapList > 0 then
             if not selectedSquad then selectedSquad = 1 end
+            _G.playtestMode = nil
+            _G.playtestSpawnLimit = nil
+            _G.playtestEnemyTypes = nil
             restartGame(mapList[1])
             return true
         end

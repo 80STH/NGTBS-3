@@ -69,9 +69,10 @@ function restartGame(mapPath)
             local j = love.math.random(i)
             candidates[i], candidates[j] = candidates[j], candidates[i]
         end
+        local initialSpawn = _G.playtestSpawnLimit or 5
         local spawned = 0
         for _, cell in ipairs(candidates) do
-            if spawned >= 5 then break end
+            if spawned >= initialSpawn then break end
             local enemy = environment.createRandomEnemy(cell.q, cell.r)
             table.insert(entities, enemy)
             spawned = spawned + 1
@@ -80,7 +81,7 @@ function restartGame(mapPath)
         print(string.format("Spawned %d random enemies on map1", spawned))
 
         -- 50% chance to spawn SummoningRod
-        if love.math.random() < 0.5 then
+        if not _G.playtestMode and love.math.random() < 0.5 then
             local emptyCells = findRandomEmptyCells(1)
             if #emptyCells > 0 then
                 local cell = emptyCells[1]
@@ -457,14 +458,15 @@ function processDigSites()
             aliveEnemies = aliveEnemies + 1
         end
     end
-    local needed = 7 - aliveEnemies
+    local spawnLimit = _G.playtestSpawnLimit or 7
+    local needed = spawnLimit - aliveEnemies
     if needed > 0 then
         local spots = findRandomEmptyCells(needed, function(q, r)
             return status.hasDigSite(q, r) or status.hasNegativeHexStatus(q, r)
         end)
+        local digTypes = _G.playtestEnemyTypes or { "Ghost", "Zombie", "Lich" }
         for _, spot in ipairs(spots) do
-            local types = { "Ghost", "Zombie", "Lich" }
-            local spawnType = types[love.math.random(1, #types)]
+            local spawnType = digTypes[love.math.random(1, #digTypes)]
             status.setDigSite(spot.q, spot.r, 1, spawnType)
             print(string.format("New dig site at (%d,%d) -> %s", spot.q, spot.r, spawnType))
         end

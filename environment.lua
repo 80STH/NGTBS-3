@@ -869,6 +869,11 @@ function environment.createEnemyByType(enemyType, q, r)
         name = "Zombie"
         maxHealth = 3
         moveRange = 3
+    elseif enemyType == "PoisonousZombie" then
+        attacks = environment.getZombieAttacks()
+        name = "PoisonousZombie"
+        maxHealth = 3
+        moveRange = 3
     elseif enemyType == "Lich" then
         attacks = environment.getLichAttacks()
         name = "Lich"
@@ -918,7 +923,7 @@ function environment.createEnemyByType(enemyType, q, r)
     end
 
     local enemyTypeToGid = {
-        Ghost = 26, Zombie = 25, Lich = 27,
+        Ghost = 26, Zombie = 25, PoisonousZombie = 21, Lich = 27,
         Brute = 60, Lancer = 62, BogShaman = 80,
         Raider = 23, Dervish = 28, Crusher = 66,
         SummoningRod = 83,
@@ -939,7 +944,7 @@ function environment.createEnemyByType(enemyType, q, r)
         elseif enemyType == "Ghost" then
             love.graphics.setColor(0.7, 0.3, 1, 1)
             love.graphics.circle("fill", size/2, size/2, size/2 - 1)
-        elseif enemyType == "Zombie" then
+        elseif enemyType == "Zombie" or enemyType == "PoisonousZombie" then
             love.graphics.setColor(0.3, 0.7, 0.2, 1)
             love.graphics.circle("fill", size/2, size/2, size/2 - 1)
         elseif enemyType == "Lich" then
@@ -977,7 +982,7 @@ end
 
 -- Создать случайного врага (из пула)
 function environment.createRandomEnemy(q, r)
-    local types = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
+    local types = _G.playtestEnemyTypes or { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
     local rnd = love.math.random(1, #types)
     return environment.createEnemyByType(types[rnd], q, r)
 end

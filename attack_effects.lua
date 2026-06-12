@@ -52,7 +52,7 @@ function attack_effects.shoot(attacker, target, pushToQ, pushToR, hex)
 end
 
 -- Эффект для Piercing Shot (пронзающий выстрел)
-function attack_effects.piercingShoot(attacker, firstTarget, secondTarget, stepX, stepY, stepZ, hex)
+function attack_effects.piercingShoot(attacker, firstTarget, secondTarget, firstPushQ, firstPushR, secondPushQ, secondPushR, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
     -- Линия на всю длину до второй цели
     local lastTarget = secondTarget or firstTarget
@@ -64,12 +64,22 @@ function attack_effects.piercingShoot(attacker, firstTarget, secondTarget, stepX
         visual.addEffect(fx, fy, "hit", 0.25)
         -- Искры
         visual.addSpark(fx, fy, 6)
+        -- Эффект отталкивания первой цели
+        if firstPushQ and firstPushR then
+            local pushX, pushY = hex:hexToPixel(firstPushQ, firstPushR)
+            visual.addPushEffect(fx, fy, pushX, pushY, 0.2)
+        end
     end
     -- Попадание во вторую цель (основной урон)
     if secondTarget then
         local sx, sy = getHexCenter(secondTarget, hex)
         visual.addEffect(sx, sy, "hit", 0.4)
         visual.addBloodSplat(sx, sy)
+        -- Эффект отталкивания второй цели
+        if secondPushQ and secondPushR then
+            local pushX, pushY = hex:hexToPixel(secondPushQ, secondPushR)
+            visual.addPushEffect(sx, sy, pushX, pushY, 0.2)
+        end
     end
 end
 

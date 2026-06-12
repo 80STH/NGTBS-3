@@ -22,7 +22,10 @@ local function findEmptyCells(entities, hex)
                 if not occupied then
                     local terrain = _G.terrainMap and _G.terrainMap[q] and _G.terrainMap[q][r] or "grass"
                     if terrain ~= "water" then
-                        table.insert(candidates, {q = q, r = r})
+                        local status = require("status")
+                        if not status.hasNegativeHexStatus(q, r) then
+                            table.insert(candidates, {q = q, r = r})
+                        end
                     end
                 end
             end
@@ -47,10 +50,13 @@ end
 
 local function createTowerAt(q, r)
     local env = require("environment")
+    local loadedMap = env.loadedMap
+    local tileW = (loadedMap and loadedMap.tilewidth) or 14
+    local tileH = (loadedMap and loadedMap.tileheight) or 12
     local tower = Entity.new("Tower", Entity.TYPES.BUILDING, q, r, 1, false, 0, nil, nil, {})
     tower.globalHealthCost = 1
     tower.isObjective = true
-    tower.sprite = env.generateBuildingSprite("Tower", 32, 32)
+    tower.sprite = env.generateBuildingSprite("Tower", tileW, tileH)
     return tower
 end
 
@@ -112,6 +118,14 @@ local function definePool()
             desc = "Poisonous zombie must not die before decay is applied",
             onGenerate = function(entities, hex)
                 local hasZombie = isEntityAlive(entities, "PoisonousZombie")
+                if not hasZombie then
+                    for _, e in ipairs(entities) do
+                        if e.health and e.health > 0 and e.name:match("Poisonous") then
+                            hasZombie = true
+                            break
+                        end
+                    end
+                end
                 if not hasZombie then
                     local env = require("environment")
                     local cells = findEmptyCells(entities, hex)
@@ -238,6 +252,25 @@ function objectives.generate(entities, hex)
     end
 
     print(string.format("Generated %d objectives:", count))
+    for _, obj in ipairs(activeObjectives) do
+        print(string.format("  - %s (%s)", obj.name, obj.id))
+    end
+end
+
+function objectives.activateAll(entities, hex)
+    definePool()
+    activeObjectives = {}
+    objectiveStates = {}
+
+    for _, def in ipairs(objectivePool) do
+        table.insert(activeObjectives, def)
+        objectiveStates[def.id] = "pending"
+        if def.onGenerate then
+            def.onGenerate(entities, hex)
+        end
+    end
+
+    print(string.format("Activated all %d objectives:", #activeObjectives))
     for _, obj in ipairs(activeObjectives) do
         print(string.format("  - %s (%s)", obj.name, obj.id))
     end

@@ -294,7 +294,12 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
         end
     elseif attack.name == "Shoot" then
         if target then
-            attack_effects.shoot(enemy, target, nil, nil, hex)
+            local dir = enemy.attackDirection
+            local pushQ, pushR
+            if dir and target.isPushable ~= false then
+                pushQ, pushR = hex_utils.applyCubeStep(target.q, target.r, dir.dx, dir.dy, dir.dz)
+            end
+            attack_effects.shoot(enemy, target, pushQ, pushR, hex)
         elseif targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
