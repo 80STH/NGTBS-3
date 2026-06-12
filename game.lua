@@ -144,6 +144,7 @@ function restartGame(mapPath)
     status.clearAllDigSites()
 
     objectives.reset()
+    objectives.generate(entities, hex)
     objectives.update(entities)
 
     if skipDeploy then

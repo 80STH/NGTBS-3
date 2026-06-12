@@ -1036,4 +1036,8 @@ function environment.applyLevelToEnemy(entity, level)
     entity.level = level
 end
 
+function environment.generateBuildingSprite(name, w, h)
+    return generateCustomSprite(name, w or 32, h or 32)
+end
+
 return environment
