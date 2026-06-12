@@ -628,11 +628,19 @@ end
     if attack.name == "Dash" then
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
         if stepX then
-            local firstTarget, targetHex = attack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+            local firstTarget, targetHex, lastFree = attack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+            
+            -- Стрелка должна указывать на цель, а не на курсор
+            local indicatorQ, indicatorR
+            if firstTarget and targetHex then
+                indicatorQ, indicatorR = targetHex.q, targetHex.r
+            else
+                indicatorQ, indicatorR = hoverQ, hoverR
+            end
             
             -- Рисуем след рывка от атакующего к цели
             local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
-            local toX, toY = getDrawCoords(hoverQ, hoverR)
+            local toX, toY = getDrawCoords(indicatorQ, indicatorR)
             local trailPulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 6)
             love.graphics.setLineWidth(6)
             love.graphics.setColor(0.3, 1, 0.3, 0.15 * trailPulse)
@@ -641,7 +649,7 @@ end
             love.graphics.setColor(0.6, 1, 0.6, 0.4 * trailPulse)
             love.graphics.line(fromX, fromY, toX, toY)
             love.graphics.setLineWidth(1)
-            ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, attacker.q, attacker.r, hoverQ, hoverR)
+            ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, attacker.q, attacker.r, indicatorQ, indicatorR)
             -- Маркер цели в точке удара
             local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
             local alpha = 0.4 + 0.4 * pulse
