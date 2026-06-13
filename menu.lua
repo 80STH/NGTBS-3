@@ -254,7 +254,7 @@ function menu.mousepressed(x, y)
             if x >= bx2 and x <= bx2 + bw2 and y >= by and y <= by + bh2 then
                 _G.playtestMode = true
                 _G.playtestSpawnLimit = diff.limit
-                _G.playtestEnemyTypes = { "Ghost", "Zombie", "PoisonousZombie", "Lich" }
+                _G.playtestEnemyTypes = { "Ghost", "Zombie", "Lich" }
                 selectedSquad = 1
                 difficultyModifier = diff.diff
                 playtestPhase = nil

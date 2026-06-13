@@ -59,7 +59,7 @@ function restartGame(mapPath)
             for r = 0, height - 1 do
                 if hex:isActiveHex(q, r) then
                     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain ~= "water" and not occupiedSet[q .. "," .. r] then
+                    if terrain ~= "water" and not occupiedSet[q .. "," .. r] and not status.hasNegativeHexStatus(q, r) then
                         table.insert(candidates, {q = q, r = r})
                     end
                 end
@@ -444,6 +444,7 @@ function processDigSites()
             print(string.format("A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r))
         else
             print(string.format("Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r))
+            _G.objective_digBlocks = (_G.objective_digBlocks or 0) + 1
         end
         status.removeDigSite(dig.q, dig.r)
     end

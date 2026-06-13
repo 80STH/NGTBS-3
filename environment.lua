@@ -965,7 +965,12 @@ function environment.createEnemyByType(enemyType, q, r)
     if hasAura then
         entity.aura = hasAura
     end
-    local level = environment.getRandomLevel()
+    local level
+    if _G.playtestMode then
+        level = 1
+    else
+        level = environment.getRandomLevel()
+    end
     environment.applyLevelToEnemy(entity, level)
     -- Стержень призывания: переопределяем здоровье после applyLevelToEnemy
     if enemyType == "SummoningRod" then

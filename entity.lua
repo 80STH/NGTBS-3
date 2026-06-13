@@ -170,7 +170,10 @@ function Entity:startDeath()
     if self.isDying then return end
     self.isDying = true
     self.deathTimer = 0
-    self.health = 0   -- гарантируем, что здоровье ноль
+    self.health = 0
+    if not self.isPlayable and self:isCharacter() then
+        _G.objective_enemiesKilled = (_G.objective_enemiesKilled or 0) + 1
+    end
     if sounds and sounds.death then
         sounds.death:play()
     end

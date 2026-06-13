@@ -116,6 +116,7 @@ local function definePool()
             id = "survive_poisonous_zombie",
             name = "Poisonous Zombie Survives",
             desc = "Poisonous zombie must not die before decay is applied",
+            incompatible = { "slaughter" },
             onGenerate = function(entities, hex)
                 local hasZombie = isEntityAlive(entities, "PoisonousZombie")
                 if not hasZombie then
@@ -168,34 +169,6 @@ local function definePool()
             end,
         },
         {
-            id = "defend_tower",
-            name = "Defend the Tower",
-            desc = "A random building was replaced with a tower. Protect it!",
-            onGenerate = function(entities, hex)
-                local idx = findBuildingToReplace(entities)
-                if idx then
-                    local old = entities[idx]
-                    entities[idx] = createTowerAt(old.q, old.r)
-                    print(string.format("Objective 'defend_tower': Building at (%d,%d) replaced with Tower", old.q, old.r))
-                else
-                    local cells = findEmptyCells(entities, hex)
-                    if #cells > 0 then
-                        local cell = cells[love.math.random(1, #cells)]
-                        table.insert(entities, createTowerAt(cell.q, cell.r))
-                        print(string.format("Objective 'defend_tower': Tower placed at (%d,%d)", cell.q, cell.r))
-                    end
-                end
-            end,
-            check = function(entities, state)
-                if not isEntityAlive(entities, "Tower") then
-                    state["defend_tower"] = "failed"
-                end
-            end,
-            checkOnVictory = function(entities, state)
-                state["defend_tower"] = isEntityAlive(entities, "Tower") and "completed" or "failed"
-            end,
-        },
-        {
             id = "defend_zombie",
             name = "Defend the Zombie",
             desc = "A zombie appears on the map. It must survive!",
@@ -224,6 +197,109 @@ local function definePool()
                 state["defend_zombie"] = (alive or decayApplied) and "completed" or "failed"
             end,
         },
+        {
+            id = "slaughter",
+            name = "Slaughter",
+            desc = "Kill 7 enemies before decay is applied",
+            incompatible = { "survive_poisonous_zombie" },
+            onGenerate = function(entities, hex)
+                _G.objective_enemiesKilled = 0
+            end,
+            check = function(entities, state)
+                local decayApplied = _G.decayAppliedForTurnLimit or false
+                local killed = _G.objective_enemiesKilled or 0
+                if decayApplied then
+                    state["slaughter"] = (killed >= 7) and "completed" or "failed"
+                end
+            end,
+            checkOnVictory = function(entities, state)
+                local killed = _G.objective_enemiesKilled or 0
+                state["slaughter"] = (killed >= 7) and "completed" or "failed"
+            end,
+        },
+        {
+            id = "block_dig",
+            name = "Block Dig",
+            desc = "Block dig sites from spawning at least 2 times",
+            onGenerate = function(entities, hex)
+                _G.objective_digBlocks = 0
+            end,
+            check = function(entities, state)
+                local blocked = _G.objective_digBlocks or 0
+                if blocked >= 2 then
+                    state["block_dig"] = "completed"
+                end
+            end,
+            checkOnVictory = function(entities, state)
+                local blocked = _G.objective_digBlocks or 0
+                state["block_dig"] = (blocked >= 2) and "completed" or "failed"
+            end,
+        },
+        {
+            id = "kill_leader",
+            name = "Destroy the Leader",
+            desc = "Find and eliminate the enemy leader!",
+            onGenerate = function(entities, hex)
+                local env = require("environment")
+                local candidates = {}
+                for _, e in ipairs(entities) do
+                    if e.health and e.health > 0 and e:isCharacter() and not e.isPlayable and not e.isSummoningRod then
+                        table.insert(candidates, e)
+                    end
+                end
+                local leader
+                if #candidates > 0 then
+                    leader = candidates[love.math.random(1, #candidates)]
+                else
+                    leader = env.createRandomEnemy(-1, -1)
+                    local cells = findEmptyCells(entities, hex)
+                    if #cells > 0 then
+                        local cell = cells[love.math.random(1, #cells)]
+                        leader.q = cell.q
+                        leader.r = cell.r
+                        table.insert(entities, leader)
+                    end
+                end
+                if leader then
+                    leader.isLeader = true
+                    leader.maxHealth = leader.maxHealth + 4
+                    leader.health = leader.maxHealth
+                    leader.moveRange = leader.moveRange + 1
+                    if leader.attacks then
+                        for _, at in ipairs(leader.attacks) do
+                            if at.attack and at.attack.damage then
+                                at.attack.damage = at.attack.damage + 2
+                            end
+                        end
+                    end
+                    leader.level = 4
+                    leader.name = "Leader " .. (leader.name or "Enemy")
+                    print(string.format("Objective 'kill_leader': Leader created at (%d,%d) - %s", leader.q, leader.r, leader.name))
+                end
+            end,
+            check = function(entities, state)
+                local alive = false
+                for _, e in ipairs(entities) do
+                    if e.isLeader and e.health and e.health > 0 then
+                        alive = true
+                        break
+                    end
+                end
+                if not alive then
+                    state["kill_leader"] = "completed"
+                end
+            end,
+            checkOnVictory = function(entities, state)
+                local alive = false
+                for _, e in ipairs(entities) do
+                    if e.isLeader and e.health and e.health > 0 then
+                        alive = true
+                        break
+                    end
+                end
+                state["kill_leader"] = alive and "failed" or "completed"
+            end,
+        },
     }
 end
 
@@ -244,14 +320,38 @@ function objectives.generate(entities, hex)
     local count = math.min(2, #shuffled)
     for i = 1, count do
         local def = shuffled[i]
-        table.insert(activeObjectives, def)
-        objectiveStates[def.id] = "pending"
-        if def.onGenerate then
-            def.onGenerate(entities, hex)
+        local conflict = false
+        for _, existing in ipairs(activeObjectives) do
+            if existing.incompatible then
+                for _, id in ipairs(existing.incompatible) do
+                    if id == def.id then
+                        conflict = true
+                        break
+                    end
+                end
+            end
+            if def.incompatible then
+                for _, id in ipairs(def.incompatible) do
+                    if id == existing.id then
+                        conflict = true
+                        break
+                    end
+                end
+            end
+            if conflict then break end
+        end
+        if conflict then
+            print(string.format("Skipping '%s' due to conflict with selected objectives", def.id))
+        else
+            table.insert(activeObjectives, def)
+            objectiveStates[def.id] = "pending"
+            if def.onGenerate then
+                def.onGenerate(entities, hex)
+            end
         end
     end
 
-    print(string.format("Generated %d objectives:", count))
+    print(string.format("Generated %d objectives:", #activeObjectives))
     for _, obj in ipairs(activeObjectives) do
         print(string.format("  - %s (%s)", obj.name, obj.id))
     end
@@ -280,6 +380,8 @@ function objectives.reset()
     definePool()
     activeObjectives = {}
     objectiveStates = {}
+    _G.objective_enemiesKilled = 0
+    _G.objective_digBlocks = 0
 end
 
 function objectives.getList()
