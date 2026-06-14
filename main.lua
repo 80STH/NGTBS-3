@@ -218,9 +218,7 @@ function love.update(dt)
         end
     end
     combat.updatePushAnimations(dt, hex)
-    if globalHealth.flashTimer and globalHealth.flashTimer > 0 then
-        globalHealth.flashTimer = globalHealth.flashTimer - dt
-    end
+    -- globalHealth removed
     if decayMessageTimer > 0 then
         decayMessageTimer = decayMessageTimer - dt
     end

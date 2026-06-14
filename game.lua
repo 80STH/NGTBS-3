@@ -31,7 +31,6 @@ function restartGame(mapPath)
     status.initHexStatuses(hexStatuses)
 
     globalHealth = { current = 5, max = 5, initial = 5 }
-    combat.globalHealth = globalHealth
 
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable then
@@ -282,14 +281,6 @@ end
 
 function checkGameEnd()
     if not gameActive then return end
-
-    if globalHealth.current <= 0 then
-        loss = true
-        gameActive = false
-        print("DEFEAT: Global health depleted!")
-        syncGlobalsToState()
-        return
-    end
 
     local anyAlly = false
     for _, e in ipairs(entities) do

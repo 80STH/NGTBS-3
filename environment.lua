@@ -18,18 +18,18 @@ local gidToTerrain = {
 }
 
 local gidToEntity = {
-    [34] = { type = "character", name = "Warrior", isPlayable = true,  maxHealth = 5, moveRange = 3, attacks = "warrior" },
-    [31] = { type = "character", name = "Mage",    isPlayable = true,  maxHealth = 3, moveRange = 4, attacks = "mage" },
-    [30] = { type = "character", name = "Rogue",   isPlayable = true,  maxHealth = 4, moveRange = 5, attacks = "rogue" },
-    [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "ghost" },
-    [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
-    [21] = { type = "character", name = "PoisonousZombie", isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
-    [27] = { type = "character", name = "Lich",    isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "lich" },
-    [40] = { type = "character", name = "Summoner", isPlayable = true,  maxHealth = 3, moveRange = 3, attacks = "summoner" },
-    [42] = { type = "character", name = "Summoned", isPlayable = true,  maxHealth = 2, moveRange = 2, attacks = "summoned" },
-    [44] = { type = "character", name = "Divided",  isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "none" },
-    [45] = { type = "character", name = "Divider",  isPlayable = true,  maxHealth = 4, moveRange = 4, attacks = "divider" },
-    [68] = { type = "character", name = "AttackTest", isPlayable = true, maxHealth = 10, moveRange = 6, attacks = "all" },
+    [34] = { type = "character", name = "Warrior", isPlayable = true,  maxHealth = 1, moveRange = 3, attacks = "warrior" },
+    [31] = { type = "character", name = "Mage",    isPlayable = true,  maxHealth = 1, moveRange = 4, attacks = "mage" },
+    [30] = { type = "character", name = "Rogue",   isPlayable = true,  maxHealth = 1, moveRange = 5, attacks = "rogue" },
+    [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 1, moveRange = 3, attacks = "ghost" },
+    [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 1, moveRange = 3, attacks = "zombie" },
+    [21] = { type = "character", name = "PoisonousZombie", isPlayable = false, maxHealth = 1, moveRange = 3, attacks = "zombie" },
+    [27] = { type = "character", name = "Lich",    isPlayable = false, maxHealth = 1, moveRange = 3, attacks = "lich" },
+    [40] = { type = "character", name = "Summoner", isPlayable = true,  maxHealth = 1, moveRange = 3, attacks = "summoner" },
+    [42] = { type = "character", name = "Summoned", isPlayable = true,  maxHealth = 1, moveRange = 2, attacks = "summoned" },
+    [44] = { type = "character", name = "Divided",  isPlayable = true,  maxHealth = 1, moveRange = 3, attacks = "none" },
+    [45] = { type = "character", name = "Divider",  isPlayable = true,  maxHealth = 1, moveRange = 4, attacks = "divider" },
+    [68] = { type = "character", name = "AttackTest", isPlayable = true, maxHealth = 1, moveRange = 6, attacks = "all" },
     [11] = { type = "obstacle",  name = "SuperMountain", indestructible = true },
     [9]  = { type = "obstacle",  name = "MountainSlope", health = 2, maxDamagePerHit = 1, direction = {dx = 1, dy = 0, dz = -1} },
     [15] = { type = "obstacle",  name = "MountainSlope", indestructible = true, noCollisionDamage = true },
@@ -39,13 +39,13 @@ local gidToEntity = {
     [6] = { type = "obstacle",  name = "WeakMountain",  health = 2, maxDamagePerHit = 1 },
     [59] = { type = "building", name = "Ship",          health = 1, globalHealthCost = 1, moveRange = 1, waterWalker = true },
     [29] = { type = "building", name = "Tower",         health = 1, globalHealthCost = 1, isObjective = true },
-    [60] = { type = "character", name = "Brute",    isPlayable = false, maxHealth = 5, moveRange = 2, attacks = "brute" },
-    [62] = { type = "character", name = "Lancer",   isPlayable = false, maxHealth = 4, moveRange = 3, attacks = "lancer" },
-    [80] = { type = "character", name = "BogShaman", isPlayable = false, maxHealth = 3, moveRange = 2, attacks = "bogshaman" },
-    [23] = { type = "character", name = "Raider",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "raider" },
-    [28] = { type = "character", name = "Dervish",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "dervish" },
-    [66] = { type = "character", name = "Crusher",  isPlayable = false, maxHealth = 4, moveRange = 2, attacks = "crusher" },
-    [83] = { type = "character", name = "SummoningRod", isPlayable = false, maxHealth = 4, moveRange = 0, attacks = "summoningrod" },
+    [60] = { type = "character", name = "Brute",    isPlayable = false, maxHealth = 1, moveRange = 2, attacks = "brute" },
+    [62] = { type = "character", name = "Lancer",   isPlayable = false, maxHealth = 1, moveRange = 3, attacks = "lancer" },
+    [80] = { type = "character", name = "BogShaman", isPlayable = false, maxHealth = 1, moveRange = 2, attacks = "bogshaman" },
+    [23] = { type = "character", name = "Raider",   isPlayable = false, maxHealth = 1, moveRange = 3, attacks = "raider" },
+    [28] = { type = "character", name = "Dervish",  isPlayable = false, maxHealth = 1, moveRange = 3, attacks = "dervish" },
+    [66] = { type = "character", name = "Crusher",  isPlayable = false, maxHealth = 1, moveRange = 2, attacks = "crusher" },
+    [83] = { type = "character", name = "SummoningRod", isPlayable = false, maxHealth = 1, moveRange = 0, attacks = "summoningrod" },
 }
 
 environment.enemySpriteCache = {}
@@ -850,70 +850,58 @@ function environment.createEnemyByType(enemyType, q, r)
     local Entity = require("entity")
     local attacks = {}
     local name = ""
-    local maxHealth = 3
+    local maxHealth = 1
     local moveRange = 2
     local hasAura = nil
 
     if enemyType == "Ghost" then
         attacks = environment.getGhostAttacks()
         name = "Ghost"
-        maxHealth = 3
         moveRange = 3
     elseif enemyType == "Zombie" then
         attacks = environment.getZombieAttacks()
         name = "Zombie"
-        maxHealth = 3
         moveRange = 3
     elseif enemyType == "PoisonousZombie" then
         attacks = environment.getZombieAttacks()
         name = "PoisonousZombie"
-        maxHealth = 3
         moveRange = 3
     elseif enemyType == "Lich" then
         attacks = environment.getLichAttacks()
         name = "Lich"
-        maxHealth = 2
         moveRange = 3
     elseif enemyType == "Brute" then
         attacks = environment.getBruteAttacks()
         name = "Brute"
-        maxHealth = 5
         moveRange = 2
     elseif enemyType == "Lancer" then
         attacks = environment.getLancerAttacks()
         name = "Lancer"
-        maxHealth = 4
         moveRange = 3
     elseif enemyType == "BogShaman" then
         attacks = environment.getBogShamanAttacks()
         name = "BogShaman"
-        maxHealth = 3
         moveRange = 2
         hasAura = { type = "slow", radius = 1 }
     elseif enemyType == "Raider" then
         attacks = environment.getRaiderAttacks()
         name = "Raider"
-        maxHealth = 3
         moveRange = 3
     elseif enemyType == "Dervish" then
         attacks = environment.getDervishAttacks()
         name = "Dervish"
-        maxHealth = 3
         moveRange = 3
     elseif enemyType == "Crusher" then
         attacks = environment.getCrusherAttacks()
         name = "Crusher"
-        maxHealth = 4
         moveRange = 2
     elseif enemyType == "SummoningRod" then
         attacks = environment.getSummoningRodAttacks()
         name = "SummoningRod"
-        maxHealth = 4
         moveRange = 0
     else
         attacks = environment.getZombieAttacks()
         name = "Zombie"
-        maxHealth = 3
         moveRange = 3
     end
 
@@ -967,15 +955,10 @@ function environment.createEnemyByType(enemyType, q, r)
         level = environment.getRandomLevel()
     end
     environment.applyLevelToEnemy(entity, level)
-    -- Стержень призывания: переопределяем здоровье после applyLevelToEnemy
     if enemyType == "SummoningRod" then
         entity.isSummoningRod = true
         entity.isPushable = false
         entity.moveRange = 0
-        local healthMap = {[1] = 4, [2] = 5, [3] = 6, [4] = 7}
-        local lvl = entity.level or 1
-        entity.maxHealth = healthMap[lvl] or 4
-        entity.health = entity.maxHealth
     end
     return entity
 end
@@ -1018,8 +1001,6 @@ function environment.applyLevelToEnemy(entity, level)
     if not level or level <= 1 then return end
 
     if level >= 2 then
-        entity.maxHealth = entity.maxHealth + 1
-        entity.health = entity.health + 1
         entity.moveRange = entity.moveRange + 1
     end
 
@@ -1030,8 +1011,6 @@ function environment.applyLevelToEnemy(entity, level)
     end
 
     if level >= 4 then
-        entity.maxHealth = entity.maxHealth + 3
-        entity.health = entity.health + 3
         for _, at in ipairs(entity.attacks) do
             at.attack.damage = (at.attack.damage or 1) + 2
         end

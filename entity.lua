@@ -135,24 +135,9 @@ function Entity:takeDamage(damage, globalHealth)
     end
     local actualDamage = math.min(damage, self.health)
     self.health = self.health - actualDamage
-    
-    if self:isBuilding() and globalHealth then
-        globalHealth.current = math.max(0, globalHealth.current - actualDamage)
-        globalHealth.flashTimer = 2.0
-        if screenShake then
-            screenShake.timer = screenShake.duration
-        end
-        print(string.format("%s takes %d damage! (%d/%d HP)", 
-              self.name, actualDamage, math.max(0, self.health), self.maxHealth))
-        print(string.format(" Global health reduced by %d! (%d/%d)", 
-              actualDamage, globalHealth.current, globalHealth.max))
-        
-        -- ВЫЗЫВАЕМ ПРОВЕРКУ КОНЦА ИГРЫ
-        if checkGameEnd then checkGameEnd() end
-    else
-        print(string.format("%s takes %d damage! (%d/%d HP)", 
-              self.name, actualDamage, math.max(0, self.health), self.maxHealth))
-    end
+
+    print(string.format("%s takes %d damage! (%d/%d HP)", 
+          self.name, actualDamage, math.max(0, self.health), self.maxHealth))
 
     -- Нокаут для союзников: вместо смерти переводим в нокаут
     if self.health <= 0 and self.isPlayable and self:isCharacter() and not status.hasEntityStatus(self, "knockout") then

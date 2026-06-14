@@ -289,7 +289,7 @@ function renderer.draw(state)
     ui.drawTestViewButton(mx, my)
 
     global_abilities.drawPreview(hex, state)
-    ui.drawGlobalHealthBar(state.globalHealth, mx, my)
+    -- ui.drawGlobalHealthBar removed
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
     ui.drawDecayButton(mx, my, state.turnCount, state.maxTurns, state.turnState.phase)
     ui.drawAllyPanel(mx, my, state.entities, state.selectedActor)
@@ -539,65 +539,6 @@ function getEntityDrawPosition(entity, state)
 end
 
 function drawHealthBar(entity, x, y, damage)
-    if not x or not y then
-        if entity and entity.q ~= nil and entity.r ~= nil and _G.state and _G.state.hex then
-            x, y = _G.state.hex:hexToPixel(entity.q, entity.r)
-        else
-            return
-        end
-    end
-
-    if not entity.maxHealth or entity.maxHealth <= 0 then return end
-    if entity.maxHealth > 10 then return end
-    if entity.health <= 0 or entity.isDying then return end
-
-    local pipW, pipH = 8, 16
-    local spacing = 1
-    local totalWidth = entity.maxHealth * (pipW + spacing) - spacing
-    local startX = x - totalWidth / 2
-    local startY = y - 28
-
-    damage = damage or 0
-    if status.hasEntityStatus(entity, "acid") then
-        damage = damage * 2
-    end
-    local damageClamped = math.min(damage, entity.health)
-
-    -- Рамка вокруг всех ячеек
-    local framePad = 1
-    love.graphics.setColor(0.15, 0.15, 0.15, 0.7)
-    love.graphics.rectangle("fill", startX - framePad, startY - framePad, totalWidth + framePad * 2, pipH + framePad * 2)
-    love.graphics.setColor(0.5, 0.5, 0.5, 0.7)
-    love.graphics.rectangle("line", startX - framePad, startY - framePad, totalWidth + framePad * 2, pipH + framePad * 2)
-
-    for i = 1, entity.maxHealth do
-        local cellX = startX + (i - 1) * (pipW + spacing)
-        local cellY = startY
-        local isAlive = i <= entity.health
-        local willTakeDamage = damageClamped > 0 and i > entity.health - damageClamped and i <= entity.health
-
-        if willTakeDamage then
-            local t = love.timer.getTime()
-            local blink = 0.5 + 0.5 * math.sin(t * 8)
-            love.graphics.setColor(1, 0.2 + blink * 0.3, 0.2, 0.9)
-        elseif isAlive then
-            if status.hasEntityStatus(entity, "knockout") then
-                love.graphics.setColor(1, 0.1, 0.1, 0.9)
-            else
-                love.graphics.setColor(0, 0.8, 0, 0.9)
-            end
-        else
-            love.graphics.setColor(0.15, 0.02, 0.02, 0.4)
-        end
-        love.graphics.rectangle("fill", cellX, cellY, pipW, pipH)
-    end
-
-    -- Вертикальные разделители
-    love.graphics.setColor(0.1, 0.1, 0.1, 0.6)
-    for i = 2, entity.maxHealth do
-        local lx = startX + (i - 1) * (pipW + spacing) - 1
-        love.graphics.line(lx, startY, lx, startY + pipH)
-    end
 end
 
 function drawActionIndicator(entity, x, y)
@@ -672,7 +613,7 @@ function drawEntity(entity, state)
         ui.drawEntityStatusEffects(x, y, entity, overlayRadius, love.timer.getTime())
     end
 
-    drawHealthBar(entity, x, y)
+    -- drawHealthBar removed
     drawActionIndicator(entity, x, y)
 
     if state.selectedActor == entity and entity:isCharacter() and not entity.isDying then
