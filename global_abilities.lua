@@ -20,7 +20,7 @@ global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth"
 local function getDropdownHeader()
     local w = 145
     local x = logicalW - w - 10
-    return { x = x, y = 8, w = w, h = 26 }
+    return { x = x, y = 410, w = w, h = 26 }
 end
 
 function global_abilities.register(obj)

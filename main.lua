@@ -113,11 +113,11 @@ function love.load()
     environment.loadUnitSprites()
 
     restartButton = {
-        x = 270, y = 1240, width = 110, height = 30,
+        x = 270, y = 1215, width = 110, height = 30,
         text = "Restart Game", isHovered = false
     }
     endTurnButton = {
-        x = 140, y = 1240, width = 110, height = 30,
+        x = 140, y = 1215, width = 110, height = 30,
         text = "End Turn", isHovered = false,
         holdTimer = 0, isHeld = false,
     }
@@ -251,7 +251,7 @@ function love.update(dt)
     end
 
     undoButton = undoButton or {}
-    undoButton.isHovered = (mx >= 10 and mx <= 120 and my >= 1240 and my <= 1270)
+    undoButton.isHovered = (mx >= 10 and mx <= 120 and my >= 1215 and my <= 1245)
     endTurnButton.isHovered = (mx >= endTurnButton.x and mx <= endTurnButton.x + endTurnButton.width and
                                my >= endTurnButton.y and my <= endTurnButton.y + endTurnButton.height)
 end

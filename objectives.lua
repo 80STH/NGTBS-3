@@ -68,18 +68,6 @@ local function isEntityAlive(entities, name)
     return false
 end
 
-local function isAnyZombieAlive(entities)
-    for _, e in ipairs(entities) do
-        if e.health and e.health > 0 and e:isCharacter() and not e.isPlayable then
-            local name = e.name or ""
-            if name:match("Zombie$") and not name:match("Poisonous") then
-                return true
-            end
-        end
-    end
-    return false
-end
-
 local function definePool()
     objectivePool = {
         {
@@ -165,35 +153,6 @@ local function definePool()
                     end
                 end
                 state["survive_poisonous_zombie"] = (alive or decayApplied) and "completed" or "failed"
-            end,
-        },
-        {
-            id = "defend_zombie",
-            name = "Defend the Zombie",
-            desc = "A zombie appears on the map. It must survive!",
-            onGenerate = function(entities, hex)
-                local env = require("environment")
-                local cells = findEmptyCells(entities, hex)
-                if #cells > 0 then
-                    local cell = cells[love.math.random(1, #cells)]
-                    local zombie = env.createEnemyByType("Zombie", cell.q, cell.r)
-                    table.insert(entities, zombie)
-                    print(string.format("Objective 'defend_zombie': Zombie spawned at (%d,%d)", cell.q, cell.r))
-                end
-            end,
-            check = function(entities, state)
-                local decayApplied = _G.decayAppliedForTurnLimit or false
-                local alive = isAnyZombieAlive(entities)
-                if not alive then
-                    state["defend_zombie"] = decayApplied and "completed" or "failed"
-                elseif decayApplied then
-                    state["defend_zombie"] = "completed"
-                end
-            end,
-            checkOnVictory = function(entities, state)
-                local decayApplied = _G.decayAppliedForTurnLimit or false
-                local alive = isAnyZombieAlive(entities)
-                state["defend_zombie"] = (alive or decayApplied) and "completed" or "failed"
             end,
         },
         {
@@ -435,7 +394,7 @@ function objectives.draw()
     if #activeObjectives == 0 then return end
 
     local x = 10
-    local y = 330
+    local y = 1070
     local w = 200
     local lineH = 16
     local padding = 6
