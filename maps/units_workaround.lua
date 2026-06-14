@@ -5,8 +5,8 @@ return {
   class = "",
   orientation = "hexagonal",
   renderorder = "right-down",
-  width = 11,
-  height = 11,
+  width = 9,
+  height = 9,
   tilewidth = 14,
   tileheight = 12,
   nextlayerid = 5,
@@ -89,8 +89,8 @@ return {
       type = "tilelayer",
       x = 0,
       y = 0,
-      width = 11,
-      height = 11,
+      width = 9,
+      height = 9,
       id = 2,
       name = "entities",
       class = "",
@@ -103,7 +103,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJyTY2BgkAdiJSDWAGJdINYCYh0gdgFiWwYIcAVicSAWBWJJIJYCYmkglgFiJyAOAOJgJLUwTAwgRR2xakkFtDCXFDOJDTNXHBibvTA5AOzICLA="
+      data = "eJyTY2BgkAdiJSDWAGJdINYCYh0gdmGAAHEgFgViSSCWAmJpIJYBYicgDoCqsQXiYAb8wJWAPLFqiAHUMocYAADfPQPW"
     }
   }
 }

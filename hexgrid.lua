@@ -157,7 +157,7 @@ end
 function HexGrid:centerOnScreen(screenWidth, screenHeight)
     local mapWidth = (self.gridWidth + 0.5) * self.hexWidth
     local mapHeight = self.gridHeight * self.hexHeight
-    self.offsetX = (screenWidth - mapWidth) / 2
+    self.offsetX = (screenWidth - mapWidth) / 2 + config.GRID_OFFSET_X
     self.offsetY = (screenHeight - mapHeight) / 2
     self.centerPixelX = (self.centerQ + (self.centerR % 2) * 0.5) * self.hexWidth
     self.centerPixelY = self.centerR * self.hexHeight

@@ -400,8 +400,6 @@ function environment.loadMapFromTiled(filePath)
     local entities = {}
     local walkable = {}
 
-    -- Временно создаём hex-объект для проверки isActiveHex (позже он будет пересоздан в main)
-    -- Но нам нужны координаты, поэтому используем временный hex с теми же размерами
     local tempHex = require("hexgrid").new(
         config.HEX_RADIUS,
         width, height,
@@ -409,9 +407,6 @@ function environment.loadMapFromTiled(filePath)
         config.CENTER_Q,
         config.CENTER_R
     )
-    -- Центр шестиугольника предполагается в (5,5) при width=11, height=11
-    -- Функция isActiveHex использует жёстко заданный центр 5,5, что корректно только для карты 11x11.
-    -- Если карта другого размера, нужно вычислять центр динамически. Оставим как есть, т.к. в проекте 11x11.
 
     -- Находим слой terrain
     local groundLayer = nil

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.1" orientation="hexagonal" renderorder="right-down" width="11" height="11" tilewidth="14" tileheight="12" infinite="0" hexsidelength="6" staggeraxis="y" staggerindex="odd" nextlayerid="5" nextobjectid="2">
+<map version="1.10" tiledversion="1.12.1" orientation="hexagonal" renderorder="right-down" width="9" height="9" tilewidth="14" tileheight="12" infinite="0" hexsidelength="6" staggeraxis="y" staggerindex="odd" nextlayerid="5" nextobjectid="2">
  <editorsettings>
   <export target="map1.lua" format="lua"/>
  </editorsettings>
@@ -17,19 +17,19 @@
    </properties>
   </tile>
  </tileset>
- <layer id="1" name="terrain" width="11" height="11">
+ <layer id="1" name="terrain" width="9" height="9">
   <data encoding="base64" compression="zlib">
-   eJyVziEOADAIA0AQSPr/586whDTAmKjqlWAiYhFtYpTcIeILO3k2GsYfNntNu64DuXwbhf+11b+Tx9JWjj1oe/sDT24CrQ==
+   eJxjZWBgYIViRjTMiobR5YlVw0hAnheKCZmBjPmIsIsPjzpCatD9hU0dTA4Ap5gBKQ==
   </data>
  </layer>
- <layer id="2" name="entities" width="11" height="11">
+ <layer id="2" name="entities" width="9" height="9">
   <data encoding="base64" compression="zlib">
-   eJyFj0EKwDAIBPcUKQ2Evqfn/f+X2oAL1po2sAhmGJUA6Bl39iJMGUWPH+x85lV9JH5ybeHN7sn24FE178ut2frbgqPj7T6c1R7RjYI9000sOOLp1lz7YRn2aAsu8jmRvQAmNhKy
+   eJxzZWBgcAVifiBmQ8MwAJOHsWGYDUqjqwEBdiRxmFkweZg+dLOQ1fCgmQ0zE6ROEM0eTixuckVSh+5ONiQ2SI01mt/Y0PgwdcgYWQ0Ak5sJCA==
   </data>
  </layer>
- <layer id="3" name="status" width="11" height="11">
+ <layer id="3" name="status" width="9" height="9">
   <data encoding="base64" compression="zlib">
-   eJwLYmBgCCITa1KgFx9moJG5tDSblm6mFAMAxTElpA==
+   eJwLYmBgCCIRa5KhBxtmoJI51DSLHHMA/S0Y1A==
   </data>
  </layer>
 </map>

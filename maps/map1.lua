@@ -5,8 +5,8 @@ return {
   class = "",
   orientation = "hexagonal",
   renderorder = "right-down",
-  width = 11,
-  height = 11,
+  width = 9,
+  height = 9,
   tilewidth = 14,
   tileheight = 12,
   nextlayerid = 5,
@@ -89,8 +89,8 @@ return {
       type = "tilelayer",
       x = 0,
       y = 0,
-      width = 11,
-      height = 11,
+      width = 9,
+      height = 9,
       id = 1,
       name = "terrain",
       class = "",
@@ -103,14 +103,14 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJyVziEOADAIA0AQSPr/586whDTAmKjqlWAiYhFtYpTcIeILO3k2GsYfNntNu64DuXwbhf+11b+Tx9JWjj1oe/sDT24CrQ=="
+      data = "eJxjZWBgYIViRjTMiobR5YlVw0hAnheKCZmBjPmIsIsPjzpCatD9hU0dTA4Ap5gBKQ=="
     },
     {
       type = "tilelayer",
       x = 0,
       y = 0,
-      width = 11,
-      height = 11,
+      width = 9,
+      height = 9,
       id = 2,
       name = "entities",
       class = "",
@@ -123,14 +123,14 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJyFj0EKwDAIBPcUKQ2Evqfn/f+X2oAL1po2sAhmGJUA6Bl39iJMGUWPH+x85lV9JH5ybeHN7sn24FE178ut2frbgqPj7T6c1R7RjYI9000sOOLp1lz7YRn2aAsu8jmRvQAmNhKy"
+      data = "eJxzZWBgcAVifiBmQ8MwAJOHsWGYDUqjqwEBdiRxmFkweZg+dLOQ1fCgmQ0zE6ROEM0eTixuckVSh+5ONiQ2SI01mt/Y0PgwdcgYWQ0Ak5sJCA=="
     },
     {
       type = "tilelayer",
       x = 0,
       y = 0,
-      width = 11,
-      height = 11,
+      width = 9,
+      height = 9,
       id = 3,
       name = "status",
       class = "",
@@ -143,7 +143,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJwLYmBgCCITa1KgFx9moJG5tDSblm6mFAMAxTElpA=="
+      data = "eJwLYmBgCCIRa5KhBxtmoJI51DSLHHMA/S0Y1A=="
     }
   }
 }
