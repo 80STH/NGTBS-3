@@ -340,11 +340,6 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         if not def.isPlayable then
             environment.enemySpriteCache[def.name] = entitySprite
         end
-        -- Apply level to non-playable characters
-        if not def.isPlayable then
-            local level = environment.getRandomLevel()
-            environment.applyLevelToEnemy(actor, level)
-        end
         if def.name == "SummoningRod" then
             actor.isSummoningRod = true
             actor.isPushable = false
@@ -943,13 +938,6 @@ function environment.createEnemyByType(enemyType, q, r)
     if hasAura then
         entity.aura = hasAura
     end
-    local level
-    if _G.playtestMode then
-        level = 1
-    else
-        level = environment.getRandomLevel()
-    end
-    environment.applyLevelToEnemy(entity, level)
     if enemyType == "SummoningRod" then
         entity.isSummoningRod = true
         entity.isPushable = false
@@ -963,56 +951,6 @@ function environment.createRandomEnemy(q, r)
     local types = _G.playtestEnemyTypes or { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
     local rnd = love.math.random(1, #types)
     return environment.createEnemyByType(types[rnd], q, r)
-end
-
--- ============================================================
--- LEVEL SYSTEM
--- ============================================================
--- Returns a level (1-4) based on difficultyModifier (1-32)
-function environment.getRandomLevel(difficultyModifier)
-    difficultyModifier = difficultyModifier or _G.difficultyModifier or 1
-    local pool
-    if difficultyModifier <= 8 then
-        pool = {1, 1, 2}
-    elseif difficultyModifier <= 16 then
-        pool = {1, 2, 3}
-    elseif difficultyModifier <= 24 then
-        pool = {2, 3, 4}
-    elseif difficultyModifier <= 31 then
-        pool = {3, 4}
-    else
-        pool = {4}
-    end
-    return pool[love.math.random(1, #pool)]
-end
-
--- Applies level stat modifiers to an enemy entity
-function environment.applyLevelToEnemy(entity, level)
-    local levelNames = {[1] = "Weak", [2] = "Regular", [3] = "Hardened", [4] = "Leader"}
-    if levelNames[level] then
-        entity.name = levelNames[level] .. " " .. entity.name
-    end
-
-    if not level or level <= 1 then return end
-
-    if level >= 2 then
-        entity.moveRange = entity.moveRange + 1
-    end
-
-    if level >= 3 then
-        for _, at in ipairs(entity.attacks) do
-            at.attack.damage = (at.attack.damage or 1) + 1
-        end
-    end
-
-    if level >= 4 then
-        for _, at in ipairs(entity.attacks) do
-            at.attack.damage = (at.attack.damage or 1) + 1
-        end
-        entity.moveRange = entity.moveRange + 2
-    end
-
-    entity.level = level
 end
 
 function environment.generateBuildingSprite(name, w, h)

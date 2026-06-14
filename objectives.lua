@@ -261,7 +261,7 @@ local function definePool()
                 end
                 if leader then
                     leader.isLeader = true
-                    leader.maxHealth = leader.maxHealth + 4
+                    leader.maxHealth = 4
                     leader.health = leader.maxHealth
                     leader.moveRange = leader.moveRange + 1
                     if leader.attacks then
@@ -271,7 +271,6 @@ local function definePool()
                             end
                         end
                     end
-                    leader.level = 4
                     leader.name = "Leader " .. (leader.name or "Enemy")
                     print(string.format("Objective 'kill_leader': Leader created at (%d,%d) - %s", leader.q, leader.r, leader.name))
                 end
@@ -316,7 +315,8 @@ function objectives.generate(entities, hex)
     objectiveStates = {}
 
     local shuffled = shuffle(objectivePool)
-    local count = math.min(2, #shuffled)
+    local maxObj = _G.playtestObjectiveCount or 2
+    local count = math.min(maxObj, #shuffled)
     for i = 1, count do
         local def = shuffled[i]
         local conflict = false

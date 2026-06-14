@@ -9,21 +9,21 @@ local squads = {
         name = "Old Guard",
         units = {
             { name = "Warrior", maxHealth = 2, moveRange = 3, attacks = "warrior" },
-            { name = "Mage",    maxHealth = 2, moveRange = 4, attacks = "mage" },
-            { name = "Rogue",   maxHealth = 2, moveRange = 5, attacks = "rogue" },
+            { name = "Mage",    maxHealth = 2, moveRange = 3, attacks = "mage" },
+            { name = "Rogue",   maxHealth = 2, moveRange = 3, attacks = "rogue" },
         }
     },
     {
         name = "New Blood",
         units = {
             { name = "Summoner", maxHealth = 2, moveRange = 3, attacks = "summoner" },
-            { name = "Divider",  maxHealth = 2, moveRange = 4, attacks = "divider" },
+            { name = "Divider",  maxHealth = 2, moveRange = 3, attacks = "divider" },
         }
     },
     {
         name = "Attack Test",
         units = {
-            { name = "AttackTest", maxHealth = 2, moveRange = 6, attacks = "all" },
+            { name = "AttackTest", maxHealth = 2, moveRange = 3, attacks = "all" },
         }
     },
 }
@@ -163,9 +163,9 @@ function menu.drawPlaytestDifficulty()
     love.graphics.printf("Select Difficulty", 0, h * 0.28, w, "center")
 
     local difficulties = {
-        { name = "Easy",   desc = "Spawn limit: 5", limit = 5, diff = 4 },
-        { name = "Medium", desc = "Spawn limit: 6", limit = 6, diff = 12 },
-        { name = "Hard",   desc = "Spawn limit: 7", limit = 7, diff = 24 },
+        { name = "Easy",   desc = "2 objectives", limit = 4, diff = 4, objCount = 2 },
+        { name = "Medium", desc = "3 objectives", limit = 5, diff = 12, objCount = 3 },
+        { name = "Hard",   desc = "4 objectives", limit = 6, diff = 24, objCount = 4 },
     }
 
     local bw, bh = 220, 55
@@ -211,9 +211,9 @@ function menu.mousepressed(x, y)
 
     if playtestPhase == "select_difficulty" then
         local difficulties = {
-            { name = "Easy",   limit = 5, diff = 4 },
-            { name = "Medium", limit = 6, diff = 12 },
-            { name = "Hard",   limit = 7, diff = 24 },
+            { name = "Easy",   limit = 4, diff = 4, objCount = 2 },
+            { name = "Medium", limit = 5, diff = 12, objCount = 3 },
+            { name = "Hard",   limit = 6, diff = 24, objCount = 4 },
         }
         local bw2, bh2 = 220, 55
         local bx2 = logicalW/2 - bw2/2
@@ -225,6 +225,7 @@ function menu.mousepressed(x, y)
                 _G.playtestMode = true
                 _G.playtestSpawnLimit = diff.limit
                 _G.playtestEnemyTypes = { "Ghost", "Zombie", "Lich" }
+                _G.playtestObjectiveCount = diff.objCount
                 selectedSquad = 1
                 difficultyModifier = diff.diff
                 playtestPhase = nil
