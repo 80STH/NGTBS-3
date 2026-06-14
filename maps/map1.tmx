@@ -19,17 +19,17 @@
  </tileset>
  <layer id="1" name="terrain" width="9" height="9">
   <data encoding="base64" compression="zlib">
-   eJxjZWBgYIViRjTMiobR5YlVw0hAnheKCZmBjPmIsIsPjzpCatD9hU0dTA4Ap5gBKQ==
+   eJxjZWBgYAViRiyYFQljkydWDSMBeV4ohqnhI2AWHwE1MPfgU0dIDSsa5sOCYXIAptgBVg==
   </data>
  </layer>
- <layer id="2" name="entities" width="9" height="9">
+ <layer id="2" name="entities" width="9" height="9" visible="0">
   <data encoding="base64" compression="zlib">
-   eJxzZWBgcAVifiBmQ8MwAJOHsWGYDUqjqwEBdiRxmFkweZg+dLOQ1fCgmQ0zE6ROEM0eTixuckVSh+5ONiQ2SI01mt/Y0PgwdcgYWQ0Ak5sJCA==
+   eJxtj8EJACAMA/tSpII4j+/uv5IWDMRg4bDaI2qYWRzGwQUU5uiB31WdrErnyMK8SM7P6ZKNzPSm3NM+bwryir1ZTn06S/7msofHsLMBwJsJRA==
   </data>
  </layer>
- <layer id="3" name="status" width="9" height="9">
+ <layer id="3" name="status" width="9" height="9" visible="0">
   <data encoding="base64" compression="zlib">
-   eJwLYmBgCCIRa5KhBxtmoJI51DSLHHMA/S0Y1A==
+   eJwLYmBgCIJiRiQ2NgyT1yRCDTHyDATUkoKpZRY55gAAsYYXkA==
   </data>
  </layer>
 </map>

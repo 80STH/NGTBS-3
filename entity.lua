@@ -19,7 +19,7 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     self.type = type or Entity.TYPES.CHARACTER
     self.q = q or 0
     self.r = r or 0
-    self.maxHealth = maxHealth or 3
+    self.maxHealth = maxHealth or 2
     self.health = self.maxHealth
     self.isPlayable = isPlayable or false
     self.moveRange = moveRange or 0
@@ -44,8 +44,7 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     self.hasMovedThisTurn = false   -- для союзников
     self.canMoveAfterAttack = false
     
-    -- Для строительных объектов
-    self.globalHealthCost = nil
+
     
     -- Максимальный урон за один удар (nil = без ограничения)
     self.maxDamagePerHit = nil
@@ -126,7 +125,7 @@ function Entity:switchAttack()
 end
 
 -- Применить урон
-function Entity:takeDamage(damage, globalHealth)
+function Entity:takeDamage(damage)
     if self.indestructible then
         return false
     end
@@ -135,17 +134,17 @@ function Entity:takeDamage(damage, globalHealth)
     end
     local actualDamage = math.min(damage, self.health)
     self.health = self.health - actualDamage
-
+    
     print(string.format("%s takes %d damage! (%d/%d HP)", 
           self.name, actualDamage, math.max(0, self.health), self.maxHealth))
 
     -- Нокаут для союзников: вместо смерти переводим в нокаут
     if self.health <= 0 and self.isPlayable and self:isCharacter() and not status.hasEntityStatus(self, "knockout") then
-        self.health = 2
+        self.health = 1
         self._savedMoveRange = self.moveRange
         self.moveRange = 2
         status.applyToEntity(self, "knockout")
-        print(string.format(" %s is knocked out! (2 HP, move=2, cannot attack)", self.name))
+        print(string.format(" %s is knocked out! (1 HP, move=2, cannot attack)", self.name))
         return false
     end
 

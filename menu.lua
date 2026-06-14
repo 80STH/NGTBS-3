@@ -8,22 +8,22 @@ local squads = {
     {
         name = "Old Guard",
         units = {
-            { name = "Warrior", maxHealth = 5, moveRange = 3, attacks = "warrior" },
-            { name = "Mage",    maxHealth = 3, moveRange = 4, attacks = "mage" },
-            { name = "Rogue",   maxHealth = 4, moveRange = 5, attacks = "rogue" },
+            { name = "Warrior", maxHealth = 2, moveRange = 3, attacks = "warrior" },
+            { name = "Mage",    maxHealth = 2, moveRange = 4, attacks = "mage" },
+            { name = "Rogue",   maxHealth = 2, moveRange = 5, attacks = "rogue" },
         }
     },
     {
         name = "New Blood",
         units = {
-            { name = "Summoner", maxHealth = 3, moveRange = 3, attacks = "summoner" },
-            { name = "Divider",  maxHealth = 4, moveRange = 4, attacks = "divider" },
+            { name = "Summoner", maxHealth = 2, moveRange = 3, attacks = "summoner" },
+            { name = "Divider",  maxHealth = 2, moveRange = 4, attacks = "divider" },
         }
     },
     {
         name = "Attack Test",
         units = {
-            { name = "AttackTest", maxHealth = 10, moveRange = 6, attacks = "all" },
+            { name = "AttackTest", maxHealth = 2, moveRange = 6, attacks = "all" },
         }
     },
 }

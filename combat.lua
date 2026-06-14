@@ -107,7 +107,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
     if occupant and occupant ~= target then
         -- Склон горы (неразрушимый) — анимация отскока без урона
         if occupant.noCollisionDamage then
-            combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, occupant, true)
+            combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant, true)
             if onComplete then onComplete(false) end
             return
         end
@@ -116,10 +116,10 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
             local safe = hex_utils.isPushFromSafeSide(occupant, fromQ, fromR)
             if safe then
                 -- Безопасная сторона: отскок без урона
-                combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, occupant, true)
+                combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant, true)
             else
                 -- Опасная сторона: отскок с уроном
-                combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, occupant)
+                combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant)
             end
             if onComplete then onComplete(false) end
             return
@@ -132,7 +132,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
             return
         end
         -- Столкновение → bounce + урон
-        combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, occupant)
+        combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant)
         if onComplete then onComplete(false) end
         return
     end
@@ -308,7 +308,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
 
     -- Наносим урон первой цели
     if firstTarget then
-        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
     end
 
     -- Функция для пуша цели (вызывается в любом сценарии)
@@ -318,7 +318,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
             local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
             local isEdge = not hex:isActiveHex(pushQ, pushR)
             if isEdge or occupant then
-                combat.addCollisionBounceAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities, sounds, globalHealth, occupant)
+                combat.addCollisionBounceAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities, sounds, occupant)
             else
                 combat.addPushAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR)
             end
@@ -411,7 +411,7 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
         return false, "Destination cell is occupied!"
     end
     -- Наносим 1 урон
-    self:dealDamageToTarget(targetActor, attacker, 1, entities, sounds, nil, globalHealth)
+    self:dealDamageToTarget(targetActor, attacker, 1, entities, sounds, nil)
     -- Перемещение
     attack_effects.flip(attacker, targetActor, destQ, destR, hex)
     combat.addPushAnimation(targetActor, targetQ, targetR, destQ, destR)
@@ -450,7 +450,7 @@ function combat.LineShotAttack:execute(attacker, targetQ, targetR, hex, entities
     end
     attack_effects.shoot(attacker, firstTarget, pushQ, pushR, hex)
     if self.damage > 0 then
-        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
     end
     self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
     combat.startPushAnimations(hex)
@@ -501,7 +501,7 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     end
     attack_effects.piercingShoot(attacker, firstTarget, secondTarget, firstPushQ, firstPushR, secondPushQ, secondPushR, hex)
     if secondTarget then
-        self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil, globalHealth)
+        self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil)
     end
     if secondTarget and secondTarget.isPushable ~= false and secondHex then
         local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
@@ -571,7 +571,7 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
     local centerEntity = combat.getEntityAtHex(targetQ, targetR, entities)
     if centerEntity then
     -- Наносим урон цели вместо создания камня
-    self:dealDamageToTarget(centerEntity, attacker, 1, entities, sounds, nil, globalHealth)
+    self:dealDamageToTarget(centerEntity, attacker, 1, entities, sounds, nil)
 elseif terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
     -- Камень тонет в воде
     local cx, cy = hex:hexToPixel(targetQ, targetR)
@@ -750,7 +750,7 @@ function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities
     end
 
     local damage = self.damage
-    local wasDestroyed = target:takeDamage(damage, globalHealth)
+    local wasDestroyed = target:takeDamage(damage)
     print(string.format(" %s throws a magic bolt at %s for %d damage!", attacker.name, target.name, damage))
     if sounds and sounds.attack then sounds.attack:play() end
 
@@ -800,7 +800,7 @@ function combat.GhostBoltAttack:execute(attacker, targetQ, targetR, hex, entitie
     if not firstTarget then return false, "No target in that direction!" end
 
     -- Наносим урон (не отталкиваем)
-    self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil, globalHealth)
+    self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
     attacker.hasActedThisTurn = true
 
     attack_effects.ghostBolt(attacker, firstTarget, hex)
@@ -842,7 +842,7 @@ function combat.ZombieBiteAttack:execute(attacker, targetQ, targetR, hex, entiti
 
     attack_effects.bite(attacker, target, hex)
 
-    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
     attacker.hasActedThisTurn = true
     return true
 end
@@ -977,7 +977,7 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
     -- Если клетка занята — 2 урона occupant'у
     local occupant = combat.getEntityAtHex(sq, sr, entities)
     if occupant and occupant.health > 0 then
-        local wasDestroyed = occupant:takeDamage(2, globalHealth)
+        local wasDestroyed = occupant:takeDamage(2)
         print(string.format("SummoningRod: %s takes 2 damage from occupied summon cell!", occupant.name))
         if sounds and sounds.attack then sounds.attack:play() end
         local fx, fy = getDrawCoords(sq, sr)
@@ -1058,7 +1058,7 @@ function combat.VortexStrikeAttack:execute(attacker, targetQ, targetR, hex, enti
     if target.health > 0 and target.isPushable ~= false then
         local occupant = combat.getEntityAtHex(destCell.q, destCell.r, entities)
         if occupant then
-            combat.addCollisionBounceAnimation(target, targetQ, targetR, destCell.q, destCell.r, hex, entities, sounds, globalHealth, occupant)
+            combat.addCollisionBounceAnimation(target, targetQ, targetR, destCell.q, destCell.r, hex, entities, sounds, occupant)
         else
             combat.addPushAnimation(target, targetQ, targetR, destCell.q, destCell.r)
         end
@@ -1109,7 +1109,7 @@ function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entiti
             if occupantB.isHazard then
                 combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
             elseif occupantB.isPushable == false then
-                combat.addCollisionBounceAnimation(targetA, targetQ, targetR, destQ, destR, hex, entities, sounds, globalHealth, occupantB)
+                combat.addCollisionBounceAnimation(targetA, targetQ, targetR, destQ, destR, hex, entities, sounds, occupantB)
             else
                 local b2q, b2r
                 if shiftDir == "right" then
@@ -1121,9 +1121,9 @@ function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entiti
                     combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
                     combat.addPushAnimation(occupantB, destQ, destR, b2q, b2r)
                 else
-                    combat.addCollisionBounceAnimation(targetA, targetQ, targetR, destQ, destR, hex, entities, sounds, globalHealth, occupantB)
+                    combat.addCollisionBounceAnimation(targetA, targetQ, targetR, destQ, destR, hex, entities, sounds, occupantB)
                     local occupantAtB2 = hex:isActiveHex(b2q, b2r) and combat.getEntityAtHex(b2q, b2r, entities) or nil
-                    combat.addCollisionBounceAnimation(occupantB, destQ, destR, b2q, b2r, hex, entities, sounds, globalHealth, occupantAtB2)
+                    combat.addCollisionBounceAnimation(occupantB, destQ, destR, b2q, b2r, hex, entities, sounds, occupantAtB2)
                 end
             end
         else
@@ -1243,14 +1243,14 @@ function combat.ElectricHookAttack:execute(attacker, targetQ, targetR, hex, enti
     if not stepX then return false, "Not a straight line!" end
 
     -- Deal 1 damage to everyone on the line (including attacker, excluding entities past target)
-    self:dealDamageToTarget(attacker, attacker, 1, entities, sounds, nil, globalHealth)
+    self:dealDamageToTarget(attacker, attacker, 1, entities, sounds, nil)
     local curQ, curR = attacker.q, attacker.r
     while true do
         local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
         if not hex:isValidHex(nextQ, nextR) then break end
         local e = combat.getEntityAtHex(nextQ, nextR, entities)
         if e and e.health > 0 and e ~= attacker then
-            self:dealDamageToTarget(e, attacker, 1, entities, sounds, nil, globalHealth)
+            self:dealDamageToTarget(e, attacker, 1, entities, sounds, nil)
         end
         if nextQ == targetQ and nextR == targetR then break end
         curQ, curR = nextQ, nextR
@@ -1290,7 +1290,7 @@ function combat.BashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     end
     if not target then return false, "No target at that hex" end
 
-    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
 
     -- Цель позади атакующего: направление от цели к атакующему, затем ещё шаг за атакующего
     local stepX, stepY, stepZ = self:getLineDirection(targetQ, targetR, attacker.q, attacker.r, hex)
@@ -1304,7 +1304,7 @@ function combat.BashAttack:execute(attacker, targetQ, targetR, hex, entities, so
             end
         end
         if behindEntity then
-            self:dealDamageToTarget(behindEntity, attacker, self.damage, entities, sounds, nil, globalHealth)
+            self:dealDamageToTarget(behindEntity, attacker, self.damage, entities, sounds, nil)
         end
     end
 
@@ -1370,7 +1370,7 @@ function combat.CleaveAttack:execute(attacker, targetQ, targetR, hex, entities, 
             end
         end
         if target then
-            self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+            self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
         end
     end
 
@@ -1423,7 +1423,7 @@ function combat.LungeAttack:execute(attacker, targetQ, targetR, hex, entities, s
     end
     if not target then return false, "No target at that hex" end
 
-    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
 
     -- Цель за целью: продолжаем линию от атакующего через цель
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
@@ -1437,7 +1437,7 @@ function combat.LungeAttack:execute(attacker, targetQ, targetR, hex, entities, s
             end
         end
         if behindEntity then
-            self:dealDamageToTarget(behindEntity, attacker, self.damage, entities, sounds, nil, globalHealth)
+            self:dealDamageToTarget(behindEntity, attacker, self.damage, entities, sounds, nil)
         end
     end
 
@@ -1486,7 +1486,7 @@ function combat.HeavyPunchAttack:execute(attacker, targetQ, targetR, hex, entiti
     local target = combat.getEntityAtHex(targetQ, targetR, entities)
     if not target or target.health <= 0 then return false, "No valid target at that hex" end
 
-    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
 
     if target.health > 0 then
         local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
@@ -1542,7 +1542,7 @@ function combat.EmpowerPunchAttack:execute(attacker, targetQ, targetR, hex, enti
     local target = combat.getEntityAtHex(targetQ, targetR, entities)
     if not target or target.health <= 0 then return false, "No valid target at that hex" end
 
-    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil, globalHealth)
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
 
     if target.health > 0 then
         local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
@@ -1640,7 +1640,7 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
                 else
                     -- Применяем эффекты клетки (огонь, вода) на исходной позиции
                     if terrainMap then
-                        effects.applyAllCellEffects(pushedObj, fromQ, fromR, terrainMap, entities, globalHealth)
+                        effects.applyAllCellEffects(pushedObj, fromQ, fromR, terrainMap, entities)
                     end
                 end
             else
@@ -1649,7 +1649,7 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
                 pushedObj.r = toR
                 -- Применяем эффекты клетки после перемещения
                 if pushedObj and terrainMap then
-                    local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities, globalHealth)
+                    local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities)
                     if died then
                         pushedObj:startDeath()
                     end
@@ -1673,7 +1673,7 @@ function combat.addDirectPushAnimation(obj, fromQ, fromR, toQ, toR)
             pushedObj.q = toQ
             pushedObj.r = toR
             if terrainMap then
-                local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities, globalHealth)
+                local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities)
                 if died then pushedObj:startDeath() end
             end
         end
@@ -1806,7 +1806,7 @@ function combat.getEntityAtHex(q, r, entities)
 end
 
 -- combat.lua (заменить существующий метод)
-function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, sounds, directionIndex, globalHealth)
+function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, sounds, directionIndex)
     -- Базовый множитель = 1.0
     local multiplier = 1.0
 
@@ -1838,7 +1838,7 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
 
     if finalDamage < 1 and damage > 0 then finalDamage = 1 end
 
-    local wasDestroyed = target:takeDamage(finalDamage, globalHealth)  -- ← передаём globalHealth
+    local wasDestroyed = target:takeDamage(finalDamage)
     if sounds and sounds.attack then sounds.attack:play() end
 
     if hex and visual then
@@ -1881,7 +1881,7 @@ function combat.addShakeAnimation(obj, q, r)
     })
 end
 
-function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, entities, sounds, globalHealth, withEntity, skipDamage)
+function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, entities, sounds, withEntity, skipDamage)
     -- Эффект столкновения в целевой клетке (визуальный, без урона)
     local x, y = getDrawCoords(toQ, toR)
     visual.addEffect(x, y, "collision", 0.3)
@@ -1898,7 +1898,7 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
         local damage = 1
         if obj.health and obj.health > 0 then
             if not (withEntity and withEntity.noCollisionDamage) then
-                local wasDestroyed = obj:takeDamage(damage, globalHealth)
+                local wasDestroyed = obj:takeDamage(damage)
                 if wasDestroyed then
                     obj:startDeath()
                 end
@@ -1906,7 +1906,7 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
         end
         if withEntity and withEntity.health and withEntity.health > 0 then
             if not withEntity.noCollisionDamage then
-                local wasDestroyed = withEntity:takeDamage(damage, globalHealth)
+                local wasDestroyed = withEntity:takeDamage(damage)
                 if wasDestroyed then
                     withEntity:startDeath()
                 end
@@ -2013,7 +2013,7 @@ function updateActorMovement(actor, dt)
             actor.r = actor.targetR
             -- Применяем эффекты клетки на каждом шагу пути
             if terrainMap then
-                local died = effects.applyAllCellEffects(actor, actor.q, actor.r, terrainMap, entities, globalHealth)
+                local died = effects.applyAllCellEffects(actor, actor.q, actor.r, terrainMap, entities)
                 if died then
                     local x, y = hex:hexToPixel(actor.q, actor.r)
                     visual.addEffect(x, y, "drown")
@@ -2080,7 +2080,6 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
         print(attacker.name .. " attacked and ended turn. Move history cleared.")
         attackMode = false
         selectedAttack = nil
-        globalHealth.previewDamage = 0
         checkGameEnd()
     else
         print("Attack failed: " .. (message or "unknown"))

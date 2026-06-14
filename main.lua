@@ -45,7 +45,6 @@ function syncStateToGlobals()
     entities = state.entities
     hex = state.hex
     terrainMap = state.terrainMap
-    globalHealth = state.globalHealth
     turnState = state.turnState
     turnCount = state.turnCount
     maxTurns = state.maxTurns
@@ -79,7 +78,6 @@ function syncGlobalsToState()
     state.entities = entities
     state.hex = hex
     state.terrainMap = terrainMap
-    state.globalHealth = globalHealth
     state.turnState = turnState
     state.turnCount = turnCount
     state.maxTurns = maxTurns
@@ -218,7 +216,6 @@ function love.update(dt)
         end
     end
     combat.updatePushAnimations(dt, hex)
-    -- globalHealth removed
     if decayMessageTimer > 0 then
         decayMessageTimer = decayMessageTimer - dt
     end

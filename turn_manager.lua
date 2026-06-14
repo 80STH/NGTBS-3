@@ -1,6 +1,6 @@
 -- turn_manager.lua
 -- Машина состояний для фаз хода (enemy_prepare / player / enemy_attack).
--- Использует глобалы (entities, hex, turnState, sounds, globalHealth, terrainMap).
+-- Использует глобалы (entities, hex, turnState, sounds, terrainMap).
 
 local turnManager = {}
 
@@ -37,7 +37,7 @@ function turnManager.endPlayerTurn()
     checkGameEnd()
 
     -- Step 1: Simultaneous effects (fire, decay) — no digging
-    effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
+    effects.applyEndOfTurnEffects(entities, terrainMap)
     checkGameEnd()
 
     if turnCount >= maxTurns and not decayAppliedForTurnLimit then
@@ -115,7 +115,7 @@ function updateAttackPhase(dt)
         turnState.enemyAttackTimer = 0
         local enemy = table.remove(turnState.enemyAttackQueue, 1)
         if enemy and enemy.health > 0 then
-            ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
+            ai.executePreparedAttack(enemy, entities, hex, sounds)
             checkGameEnd()
         end
     end

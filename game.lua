@@ -30,7 +30,7 @@ function restartGame(mapPath)
 
     status.initHexStatuses(hexStatuses)
 
-    globalHealth = { current = 5, max = 5, initial = 5 }
+
 
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable then
@@ -401,7 +401,7 @@ end
 function processDigSites()
     for _, entity in ipairs(entities) do
         if entity.health > 0 and status.hasDigSite(entity.q, entity.r) then
-            local wasDestroyed = entity:takeDamage(1, globalHealth)
+            local wasDestroyed = entity:takeDamage(1)
             print(string.format("Dig site damage: %s takes 1 damage!", entity.name))
             if sounds and sounds.collision then sounds.collision:play() end
             if wasDestroyed then
@@ -506,7 +506,7 @@ function strikeLightning()
 
     local target = getEntityAtHex(tq, tr)
     if target and target.health > 0 then
-        local wasDestroyed = target:takeDamage(2, globalHealth)
+        local wasDestroyed = target:takeDamage(2)
         if sounds and sounds.collision then sounds.collision:play() end
         if not wasDestroyed then
             status.applyToEntity(target, "empowered")

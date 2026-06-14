@@ -5,7 +5,7 @@ local status = require("status")
 
 -- Применить ВСЕ эффекты клетки к сущности (статусы + утопление)
 -- Возвращает: true, если сущность погибла (анимация запущена)
-function effects.applyAllCellEffects(entity, q, r, terrainMap, entities, globalHealth)
+function effects.applyAllCellEffects(entity, q, r, terrainMap, entities)
     if not entity or not entity.health or entity.health <= 0 then
         return false
     end
@@ -60,7 +60,7 @@ end
 
 -- Применить конец хода: урон от огня, повторное утопление
 -- Теперь сразу запускает анимацию смерти, ничего не возвращает
-function effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
+function effects.applyEndOfTurnEffects(entities, terrainMap)
     for _, entity in ipairs(entities) do
         if entity.health and entity.health > 0 and not entity.isDying then
             -- Огонь наносит урон в конце хода (если не на воде)
@@ -69,7 +69,7 @@ function effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
                 if terrain ~= "water" then
                     local damage = 1
                     print(string.format(" %s burns for %d damage!", entity.name, damage))
-                    local wasDestroyed = entity:takeDamage(damage, globalHealth)
+                    local wasDestroyed = entity:takeDamage(damage)
                     if sounds and sounds.fire then sounds.fire:play() end
                     if wasDestroyed then
                         entity:startDeath()
@@ -87,7 +87,7 @@ function effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
             if status.hasEntityStatus(entity, "decay") then
                 local damage = 1
                 print(string.format(" %s decays for %d damage!", entity.name, damage))
-                local wasDestroyed = entity:takeDamage(damage, globalHealth)
+                local wasDestroyed = entity:takeDamage(damage)
                 if sounds and sounds.decay then sounds.decay:play() end
                 if wasDestroyed then
                     entity:startDeath()

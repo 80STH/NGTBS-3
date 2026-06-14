@@ -13,7 +13,6 @@ function GameState.new()
     self.terrainMap = {}
     self.terrainTextures = {}
 
-    self.globalHealth = { current = 5, max = 5, initial = 5 }
 
     self.turnState = {
         phase = "enemy_prepare",

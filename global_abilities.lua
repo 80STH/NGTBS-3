@@ -162,16 +162,7 @@ function global_abilities.drawButtons(mx, my, state)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
--- Начисление previewDamage только для зданий (для глобальных воздействий)
-function global_abilities.previewBuildingDamage(globalHealth, damagedEntities)
-    if not globalHealth then return end
-    for _, dmg in ipairs(damagedEntities) do
-        if dmg.entity and dmg.entity:isBuilding() and dmg.entity.health > 0 then
-            local actual = math.min(dmg.damage or 1, dmg.entity.health)
-            globalHealth.previewDamage = (globalHealth.previewDamage or 0) + actual
-        end
-    end
-end
+
 
 function global_abilities.drawAbilityButton(self, mx, my, state, cfg)
     local isActive = (global_abilities.activeAbility == self)
@@ -670,7 +661,7 @@ function WindTorrent:onClickHex(q, r, hex, state)
         return true
     end
 
-    self:executeGlobalWithAnimation(direction, hex, state.entities, state.sounds, state.terrainMap, state.globalHealth, function(success, message)
+    self:executeGlobalWithAnimation(direction, hex, state.entities, state.sounds, state.terrainMap, function(success, message)
         if success then
             state.actionHistory = {}
             print("Wind Torrent used! History cleared.")
@@ -779,12 +770,7 @@ function WindTorrent:drawPreview(hex, state)
     for _, pd in ipairs(previewData) do
         ui.drawPushArrow(pd.fromX, pd.fromY, pd.toX, pd.toY, nil, nil, nil, nil, pd.fromQ, pd.fromR, pd.toQ, pd.toR)
     end
-    for _, dmg in ipairs(damagedEntities) do
-        if dmg.entity and dmg.entity.health > 0 then
-            drawHealthBar(dmg.entity, dmg.x, dmg.y, dmg.damage)
-        end
-    end
-    global_abilities.previewBuildingDamage(state.globalHealth, damagedEntities)
+
 end
 
 function WindTorrent:drawButton(mx, my, state)
@@ -802,7 +788,7 @@ function WindTorrent:drawButton(mx, my, state)
     })
 end
 
-function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds, terrainMap, globalHealth, onComplete)
+function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds, terrainMap, onComplete)
     if self.hasBeenUsed then
         if onComplete then onComplete(false, "Already used") end
         return false
@@ -846,24 +832,24 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
 
         local fromKey = obj.q .. "," .. obj.r
         if occupied[fromKey] and occupied[fromKey] ~= obj then
-            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, obj.q, obj.r, hex, entities, sounds, globalHealth, occupied[fromKey])
+            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, obj.q, obj.r, hex, entities, sounds, occupied[fromKey])
             occupied[fromKey] = obj
             goto continue
         end
 
         local newQ, newR = hex_utils.applyCubeDiff(obj.q, obj.r, step.dx, step.dy, step.dz)
         if not hex:isActiveHex(newQ, newR) then
-            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, globalHealth, nil)
+            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, nil)
             occupied[fromKey] = obj
         else
             local immovableKey = newQ .. "," .. newR
             if immovableMap[immovableKey] then
-                combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, globalHealth, immovableMap[immovableKey])
+                combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, immovableMap[immovableKey])
                 occupied[fromKey] = obj
             else
                 local targetOcc = occupied[newQ .. "," .. newR]
                 if targetOcc then
-                    combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, globalHealth, targetOcc)
+                    combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, targetOcc)
                     occupied[fromKey] = obj
                 else
                     combat.addDirectPushAnimation(obj, obj.q, obj.r, newQ, newR)

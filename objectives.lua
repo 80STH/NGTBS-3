@@ -54,7 +54,6 @@ local function createTowerAt(q, r)
     local tileW = (loadedMap and loadedMap.tilewidth) or 14
     local tileH = (loadedMap and loadedMap.tileheight) or 12
     local tower = Entity.new("Tower", Entity.TYPES.BUILDING, q, r, 1, false, 0, nil, nil, {})
-    tower.globalHealthCost = 1
     tower.isObjective = true
     tower.sprite = env.generateBuildingSprite("Tower", tileW, tileH)
     return tower

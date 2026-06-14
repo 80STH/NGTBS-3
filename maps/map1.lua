@@ -103,7 +103,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJxjZWBgYIViRjTMiobR5YlVw0hAnheKCZmBjPmIsIsPjzpCatD9hU0dTA4Ap5gBKQ=="
+      data = "eJxjZWBgYAViRiyYFQljkydWDSMBeV4ohqnhI2AWHwE1MPfgU0dIDSsa5sOCYXIAptgBVg=="
     },
     {
       type = "tilelayer",
@@ -114,7 +114,7 @@ return {
       id = 2,
       name = "entities",
       class = "",
-      visible = true,
+      visible = false,
       opacity = 1,
       offsetx = 0,
       offsety = 0,
@@ -123,7 +123,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJxzZWBgcAVifiBmQ8MwAJOHsWGYDUqjqwEBdiRxmFkweZg+dLOQ1fCgmQ0zE6ROEM0eTixuckVSh+5ONiQ2SI01mt/Y0PgwdcgYWQ0Ak5sJCA=="
+      data = "eJxtj8EJACAMA/tSpII4j+/uv5IWDMRg4bDaI2qYWRzGwQUU5uiB31WdrErnyMK8SM7P6ZKNzPSm3NM+bwryir1ZTn06S/7msofHsLMBwJsJRA=="
     },
     {
       type = "tilelayer",
@@ -134,7 +134,7 @@ return {
       id = 3,
       name = "status",
       class = "",
-      visible = true,
+      visible = false,
       opacity = 1,
       offsetx = 0,
       offsety = 0,
@@ -143,7 +143,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJwLYmBgCCIRa5KhBxtmoJI51DSLHHMA/S0Y1A=="
+      data = "eJwLYmBgCIJiRiQ2NgyT1yRCDTHyDATUkoKpZRY55gAAsYYXkA=="
     }
   }
 }

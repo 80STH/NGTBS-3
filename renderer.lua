@@ -289,7 +289,7 @@ function renderer.draw(state)
     ui.drawTestViewButton(mx, my)
 
     global_abilities.drawPreview(hex, state)
-    -- ui.drawGlobalHealthBar removed
+
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
     ui.drawDecayButton(mx, my, state.turnCount, state.maxTurns, state.turnState.phase)
     ui.drawAllyPanel(mx, my, state.entities, state.selectedActor)
@@ -538,9 +538,6 @@ function getEntityDrawPosition(entity, state)
     return getDrawCoords(entity.q, entity.r)
 end
 
-function drawHealthBar(entity, x, y, damage)
-end
-
 function drawActionIndicator(entity, x, y)
     if not entity:isCharacter() then return end
     if status.hasEntityStatus(entity, "knockout") then
@@ -577,6 +574,8 @@ function drawEntity(entity, state)
         love.graphics.setColor(1, 1, 1, alpha)
     end
 
+    local wounded = entity:isCharacter() and entity.health > 0 and entity.health < entity.maxHealth
+
     if entity.sprite then
         local sw, sh = entity.sprite:getDimensions()
         local baseScale = 6
@@ -590,6 +589,9 @@ function drawEntity(entity, state)
         local drawY = y
         if entity:isObstacle() or entity:isBuilding() then
             drawY = y - 6
+        end
+        if wounded then
+            love.graphics.setColor(1, 0.3, 0.3, alpha)
         end
         love.graphics.draw(entity.sprite, x, drawY, 0, finalScale, finalScale, sw/2, sh/2)
 
@@ -613,7 +615,6 @@ function drawEntity(entity, state)
         ui.drawEntityStatusEffects(x, y, entity, overlayRadius, love.timer.getTime())
     end
 
-    -- drawHealthBar removed
     drawActionIndicator(entity, x, y)
 
     if state.selectedActor == entity and entity:isCharacter() and not entity.isDying then
