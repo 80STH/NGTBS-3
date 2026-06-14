@@ -237,17 +237,6 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
         love.graphics.polygon("fill", x1, y1, x3, y3, x4, y4)
     end
 
-    if terrainType ~= "water" then
-        love.graphics.setColor(edgeColor)
-        love.graphics.setLineWidth(1.5)
-        for i = 1, n do
-            local next_i = i % n + 1
-            local x1, y1 = bottomVertices[(i-1)*2+1], bottomVertices[(i-1)*2+2]
-            local x2, y2 = bottomVertices[(next_i-1)*2+1], bottomVertices[(next_i-1)*2+2]
-            love.graphics.line(x1, y1, x2, y2)
-        end
-    end
-
     -- Верхняя грань
     love.graphics.setColor(topColor)
     love.graphics.polygon("fill", topVertices)
