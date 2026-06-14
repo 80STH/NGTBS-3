@@ -9,7 +9,7 @@ local squads = {
         name = "Old Guard",
         units = {
             { name = "Warrior", maxHealth = 2, moveRange = 3, attacks = "warrior" },
-            { name = "Mage",    maxHealth = 2, moveRange = 3, attacks = "mage" },
+            { name = "Puncher", maxHealth = 2, moveRange = 3, attacks = "puncher" },
             { name = "Rogue",   maxHealth = 2, moveRange = 3, attacks = "rogue" },
         }
     },

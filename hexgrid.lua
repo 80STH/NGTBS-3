@@ -167,11 +167,12 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
     local radius = self.radius
     local extrude = 36          -- высота обычных клеток
     local waterExtrude = 18     -- высота воды
-    local actualExtrude = (terrainType == "water") and waterExtrude or extrude
+    local isLowTerrain = terrainType == "water" or terrainType == "underwater_mines"
+    local actualExtrude = isLowTerrain and waterExtrude or extrude
     
-    -- Для воды смещаем всю клетку вниз на разницу высот (чтобы верхняя грань была ниже)
+    -- Для низкого ландшафта смещаем всю клетку вниз на разницу высот
     local yOffset = 0
-    if terrainType == "water" then
+    if isLowTerrain then
         yOffset = extrude - waterExtrude
     end
 
@@ -209,6 +210,10 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
         topColor = {0.45, 0.65, 0.35, 1}
         sideColor = {0.3, 0.5, 0.2, 1}
         edgeColor = {0.2, 0.4, 0.15, 1}
+    elseif terrainType == "underwater_mines" then
+        topColor = {0.08, 0.25, 0.45, 1}
+        sideColor = {0.05, 0.15, 0.35, 1}
+        edgeColor = {0.02, 0.1, 0.25, 1}
     else
         topColor = {0.35, 0.35, 0.35, 1}
         sideColor = {0.25, 0.25, 0.25, 1}
@@ -258,6 +263,18 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
         shadowVertices[i+1] = topVertices[i+1]
     end
     love.graphics.polygon("fill", shadowVertices)
+
+    -- Mine-like decoration for underwater mines
+    if terrainType == "underwater_mines" then
+        local cx, cy = x, y + yOffset
+        love.graphics.setColor(0.8, 0.15, 0.15, 0.9)
+        love.graphics.circle("fill", cx - radius * 0.25, cy - radius * 0.15, radius * 0.08)
+        love.graphics.circle("fill", cx + radius * 0.3, cy + radius * 0.2, radius * 0.08)
+        love.graphics.circle("fill", cx + radius * 0.05, cy - radius * 0.35, radius * 0.07)
+        love.graphics.setColor(0.9, 0.6, 0.1, 0.8)
+        love.graphics.circle("fill", cx - radius * 0.15, cy + radius * 0.3, radius * 0.06)
+        love.graphics.circle("fill", cx + radius * 0.2, cy - radius * 0.2, radius * 0.06)
+    end
 
     love.graphics.setLineWidth(1)
 end

@@ -138,7 +138,8 @@ end
 
 function getDrawCoords(q, r)
     local x, y = hex:hexToPixel(q, r)
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
+    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r]
+    if terrain == "water" or terrain == "underwater_mines" then
         y = y + config.WATER_Y_OFFSET
     end
     return x, y
@@ -310,12 +311,16 @@ end
 
 function isCellPassable(q, r, movingEntity)
     if not hex:isActiveHex(q, r) then return false end
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
+    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+    if terrain == "water" then
         if movingEntity and (movingEntity.waterWalker or movingEntity.flying) then
             -- ok
         else
             return false
         end
+    end
+    if terrain == "underwater_mines" then
+        return false
     end
     if movingEntity and movingEntity.flying then
         return true

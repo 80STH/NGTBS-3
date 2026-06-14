@@ -720,11 +720,15 @@ combat.LichBoltAttack.__index = combat.LichBoltAttack
 
 function combat.LichBoltAttack.new(range)
     local self = combat.Attack.new("Magic Bolt", "Throw a bolt that hits any target in range, ignoring obstacles and line of sight", range or 5, 1, {})
+    self.minRange = 2
     return setmetatable(self, combat.LichBoltAttack)
 end
 
 function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance < self.minRange then
+        return false, "Target too close!"
+    end
     if distance > self.range then
         return false, "Target out of range"
     end
@@ -768,7 +772,8 @@ function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities
 end
 
 function combat.LichBoltAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
-    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) > self.range then
+    local dist = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if dist < self.minRange or dist > self.range then
         return nil
     end
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
@@ -1474,7 +1479,7 @@ combat.HeavyPunchAttack = setmetatable({}, combat.Attack)
 combat.HeavyPunchAttack.__index = combat.HeavyPunchAttack
 
 function combat.HeavyPunchAttack.new()
-    local self = combat.Attack.new("Heavy Punch", "Melee attack, 2 damage and pushes target away", 1, 2, {})
+    local self = combat.Attack.new("Heavy Punch", "Melee attack, 1 damage, pushes target away. Lethal if empowered", 1, 1, {})
     return setmetatable(self, combat.HeavyPunchAttack)
 end
 
@@ -1486,7 +1491,13 @@ function combat.HeavyPunchAttack:execute(attacker, targetQ, targetR, hex, entiti
     local target = combat.getEntityAtHex(targetQ, targetR, entities)
     if not target or target.health <= 0 then return false, "No valid target at that hex" end
 
-    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
+    if status.hasEntityStatus(attacker, "empowered") then
+        target.health = 0
+        target:startDeath()
+        print(string.format(" %s lands a lethal Heavy Punch on %s!", attacker.name, target.name))
+    else
+        self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
+    end
 
     if target.health > 0 then
         local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
@@ -1530,7 +1541,7 @@ combat.EmpowerPunchAttack = setmetatable({}, combat.Attack)
 combat.EmpowerPunchAttack.__index = combat.EmpowerPunchAttack
 
 function combat.EmpowerPunchAttack.new()
-    local self = combat.Attack.new("Empower Punch", "Melee attack, 1 damage, pushes target, doubles next attack damage", 1, 1, {})
+    local self = combat.Attack.new("Empower Punch", "Pushes target, doubles next attack damage. Deals 1 damage if empowered", 1, 0, {})
     return setmetatable(self, combat.EmpowerPunchAttack)
 end
 
@@ -1542,7 +1553,10 @@ function combat.EmpowerPunchAttack:execute(attacker, targetQ, targetR, hex, enti
     local target = combat.getEntityAtHex(targetQ, targetR, entities)
     if not target or target.health <= 0 then return false, "No valid target at that hex" end
 
-    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
+    local empowered = status.hasEntityStatus(attacker, "empowered")
+    if empowered then
+        self:dealDamageToTarget(target, attacker, 1, entities, sounds, nil)
+    end
 
     if target.health > 0 then
         local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
@@ -2005,6 +2019,7 @@ function startNextMove(actor)
 end
 
 function updateActorMovement(actor, dt)
+    if not actor.isPlayable then return end
     if actor.isMoving then
         actor.timer = actor.timer + dt
         local t = actor.timer / actor.speed

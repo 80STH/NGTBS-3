@@ -169,10 +169,11 @@ function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
 end
 -- Отрисовка стрелки отталкивания (с отступом от центров)
 function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, toQ, toR)
-    if fromQ ~= nil and terrainMap and terrainMap[fromQ] and terrainMap[fromQ][fromR] == "water" then
+    local isLowTerrain = function(q, r) local t = terrainMap and terrainMap[q] and terrainMap[q][r]; return t == "water" or t == "underwater_mines" end
+    if fromQ ~= nil and isLowTerrain(fromQ, fromR) then
         fromY = fromY - config.WATER_Y_OFFSET
     end
-    if toQ ~= nil and terrainMap and terrainMap[toQ] and terrainMap[toQ][toR] == "water" then
+    if toQ ~= nil and isLowTerrain(toQ, toR) then
         toY = toY - config.WATER_Y_OFFSET
     end
     local angle = math.atan2(toY - fromY, toX - fromX)
@@ -1796,12 +1797,16 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
 end
 function isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
     if not hex:isActiveHex(q, r) then return false end
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
+    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+    if terrain == "water" then
         if enemy and enemy.flying then
             -- ok
         else
             return false
         end
+    end
+    if terrain == "underwater_mines" then
+        return false
     end
     if enemy and enemy.flying then
         return true

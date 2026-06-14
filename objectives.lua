@@ -21,7 +21,7 @@ local function findEmptyCells(entities, hex)
                 end
                 if not occupied then
                     local terrain = _G.terrainMap and _G.terrainMap[q] and _G.terrainMap[q][r] or "grass"
-                    if terrain ~= "water" then
+                    if terrain ~= "water" and terrain ~= "underwater_mines" then
                         local status = require("status")
                         if not status.hasNegativeHexStatus(q, r) then
                             table.insert(candidates, {q = q, r = r})

@@ -390,7 +390,7 @@ function drawHexGrid(state, cellOverlays)
             if hex:isActiveHex(col, row) then
                 local terrainType = state.terrainMap and state.terrainMap[col] and state.terrainMap[col][row] or "grass"
                 local cellX, cellY = hex:hexToPixel(col, row)
-                local yOffset = (terrainType == "water") and state.config.WATER_Y_OFFSET or 0
+                local yOffset = (terrainType == "water" or terrainType == "underwater_mines") and state.config.WATER_Y_OFFSET or 0
                 -- Test view: shift center cell up/down
                 local testY = 0
                 if testViewActive and col == hex.centerQ and row == hex.centerR then
@@ -406,7 +406,7 @@ function drawHexGrid(state, cellOverlays)
 
     for _, cell in ipairs(cells) do
         local drawY = cell.y + (cell.testY or 0)
-        local yOffset = (cell.terrain == "water") and state.config.WATER_Y_OFFSET or 0
+        local yOffset = (cell.terrain == "water" or cell.terrain == "underwater_mines") and state.config.WATER_Y_OFFSET or 0
         hex:drawTerrainHex(cell.q, cell.r, cell.terrain, cell.x, drawY)
         local hexStatuses = status.getAtHex(cell.q, cell.r)
         if #hexStatuses > 0 then
@@ -649,7 +649,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) then
                 local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
-                if terrain ~= "water" then
+                if terrain ~= "water" and terrain ~= "underwater_mines" then
                     local occupied = false
                     for _, e in ipairs(state.entities) do
                         if e.q == q and e.r == r then

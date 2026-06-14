@@ -58,7 +58,7 @@ function restartGame(mapPath)
             for r = 0, height - 1 do
                 if hex:isActiveHex(q, r) then
                     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain ~= "water" and not occupiedSet[q .. "," .. r] and not status.hasNegativeHexStatus(q, r) then
+                    if terrain ~= "water" and terrain ~= "underwater_mines" and not occupiedSet[q .. "," .. r] and not status.hasNegativeHexStatus(q, r) then
                         table.insert(candidates, {q = q, r = r})
                     end
                 end
@@ -378,7 +378,7 @@ function findRandomEmptyCells(count, excludeFn)
                 end
                 if not occupied then
                     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain ~= "water" then
+                    if terrain ~= "water" and terrain ~= "underwater_mines" then
                         if not excludeFn or not excludeFn(q, r) then
                             table.insert(candidates, {q = q, r = r})
                         end

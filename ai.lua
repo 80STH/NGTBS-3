@@ -115,6 +115,7 @@ function ai.getBestTargetForEnemy(enemy, entities, hex, selectedTargets)
         local target = t.entity
         local dist = hex:getDistance(enemy.q, enemy.r, target.q, target.r)
         if dist > attack.range then goto continue end
+        if attack.minRange and dist < attack.minRange then goto continue end
 
         local valid = false
         if attackRequiresLine(attack) then
@@ -743,6 +744,10 @@ function ai.getLivingEnemies(entities)
 end
 
 function isCellDangerousForEntity(q, r, entity)
+    -- Underwater mines — смертельно, никогда туда не ходить
+    if terrainMap and terrainMap[q] and terrainMap[q][r] == "underwater_mines" then
+        return true
+    end
     local cellStatuses = status.getAtHex(q, r)
     if not cellStatuses or #cellStatuses == 0 then
         return false

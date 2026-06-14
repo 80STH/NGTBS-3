@@ -15,11 +15,12 @@ local gidToTerrain = {
     [7]  = "snow",
     [8]  = "swamp",
     [14] = "water",
+    [17] = "underwater_mines",
 }
 
 local gidToEntity = {
     [34] = { type = "character", name = "Warrior", isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "warrior" },
-    [31] = { type = "character", name = "Mage",    isPlayable = true,  maxHealth = 2, moveRange = 4, attacks = "mage" },
+    [31] = { type = "character", name = "Puncher",  isPlayable = true,  maxHealth = 2, moveRange = 4, attacks = "puncher" },
     [30] = { type = "character", name = "Rogue",   isPlayable = true,  maxHealth = 2, moveRange = 5, attacks = "rogue" },
     [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "ghost" },
     [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "zombie" },
@@ -33,7 +34,7 @@ local gidToEntity = {
     [11] = { type = "obstacle",  name = "SuperMountain", indestructible = true },
     [9]  = { type = "obstacle",  name = "MountainSlope", health = 2, maxDamagePerHit = 1, direction = {dx = 1, dy = 0, dz = -1} },
     [15] = { type = "obstacle",  name = "MountainSlope", indestructible = true, noCollisionDamage = true },
-    [17] = { type = "obstacle",  name = "DeepWater", isHazard = true },
+    -- [17] removed: DeepWater is now terrain "underwater_mines"
     [12] = { type = "building",  name = "SmallBuilding", health = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2 },
     [6] = { type = "obstacle",  name = "WeakMountain",  health = 2, maxDamagePerHit = 1 },
@@ -246,12 +247,6 @@ local function generateCustomSprite(name, w, h)
         love.graphics.polygon("fill", 0, h, w*0.6, h*0.2, w*0.6, h)
         love.graphics.setColor(0.4, 0.35, 0.3)
         love.graphics.rectangle("fill", 0, h-2, w, 2)
-    elseif name == "DeepWater" then
-        love.graphics.setColor(0.1, 0.1, 0.4, 1)
-        love.graphics.rectangle("fill", 0, 0, w, h)
-        love.graphics.setColor(0.2, 0.2, 0.6, 0.6)
-        love.graphics.ellipse("fill", w*0.3, h*0.3, w*0.2, h*0.1)
-
     end
 
     love.graphics.setCanvas()
@@ -267,7 +262,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
     local tileHeight = map.tileheight or 32
     local entitySprite
 
-        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Ship" or def.name == "Tower" or def.name == "MountainSlope" or def.name == "DeepWater" then
+        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Ship" or def.name == "Tower" or def.name == "MountainSlope" then
         entitySprite = generateCustomSprite(def.name, tileWidth, tileHeight)
     else
         entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)
@@ -293,8 +288,8 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         local attacks = {}
         if def.attacks == "warrior" then
             attacks = environment.getWarriorAttacks()
-        elseif def.attacks == "mage" then
-            attacks = environment.getMageAttacks()
+        elseif def.attacks == "puncher" then
+            attacks = environment.getPuncherAttacks()
         elseif def.attacks == "rogue" then
             attacks = environment.getRogueAttacks()
         elseif def.attacks == "lich" then
@@ -409,6 +404,9 @@ function environment.loadMapFromTiled(filePath)
     if not groundLayer then error("'terrain' layer not found!") end
 
     local rawData = groundLayer.data
+    local terrainTypesFound = {}
+    local unknownTerrainGids = {}
+
     for y = 1, height do
         for x = 1, width do
             local gid = nil
@@ -446,7 +444,31 @@ function environment.loadMapFromTiled(filePath)
                     terrainTextures[gridX][gridY] = texture
                 end
             end
+            if gid and gid > 0 then
+                local tt = gidToTerrain[gid]
+                if tt then
+                    terrainTypesFound[tt] = true
+                else
+                    unknownTerrainGids[gid] = true
+                end
+            end
         end
+    end
+
+    local typesList = {}
+    for t, _ in pairs(terrainTypesFound) do
+        table.insert(typesList, t)
+    end
+    table.sort(typesList)
+    print("Terrain types found: " .. table.concat(typesList, ", "))
+
+    local unknownList = {}
+    for gid, _ in pairs(unknownTerrainGids) do
+        table.insert(unknownList, tostring(gid))
+    end
+    table.sort(unknownList, function(a, b) return tonumber(a) < tonumber(b) end)
+    if #unknownList > 0 then
+        print("Unknown terrain GIDs: " .. table.concat(unknownList, ", "))
     end
 
     -- Загружаем entities только на активных клетках
@@ -578,11 +600,11 @@ function environment.getWarriorAttacks()
     }
 end
 
-function environment.getMageAttacks()
+function environment.getPuncherAttacks()
     local combat = require("combat")
     return {
-        { attack = combat.AoePushAttack.new(), name = "Stone Throw", description = "Throw a stone that pushes enemies around" },
-        { attack = combat.AoeDirectionalAttack.new(), name = "Shockwave", description = "Pushes all 6 surrounding enemies away from the center" },
+        { attack = combat.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Melee attack, 1 damage, pushes target away. Lethal if empowered" },
+        { attack = combat.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack damage. Deals 1 damage if empowered" },
     }
 end
 
@@ -797,8 +819,8 @@ function environment.createSquadUnit(unitDef, q, r)
     local attacks = {}
     if unitDef.attacks == "warrior" then
         attacks = environment.getWarriorAttacks()
-    elseif unitDef.attacks == "mage" then
-        attacks = environment.getMageAttacks()
+    elseif unitDef.attacks == "puncher" then
+        attacks = environment.getPuncherAttacks()
     elseif unitDef.attacks == "rogue" then
         attacks = environment.getRogueAttacks()
     elseif unitDef.attacks == "summoner" then
@@ -810,7 +832,7 @@ function environment.createSquadUnit(unitDef, q, r)
     end
 
     local nameToGid = {
-        Warrior = 34, Mage = 31, Rogue = 30,
+        Warrior = 34, Puncher = 31, Rogue = 30,
         Summoner = 40, Divider = 45, Summoned = 42, Divided = 44,
         AttackTest = 68,
     }
@@ -819,7 +841,7 @@ function environment.createSquadUnit(unitDef, q, r)
 
     local colors = {
         Warrior = {0.8, 0.3, 0.2},
-        Mage = {0.2, 0.5, 0.8},
+        Puncher = {0.2, 0.5, 0.8},
         Rogue = {0.2, 0.8, 0.3},
         Summoner = {0.8, 0.2, 0.8},
         Divider = {0.9, 0.7, 0.1},

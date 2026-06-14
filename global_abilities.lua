@@ -234,7 +234,7 @@ function UnearthAbility:onActivate(state)
         end
         if not occupied then
             local terrain = state.terrainMap and state.terrainMap[site.q] and state.terrainMap[site.q][site.r] or "grass"
-            if terrain ~= "water" and not status.hasNegativeHexStatus(site.q, site.r) then
+            if terrain ~= "water" and terrain ~= "underwater_mines" and not status.hasNegativeHexStatus(site.q, site.r) then
                 local newEnemy = environment.createRandomEnemy(site.q, site.r)
                 table.insert(state.entities, newEnemy)
                 spawned = spawned + 1
