@@ -125,10 +125,22 @@ function processNextEnemyPrepare()
     if #turnState.enemyPrepareQueue == 0 then
         turnState.phase = "player"
         for _, a in ipairs(entities) do
-            if a.isPlayable and a.health > 0 then
-                a.hasActedThisTurn = false
-                a.hasMovedThisTurn = false
-                a.canMoveAfterAttack = false
+            if a.isPlayable then
+                -- Снимаем нокаут в начале хода: здоровье -> 1, востанавливаем скорость
+                if status.hasEntityStatus(a, "knockout") then
+                    status.removeFromEntity(a, "knockout")
+                    a.health = 1
+                    if a._savedMoveRange then
+                        a.moveRange = a._savedMoveRange
+                        a._savedMoveRange = nil
+                    end
+                    print(string.format(" %s recovers from knockout! (1 HP)", a.name))
+                end
+                if a.health > 0 then
+                    a.hasActedThisTurn = false
+                    a.hasMovedThisTurn = false
+                    a.canMoveAfterAttack = false
+                end
             end
         end
         actionHistory = {}

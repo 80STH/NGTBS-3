@@ -44,6 +44,10 @@ end
 
 -- Проверка, может ли актор дойти до клетки (с учётом препятствий и длины пути)
 function ui.getEffectiveMoveRange(actor, entities, hex)
+    -- Нокаут: скорость принудительно 2
+    if status and status.hasEntityStatus and status.hasEntityStatus(actor, "knockout") then
+        return 2
+    end
     local base = actor.moveRange or 0
     if status and status.hasEntityStatus and status.hasEntityStatus(actor, "empowered") then
         base = base + 1
@@ -1667,6 +1671,7 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         empowered = { name = "Empowered", color = {1, 0.9, 0.2}, desc = "Move +1, damage +1." },
         double_damage = { name = "Double Damage", color = {1, 0.5, 0.5}, desc = "Next attack deals double damage (one-time)." },
         wounded = { name = "Wounded", color = {1, 0.4, 0.2}, desc = "Health below max. Move range reduced by 1." },
+        knockout = { name = "Knockout", color = {1, 0.1, 0.1}, desc = "Move range reduced to 2. Cannot attack. Recovers next turn with 1 HP." },
     }
     local statuses = ui.getEffectiveStatuses(entity)
 
@@ -2295,6 +2300,10 @@ function updateAttackButtons(actor)
     if not actor or not actor.attacks or #actor.attacks == 0 then
         return
     end
+    -- Нокаутированные союзники не могут атаковать
+    if status.hasEntityStatus(actor, "knockout") then
+        return
+    end
     local startX = logicalW - 160
     local startY = 100
     for i, attackInfo in ipairs(actor.attacks) do
@@ -2491,16 +2500,17 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
 
         local btn = {x = x, y = by, w = btnW, h = btnH, entity = ally}
         table.insert(allyPanelButtons, btn)
+        local isKnockedOut = status.hasEntityStatus(ally, "knockout")
 
         if sel then
-            love.graphics.setColor(0.25, 0.55, 0.25, 0.88)
+            love.graphics.setColor(isKnockedOut and 0.55 or 0.25, 0.25, 0.25, 0.88)
         elseif hover then
-            love.graphics.setColor(0.35, 0.4, 0.5, 0.85)
+            love.graphics.setColor(isKnockedOut and 0.45 or 0.35, 0.25, 0.35, 0.85)
         else
-            love.graphics.setColor(0.18, 0.2, 0.25, 0.82)
+            love.graphics.setColor(0.28, 0.15, 0.18, 0.82)
         end
         love.graphics.rectangle("fill", x, by, btnW, btnH, 4)
-        love.graphics.setColor(0.45, 0.5, 0.55, 0.5)
+        love.graphics.setColor(isKnockedOut and 0.9 or 0.45, 0.2, 0.2, 0.5)
         love.graphics.setLineWidth(1)
         love.graphics.rectangle("line", x, by, btnW, btnH, 4)
 
@@ -2509,7 +2519,9 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
 
         local hpStr = tostring(ally.health) .. "/" .. tostring(ally.maxHealth)
         local hpColor
-        if ally.health <= ally.maxHealth * 0.3 then
+        if status.hasEntityStatus(ally, "knockout") then
+            hpColor = {1, 0.1, 0.1}
+        elseif ally.health <= ally.maxHealth * 0.3 then
             hpColor = {1, 0.25, 0.25}
         elseif ally.health <= ally.maxHealth * 0.6 then
             hpColor = {1, 0.8, 0.2}
@@ -2521,7 +2533,10 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
 
         local indX = x + btnW - 16
         local indY = by + btnH / 2 - 1
-        if ally.hasActedThisTurn then
+        if isKnockedOut then
+            love.graphics.setColor(1, 0.2, 0.2, 1)
+            love.graphics.print("KO", indX - 6, indY - 2)
+        elseif ally.hasActedThisTurn then
             love.graphics.setColor(0.5, 0.5, 0.5, 1)
             love.graphics.print("✗", indX, indY - 2)
         elseif not ally.hasMovedThisTurn then

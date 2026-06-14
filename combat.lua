@@ -2051,6 +2051,10 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
         print("[DEBUG] Not a playable character")
         return false, "Not a playable character"
     end
+    if status.hasEntityStatus(attacker, "knockout") then
+        print("[DEBUG] Knocked out, cannot attack")
+        return false, "Knocked out, cannot attack"
+    end
     if attacker.hasActedThisTurn then
         print("[DEBUG] Already acted this turn")
         return false, "Already acted this turn"

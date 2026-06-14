@@ -105,6 +105,17 @@ return function(ui)
         love.graphics.circle("fill", x, y, radius * 0.5)
     end
 
+    function ui.drawKnockoutOnEntity(x, y, radius, time)
+        local t = time * 3
+        local pulse = 0.7 + 0.3 * math.sin(t * 4)
+        love.graphics.setColor(0.9 * pulse, 0.1, 0.1, 0.7 * pulse)
+        love.graphics.setLineWidth(3)
+        love.graphics.circle("line", x, y, radius * 0.7)
+        love.graphics.setColor(1, 0.1 * pulse, 0.1 * pulse, 0.9 * pulse)
+        love.graphics.print("KO", x - 10, y - 8)
+        love.graphics.setLineWidth(1)
+    end
+
     function ui.drawEmpoweredOnEntity(x, y, radius, time)
         local t = time * 6
         love.graphics.setBlendMode("add")
@@ -136,6 +147,9 @@ return function(ui)
         end
         if status.hasEntityStatus(entity, "empowered") then
             ui.drawEmpoweredOnEntity(x, y, radius, time)
+        end
+        if status.hasEntityStatus(entity, "knockout") then
+            ui.drawKnockoutOnEntity(x, y, radius, time)
         end
     end
 

@@ -581,7 +581,11 @@ function drawHealthBar(entity, x, y, damage)
             local blink = 0.5 + 0.5 * math.sin(t * 8)
             love.graphics.setColor(1, 0.2 + blink * 0.3, 0.2, 0.9)
         elseif isAlive then
-            love.graphics.setColor(0, 0.8, 0, 0.9)
+            if status.hasEntityStatus(entity, "knockout") then
+                love.graphics.setColor(1, 0.1, 0.1, 0.9)
+            else
+                love.graphics.setColor(0, 0.8, 0, 0.9)
+            end
         else
             love.graphics.setColor(0.15, 0.02, 0.02, 0.4)
         end
@@ -598,6 +602,13 @@ end
 
 function drawActionIndicator(entity, x, y)
     if not entity:isCharacter() then return end
+    if status.hasEntityStatus(entity, "knockout") then
+        love.graphics.setColor(1, 0.1, 0.1, 0.9)
+        love.graphics.circle("fill", x + 15, y - 15, 8)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print("KO", x + 11, y - 20)
+        return
+    end
     if entity.hasActedThisTurn then
         love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
         love.graphics.circle("fill", x + 15, y - 15, 8)
