@@ -1568,11 +1568,11 @@ end
 function ui.drawGlobalHealthBar(globalHealth, mouseX, mouseY)
     local previewDamage = globalHealth.previewDamage or 0
     globalHealth.previewDamage = 0
-    local pipWidth = 16
-    local pipHeight = 32
+    local pipWidth = 14
+    local pipHeight = 26
     local pipSpacing = 0
     local x = 10
-    local y = 60
+    local y = 14
     local totalW = globalHealth.max * (pipWidth + pipSpacing) - pipSpacing
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.print("Global Health:", x, y - 16)
@@ -2484,14 +2484,11 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
     end
     if #allies == 0 then return end
 
-    local x = 10
-    local btnW = 145
-    local btnH = 32
+    local x = logicalW - 145
+    local btnW = 135
+    local btnH = 30
     local gap = 2
-    local bottomY = logicalH - 10
-    local totalH = #allies * (btnH + gap)
-    local startY = bottomY - totalH
-    if startY < 35 then startY = 35 end
+    local startY = 140
 
     for i, ally in ipairs(allies) do
         local by = startY + (i - 1) * (btnH + gap)

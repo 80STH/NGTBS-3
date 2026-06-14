@@ -18,10 +18,9 @@ global_abilities.dropdownOpen = false
 global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay"}
 
 local function getDropdownHeader()
-    local screenW = love.graphics.getWidth()
     local w = 145
-    local x = screenW - w - 10
-    return { x = x, y = 10, w = w, h = 26 }
+    local x = logicalW - w - 10
+    return { x = x, y = 8, w = w, h = 26 }
 end
 
 function global_abilities.register(obj)

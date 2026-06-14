@@ -91,7 +91,7 @@ function input.mousepressed(x, y, button)
 
     if global_abilities.handleClick(x, y, state) then return end
 
-    if x >= 10 and x <= 130 and y >= 190 and y <= 220 then
+    if x >= 10 and x <= 130 and y >= 1240 and y <= 1270 then
         if #actionHistory > 0 then
             undoLastAction()
         else
@@ -101,9 +101,8 @@ function input.mousepressed(x, y, button)
     end
 
     -- Test view button
-    local tw, th = 120, 22
-    local tx, ty = logicalW - 130, 10
-    if x >= tx and x <= tx + tw and y >= ty and y <= ty + th then
+    local tx, ty = logicalW - 28, 8
+    if x >= tx and x <= tx + 20 and y >= ty and y <= ty + 20 then
         testViewActive = not testViewActive
         print("Test view: " .. (testViewActive and "ON" or "OFF"))
         return
@@ -132,8 +131,8 @@ function input.mousepressed(x, y, button)
     end
 
     -- Enemy Order button toggle
-    local orderBtnX = logicalW - 110
-    local orderBtnY = logicalH - 40
+    local orderBtnX = 160
+    local orderBtnY = 1200
     if x >= orderBtnX and x <= orderBtnX + 100 and y >= orderBtnY and y <= orderBtnY + 30 then
         showEnemyOrder = not showEnemyOrder
         print("Enemy order display: " .. (showEnemyOrder and "ON" or "OFF"))

@@ -31,7 +31,7 @@ logicalH = 0
 screenShake = { timer = 0, intensity = 6, duration = 0.3 }
 testViewActive = false
 testViewOffsetY = 0
-gridRotationMode = false
+
 gamePhase = "menu"
 selectedMapPath = nil
 selectedSquad = nil
@@ -115,11 +115,11 @@ function love.load()
     environment.loadUnitSprites()
 
     restartButton = {
-        x = 10, y = 295, width = 120, height = 30,
+        x = 270, y = 1240, width = 110, height = 30,
         text = "Restart Game", isHovered = false
     }
     endTurnButton = {
-        x = 10, y = 260, width = 120, height = 30,
+        x = 140, y = 1240, width = 110, height = 30,
         text = "End Turn", isHovered = false,
         holdTimer = 0, isHeld = false,
     }
@@ -256,7 +256,7 @@ function love.update(dt)
     end
 
     undoButton = undoButton or {}
-    undoButton.isHovered = (mx >= 10 and mx <= 130 and my >= 190 and my <= 220)
+    undoButton.isHovered = (mx >= 10 and mx <= 120 and my >= 1240 and my <= 1270)
     endTurnButton.isHovered = (mx >= endTurnButton.x and mx <= endTurnButton.x + endTurnButton.width and
                                my >= endTurnButton.y and my <= endTurnButton.y + endTurnButton.height)
 end

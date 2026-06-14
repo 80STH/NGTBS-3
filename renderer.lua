@@ -294,9 +294,9 @@ function renderer.draw(state)
     ui.drawDecayButton(mx, my, state.turnCount, state.maxTurns, state.turnState.phase)
     ui.drawAllyPanel(mx, my, state.entities, state.selectedActor)
     if state.selectedActor then
-        love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 23)
+        love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 55)
     end
-    love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 95)
+    love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 80)
 
     local hoverOrder = ui.drawEnemyOrderButton(mx, my)
     local showOrder = hoverOrder or state.showEnemyOrder
@@ -748,7 +748,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
     end
 
     local panelX = 10
-    local panelY = 120
+    local panelY = 80
     local panelW = 180
     local panelH = 30 + #unplacedAllies * 22 + 10
 
@@ -806,7 +806,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
     state.deployConfirmBtn = canConfirm and {x = btnX, y = btnY, w = btnW, h = btnH} or nil
 
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("DEPLOYMENT PHASE — Place your units", 10, 23)
+    love.graphics.print("DEPLOYMENT PHASE — Place your units", 10, 55)
 end
 
 return renderer

@@ -26,7 +26,7 @@ function restartGame(mapPath)
         config.CENTER_R
     )
     hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
-    hex.rotation = gridRotationMode and config.GRID_ROTATION_ANGLE or 0
+    hex.rotation = config.GRID_ROTATION_ANGLE
 
     status.initHexStatuses(hexStatuses)
 

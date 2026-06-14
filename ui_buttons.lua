@@ -7,15 +7,15 @@ return function(ui)
     function ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
         local canUndo = #actionHistory > 0
         love.graphics.setColor(canUndo and 0.2 or 0.5, 0.2, 0.8, 0.8)
-        love.graphics.rectangle("fill", 10, 190, 120, 30, 5)
+        love.graphics.rectangle("fill", 10, 1240, 120, 30, 5)
         love.graphics.setColor(1, 1, 1, 1)
         local old = love.graphics.getFont()
         love.graphics.setFont(buttonFont)
-        love.graphics.printf("Undo (U)", 10, 199, 120, "center")
+        love.graphics.printf("Undo (U)", 10, 1249, 120, "center")
         love.graphics.setFont(old)
         if not canUndo then
             love.graphics.setColor(0, 0, 0, 0.6)
-            love.graphics.rectangle("fill", 10, 190, 120, 30, 5)
+            love.graphics.rectangle("fill", 10, 1240, 120, 30, 5)
         end
     end
 
@@ -24,7 +24,7 @@ return function(ui)
         local text = decayActive and "Decay active!" or ("Decay in: " .. (maxTurns - turnCount))
         local btnW, btnH = 140, 22
         local x = 10
-        local y = (logicalH - btnH) / 2
+        local y = 1200
 
         local isHover = mouseX >= x and mouseX <= x + btnW and mouseY >= y and mouseY <= y + btnH
 
@@ -68,22 +68,22 @@ return function(ui)
         local pressedOffset = isPressed and 2 or 0
 
         love.graphics.setColor(isPlayerTurn and (isPressed and 0.5 or 0.8) or 0.4, 0.2, 0.2, 0.8)
-        love.graphics.rectangle("fill", 10, 260 + pressedOffset, 120, 30 - pressedOffset, 5)
+        love.graphics.rectangle("fill", 140, 1240 + pressedOffset, 110, 30 - pressedOffset, 5)
 
         if isPressed then
             local progress = math.min(btn.holdTimer / 0.7, 1)
             love.graphics.setColor(0.9, 0.3, 0.2, 0.6)
-            love.graphics.rectangle("fill", 10, 260 + pressedOffset, 120 * progress, 30 - pressedOffset, 5)
+            love.graphics.rectangle("fill", 140, 1240 + pressedOffset, 110 * progress, 30 - pressedOffset, 5)
         end
 
         love.graphics.setColor(1, 1, 1, 1)
         local old = love.graphics.getFont()
         love.graphics.setFont(buttonFont)
-        love.graphics.printf("End Turn (E)", 10, 269 + pressedOffset, 120, "center")
+        love.graphics.printf("End Turn (E)", 140, 1249 + pressedOffset, 110, "center")
         love.graphics.setFont(old)
         if not isPlayerTurn then
             love.graphics.setColor(0, 0, 0, 0.6)
-            love.graphics.rectangle("fill", 10, 260, 120, 30, 5)
+            love.graphics.rectangle("fill", 140, 1240, 110, 30, 5)
         end
 
         if btn.isHovered and isPlayerTurn then
@@ -96,9 +96,9 @@ return function(ui)
             if #unitsLeft > 0 then
                 local names = table.concat(unitsLeft, ", ")
                 local tooltipW, tooltipH = 260, 48
-                local tx, ty = 10 + 120 + 6, 260
+                local tx, ty = 140 + 110 + 6, 1240
                 if tx + tooltipW > logicalW - 10 then
-                    tx = 10 - tooltipW - 6
+                    tx = 140 - tooltipW - 6
                 end
                 love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
                 love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
@@ -117,6 +117,10 @@ return function(ui)
         if #attackButtons == 0 then return end
 
         for i, btn in ipairs(attackButtons) do
+            btn.x = logicalW - 155
+            btn.y = 100 + (i - 1) * 32
+            btn.width = 145
+            btn.height = 28
             local isSelected = (selectedAttack == btn.attack and attackMode)
             love.graphics.setColor(isSelected and 0.9 or 0.3, 0.7, 0.3, 0.8)
             love.graphics.rectangle("fill", btn.x, btn.y, btn.width, btn.height, 5)
@@ -132,8 +136,8 @@ return function(ui)
 
     function ui.drawEnemyOrderButton(mouseX, mouseY)
         local btnW, btnH = 100, 30
-        local x = logicalW - btnW - 10
-        local y = logicalH - btnH - 10
+        local x = 160
+        local y = 1200
         local isHover = mouseX >= x and mouseX <= x + btnW and mouseY >= y and mouseY <= y + btnH
 
         love.graphics.setColor(isHover and 0.6 or 0.3, 0.4, 0.6, 0.8)
@@ -179,7 +183,7 @@ return function(ui)
 
     function ui.drawTestViewButton(mx, my)
         local bw, bh = 20, 20
-        local bx, by = logicalW - bw - 10, 10
+        local bx, by = logicalW - 28, 8
         love.graphics.setColor(testViewActive and 0.4 or 0.2, 0.6, testViewActive and 0.9 or 0.6, 0.8)
         love.graphics.rectangle("fill", bx, by, bw, bh, 3)
         love.graphics.setColor(1, 1, 1, 1)

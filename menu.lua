@@ -49,9 +49,9 @@ function menu.draw()
     end
 
     -- Draw normal menu
-    local titleFont = love.graphics.newFont(math.max(18, math.floor(h * 0.05)))
+    local titleFont = love.graphics.newFont(math.max(16, math.floor(h * 0.03)))
     love.graphics.setFont(titleFont)
-    love.graphics.printf("Select Map", 0, h * 0.12, w, "center")
+    love.graphics.printf("Select Map", 0, h * 0.10, w, "center")
 
     local bw, bh = 260, 50
     local mapStartY = h * 0.20
@@ -131,37 +131,7 @@ function menu.draw()
     love.graphics.setFont(love.graphics.newFont(11))
     love.graphics.printf(tostring(difficultyModifier), 0, sy + sh + 4, w, "center")
 
-    -- Grid mode toggle
-    local modeY = sy + sh + 30
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.setFont(love.graphics.newFont(12))
-    love.graphics.printf("Grid Mode", 0, modeY, w, "center")
-
-    local modeBtnW, modeBtnH = 140, 28
-    local modeBtnY = modeY + 20
-    local modeBtn1X = w/2 - modeBtnW - 6
-    local modeBtn2X = w/2 + 6
-
-    local mode1Hover = mx >= modeBtn1X and mx <= modeBtn1X + modeBtnW and my >= modeBtnY and my <= modeBtnY + modeBtnH
-    local mode2Hover = mx >= modeBtn2X and mx <= modeBtn2X + modeBtnW and my >= modeBtnY and my <= modeBtnY + modeBtnH
-
-    love.graphics.setColor(not gridRotationMode and (mode1Hover and 0.4 or 0.25) or 0.15, not gridRotationMode and 0.3 or 0.15, not gridRotationMode and 0.5 or 0.2, 0.9)
-    love.graphics.rectangle("fill", modeBtn1X, modeBtnY, modeBtnW, modeBtnH, 6)
-    love.graphics.setColor(not gridRotationMode and 0.5 or 0.3, not gridRotationMode and 0.4 or 0.3, not gridRotationMode and 0.8 or 0.4, not gridRotationMode and 0.9 or 0.5)
-    love.graphics.rectangle("line", modeBtn1X, modeBtnY, modeBtnW, modeBtnH, 6)
-    love.graphics.setColor(1, 1, 1, not gridRotationMode and 1 or 0.5)
-    love.graphics.setFont(love.graphics.newFont(11))
-    love.graphics.printf("Standard", modeBtn1X, modeBtnY + 6, modeBtnW, "center")
-
-    love.graphics.setColor(gridRotationMode and (mode2Hover and 0.4 or 0.25) or 0.15, gridRotationMode and 0.3 or 0.15, gridRotationMode and 0.5 or 0.2, 0.9)
-    love.graphics.rectangle("fill", modeBtn2X, modeBtnY, modeBtnW, modeBtnH, 6)
-    love.graphics.setColor(gridRotationMode and 0.5 or 0.3, gridRotationMode and 0.4 or 0.3, gridRotationMode and 0.8 or 0.4, gridRotationMode and 0.9 or 0.5)
-    love.graphics.rectangle("line", modeBtn2X, modeBtnY, modeBtnW, modeBtnH, 6)
-    love.graphics.setColor(1, 1, 1, gridRotationMode and 1 or 0.5)
-    love.graphics.setFont(love.graphics.newFont(11))
-    love.graphics.printf("Rotated", modeBtn2X, modeBtnY + 6, modeBtnW, "center")
-
-    local bottomY = modeBtnY + modeBtnH + 12
+    local bottomY = sy + sh + 30
 
     -- Full Playtest button
     local ptY = bottomY + 30
@@ -184,9 +154,9 @@ function menu.drawPlaytestDifficulty()
     local h = logicalH
 
     love.graphics.setColor(1, 1, 1, 1)
-    local titleFont = love.graphics.newFont(math.max(18, math.floor(h * 0.05)))
+    local titleFont = love.graphics.newFont(math.max(16, math.floor(h * 0.035)))
     love.graphics.setFont(titleFont)
-    love.graphics.printf("Full Playtest", 0, h * 0.20, w, "center")
+    love.graphics.printf("Full Playtest", 0, h * 0.15, w, "center")
 
     love.graphics.setFont(love.graphics.newFont(14))
     love.graphics.setColor(0.7, 0.7, 0.7, 1)
@@ -308,24 +278,8 @@ function menu.mousepressed(x, y)
         return true
     end
 
-    -- Grid mode toggle
-    local modeY = sy + sh + 30
-    local modeBtnW, modeBtnH = 140, 28
-    local modeBtnY = modeY + 20
-    local modeBtn1X = logicalW/2 - modeBtnW - 6
-    local modeBtn2X = logicalW/2 + 6
-    if y >= modeBtnY and y <= modeBtnY + modeBtnH then
-        if x >= modeBtn1X and x <= modeBtn1X + modeBtnW then
-            gridRotationMode = false
-            return true
-        elseif x >= modeBtn2X and x <= modeBtn2X + modeBtnW then
-            gridRotationMode = true
-            return true
-        end
-    end
-
     -- Full Playtest button
-    local ptY = modeBtnY + modeBtnH + 12 + 30
+    local ptY = sy + sh + 30 + 30
     if x >= bx and x <= bx + bw and y >= ptY and y <= ptY + bh then
         playtestPhase = "select_difficulty"
         return true
