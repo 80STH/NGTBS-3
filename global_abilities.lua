@@ -56,6 +56,10 @@ function global_abilities.handleButtonClick(x, y, state)
             local ix, iy, iw, ih = getAbilityItemRect(i)
             if x >= ix and x <= ix + iw and y >= iy and y <= iy + ih then
                 if state.turnState.phase == "player" and not ab.hasBeenUsed then
+                    if ab.name == "Unearth" and not ab:hasDigSites(state) then
+                        print("Unearth: No dig sites on the map!")
+                        return true
+                    end
                     if global_abilities.activeAbility then
                         global_abilities.activeAbility:onDeactivate(state)
                     end
@@ -93,6 +97,10 @@ function global_abilities.handleKey(key, state)
     for _, ab in pairs(global_abilities.registry) do
         if key == ab.key then
             if state.turnState.phase == "player" and not ab.hasBeenUsed then
+                if ab.name == "Unearth" and not ab:hasDigSites(state) then
+                    print("Unearth: No dig sites on the map!")
+                    return true
+                end
                 if global_abilities.activeAbility then
                     global_abilities.activeAbility:onDeactivate(state)
                 end
@@ -222,8 +230,13 @@ function UnearthAbility:reset()
 end
 
 function UnearthAbility:onActivate(state)
-    local spawned = 0
     local digSites = status.getAllDigSites()
+    if #digSites == 0 then
+        print("Unearth: No dig sites to unearth!")
+        global_abilities.activeAbility = nil
+        return
+    end
+    local spawned = 0
     for _, site in ipairs(digSites) do
         local occupied = false
         for _, e in ipairs(state.entities) do
@@ -256,16 +269,23 @@ function UnearthAbility:onClickHex(q, r, hex, state)
     return false
 end
 
+function UnearthAbility:hasDigSites(state)
+    return #status.getAllDigSites() > 0
+end
+
 function UnearthAbility:drawButton(mx, my, state)
+    local hasSites = self:hasDigSites(state)
     global_abilities.drawAbilityButton(self, mx, my, state, {
-        color = {0.7, 0.5, 0.2},
+        color = hasSites and {0.7, 0.5, 0.2} or {0.4, 0.4, 0.4},
         label = "Unearth (U)",
         activeLabel = "Unearth (U)",
         tooltipH = 64,
         tooltipTitle = "Unearth",
-        tooltipLines = {
+        tooltipLines = hasSites and {
             "All enemies in dig sites",
             "immediately emerge.",
+        } or {
+            "No dig sites on the map.",
         },
     })
 end

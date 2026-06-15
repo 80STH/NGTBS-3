@@ -12,7 +12,7 @@ return {
   nextlayerid = 5,
   nextobjectid = 2,
   hexsidelength = 6,
-  staggeraxis = "y",
+  staggeraxis = "x",
   staggerindex = "odd",
   properties = {},
   tilesets = {
@@ -103,7 +103,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJxjZWBgYAViRiyYFQljkydWDSMBeV4ohqnhI2CWIAE1MPfgU0dIDSsaFkTDyGoAqvgBXg=="
+      data = "eJxjZWBgYIViRiTMioYZcWBmIuRxyVGC+YhQIwhVh65WEM2PgkhqYWx0/yOrRRcDAJMAAUo="
     },
     {
       type = "tilelayer",
@@ -123,7 +123,7 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJxtj0EKACEMA3tSli74IM/9/5dWYQdiMBCsbRjaiohaHstpRsypcf6vZ7a69GExb8a5ZV5jw9S96D2XnUoyLU5WSr017ba0v7KQZj6lxwjN"
+      data = "eJxjYEAAbiSMDrCJI4vxo8nxYFGLrIYdi1p0NdgAPjW4zLHGYY4rAbsYoGoIqQMAB28CBQ=="
     },
     {
       type = "tilelayer",

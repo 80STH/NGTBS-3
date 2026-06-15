@@ -16,17 +16,19 @@ function restartGame(mapPath)
 
     local hexStatuses
     local deployableAllies
-    terrainMap, entities, width, height, hexStatuses, _, deployableAllies = environment.loadMapFromTiled(mapPath)
+    terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation = environment.loadMapFromTiled(mapPath)
+    orientation = orientation or "pointy"
 
     hex = require("hexgrid").new(
         config.HEX_RADIUS,
         width, height,
         config.ACTIVE_RADIUS,
         config.CENTER_Q,
-        config.CENTER_R
+        config.CENTER_R,
+        orientation
     )
     hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
-    hex.rotation = config.GRID_ROTATION_ANGLE
+    hex.rotation = (orientation == "flat") and 0 or config.GRID_ROTATION_ANGLE
 
     status.initHexStatuses(hexStatuses)
 
@@ -506,11 +508,11 @@ function strikeLightning()
 
     local target = getEntityAtHex(tq, tr)
     if target and target.health > 0 then
-        local wasDestroyed = target:takeDamage(2)
+        local wasDestroyed = target:takeDamage(1)
         if sounds and sounds.collision then sounds.collision:play() end
         if not wasDestroyed then
             status.applyToEntity(target, "empowered")
-            print("Lightning strikes " .. target.name .. "! 2 damage, Empowered applied")
+            print("Lightning strikes " .. target.name .. "! 1 damage, Empowered applied")
         else
             target:startDeath()
             print("Lightning destroys " .. target.name .. "!")

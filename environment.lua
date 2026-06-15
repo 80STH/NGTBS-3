@@ -20,8 +20,8 @@ local gidToTerrain = {
 
 local gidToEntity = {
     [34] = { type = "character", name = "Warrior", isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "warrior" },
-    [31] = { type = "character", name = "Puncher",  isPlayable = true,  maxHealth = 2, moveRange = 4, attacks = "puncher" },
-    [30] = { type = "character", name = "Rogue",   isPlayable = true,  maxHealth = 2, moveRange = 5, attacks = "rogue" },
+    [30] = { type = "character", name = "Puncher",  isPlayable = true,  maxHealth = 2, moveRange = 4, attacks = "puncher" },
+    [31] = { type = "character", name = "Rogue",   isPlayable = true,  maxHealth = 2, moveRange = 5, attacks = "rogue" },
     [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "ghost" },
     [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "zombie" },
     [21] = { type = "character", name = "PoisonousZombie", isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "zombie" },
@@ -379,6 +379,10 @@ function environment.loadMapFromTiled(filePath)
     local map = sti(filePath)
     local width, height = map.width, map.height
 
+    local orientation = (map.staggeraxis == "x") and "flat" or "pointy"
+    local hex_utils = require("hex_utils")
+    hex_utils.setOrientation(orientation)
+
     -- Создаём карту terrain и текстур только для активных клеток шестиугольника
     local terrainMap = {}
     local terrainTextures = {}
@@ -390,7 +394,8 @@ function environment.loadMapFromTiled(filePath)
         width, height,
         config.ACTIVE_RADIUS,
         config.CENTER_Q,
-        config.CENTER_R
+        config.CENTER_R,
+        orientation
     )
 
     -- Находим слой terrain
@@ -588,7 +593,7 @@ function environment.loadMapFromTiled(filePath)
     print(string.format("Entities loaded: %d", #gameEntities))
     print(string.format("Allies for deploy: %d", #deployableAllies))
 
-    return terrainMap, gameEntities, width, height, hexStatuses, walkable, deployableAllies
+    return terrainMap, gameEntities, width, height, hexStatuses, walkable, deployableAllies, orientation
 end
 
 -- Функции атак (без изменений)
@@ -832,7 +837,7 @@ function environment.createSquadUnit(unitDef, q, r)
     end
 
     local nameToGid = {
-        Warrior = 34, Puncher = 31, Rogue = 30,
+        Warrior = 34, Puncher = 30, Rogue = 31,
         Summoner = 40, Divider = 45, Summoned = 42, Divided = 44,
         AttackTest = 68,
     }
@@ -841,8 +846,8 @@ function environment.createSquadUnit(unitDef, q, r)
 
     local colors = {
         Warrior = {0.8, 0.3, 0.2},
-        Puncher = {0.2, 0.5, 0.8},
-        Rogue = {0.2, 0.8, 0.3},
+        Puncher = {0.2, 0.8, 0.3},
+        Rogue = {0.2, 0.5, 0.8},
         Summoner = {0.8, 0.2, 0.8},
         Divider = {0.9, 0.7, 0.1},
         Summoned = {0.6, 0.3, 0.9},

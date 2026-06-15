@@ -1,23 +1,35 @@
--- hex_utils.lua
--- Утилиты для работы с гексагональными координатами (pointy-top, odd-r)
 local hex_utils = {}
+hex_utils.orientation = "pointy"
 
--- Преобразование axial (q,r) в кубические координаты (x,y,z)
+function hex_utils.setOrientation(orientation)
+    hex_utils.orientation = orientation
+end
+
 function hex_utils.axialToCube(q, r)
-    local x = q - (r - (r % 2)) / 2
-    local z = r
+    local x, z
+    if hex_utils.orientation == "flat" then
+        x = q
+        z = r - math.floor((q - (q % 2)) / 2)
+    else
+        x = q - math.floor((r - (r % 2)) / 2)
+        z = r
+    end
     local y = -x - z
     return x, y, z
 end
 
--- Преобразование кубических координат в axial
 function hex_utils.cubeToAxial(x, y, z)
-    local q = x + (z - (z % 2)) / 2
-    local r = z
+    local q, r
+    if hex_utils.orientation == "flat" then
+        q = x
+        r = z + math.floor((x - (x % 2)) / 2)
+    else
+        q = x + math.floor((z - (z % 2)) / 2)
+        r = z
+    end
     return q, r
 end
 
--- Применение шага в кубических координатах к axial координатам
 function hex_utils.applyCubeStep(q, r, stepX, stepY, stepZ)
     local x, y, z = hex_utils.axialToCube(q, r)
     x = x + stepX
@@ -26,7 +38,6 @@ function hex_utils.applyCubeStep(q, r, stepX, stepY, stepZ)
     return hex_utils.cubeToAxial(x, y, z)
 end
 
--- Расстояние между двумя гексами в axial координатах
 function hex_utils.getDistance(q1, r1, q2, r2)
     local x1, y1, z1 = hex_utils.axialToCube(q1, r1)
     local x2, y2, z2 = hex_utils.axialToCube(q2, r2)
@@ -44,8 +55,6 @@ function hex_utils.applyCubeDiff(q, r, dx, dy, dz)
     return hex_utils.cubeToAxial(x + dx, y + dy, z + dz)
 end
 
--- Поворот кубического направления на 60°
--- clockwise=true: по часовой стрелке, false: против часовой
 function hex_utils.rotateCubeDir(dx, dy, dz, clockwise)
     if clockwise then
         return -dy, -dz, -dx
@@ -54,7 +63,6 @@ function hex_utils.rotateCubeDir(dx, dy, dz, clockwise)
     end
 end
 
--- 6 направлений гекса в кубических координатах
 hex_utils.CUBE_DIRECTIONS = {
     {dx = 1, dy = -1, dz = 0},
     {dx = 1, dy = 0, dz = -1},
@@ -64,10 +72,6 @@ hex_utils.CUBE_DIRECTIONS = {
     {dx = 0, dy = -1, dz = 1},
 }
 
--- Проверка, безопасна ли сторона столкновения с направленной сущностью
--- entity.direction — кубический вектор направления склона (downhill)
--- fromQ, fromR — откуда прилетает толчок (координаты источника толчка)
--- Возвращает true, если толчок с безопасной стороны (без урона)
 function hex_utils.isPushFromSafeSide(entity, fromQ, fromR)
     if not entity.direction then return true end
     local toQ, toR = entity.q, entity.r
