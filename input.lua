@@ -100,14 +100,6 @@ function input.mousepressed(x, y, button)
         return
     end
 
-    -- Test view button
-    local tx, ty = logicalW - 28, 8
-    if x >= tx and x <= tx + 20 and y >= ty and y <= ty + 20 then
-        testViewActive = not testViewActive
-        print("Test view: " .. (testViewActive and "ON" or "OFF"))
-        return
-    end
-
     if x >= endTurnButton.x and x <= endTurnButton.x + endTurnButton.width and
        y >= endTurnButton.y and y <= endTurnButton.y + endTurnButton.height then
         if turnState.phase == "player" then

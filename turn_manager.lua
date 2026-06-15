@@ -144,6 +144,7 @@ function processNextEnemyPrepare()
             end
         end
         actionHistory = {}
+        global_abilities.abilityUsedThisTurn = false
         selectLightningTarget()
         print("=== PLAYER TURN ===")
         return
