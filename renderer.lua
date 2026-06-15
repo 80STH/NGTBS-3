@@ -286,7 +286,6 @@ function renderer.draw(state)
     ui.drawEndTurnButton(state.turnState, state.entities)
     ui.drawRestartButton(state.restartButton, state.turnState)
     global_abilities.drawButtons(mx, my, state)
-    ui.drawTestViewButton(mx, my)
 
     global_abilities.drawPreview(hex, state)
 

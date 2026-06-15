@@ -181,12 +181,4 @@ return function(ui)
         love.graphics.setFont(old)
     end
 
-    function ui.drawTestViewButton(mx, my)
-        local bw, bh = 20, 20
-        local bx, by = logicalW - 28, 410
-        love.graphics.setColor(testViewActive and 0.4 or 0.2, 0.6, testViewActive and 0.9 or 0.6, 0.8)
-        love.graphics.rectangle("fill", bx, by, bw, bh, 3)
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.printf("T", bx, by + 4, bw, "center")
-    end
 end
