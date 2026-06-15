@@ -1415,7 +1415,10 @@ end
 function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
     local bgColor = {0.1, 0.1, 0.2, 0.9}
     local borderColor = {0.8, 0.8, 0.8, 1}
-    if entity.isPlayable then
+    if entity:isBuilding() then
+        bgColor = {0.15, 0.15, 0.15, 0.9}
+        borderColor = {1, 1, 1, 1}
+    elseif entity.isPlayable then
         bgColor = {0.1, 0.2, 0.1, 0.9}
         borderColor = {0.4, 0.9, 0.4, 1}
     else

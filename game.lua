@@ -50,7 +50,7 @@ function restartGame(mapPath)
     if mapPath:match("map1%.lua$") then
         local occupiedSet = {}
         for _, e in ipairs(entities) do
-            if not e.isSummoningRod then
+            if not e.isSummoningRod and not e:isBuilding() then
                 local k = e.q .. "," .. e.r
                 occupiedSet[k] = true
             end

@@ -449,11 +449,20 @@ function drawHexGrid(state, cellOverlays)
             love.graphics.setLineWidth(3)
             love.graphics.polygon("line", insetVerts)
         elseif isHovered then
-            love.graphics.setColor(0.5, 0.8, 0.3, 0.5)
-            love.graphics.polygon("fill", insetVerts)
-            love.graphics.setColor(0.5, 0.8, 0.3, 0.9)
-            love.graphics.setLineWidth(3)
-            love.graphics.polygon("line", insetVerts)
+            local hoverEntity = getEntityAtHex(cell.q, cell.r)
+            if hoverEntity and hoverEntity:isBuilding() then
+                love.graphics.setColor(1, 1, 1, 0.3)
+                love.graphics.polygon("fill", insetVerts)
+                love.graphics.setColor(1, 1, 1, 0.9)
+                love.graphics.setLineWidth(3)
+                love.graphics.polygon("line", insetVerts)
+            else
+                love.graphics.setColor(0.5, 0.8, 0.3, 0.5)
+                love.graphics.polygon("fill", insetVerts)
+                love.graphics.setColor(0.5, 0.8, 0.3, 0.9)
+                love.graphics.setLineWidth(3)
+                love.graphics.polygon("line", insetVerts)
+            end
         end
 
         -- Направленные сущности: цветовая маркировка граней (зелёный = безопасно, красный = опасно)
