@@ -19,12 +19,12 @@
  </tileset>
  <layer id="1" name="terrain" width="9" height="9">
   <data encoding="base64" compression="zlib">
-   eJxjZWBgYIViRiTMioYZcWBmIuRxyVGC+YhQIwhVh65WEM2PgkhqYWx0/yOrRRcDAJMAAUo=
+   eJxjZWBgYIViRiTMioYZcWBmIuRxyRHCfFCMS46QfkEcZgii+VEQSS2Mje5/ZLXoYgCj3AFk
   </data>
  </layer>
  <layer id="2" name="entities" width="9" height="9">
   <data encoding="base64" compression="zlib">
-   eJxjYEAAbiSMDrCJI4vxo8nxYFGLrIYdi1p0NdgAPjW4zLHGYY4rAbsYoGoIqQMAB28CBQ==
+   eJxjYEAAbiSMDkBi7FjEYGr50eTYsKhFVsODRS26GmyAHY8amJno5lhjUQtS40rALgaoGkLqAPqkAfY=
   </data>
  </layer>
  <layer id="3" name="status" width="9" height="9" visible="0">
