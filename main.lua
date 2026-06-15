@@ -43,42 +43,7 @@ placedAllies = {}
 deploySelectedIdx = nil
 allyPanelButtons = {}
 
-function syncStateToGlobals()
-    entities = state.entities
-    hex = state.hex
-    terrainMap = state.terrainMap
-    turnState = state.turnState
-    turnCount = state.turnCount
-    maxTurns = state.maxTurns
-    gameActive = state.gameActive
-    win = state.win
-    loss = state.loss
-    selectedActor = state.selectedActor
-    selectedAttack = state.selectedAttack
-    attackMode = state.attackMode
-    flipTargetActor = state.flipTargetActor
-    vortexTargetCell = state.vortexTargetCell
-    pullHookTargetCell = state.pullHookTargetCell
-    attackButtons = state.attackButtons
-    sounds = state.sounds
-    actionHistory = state.actionHistory
-    maxUndoCount = state.maxUndoCount
-    restartButton = state.restartButton
-    endTurnButton = state.endTurnButton
-    undoButton = state.undoButton
-    decayAppliedForTurnLimit = state.decayAppliedForTurnLimit
-    decayMessageTimer = state.decayMessageTimer
-    fireAppliedForTurnLimit = state.fireAppliedForTurnLimit
-    pushAnimations = state.pushAnimations
-    showEnemyOrder = state.showEnemyOrder
-    dpiScale = state.dpiScale
-    difficultyModifier = state.difficultyModifier
-    DEBUG_COMBAT = state.DEBUG_COMBAT
-    chaos = state.chaos or 0
-    chaosMax = state.chaosMax or 5
-end
-
-function syncGlobalsToState()
+function syncState()
     state.entities = entities
     state.hex = hex
     state.terrainMap = terrainMap
@@ -279,7 +244,7 @@ function love.draw()
     if gamePhase == "menu" then
         menu.draw()
     elseif gamePhase == "deploy" then
-        syncGlobalsToState()
+        syncState()
         renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
     else
         if screenShake.timer > 0 then
@@ -288,7 +253,7 @@ function love.draw()
             local offsetY = screenShake.intensity * ease * math.sin(t * math.pi * 12)
             love.graphics.translate(0, offsetY)
         end
-        syncGlobalsToState()
+        syncState()
         renderer.draw(state)
     end
 

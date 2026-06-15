@@ -2,7 +2,7 @@
 -- Система боя с кубическими координатами (pointy-top, odd-r)
 local combat = {}
 local visual = require("visual_effects")
-status = require("status")
+local status = require("status")
 local Entity = require("entity")
 local attack_effects = require("attack_effects")
 

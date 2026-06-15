@@ -39,12 +39,6 @@ function global_abilities.spendAbility(ab)
     global_abilities.abilityUsedThisTurn = true
 end
 
-function global_abilities.spendAbility(ab)
-    ab.hasBeenUsed = true
-    global_abilities.mana = global_abilities.mana - ab.manaCost
-    global_abilities.abilityUsedThisTurn = true
-end
-
 function global_abilities.reset()
     global_abilities.activeAbility = nil
     global_abilities.mana = global_abilities.maxMana

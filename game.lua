@@ -220,7 +220,7 @@ function restartGame(mapPath)
     else
         gamePhase = "deploy"
     end
-    syncGlobalsToState()
+    syncState()
     print(skipDeploy and "=== MAP LOADED — GAME STARTED ===" or "=== MAP LOADED — DEPLOY YOUR ALLIES ===")
 end
 
@@ -278,7 +278,7 @@ function confirmDeploy()
     placedAllies = {}
     deploySelectedIdx = nil
 
-    syncGlobalsToState()
+    syncState()
     print("=== DEPLOY CONFIRMED — GAME STARTED ===")
 end
 
@@ -296,7 +296,7 @@ function checkGameEnd()
         loss = true
         gameActive = false
         print("DEFEAT: Chaos has consumed the realm!")
-        syncGlobalsToState()
+        syncState()
         return
     end
 
@@ -304,7 +304,7 @@ function checkGameEnd()
         loss = true
         gameActive = false
         print("DEFEAT: All allies destroyed!")
-        syncGlobalsToState()
+        syncState()
         return
     end
 
@@ -320,7 +320,7 @@ function checkGameEnd()
         gameActive = false
         objectives.checkOnVictory(entities)
         print("VICTORY: All enemies defeated after turn limit!")
-        syncGlobalsToState()
+        syncState()
         return
     end
 
@@ -329,7 +329,7 @@ function checkGameEnd()
         gameActive = false
         objectives.checkOnVictory(entities)
         print("VICTORY: Turn limit reached and all enemies defeated!")
-        syncGlobalsToState()
+        syncState()
     end
 end
 
