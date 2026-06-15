@@ -2224,4 +2224,77 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
         end
     end
 end
+
+function ui.drawChaosBar(mx, my)
+    local chaosVal = _G.chaos or 0
+    local chaosMaxVal = _G.chaosMax or 5
+
+    local cellW = 30
+    local cellH = 14
+    local gap = 3
+    local pad = 4
+    local barX = 10
+    local barY = 10
+    local totalW = (cellW + gap) * chaosMaxVal + pad * 2
+
+    -- Label
+    if not smallFont then smallFont = love.graphics.newFont(12) end
+    love.graphics.setFont(smallFont)
+    love.graphics.setColor(0.9, 0.6, 0.8, 1)
+    love.graphics.print("Chaos", barX, barY)
+
+    -- Background
+    local bgY = barY + 16
+    local bgH = cellH + pad * 2
+    love.graphics.setColor(0.08, 0.08, 0.15, 0.85)
+    love.graphics.rectangle("fill", barX, bgY, totalW, bgH, 4)
+    love.graphics.setColor(0.3, 0.2, 0.4, 0.6)
+    love.graphics.rectangle("line", barX, bgY, totalW, bgH, 4)
+
+    -- Cells (filled left to right)
+    for i = 1, chaosMaxVal do
+        local cx = barX + pad + (i - 1) * (cellW + gap)
+        local cy = bgY + pad
+        local filled = i <= chaosVal
+        if filled then
+            local t = love.timer.getTime()
+            local pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 0.5)
+            love.graphics.setColor(0.9 * pulse, 0.35 * pulse, 0.4 * pulse, 0.9)
+        else
+            love.graphics.setColor(0.2, 0.2, 0.25, 0.6)
+        end
+        love.graphics.rectangle("fill", cx, cy, cellW, cellH, 2)
+        love.graphics.setColor(0.4, 0.3, 0.5, 0.5)
+        love.graphics.rectangle("line", cx, cy, cellW, cellH, 2)
+    end
+
+    -- Tooltip on hover
+    if mx >= barX and mx <= barX + totalW and my >= bgY and my <= bgY + bgH then
+        local ttW = 200
+        local ttH = 110
+        local ttx = barX
+        local tty = bgY + bgH + 6
+        love.graphics.setColor(0.1, 0.1, 0.2, 0.92)
+        love.graphics.rectangle("fill", ttx, tty, ttW, ttH, 5)
+        love.graphics.setColor(0.6, 0.4, 0.7, 0.8)
+        love.graphics.rectangle("line", ttx, tty, ttW, ttH, 5)
+
+        local lines = {
+            {text = "Chaos", color = {0.9, 0.6, 0.8, 1}},
+            {text = "", color = {1, 1, 1, 1}},
+            {text = "Chaos rises when buildings take", color = {0.8, 0.8, 0.8, 1}},
+            {text = "damage or secondary objectives fail.", color = {0.8, 0.8, 0.8, 1}},
+            {text = "At maximum, the realm collapses.", color = {0.8, 0.8, 0.8, 1}},
+            {text = "", color = {1, 1, 1, 1}},
+            {text = string.format("Current: %d / %d", chaosVal, chaosMaxVal), color = chaosVal >= chaosMaxVal and {1, 0.3, 0.3, 1} or {1, 0.9, 0.2, 1}},
+        }
+        local curY = tty + 6
+        for _, l in ipairs(lines) do
+            love.graphics.setColor(l.color[1], l.color[2], l.color[3], l.color[4] or 1)
+            love.graphics.print(l.text, ttx + 6, curY)
+            curY = curY + 14
+        end
+    end
+end
+
 return ui

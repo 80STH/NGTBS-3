@@ -36,6 +36,8 @@ gamePhase = "menu"
 selectedMapPath = nil
 selectedSquad = nil
 difficultyModifier = 1
+chaos = 0
+chaosMax = 5
 unplacedAllies = {}
 placedAllies = {}
 deploySelectedIdx = nil
@@ -72,6 +74,8 @@ function syncStateToGlobals()
     dpiScale = state.dpiScale
     difficultyModifier = state.difficultyModifier
     DEBUG_COMBAT = state.DEBUG_COMBAT
+    chaos = state.chaos or 0
+    chaosMax = state.chaosMax or 5
 end
 
 function syncGlobalsToState()
@@ -104,6 +108,8 @@ function syncGlobalsToState()
     state.dpiScale = dpiScale
     state.difficultyModifier = difficultyModifier
     state.showEnemyOrder = showEnemyOrder
+    state.chaos = chaos
+    state.chaosMax = chaosMax
 end
 
 function love.load()

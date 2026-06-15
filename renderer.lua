@@ -338,6 +338,7 @@ function renderer.draw(state)
         end
     end
 
+    ui.drawChaosBar(mx, my)
     objectives.draw()
 
     if not state.gameActive then

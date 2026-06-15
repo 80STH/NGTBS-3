@@ -135,6 +135,11 @@ function Entity:takeDamage(damage)
     local actualDamage = math.min(damage, self.health)
     self.health = self.health - actualDamage
     
+    if self:isBuilding() and actualDamage > 0 then
+        _G.chaos = (_G.chaos or 0) + actualDamage
+        print(string.format("Building damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos))
+    end
+    
     print(string.format("%s takes %d damage! (%d/%d HP)", 
           self.name, actualDamage, math.max(0, self.health), self.maxHealth))
 

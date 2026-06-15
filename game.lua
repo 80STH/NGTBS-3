@@ -143,6 +143,7 @@ function restartGame(mapPath)
     loss = false
     fireAppliedForTurnLimit = false
     decayAppliedForTurnLimit = false
+    chaos = 0
     status.clearAllDigSites()
 
     objectives.reset()
@@ -291,6 +292,14 @@ function checkGameEnd()
             break
         end
     end
+    if (chaos or 0) >= chaosMax then
+        loss = true
+        gameActive = false
+        print("DEFEAT: Chaos has consumed the realm!")
+        syncGlobalsToState()
+        return
+    end
+
     if not anyAlly then
         loss = true
         gameActive = false

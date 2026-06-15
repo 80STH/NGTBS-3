@@ -3,9 +3,20 @@ local Entity = require("entity")
 local objectives = {}
 
 local activeObjectives = {}
+local activePrimaryObjective = nil
 local objectiveStates = {}
 local smallFont
 local objectivePool = {}
+
+local primaryObjectiveDef = {
+    id = "protect_buildings",
+    name = "Protect Buildings",
+    desc = "Every building HP lost increases Chaos. Survive until the realm is stable.",
+    isPrimary = true,
+    onGenerate = function(entities, hex)
+        _G.chaos = 0
+    end,
+}
 
 local function findEmptyCells(entities, hex)
     local candidates = {}
@@ -37,7 +48,7 @@ end
 local function findBuildingToReplace(entities)
     local candidates = {}
     for i, e in ipairs(entities) do
-        if e:isBuilding() and e.name ~= "Tower" then
+        if e:isBuilding() and e.name ~= "Tower" and e.name ~= "Ship" and e.maxHealth == 1 then
             local terrain = _G.terrainMap and _G.terrainMap[e.q] and _G.terrainMap[e.q][e.r] or "grass"
             if terrain ~= "water" then
                 table.insert(candidates, i)
@@ -271,12 +282,22 @@ end
 function objectives.generate(entities, hex)
     definePool()
     activeObjectives = {}
+    activePrimaryObjective = nil
     objectiveStates = {}
 
+    -- Add primary objective
+    activePrimaryObjective = primaryObjectiveDef
+    objectiveStates[primaryObjectiveDef.id] = "pending"
+    if primaryObjectiveDef.onGenerate then
+        primaryObjectiveDef.onGenerate(entities, hex)
+    end
+
+    -- Pick 2 secondary objectives from pool
     local shuffled = shuffle(objectivePool)
+    local count = 0
     local maxObj = _G.playtestObjectiveCount or 2
-    local count = math.min(maxObj, #shuffled)
-    for i = 1, count do
+    for i = 1, #shuffled do
+        if count >= maxObj then break end
         local def = shuffled[i]
         local conflict = false
         for _, existing in ipairs(activeObjectives) do
@@ -306,10 +327,11 @@ function objectives.generate(entities, hex)
             if def.onGenerate then
                 def.onGenerate(entities, hex)
             end
+            count = count + 1
         end
     end
 
-    print(string.format("Generated %d objectives:", #activeObjectives))
+    print(string.format("Generated %d secondary objectives:", #activeObjectives))
     for _, obj in ipairs(activeObjectives) do
         print(string.format("  - %s (%s)", obj.name, obj.id))
     end
@@ -318,7 +340,14 @@ end
 function objectives.activateAll(entities, hex)
     definePool()
     activeObjectives = {}
+    activePrimaryObjective = nil
     objectiveStates = {}
+
+    activePrimaryObjective = primaryObjectiveDef
+    objectiveStates[primaryObjectiveDef.id] = "pending"
+    if primaryObjectiveDef.onGenerate then
+        primaryObjectiveDef.onGenerate(entities, hex)
+    end
 
     for _, def in ipairs(objectivePool) do
         table.insert(activeObjectives, def)
@@ -328,7 +357,7 @@ function objectives.activateAll(entities, hex)
         end
     end
 
-    print(string.format("Activated all %d objectives:", #activeObjectives))
+    print(string.format("Activated %d secondary objectives:", #activeObjectives))
     for _, obj in ipairs(activeObjectives) do
         print(string.format("  - %s (%s)", obj.name, obj.id))
     end
@@ -337,6 +366,7 @@ end
 function objectives.reset()
     definePool()
     activeObjectives = {}
+    activePrimaryObjective = nil
     objectiveStates = {}
     _G.objective_enemiesKilled = 0
     _G.objective_digBlocks = 0
@@ -344,6 +374,10 @@ end
 
 function objectives.getList()
     return activeObjectives
+end
+
+function objectives.getPrimary()
+    return activePrimaryObjective
 end
 
 function objectives.getState(id)
@@ -359,7 +393,9 @@ function objectives.getCompletedCount()
 end
 
 function objectives.getTotalCount()
-    return #activeObjectives
+    local count = #activeObjectives
+    if activePrimaryObjective then count = count + 1 end
+    return count
 end
 
 function objectives.getFailedCount()
@@ -371,16 +407,27 @@ function objectives.getFailedCount()
 end
 
 function objectives.update(entities)
+    local decayApplied = _G.decayAppliedForTurnLimit or false
     for _, obj in ipairs(activeObjectives) do
         if objectiveStates[obj.id] == "pending" then
-            if obj.check then
+            -- kill_leader and protect_tower check immediately; others wait for decay
+            local canCheck = decayApplied or obj.id == "kill_leader" or obj.id == "protect_tower"
+            if canCheck and obj.check then
+                local prevState = objectiveStates[obj.id]
                 obj.check(entities, objectiveStates)
+                if prevState == "pending" and objectiveStates[obj.id] == "failed" then
+                    _G.chaos = (_G.chaos or 0) + 1
+                    print(string.format("Objective '%s' failed! Chaos +1 (total: %d)", obj.id, _G.chaos))
+                end
             end
         end
     end
 end
 
 function objectives.checkOnVictory(entities)
+    if activePrimaryObjective and objectiveStates[activePrimaryObjective.id] == "pending" then
+        objectiveStates[activePrimaryObjective.id] = "completed"
+    end
     for _, obj in ipairs(activeObjectives) do
         if objectiveStates[obj.id] == "pending" then
             if obj.checkOnVictory then
@@ -391,42 +438,69 @@ function objectives.checkOnVictory(entities)
 end
 
 function objectives.draw()
-    if #activeObjectives == 0 then return end
-
+    if not smallFont then smallFont = love.graphics.newFont(12) end
     local x = 10
     local y = 1070
     local w = 200
     local lineH = 16
     local padding = 6
     local titleH = 20
-    local totalH = titleH + #activeObjectives * lineH + padding * 2
+    local primaryH = activePrimaryObjective and (titleH + lineH + padding) or 0
+    local secondaryH = (#activeObjectives > 0) and (titleH + #activeObjectives * lineH + padding) or 0
+    local totalH = primaryH + secondaryH + padding
+
+    if totalH <= padding then return end
 
     love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
     love.graphics.rectangle("fill", x, y, w, totalH, 5)
     love.graphics.setColor(0.4, 0.4, 0.6, 0.6)
     love.graphics.rectangle("line", x, y, w, totalH, 5)
 
-    if not smallFont then smallFont = love.graphics.newFont(12) end
-    love.graphics.setColor(0.9, 0.9, 0.6, 1)
     love.graphics.setFont(smallFont)
-    love.graphics.print("Objectives", x + padding, y + padding)
+    local curY = y + padding
 
-    for i, obj in ipairs(activeObjectives) do
-        local sy = y + titleH + (i - 1) * lineH + padding
-        local state = objectiveStates[obj.id] or "pending"
+    -- Primary objective
+    if activePrimaryObjective then
+        love.graphics.setColor(0.9, 0.6, 0.2, 1)
+        love.graphics.print("Primary", x + padding, curY)
+        curY = curY + titleH
+        local state = objectiveStates[activePrimaryObjective.id] or "pending"
         local icon, color
-        if state == "completed" then
-            icon = "✓"
-            color = {0.4, 1, 0.4, 1}
-        elseif state == "failed" then
-            icon = "✗"
+        if state == "failed" then
+            icon = "\xc3\x97"
             color = {1, 0.4, 0.4, 1}
         else
-            icon = "○"
-            color = {0.8, 0.8, 0.8, 1}
+            icon = "\xe2\x97\x8b"
+            color = {0.9, 0.6, 0.2, 1}
         end
         love.graphics.setColor(unpack(color))
-        love.graphics.print(icon .. " " .. obj.name, x + padding, sy)
+        love.graphics.print(icon .. " " .. activePrimaryObjective.name, x + padding, curY)
+        curY = curY + lineH + padding
+    end
+
+    -- Secondary objectives
+    if #activeObjectives > 0 then
+        love.graphics.setColor(0.9, 0.9, 0.6, 1)
+        love.graphics.print("Secondary", x + padding, curY)
+        curY = curY + titleH
+
+        for i, obj in ipairs(activeObjectives) do
+            local sy = curY + (i - 1) * lineH
+            local state = objectiveStates[obj.id] or "pending"
+            local icon, color
+            if state == "completed" then
+                icon = "\xe2\x9c\x93"
+                color = {0.4, 1, 0.4, 1}
+            elseif state == "failed" then
+                icon = "\xc3\x97"
+                color = {1, 0.4, 0.4, 1}
+            else
+                icon = "\xe2\x97\x8b"
+                color = {0.8, 0.8, 0.8, 1}
+            end
+            love.graphics.setColor(unpack(color))
+            love.graphics.print(icon .. " " .. obj.name, x + padding, sy)
+        end
     end
 end
 
