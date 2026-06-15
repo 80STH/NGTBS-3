@@ -141,6 +141,7 @@ local function definePool()
             id = "protect_tower",
             name = "Protect the Tower",
             desc = "Keep the tower alive until victory",
+            incompatibleWithPrimary = true,
             onGenerate = function(entities, hex)
                 local hasTower = isEntityAlive(entities, "Tower")
                 if not hasTower then
@@ -352,30 +353,58 @@ function objectives.generate(entities, hex)
     local shuffled = shuffle(objectivePool)
     local count = 0
     local maxObj = 2
+
+    -- Force-include protect_blockpost when primary is protect_caravans
+    if activePrimaryObjective and activePrimaryObjective.id == "protect_caravans" then
+        for i = #shuffled, 1, -1 do
+            if shuffled[i].id == "protect_blockpost" then
+                local def = table.remove(shuffled, i)
+                table.insert(activeObjectives, def)
+                objectiveStates[def.id] = "pending"
+                if def.onGenerate then
+                    def.onGenerate(entities, hex)
+                end
+                count = count + 1
+                break
+            end
+        end
+    end
+
     for i = 1, #shuffled do
         if count >= maxObj then break end
         local def = shuffled[i]
-        local conflict = false
-        for _, existing in ipairs(activeObjectives) do
-            if existing.incompatible then
-                for _, id in ipairs(existing.incompatible) do
-                    if id == def.id then
-                        conflict = true
-                        break
-                    end
-                end
-            end
-            if def.incompatible then
-                for _, id in ipairs(def.incompatible) do
-                    if id == existing.id then
-                        conflict = true
-                        break
-                    end
-                end
-            end
-            if conflict then break end
+        local skip = false
+
+        -- Check incompatibility with primary objective
+        if not skip and def.incompatibleWithPrimary and activePrimaryObjective then
+            print(string.format("Skipping '%s' due to incompatibility with primary objective '%s'", def.id, activePrimaryObjective.id))
+            skip = true
         end
-        if conflict then
+
+        -- Check conflict with already selected secondaries
+        if not skip then
+            for _, existing in ipairs(activeObjectives) do
+                if existing.incompatible then
+                    for _, id in ipairs(existing.incompatible) do
+                        if id == def.id then
+                            skip = true
+                            break
+                        end
+                    end
+                end
+                if not skip and def.incompatible then
+                    for _, id in ipairs(def.incompatible) do
+                        if id == existing.id then
+                            skip = true
+                            break
+                        end
+                    end
+                end
+                if skip then break end
+            end
+        end
+
+        if skip then
             print(string.format("Skipping '%s' due to conflict with selected objectives", def.id))
         else
             table.insert(activeObjectives, def)

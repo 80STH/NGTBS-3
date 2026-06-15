@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <map version="1.10" tiledversion="1.12.1" orientation="hexagonal" renderorder="right-down" width="9" height="9" tilewidth="14" tileheight="12" infinite="0" hexsidelength="6" staggeraxis="x" staggerindex="odd" nextlayerid="5" nextobjectid="2">
  <editorsettings>
-  <export target="map1.lua" format="lua"/>
+  <export target="map2.lua" format="lua"/>
  </editorsettings>
  <tileset firstgid="1" name="hex mini" tilewidth="18" tileheight="18" tilecount="20" columns="5">
   <tileoffset x="0" y="1"/>
@@ -19,12 +19,12 @@
  </tileset>
  <layer id="1" name="terrain" width="9" height="9">
   <data encoding="base64" compression="zlib">
-   eJxjZWBgYIViRiTMioYZcWBmIuRxyRHCfFCMS46QfkEcZgii+VEQSS2Mje5/ZLXoYgCj3AFk
+   eJx9zzEKADAIA0CluAr+/7N1iBCC7XCLRtEwswBvBSEcTkvg7PRU0uyW8cWvN3TvpuhWrTv9VpR9/c9ZrV0R7wHF
   </data>
  </layer>
  <layer id="2" name="entities" width="9" height="9">
   <data encoding="base64" compression="zlib">
-   eJxjYEAAbiSMDkBi7FjEYGr50eTYsKhFVsODRS26GmyAHY8amJno5lhjUQtS40rALgaoGkLqAPqkAfY=
+   eJxjYEAAbgbcACTHjkeeH41vgEU/Pw45AyxqcJnji8ccbHaBgDUO97ji0I8MXIlQBwCZ4wMM
   </data>
  </layer>
  <layer id="3" name="status" width="9" height="9" visible="0">
