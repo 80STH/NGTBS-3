@@ -9,12 +9,36 @@ local smallFont
 local objectivePool = {}
 
 local primaryObjectiveDef = {
-    id = "protect_buildings",
-    name = "Protect Buildings",
-    desc = "Every building HP lost increases Chaos. Survive until the realm is stable.",
+    id = "protect_caravans",
+    name = "Protect Caravans",
+    desc = "Every caravan destroyed increases Chaos!",
     isPrimary = true,
     onGenerate = function(entities, hex)
         _G.chaos = 0
+        _G.caravanCount = 0
+        for _, e in ipairs(entities) do
+            if e.name == "Caravan" then
+                _G.caravanCount = (_G.caravanCount or 0) + 1
+            end
+        end
+    end,
+    check = function(entities, state)
+        local alive = 0
+        for _, e in ipairs(entities) do
+            if e.name == "Caravan" and e.health and e.health > 0 then
+                alive = alive + 1
+            end
+        end
+        local dead = (_G.caravanCount or 0) - alive
+        local prevDead = _G.caravansDestroyed or 0
+        if dead > prevDead then
+            local newDead = dead - prevDead
+            _G.chaos = (_G.chaos or 0) + newDead
+            _G.caravansDestroyed = dead
+            for i = 1, newDead do
+                print(string.format("Caravan destroyed! Chaos +1 (total: %d)", _G.chaos))
+            end
+        end
     end,
 }
 
@@ -48,7 +72,7 @@ end
 local function findBuildingToReplace(entities)
     local candidates = {}
     for i, e in ipairs(entities) do
-        if e:isBuilding() and e.name ~= "Tower" and e.name ~= "Ship" and e.maxHealth == 1 then
+        if e:isBuilding() and e.name ~= "Tower" and e.maxHealth == 1 then
             local terrain = _G.terrainMap and _G.terrainMap[e.q] and _G.terrainMap[e.q][e.r] or "grass"
             if terrain ~= "water" then
                 table.insert(candidates, i)
@@ -81,6 +105,38 @@ end
 
 local function definePool()
     objectivePool = {
+        {
+            id = "protect_blockpost",
+            name = "Protect the Blockpost",
+            desc = "Blockpost HP lost increases Chaos!",
+            onGenerate = function(entities, hex)
+                for _, e in ipairs(entities) do
+                    if e.name == "Blockpost" and e.health and e.health > 0 then
+                        _G.blockpostMaxHealth = e.maxHealth
+                        break
+                    end
+                end
+            end,
+            check = function(entities, state)
+                for _, e in ipairs(entities) do
+                    if e.name == "Blockpost" and e.maxHealth then
+                        local curHealth = math.max(0, e.health or 0)
+                        local damageTaken = e.maxHealth - curHealth
+                        local prevDamage = _G.blockpostDamageTracked or 0
+                        if damageTaken > prevDamage then
+                            local newDamage = damageTaken - prevDamage
+                            _G.chaos = (_G.chaos or 0) + newDamage
+                            _G.blockpostDamageTracked = damageTaken
+                            print(string.format("Blockpost damaged! Chaos +%d (total: %d)", newDamage, _G.chaos))
+                        end
+                        return
+                    end
+                end
+            end,
+            checkOnVictory = function(entities, state)
+                state["protect_blockpost"] = "completed"
+            end,
+        },
         {
             id = "protect_tower",
             name = "Protect the Tower",
@@ -344,6 +400,10 @@ function objectives.reset()
     objectiveStates = {}
     _G.objective_enemiesKilled = 0
     _G.objective_digBlocks = 0
+    _G.caravanCount = 0
+    _G.caravansDestroyed = 0
+    _G.blockpostMaxHealth = 0
+    _G.blockpostDamageTracked = 0
 end
 
 function objectives.getList()
@@ -382,10 +442,19 @@ end
 
 function objectives.update(entities)
     local decayApplied = _G.decayAppliedForTurnLimit or false
+
+    -- Check primary objective every frame
+    if activePrimaryObjective and objectiveStates[activePrimaryObjective.id] == "pending" then
+        if activePrimaryObjective.check then
+            activePrimaryObjective.check(entities, objectiveStates)
+        end
+    end
+
+    -- Check secondary objectives
     for _, obj in ipairs(activeObjectives) do
         if objectiveStates[obj.id] == "pending" then
-            -- kill_leader and protect_tower check immediately; others wait for decay
-            local canCheck = decayApplied or obj.id == "kill_leader" or obj.id == "protect_tower"
+            -- protect_tower, kill_leader, protect_blockpost check immediately; others wait for decay
+            local canCheck = decayApplied or obj.id == "kill_leader" or obj.id == "protect_tower" or obj.id == "protect_blockpost"
             if canCheck and obj.check then
                 local prevState = objectiveStates[obj.id]
                 obj.check(entities, objectiveStates)

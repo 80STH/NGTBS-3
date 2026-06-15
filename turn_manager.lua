@@ -166,36 +166,66 @@ function processNextEnemyPrepare()
     end
 end
 
-function moveShips()
+function moveCaravans()
+    local hex = _G.hex
+    if not hex then return end
+    local caravans = {}
+    local blockposts = {}
     for _, e in ipairs(entities) do
-        if e.waterWalker and e.health > 0 and e.isPushable ~= false then
-            local neighbors = hex:getNeighbors(e.q, e.r)
-            local waterCells = {}
-            for _, n in ipairs(neighbors) do
-                if hex:isActiveHex(n.q, n.r) and terrainMap and terrainMap[n.q] and terrainMap[n.q][n.r] == "water" then
+        if e.health and e.health > 0 and not e.isDying then
+            if e.name == "Caravan" then
+                table.insert(caravans, e)
+            elseif e.name == "Blockpost" then
+                table.insert(blockposts, e)
+            end
+        end
+    end
+    if #caravans == 0 or #blockposts == 0 then return end
+    for _, caravan in ipairs(caravans) do
+        local nearestBP = nil
+        local nearestDist = math.huge
+        for _, bp in ipairs(blockposts) do
+            local dist = hex:getDistance(caravan.q, caravan.r, bp.q, bp.r)
+            if dist > 0 and dist < nearestDist then
+                nearestDist = dist
+                nearestBP = bp
+            end
+        end
+        if not nearestBP then goto continue end
+        local neighbors = hex:getNeighbors(caravan.q, caravan.r)
+        local bestNeighbor = nil
+        local bestDist = math.huge
+        for _, n in ipairs(neighbors) do
+            if hex:isActiveHex(n.q, n.r) then
+                local terrain = _G.terrainMap and _G.terrainMap[n.q] and _G.terrainMap[n.q][n.r] or "grass"
+                if terrain ~= "water" and terrain ~= "underwater_mines" then
                     local occupied = false
                     for _, other in ipairs(entities) do
-                        if other ~= e and other.q == n.q and other.r == n.r then
+                        if other ~= caravan and other.q == n.q and other.r == n.r and other.health and other.health > 0 then
                             occupied = true
                             break
                         end
                     end
                     if not occupied then
-                        table.insert(waterCells, {q = n.q, r = n.r})
+                        local dist = hex:getDistance(n.q, n.r, nearestBP.q, nearestBP.r)
+                        if dist < bestDist then
+                            bestDist = dist
+                            bestNeighbor = n
+                        end
                     end
                 end
             end
-            if #waterCells > 0 then
-                local dest = waterCells[math.random(#waterCells)]
-                combat.addPushAnimation(e, e.q, e.r, dest.q, dest.r)
-            end
         end
+        if bestNeighbor then
+            combat.addDirectPushAnimation(caravan, caravan.q, caravan.r, bestNeighbor.q, bestNeighbor.r)
+        end
+        ::continue::
     end
     combat.startPushAnimations(hex)
 end
 
 function startEnemyPreparePhase()
-    moveShips()
+    moveCaravans()
     local enemies = {}
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.health > 0 then

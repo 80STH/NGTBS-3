@@ -38,7 +38,7 @@ local gidToEntity = {
     [12] = { type = "building",  name = "SmallBuilding", health = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2 },
     [6] = { type = "obstacle",  name = "WeakMountain",  health = 2, maxDamagePerHit = 1 },
-    [59] = { type = "building", name = "Ship",          health = 1, moveRange = 1, waterWalker = true },
+
     [29] = { type = "building", name = "Tower",         health = 1, isObjective = true },
     [60] = { type = "character", name = "Brute",    isPlayable = false, maxHealth = 2, moveRange = 2, attacks = "brute" },
     [62] = { type = "character", name = "Lancer",   isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "lancer" },
@@ -47,6 +47,8 @@ local gidToEntity = {
     [28] = { type = "character", name = "Dervish",  isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "dervish" },
     [66] = { type = "character", name = "Crusher",  isPlayable = false, maxHealth = 2, moveRange = 2, attacks = "crusher" },
     [83] = { type = "character", name = "SummoningRod", isPlayable = false, maxHealth = 2, moveRange = 0, attacks = "summoningrod" },
+    [48] = { type = "building",  name = "Caravan",   health = 1, moveRange = 1 },
+    [77] = { type = "building",  name = "Blockpost", health = 2 },
 }
 
 environment.enemySpriteCache = {}
@@ -219,16 +221,6 @@ local function generateCustomSprite(name, w, h)
             end
         end
 
-    elseif name == "Ship" then
-        love.graphics.setColor(0.5, 0.35, 0.2)
-        love.graphics.polygon("fill", 1, h-2, w/3, h-6, w*2/3, h-6, w-1, h-2)
-        love.graphics.setColor(0.4, 0.25, 0.1)
-        love.graphics.rectangle("fill", 0, h-2, w, 2)
-        love.graphics.setColor(0.55, 0.4, 0.25)
-        love.graphics.rectangle("fill", w/3, h-6, w/3, h-8)
-        love.graphics.setColor(0.95, 0.95, 1)
-        love.graphics.polygon("fill", w*2/3-1, h-8, w*2/3-1, h-6, w-1, h-6)
-
     elseif name == "Tower" then
         love.graphics.setColor(0.55, 0.5, 0.45)
         love.graphics.rectangle("fill", w/4, 2, w/2, h-2)
@@ -240,6 +232,28 @@ local function generateCustomSprite(name, w, h)
         love.graphics.polygon("fill", w/4, h-4, w/2, h-1, w*3/4, h-4)
         love.graphics.setColor(1, 0.7, 0.3)
         love.graphics.circle("fill", w/2, h/2, 2)
+    elseif name == "Caravan" then
+        love.graphics.setColor(0.5, 0.3, 0.15)
+        love.graphics.rectangle("fill", 1, 3, w-2, h-5)
+        love.graphics.setColor(0.6, 0.4, 0.2)
+        love.graphics.rectangle("fill", 2, 2, w-4, 2)
+        love.graphics.setColor(0.8, 0.7, 0.5)
+        love.graphics.rectangle("fill", 3, 4, 4, 4)
+        love.graphics.setColor(0.3, 0.2, 0.1)
+        love.graphics.circle("fill", 3, h-1, 1)
+        love.graphics.circle("fill", w-3, h-1, 1)
+
+    elseif name == "Blockpost" then
+        love.graphics.setColor(0.4, 0.3, 0.2)
+        love.graphics.rectangle("fill", 0, 3, w, h-3)
+        love.graphics.setColor(0.55, 0.45, 0.3)
+        love.graphics.rectangle("fill", 0, 3, 2, h-3)
+        love.graphics.rectangle("fill", w-2, 3, 2, h-3)
+        love.graphics.setColor(0.6, 0.5, 0.35)
+        love.graphics.rectangle("fill", 2, 0, w-4, 4)
+        love.graphics.setColor(0.5, 0.4, 0.25)
+        love.graphics.rectangle("fill", w/2-3, 0, 6, h)
+
     elseif name == "MountainSlope" then
         love.graphics.setColor(0.55, 0.5, 0.45)
         love.graphics.polygon("fill", 0, h, w*0.6, h*0.2, w, h)
@@ -262,7 +276,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
     local tileHeight = map.tileheight or 32
     local entitySprite
 
-        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Ship" or def.name == "Tower" or def.name == "MountainSlope" then
+        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Tower" or def.name == "MountainSlope" or def.name == "Caravan" or def.name == "Blockpost" then
         entitySprite = generateCustomSprite(def.name, tileWidth, tileHeight)
     else
         entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)

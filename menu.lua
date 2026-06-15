@@ -2,7 +2,7 @@ local menu = {}
 
 local playtestPhase = nil  -- nil, "select_difficulty"
 
-local mapList = {"maps/map1.lua", "maps/test_polygon_1.lua", "maps/test_polygon_2.lua"}
+local mapList = {"maps/map1.lua", "maps/map2.lua", "maps/test_polygon_1.lua", "maps/test_polygon_2.lua"}
 
 local squads = {
     {
