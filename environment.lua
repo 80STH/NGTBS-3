@@ -975,7 +975,7 @@ end
 
 -- Создать случайного врага (из пула)
 function environment.createRandomEnemy(q, r)
-    local types = _G.playtestEnemyTypes or { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
+    local types = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
     local rnd = love.math.random(1, #types)
     return environment.createEnemyByType(types[rnd], q, r)
 end

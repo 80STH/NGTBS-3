@@ -211,9 +211,7 @@ function menu.mousepressed(x, y)
 
     if playtestPhase == "select_difficulty" then
         local difficulties = {
-            { name = "Easy",   limit = 4, diff = 4, objCount = 2 },
-            { name = "Medium", limit = 5, diff = 12, objCount = 3 },
-            { name = "Hard",   limit = 6, diff = 24, objCount = 4 },
+            { name = "Play", limit = 5, diff = 1, objCount = 2 },
         }
         local bw2, bh2 = 220, 55
         local bx2 = logicalW/2 - bw2/2
@@ -222,12 +220,8 @@ function menu.mousepressed(x, y)
         for i, diff in ipairs(difficulties) do
             local by = startY + (i - 1) * (bh2 + 12)
             if x >= bx2 and x <= bx2 + bw2 and y >= by and y <= by + bh2 then
-                _G.playtestMode = true
-                _G.playtestSpawnLimit = diff.limit
-                _G.playtestEnemyTypes = { "Ghost", "Zombie", "Lich" }
-                _G.playtestObjectiveCount = diff.objCount
                 selectedSquad = 1
-                difficultyModifier = diff.diff
+                difficultyModifier = 1
                 playtestPhase = nil
                 restartGame("maps/map1.lua")
                 return true
@@ -248,9 +242,6 @@ function menu.mousepressed(x, y)
         local by = mapStartY + (i - 1) * (bh + 10)
         if x >= bx and x <= bx + bw and y >= by and y <= by + bh then
             if not selectedSquad then selectedSquad = 1 end
-            _G.playtestMode = nil
-            _G.playtestSpawnLimit = nil
-            _G.playtestEnemyTypes = nil
             restartGame(mapPath)
             return true
         end
@@ -296,9 +287,6 @@ function menu.keypressed(key)
     if key == "return" or key == " " then
         if #mapList > 0 then
             if not selectedSquad then selectedSquad = 1 end
-            _G.playtestMode = nil
-            _G.playtestSpawnLimit = nil
-            _G.playtestEnemyTypes = nil
             restartGame(mapList[1])
             return true
         end

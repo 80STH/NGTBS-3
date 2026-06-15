@@ -295,7 +295,7 @@ function objectives.generate(entities, hex)
     -- Pick 2 secondary objectives from pool
     local shuffled = shuffle(objectivePool)
     local count = 0
-    local maxObj = _G.playtestObjectiveCount or 2
+    local maxObj = 2
     for i = 1, #shuffled do
         if count >= maxObj then break end
         local def = shuffled[i]
@@ -332,32 +332,6 @@ function objectives.generate(entities, hex)
     end
 
     print(string.format("Generated %d secondary objectives:", #activeObjectives))
-    for _, obj in ipairs(activeObjectives) do
-        print(string.format("  - %s (%s)", obj.name, obj.id))
-    end
-end
-
-function objectives.activateAll(entities, hex)
-    definePool()
-    activeObjectives = {}
-    activePrimaryObjective = nil
-    objectiveStates = {}
-
-    activePrimaryObjective = primaryObjectiveDef
-    objectiveStates[primaryObjectiveDef.id] = "pending"
-    if primaryObjectiveDef.onGenerate then
-        primaryObjectiveDef.onGenerate(entities, hex)
-    end
-
-    for _, def in ipairs(objectivePool) do
-        table.insert(activeObjectives, def)
-        objectiveStates[def.id] = "pending"
-        if def.onGenerate then
-            def.onGenerate(entities, hex)
-        end
-    end
-
-    print(string.format("Activated %d secondary objectives:", #activeObjectives))
     for _, obj in ipairs(activeObjectives) do
         print(string.format("  - %s (%s)", obj.name, obj.id))
     end
