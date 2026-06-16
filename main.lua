@@ -31,55 +31,23 @@ logicalH = 0
 screenShake = { timer = 0, intensity = 6, duration = 0.3 }
 testViewActive = false
 testViewOffsetY = 0
-gridRotationMode = false
+
 gamePhase = "menu"
 selectedMapPath = nil
 selectedSquad = nil
 difficultyModifier = 1
+disableEnemySpawn = false
+chaos = 0
+chaosMax = 5
 unplacedAllies = {}
 placedAllies = {}
 deploySelectedIdx = nil
 allyPanelButtons = {}
 
-function syncStateToGlobals()
-    entities = state.entities
-    hex = state.hex
-    terrainMap = state.terrainMap
-    globalHealth = state.globalHealth
-    turnState = state.turnState
-    turnCount = state.turnCount
-    maxTurns = state.maxTurns
-    gameActive = state.gameActive
-    win = state.win
-    loss = state.loss
-    selectedActor = state.selectedActor
-    selectedAttack = state.selectedAttack
-    attackMode = state.attackMode
-    flipTargetActor = state.flipTargetActor
-    vortexTargetCell = state.vortexTargetCell
-    pullHookTargetCell = state.pullHookTargetCell
-    attackButtons = state.attackButtons
-    sounds = state.sounds
-    actionHistory = state.actionHistory
-    maxUndoCount = state.maxUndoCount
-    restartButton = state.restartButton
-    endTurnButton = state.endTurnButton
-    undoButton = state.undoButton
-    decayAppliedForTurnLimit = state.decayAppliedForTurnLimit
-    decayMessageTimer = state.decayMessageTimer
-    fireAppliedForTurnLimit = state.fireAppliedForTurnLimit
-    pushAnimations = state.pushAnimations
-    showEnemyOrder = state.showEnemyOrder
-    dpiScale = state.dpiScale
-    difficultyModifier = state.difficultyModifier
-    DEBUG_COMBAT = state.DEBUG_COMBAT
-end
-
-function syncGlobalsToState()
+function syncState()
     state.entities = entities
     state.hex = hex
     state.terrainMap = terrainMap
-    state.globalHealth = globalHealth
     state.turnState = turnState
     state.turnCount = turnCount
     state.maxTurns = maxTurns
@@ -105,7 +73,10 @@ function syncGlobalsToState()
     state.pushAnimations = pushAnimations
     state.dpiScale = dpiScale
     state.difficultyModifier = difficultyModifier
+    state.disableEnemySpawn = disableEnemySpawn
     state.showEnemyOrder = showEnemyOrder
+    state.chaos = chaos
+    state.chaosMax = chaosMax
 end
 
 function love.load()
@@ -115,11 +86,11 @@ function love.load()
     environment.loadUnitSprites()
 
     restartButton = {
-        x = 10, y = 295, width = 120, height = 30,
+        x = 270, y = 0, width = 110, height = 30,
         text = "Restart Game", isHovered = false
     }
     endTurnButton = {
-        x = 10, y = 260, width = 120, height = 30,
+        x = 140, y = 0, width = 110, height = 30,
         text = "End Turn", isHovered = false,
         holdTimer = 0, isHeld = false,
     }
@@ -140,7 +111,8 @@ end
 
 function getDrawCoords(q, r)
     local x, y = hex:hexToPixel(q, r)
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
+    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r]
+    if terrain == "water" or terrain == "underwater_mines" then
         y = y + config.WATER_Y_OFFSET
     end
     return x, y
@@ -217,10 +189,8 @@ function love.update(dt)
             actor.pulse = actor.pulse + dt * (actor.pulseSpeed or 5)
         end
     end
+
     combat.updatePushAnimations(dt, hex)
-    if globalHealth.flashTimer and globalHealth.flashTimer > 0 then
-        globalHealth.flashTimer = globalHealth.flashTimer - dt
-    end
     if decayMessageTimer > 0 then
         decayMessageTimer = decayMessageTimer - dt
     end
@@ -256,15 +226,18 @@ function love.update(dt)
     end
 
     undoButton = undoButton or {}
-    undoButton.isHovered = (mx >= 10 and mx <= 130 and my >= 190 and my <= 220)
+    local bottomY = logicalH - 65
+    undoButton.isHovered = (mx >= 10 and mx <= 120 and my >= bottomY and my <= bottomY + 30)
     endTurnButton.isHovered = (mx >= endTurnButton.x and mx <= endTurnButton.x + endTurnButton.width and
                                my >= endTurnButton.y and my <= endTurnButton.y + endTurnButton.height)
 end
 
 function love.resize(w, h)
     dpiScale = love.window.getDPIScale()
+    logicalW = w / dpiScale
+    logicalH = h / dpiScale
     if hex then
-        hex:centerOnScreen(w / dpiScale, h / dpiScale)
+        hex:centerOnScreen(logicalW, logicalH)
     end
 end
 
@@ -273,11 +246,14 @@ function love.draw()
     love.graphics.scale(dpiScale)
     logicalW = love.graphics.getWidth() / dpiScale
     logicalH = love.graphics.getHeight() / dpiScale
+    local bottomY = logicalH - 65
+    restartButton.y = bottomY
+    endTurnButton.y = bottomY
 
     if gamePhase == "menu" then
         menu.draw()
     elseif gamePhase == "deploy" then
-        syncGlobalsToState()
+        syncState()
         renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
     else
         if screenShake.timer > 0 then
@@ -286,7 +262,7 @@ function love.draw()
             local offsetY = screenShake.intensity * ease * math.sin(t * math.pi * 12)
             love.graphics.translate(0, offsetY)
         end
-        syncGlobalsToState()
+        syncState()
         renderer.draw(state)
     end
 
@@ -305,6 +281,16 @@ function getEnemyAttackOrder(entities, turnState)
                 table.insert(queue, e)
             end
         end
+        local trains_mod = require("trains")
+        local trainGroups = trains_mod.getTrainGroups()
+        for _, group in pairs(trainGroups) do
+            if group.active and group.cars and #group.cars > 0 then
+                local loco = group.cars[1]
+                if loco and loco.health and loco.health > 0 and not loco.isDying then
+                    table.insert(queue, loco)
+                end
+            end
+        end
     end
 
     for i, enemy in ipairs(queue) do
@@ -315,12 +301,16 @@ end
 
 function isCellPassable(q, r, movingEntity)
     if not hex:isActiveHex(q, r) then return false end
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
+    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+    if terrain == "water" then
         if movingEntity and (movingEntity.waterWalker or movingEntity.flying) then
             -- ok
         else
             return false
         end
+    end
+    if terrain == "underwater_mines" then
+        return false
     end
     if movingEntity and movingEntity.flying then
         return true

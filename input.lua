@@ -91,21 +91,13 @@ function input.mousepressed(x, y, button)
 
     if global_abilities.handleClick(x, y, state) then return end
 
-    if x >= 10 and x <= 130 and y >= 190 and y <= 220 then
+    local bottomY = logicalH - 65
+    if x >= 10 and x <= 130 and y >= bottomY and y <= bottomY + 30 then
         if #actionHistory > 0 then
             undoLastAction()
         else
             print("No actions to undo!")
         end
-        return
-    end
-
-    -- Test view button
-    local tw, th = 120, 22
-    local tx, ty = logicalW - 130, 10
-    if x >= tx and x <= tx + tw and y >= ty and y <= ty + th then
-        testViewActive = not testViewActive
-        print("Test view: " .. (testViewActive and "ON" or "OFF"))
         return
     end
 
@@ -132,8 +124,8 @@ function input.mousepressed(x, y, button)
     end
 
     -- Enemy Order button toggle
-    local orderBtnX = logicalW - 110
-    local orderBtnY = logicalH - 40
+    local orderBtnX = 160
+    local orderBtnY = logicalH - 105
     if x >= orderBtnX and x <= orderBtnX + 100 and y >= orderBtnY and y <= orderBtnY + 30 then
         showEnemyOrder = not showEnemyOrder
         print("Enemy order display: " .. (showEnemyOrder and "ON" or "OFF"))
@@ -192,7 +184,6 @@ function input.mousepressed(x, y, button)
                     attackMode = false
                     selectedAttack = nil
                     flipTargetActor = nil
-                    globalHealth.previewDamage = 0
                 else
                     flipTargetActor = nil
                 end
@@ -220,7 +211,7 @@ function input.mousepressed(x, y, button)
                 if isValidDest then
                     attackMode = false
                     selectedAttack = nil
-                    globalHealth.previewDamage = 0
+
                 end
                 vortexTargetCell = nil
             else
@@ -246,7 +237,7 @@ function input.mousepressed(x, y, button)
                 if isValidDest then
                     attackMode = false
                     selectedAttack = nil
-                    globalHealth.previewDamage = 0
+
                 end
                 vortexTargetCell = nil
             else
@@ -274,7 +265,7 @@ function input.mousepressed(x, y, button)
                     if isValid then
                         attackMode = false
                         selectedAttack = nil
-                        globalHealth.previewDamage = 0
+    
                     end
                 end
                 pullHookTargetCell = nil
@@ -292,7 +283,7 @@ function input.mousepressed(x, y, button)
                 if not success then print("Attack failed: " .. msg) end
                 attackMode = false
                 selectedAttack = nil
-                globalHealth.previewDamage = 0
+
             end
             return
         else
@@ -301,7 +292,7 @@ function input.mousepressed(x, y, button)
         end
         attackMode = false
         selectedAttack = nil
-        globalHealth.previewDamage = 0
+
         return
     end
 

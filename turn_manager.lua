@@ -1,11 +1,10 @@
 -- turn_manager.lua
 -- Машина состояний для фаз хода (enemy_prepare / player / enemy_attack).
--- Использует глобалы (entities, hex, turnState, sounds, globalHealth, terrainMap).
+-- Использует глобалы (entities, hex, turnState, sounds, terrainMap).
 
 local turnManager = {}
 
 function turnManager.startGame()
-    -- Выкопка с самого первого хода
     processDigSites()
 
     turnState.phase = "enemy_prepare"
@@ -32,12 +31,10 @@ function turnManager.endPlayerTurn()
         end
     end
 
-    -- Step 0: Lightning strikes before fire/decay
     strikeLightning()
     checkGameEnd()
 
-    -- Step 1: Simultaneous effects (fire, decay) — no digging
-    effects.applyEndOfTurnEffects(entities, terrainMap, globalHealth)
+    effects.applyEndOfTurnEffects(entities, terrainMap)
     checkGameEnd()
 
     if turnCount >= maxTurns and not decayAppliedForTurnLimit then
@@ -47,17 +44,34 @@ function turnManager.endPlayerTurn()
         status.clearAllDigSites()
     end
 
-    -- Step 2: Queue enemy attacks
+    -- Prepare train attacks for this turn
+    local trains_mod = require("trains")
+    trains_mod.prepareTrainAttacks(entities, hex)
+
+    -- Queue enemy attacks
     local attackers = {}
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 and not e.isDying then
             table.insert(attackers, e)
         end
     end
+
+    -- Add train attacks LAST in queue
+    local trainGroups = trains_mod.getTrainGroups()
+    for _, group in pairs(trainGroups) do
+        if group.active and group.cars and #group.cars > 0 then
+            local loco = group.cars[1]
+            if loco and loco.health and loco.health > 0 and not loco.isDying and loco.hasPreparedAttack then
+                table.insert(attackers, loco)
+            end
+        end
+    end
+
     turnState.enemyAttackQueue = attackers
     turnState.enemyAttackTimer = 0
     turnState.phase = "enemy_attack"
     turnState.pendingDigProcessing = true
+    turnState.trainShuntInProgress = false
     print("=== ENEMY ATTACK PHASE ===")
 end
 
@@ -97,8 +111,19 @@ function updatePreparePhase(dt)
 end
 
 function updateAttackPhase(dt)
+    -- If a train shunt animation is in progress, update it
+    if turnState.trainShuntInProgress then
+        local trains_mod = require("trains")
+        trains_mod.updateMovement(dt)
+        if not trains_mod.isAnyAnimating() then
+            turnState.trainShuntInProgress = false
+            turnState.currentTrainLoco = nil
+            checkGameEnd()
+        end
+        return
+    end
+
     if #turnState.enemyAttackQueue == 0 then
-        -- Step 3: Simultaneous digging
         if turnState.pendingDigProcessing then
             processDigSites()
             turnState.pendingDigProcessing = false
@@ -115,8 +140,18 @@ function updateAttackPhase(dt)
         turnState.enemyAttackTimer = 0
         local enemy = table.remove(turnState.enemyAttackQueue, 1)
         if enemy and enemy.health > 0 then
-            ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
-            checkGameEnd()
+            if enemy.isTrainAttack then
+                local trains_mod = require("trains")
+                turnState.trainShuntInProgress = true
+                turnState.currentTrainLoco = enemy
+                trains_mod.executeTrainShunt(enemy, entities, hex, function()
+                end)
+            else
+                ai.executePreparedAttack(enemy, entities, hex, sounds)
+            end
+            if not enemy.isTrainAttack then
+                checkGameEnd()
+            end
         end
     end
 end
@@ -126,7 +161,6 @@ function processNextEnemyPrepare()
         turnState.phase = "player"
         for _, a in ipairs(entities) do
             if a.isPlayable then
-                -- Снимаем нокаут в начале хода: здоровье -> 1, востанавливаем скорость
                 if status.hasEntityStatus(a, "knockout") then
                     status.removeFromEntity(a, "knockout")
                     a.health = 1
@@ -144,6 +178,7 @@ function processNextEnemyPrepare()
             end
         end
         actionHistory = {}
+        global_abilities.abilityUsedThisTurn = false
         selectLightningTarget()
         print("=== PLAYER TURN ===")
         return
@@ -165,36 +200,66 @@ function processNextEnemyPrepare()
     end
 end
 
-function moveShips()
+function moveCaravans()
+    local hex = _G.hex
+    if not hex then return end
+    local caravans = {}
+    local blockposts = {}
     for _, e in ipairs(entities) do
-        if e.waterWalker and e.health > 0 and e.isPushable ~= false then
-            local neighbors = hex:getNeighbors(e.q, e.r)
-            local waterCells = {}
-            for _, n in ipairs(neighbors) do
-                if hex:isActiveHex(n.q, n.r) and terrainMap and terrainMap[n.q] and terrainMap[n.q][n.r] == "water" then
+        if e.health and e.health > 0 and not e.isDying then
+            if e.name == "Caravan" then
+                table.insert(caravans, e)
+            elseif e.name == "Blockpost" then
+                table.insert(blockposts, e)
+            end
+        end
+    end
+    if #caravans == 0 or #blockposts == 0 then return end
+    for _, caravan in ipairs(caravans) do
+        local nearestBP = nil
+        local nearestDist = math.huge
+        for _, bp in ipairs(blockposts) do
+            local dist = hex:getDistance(caravan.q, caravan.r, bp.q, bp.r)
+            if dist > 0 and dist < nearestDist then
+                nearestDist = dist
+                nearestBP = bp
+            end
+        end
+        if not nearestBP then goto continue end
+        local neighbors = hex:getNeighbors(caravan.q, caravan.r)
+        local bestNeighbor = nil
+        local bestDist = math.huge
+        for _, n in ipairs(neighbors) do
+            if hex:isActiveHex(n.q, n.r) then
+                local terrain = _G.terrainMap and _G.terrainMap[n.q] and _G.terrainMap[n.q][n.r] or "grass"
+                if terrain ~= "water" and terrain ~= "underwater_mines" then
                     local occupied = false
                     for _, other in ipairs(entities) do
-                        if other ~= e and other.q == n.q and other.r == n.r then
+                        if other ~= caravan and other.q == n.q and other.r == n.r and other.health and other.health > 0 then
                             occupied = true
                             break
                         end
                     end
                     if not occupied then
-                        table.insert(waterCells, {q = n.q, r = n.r})
+                        local dist = hex:getDistance(n.q, n.r, nearestBP.q, nearestBP.r)
+                        if dist < bestDist then
+                            bestDist = dist
+                            bestNeighbor = n
+                        end
                     end
                 end
             end
-            if #waterCells > 0 then
-                local dest = waterCells[math.random(#waterCells)]
-                combat.addPushAnimation(e, e.q, e.r, dest.q, dest.r)
-            end
         end
+        if bestNeighbor then
+            combat.addDirectPushAnimation(caravan, caravan.q, caravan.r, bestNeighbor.q, bestNeighbor.r)
+        end
+        ::continue::
     end
     combat.startPushAnimations(hex)
 end
 
 function startEnemyPreparePhase()
-    moveShips()
+    moveCaravans()
     local enemies = {}
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.health > 0 then

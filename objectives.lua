@@ -3,9 +3,103 @@ local Entity = require("entity")
 local objectives = {}
 
 local activeObjectives = {}
+local activePrimaryObjective = nil
 local objectiveStates = {}
 local smallFont
 local objectivePool = {}
+
+local primaryObjectiveDefs = {}
+
+primaryObjectiveDefs.protect_caravans = {
+    id = "protect_caravans",
+    name = "Protect Caravans",
+    desc = "Every caravan destroyed increases Chaos!",
+    isPrimary = true,
+    forceSecondary = "protect_blockpost",
+    onGenerate = function(entities, hex)
+        _G.chaos = 0
+        _G.caravanCount = 0
+        for _, e in ipairs(entities) do
+            if e.name == "Caravan" then
+                _G.caravanCount = (_G.caravanCount or 0) + 1
+            end
+        end
+    end,
+    check = function(entities, state)
+        local alive = 0
+        for _, e in ipairs(entities) do
+            if e.name == "Caravan" and e.health and e.health > 0 then
+                alive = alive + 1
+            end
+        end
+        local dead = (_G.caravanCount or 0) - alive
+        local prevDead = _G.caravansDestroyed or 0
+        if dead > prevDead then
+            local newDead = dead - prevDead
+            _G.chaos = (_G.chaos or 0) + newDead
+            _G.caravansDestroyed = dead
+            for i = 1, newDead do
+                print(string.format("Caravan destroyed! Chaos +1 (total: %d)", _G.chaos))
+            end
+        end
+    end,
+}
+
+primaryObjectiveDefs.protect_railway = {
+    id = "protect_railway",
+    name = "Protect Railway Infrastructure",
+    desc = "Every damage to train or tunnel increases Chaos!",
+    isPrimary = true,
+    incompatibleWithSecondary = { "protect_tower", "protect_blockpost" },
+    onGenerate = function(entities, hex)
+        _G.railwayTakenDamage = 0
+        _G.occupiedTunnelCount = 0
+        for _, e in ipairs(entities) do
+            if e.name == "OccupiedTunnel" and e.health and e.health > 0 then
+                _G.occupiedTunnelCount = (_G.occupiedTunnelCount or 0) + 1
+            end
+        end
+    end,
+    check = function(entities, state)
+        local totalDamage = 0
+        for _, e in ipairs(entities) do
+            if e.isTrainCar and e.health and e.maxHealth then
+                totalDamage = totalDamage + (e.maxHealth - math.max(0, e.health))
+            end
+            if e.name == "Tunnel" and e.health and e.maxHealth then
+                totalDamage = totalDamage + (e.maxHealth - math.max(0, e.health))
+            end
+        end
+        local prev = _G.railwayTakenDamage or 0
+        if totalDamage > prev then
+            local newDamage = totalDamage - prev
+            _G.chaos = (_G.chaos or 0) + newDamage
+            _G.railwayTakenDamage = totalDamage
+            print(string.format("Railway infrastructure damaged! Chaos +%d (total: %d)", newDamage, _G.chaos))
+        end
+
+        local aliveOcc = 0
+        for _, e in ipairs(entities) do
+            if e.name == "OccupiedTunnel" and e.health and e.health > 0 then
+                aliveOcc = aliveOcc + 1
+            end
+        end
+        local prevOcc = _G.occupiedTunnelCount or 0
+        if prevOcc > aliveOcc then
+            local destroyed = prevOcc - aliveOcc
+            _G.chaos = (_G.chaos or 0) + destroyed * 2
+            print(string.format("Occupied tunnel destroyed! Chaos +%d (total: %d)", destroyed * 2, _G.chaos))
+        end
+        _G.occupiedTunnelCount = aliveOcc
+    end,
+}
+
+local function hasTrainCars(entities)
+    for _, e in ipairs(entities) do
+        if e.name == "TrainCar" or e.name == "Locomotive" then return true end
+    end
+    return false
+end
 
 local function findEmptyCells(entities, hex)
     local candidates = {}
@@ -21,7 +115,7 @@ local function findEmptyCells(entities, hex)
                 end
                 if not occupied then
                     local terrain = _G.terrainMap and _G.terrainMap[q] and _G.terrainMap[q][r] or "grass"
-                    if terrain ~= "water" then
+                    if terrain ~= "water" and terrain ~= "underwater_mines" then
                         local status = require("status")
                         if not status.hasNegativeHexStatus(q, r) then
                             table.insert(candidates, {q = q, r = r})
@@ -37,7 +131,7 @@ end
 local function findBuildingToReplace(entities)
     local candidates = {}
     for i, e in ipairs(entities) do
-        if e:isBuilding() and e.name ~= "Tower" then
+        if e:isBuilding() and e.name ~= "Tower" and e.maxHealth == 1 then
             local terrain = _G.terrainMap and _G.terrainMap[e.q] and _G.terrainMap[e.q][e.r] or "grass"
             if terrain ~= "water" then
                 table.insert(candidates, i)
@@ -54,7 +148,6 @@ local function createTowerAt(q, r)
     local tileW = (loadedMap and loadedMap.tilewidth) or 14
     local tileH = (loadedMap and loadedMap.tileheight) or 12
     local tower = Entity.new("Tower", Entity.TYPES.BUILDING, q, r, 1, false, 0, nil, nil, {})
-    tower.globalHealthCost = 1
     tower.isObjective = true
     tower.sprite = env.generateBuildingSprite("Tower", tileW, tileH)
     return tower
@@ -69,24 +162,45 @@ local function isEntityAlive(entities, name)
     return false
 end
 
-local function isAnyZombieAlive(entities)
-    for _, e in ipairs(entities) do
-        if e.health and e.health > 0 and e:isCharacter() and not e.isPlayable then
-            local name = e.name or ""
-            if name:match("Zombie$") and not name:match("Poisonous") then
-                return true
-            end
-        end
-    end
-    return false
-end
-
 local function definePool()
     objectivePool = {
+        {
+            id = "protect_blockpost",
+            name = "Protect the Blockpost",
+            desc = "Blockpost HP lost increases Chaos!",
+            onGenerate = function(entities, hex)
+                for _, e in ipairs(entities) do
+                    if e.name == "Blockpost" and e.health and e.health > 0 then
+                        _G.blockpostMaxHealth = e.maxHealth
+                        break
+                    end
+                end
+            end,
+            check = function(entities, state)
+                for _, e in ipairs(entities) do
+                    if e.name == "Blockpost" and e.maxHealth then
+                        local curHealth = math.max(0, e.health or 0)
+                        local damageTaken = e.maxHealth - curHealth
+                        local prevDamage = _G.blockpostDamageTracked or 0
+                        if damageTaken > prevDamage then
+                            local newDamage = damageTaken - prevDamage
+                            _G.chaos = (_G.chaos or 0) + newDamage
+                            _G.blockpostDamageTracked = damageTaken
+                            print(string.format("Blockpost damaged! Chaos +%d (total: %d)", newDamage, _G.chaos))
+                        end
+                        return
+                    end
+                end
+            end,
+            checkOnVictory = function(entities, state)
+                state["protect_blockpost"] = "completed"
+            end,
+        },
         {
             id = "protect_tower",
             name = "Protect the Tower",
             desc = "Keep the tower alive until victory",
+            incompatibleWithPrimary = true,
             onGenerate = function(entities, hex)
                 local hasTower = isEntityAlive(entities, "Tower")
                 if not hasTower then
@@ -169,35 +283,6 @@ local function definePool()
             end,
         },
         {
-            id = "defend_zombie",
-            name = "Defend the Zombie",
-            desc = "A zombie appears on the map. It must survive!",
-            onGenerate = function(entities, hex)
-                local env = require("environment")
-                local cells = findEmptyCells(entities, hex)
-                if #cells > 0 then
-                    local cell = cells[love.math.random(1, #cells)]
-                    local zombie = env.createEnemyByType("Zombie", cell.q, cell.r)
-                    table.insert(entities, zombie)
-                    print(string.format("Objective 'defend_zombie': Zombie spawned at (%d,%d)", cell.q, cell.r))
-                end
-            end,
-            check = function(entities, state)
-                local decayApplied = _G.decayAppliedForTurnLimit or false
-                local alive = isAnyZombieAlive(entities)
-                if not alive then
-                    state["defend_zombie"] = decayApplied and "completed" or "failed"
-                elseif decayApplied then
-                    state["defend_zombie"] = "completed"
-                end
-            end,
-            checkOnVictory = function(entities, state)
-                local decayApplied = _G.decayAppliedForTurnLimit or false
-                local alive = isAnyZombieAlive(entities)
-                state["defend_zombie"] = (alive or decayApplied) and "completed" or "failed"
-            end,
-        },
-        {
             id = "slaughter",
             name = "Slaughter",
             desc = "Kill 7 enemies before decay is applied",
@@ -262,7 +347,7 @@ local function definePool()
                 end
                 if leader then
                     leader.isLeader = true
-                    leader.maxHealth = leader.maxHealth + 4
+                    leader.maxHealth = 4
                     leader.health = leader.maxHealth
                     leader.moveRange = leader.moveRange + 1
                     if leader.attacks then
@@ -272,7 +357,6 @@ local function definePool()
                             end
                         end
                     end
-                    leader.level = 4
                     leader.name = "Leader " .. (leader.name or "Enemy")
                     print(string.format("Objective 'kill_leader': Leader created at (%d,%d) - %s", leader.q, leader.r, leader.name))
                 end
@@ -300,6 +384,7 @@ local function definePool()
                 state["kill_leader"] = alive and "failed" or "completed"
             end,
         },
+
     }
 end
 
@@ -314,33 +399,87 @@ end
 function objectives.generate(entities, hex)
     definePool()
     activeObjectives = {}
+    activePrimaryObjective = nil
     objectiveStates = {}
 
+    -- Choose primary: railway if map has train cars, otherwise caravans
+    local primaryId = hasTrainCars(entities) and "protect_railway" or "protect_caravans"
+    activePrimaryObjective = primaryObjectiveDefs[primaryId]
+    objectiveStates[activePrimaryObjective.id] = "pending"
+    if activePrimaryObjective.onGenerate then
+        activePrimaryObjective.onGenerate(entities, hex)
+    end
+
+    -- Pick 2 secondary objectives from pool
     local shuffled = shuffle(objectivePool)
-    local count = math.min(2, #shuffled)
-    for i = 1, count do
-        local def = shuffled[i]
-        local conflict = false
-        for _, existing in ipairs(activeObjectives) do
-            if existing.incompatible then
-                for _, id in ipairs(existing.incompatible) do
-                    if id == def.id then
-                        conflict = true
-                        break
-                    end
+    local count = 0
+    local maxObj = 2
+
+    -- Force-include the secondary linked to the primary
+    local forcedId = activePrimaryObjective.forceSecondary
+    if forcedId then
+        for i = #shuffled, 1, -1 do
+            if shuffled[i].id == forcedId then
+                local def = table.remove(shuffled, i)
+                table.insert(activeObjectives, def)
+                objectiveStates[def.id] = "pending"
+                if def.onGenerate then
+                    def.onGenerate(entities, hex)
                 end
+                count = count + 1
+                break
             end
-            if def.incompatible then
-                for _, id in ipairs(def.incompatible) do
-                    if id == existing.id then
-                        conflict = true
-                        break
-                    end
-                end
-            end
-            if conflict then break end
         end
-        if conflict then
+    end
+
+    -- Mark incompatible secondaries based on primary
+    local primaryIncompatible = activePrimaryObjective.incompatibleWithSecondary or {}
+
+    for i = 1, #shuffled do
+        if count >= maxObj then break end
+        local def = shuffled[i]
+        local skip = false
+
+        -- Check incompatibility with primary objective
+        if not skip and activePrimaryObjective then
+            if def.incompatibleWithPrimary then
+                print(string.format("Skipping '%s' due to incompatibility with primary objective '%s'", def.id, activePrimaryObjective.id))
+                skip = true
+            elseif primaryIncompatible then
+                for _, pid in ipairs(primaryIncompatible) do
+                    if pid == def.id then
+                        print(string.format("Skipping '%s' due to incompatibility with primary '%s'", def.id, activePrimaryObjective.id))
+                        skip = true
+                        break
+                    end
+                end
+            end
+        end
+
+        -- Check conflict with already selected secondaries
+        if not skip then
+            for _, existing in ipairs(activeObjectives) do
+                if existing.incompatible then
+                    for _, id in ipairs(existing.incompatible) do
+                        if id == def.id then
+                            skip = true
+                            break
+                        end
+                    end
+                end
+                if not skip and def.incompatible then
+                    for _, id in ipairs(def.incompatible) do
+                        if id == existing.id then
+                            skip = true
+                            break
+                        end
+                    end
+                end
+                if skip then break end
+            end
+        end
+
+        if skip then
             print(string.format("Skipping '%s' due to conflict with selected objectives", def.id))
         else
             table.insert(activeObjectives, def)
@@ -348,29 +487,11 @@ function objectives.generate(entities, hex)
             if def.onGenerate then
                 def.onGenerate(entities, hex)
             end
+            count = count + 1
         end
     end
 
-    print(string.format("Generated %d objectives:", #activeObjectives))
-    for _, obj in ipairs(activeObjectives) do
-        print(string.format("  - %s (%s)", obj.name, obj.id))
-    end
-end
-
-function objectives.activateAll(entities, hex)
-    definePool()
-    activeObjectives = {}
-    objectiveStates = {}
-
-    for _, def in ipairs(objectivePool) do
-        table.insert(activeObjectives, def)
-        objectiveStates[def.id] = "pending"
-        if def.onGenerate then
-            def.onGenerate(entities, hex)
-        end
-    end
-
-    print(string.format("Activated all %d objectives:", #activeObjectives))
+    print(string.format("Generated %d secondary objectives:", #activeObjectives))
     for _, obj in ipairs(activeObjectives) do
         print(string.format("  - %s (%s)", obj.name, obj.id))
     end
@@ -379,13 +500,23 @@ end
 function objectives.reset()
     definePool()
     activeObjectives = {}
+    activePrimaryObjective = nil
     objectiveStates = {}
     _G.objective_enemiesKilled = 0
     _G.objective_digBlocks = 0
+    _G.caravanCount = 0
+    _G.caravansDestroyed = 0
+    _G.blockpostMaxHealth = 0
+    _G.blockpostDamageTracked = 0
+    _G.railwayTakenDamage = 0
 end
 
 function objectives.getList()
     return activeObjectives
+end
+
+function objectives.getPrimary()
+    return activePrimaryObjective
 end
 
 function objectives.getState(id)
@@ -401,7 +532,9 @@ function objectives.getCompletedCount()
 end
 
 function objectives.getTotalCount()
-    return #activeObjectives
+    local count = #activeObjectives
+    if activePrimaryObjective then count = count + 1 end
+    return count
 end
 
 function objectives.getFailedCount()
@@ -413,16 +546,36 @@ function objectives.getFailedCount()
 end
 
 function objectives.update(entities)
+    local decayApplied = _G.decayAppliedForTurnLimit or false
+
+    -- Check primary objective every frame
+    if activePrimaryObjective and objectiveStates[activePrimaryObjective.id] == "pending" then
+        if activePrimaryObjective.check then
+            activePrimaryObjective.check(entities, objectiveStates)
+        end
+    end
+
+    -- Check secondary objectives
     for _, obj in ipairs(activeObjectives) do
         if objectiveStates[obj.id] == "pending" then
-            if obj.check then
+            -- Certain objectives check immediately; others wait for decay
+            local canCheck = decayApplied or obj.id == "kill_leader" or obj.id == "protect_tower" or obj.id == "protect_blockpost"
+            if canCheck and obj.check then
+                local prevState = objectiveStates[obj.id]
                 obj.check(entities, objectiveStates)
+                if prevState == "pending" and objectiveStates[obj.id] == "failed" then
+                    _G.chaos = (_G.chaos or 0) + 1
+                    print(string.format("Objective '%s' failed! Chaos +1 (total: %d)", obj.id, _G.chaos))
+                end
             end
         end
     end
 end
 
 function objectives.checkOnVictory(entities)
+    if activePrimaryObjective and objectiveStates[activePrimaryObjective.id] == "pending" then
+        objectiveStates[activePrimaryObjective.id] = "completed"
+    end
     for _, obj in ipairs(activeObjectives) do
         if objectiveStates[obj.id] == "pending" then
             if obj.checkOnVictory then
@@ -433,42 +586,69 @@ function objectives.checkOnVictory(entities)
 end
 
 function objectives.draw()
-    if #activeObjectives == 0 then return end
-
+    if not smallFont then smallFont = love.graphics.newFont(12) end
     local x = 10
-    local y = 330
+    local y = 1070
     local w = 200
     local lineH = 16
     local padding = 6
     local titleH = 20
-    local totalH = titleH + #activeObjectives * lineH + padding * 2
+    local primaryH = activePrimaryObjective and (titleH + lineH + padding) or 0
+    local secondaryH = (#activeObjectives > 0) and (titleH + #activeObjectives * lineH + padding) or 0
+    local totalH = primaryH + secondaryH + padding
+
+    if totalH <= padding then return end
 
     love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
     love.graphics.rectangle("fill", x, y, w, totalH, 5)
     love.graphics.setColor(0.4, 0.4, 0.6, 0.6)
     love.graphics.rectangle("line", x, y, w, totalH, 5)
 
-    if not smallFont then smallFont = love.graphics.newFont(12) end
-    love.graphics.setColor(0.9, 0.9, 0.6, 1)
     love.graphics.setFont(smallFont)
-    love.graphics.print("Objectives", x + padding, y + padding)
+    local curY = y + padding
 
-    for i, obj in ipairs(activeObjectives) do
-        local sy = y + titleH + (i - 1) * lineH + padding
-        local state = objectiveStates[obj.id] or "pending"
+    -- Primary objective
+    if activePrimaryObjective then
+        love.graphics.setColor(0.9, 0.6, 0.2, 1)
+        love.graphics.print("Primary", x + padding, curY)
+        curY = curY + titleH
+        local state = objectiveStates[activePrimaryObjective.id] or "pending"
         local icon, color
-        if state == "completed" then
-            icon = "✓"
-            color = {0.4, 1, 0.4, 1}
-        elseif state == "failed" then
-            icon = "✗"
+        if state == "failed" then
+            icon = "\xc3\x97"
             color = {1, 0.4, 0.4, 1}
         else
-            icon = "○"
-            color = {0.8, 0.8, 0.8, 1}
+            icon = "\xe2\x97\x8b"
+            color = {0.9, 0.6, 0.2, 1}
         end
         love.graphics.setColor(unpack(color))
-        love.graphics.print(icon .. " " .. obj.name, x + padding, sy)
+        love.graphics.print(icon .. " " .. activePrimaryObjective.name, x + padding, curY)
+        curY = curY + lineH + padding
+    end
+
+    -- Secondary objectives
+    if #activeObjectives > 0 then
+        love.graphics.setColor(0.9, 0.9, 0.6, 1)
+        love.graphics.print("Secondary", x + padding, curY)
+        curY = curY + titleH
+
+        for i, obj in ipairs(activeObjectives) do
+            local sy = curY + (i - 1) * lineH
+            local state = objectiveStates[obj.id] or "pending"
+            local icon, color
+            if state == "completed" then
+                icon = "\xe2\x9c\x93"
+                color = {0.4, 1, 0.4, 1}
+            elseif state == "failed" then
+                icon = "\xc3\x97"
+                color = {1, 0.4, 0.4, 1}
+            else
+                icon = "\xe2\x97\x8b"
+                color = {0.8, 0.8, 0.8, 1}
+            end
+            love.graphics.setColor(unpack(color))
+            love.graphics.print(icon .. " " .. obj.name, x + padding, sy)
+        end
     end
 end
 

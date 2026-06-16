@@ -4,6 +4,8 @@
 
 local turnManager = require("turn_manager")
 local objectives = require("objectives")
+local trains = require("trains")
+local Entity = require("entity")
 
 function endTurn()
     turnManager.endPlayerTurn()
@@ -16,22 +18,23 @@ function restartGame(mapPath)
 
     local hexStatuses
     local deployableAllies
-    terrainMap, entities, width, height, hexStatuses, _, deployableAllies = environment.loadMapFromTiled(mapPath)
+    terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation = environment.loadMapFromTiled(mapPath)
+    orientation = orientation or "pointy"
 
     hex = require("hexgrid").new(
         config.HEX_RADIUS,
         width, height,
         config.ACTIVE_RADIUS,
         config.CENTER_Q,
-        config.CENTER_R
+        config.CENTER_R,
+        orientation
     )
     hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
-    hex.rotation = gridRotationMode and config.GRID_ROTATION_ANGLE or 0
+    hex.rotation = (orientation == "flat") and 0 or config.GRID_ROTATION_ANGLE
 
     status.initHexStatuses(hexStatuses)
 
-    globalHealth = { current = 5, max = 5, initial = 5 }
-    combat.globalHealth = globalHealth
+
 
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable then
@@ -49,7 +52,7 @@ function restartGame(mapPath)
     if mapPath:match("map1%.lua$") then
         local occupiedSet = {}
         for _, e in ipairs(entities) do
-            if not e.isSummoningRod then
+            if not e.isSummoningRod and not e:isBuilding() then
                 local k = e.q .. "," .. e.r
                 occupiedSet[k] = true
             end
@@ -59,7 +62,7 @@ function restartGame(mapPath)
             for r = 0, height - 1 do
                 if hex:isActiveHex(q, r) then
                     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain ~= "water" and not occupiedSet[q .. "," .. r] and not status.hasNegativeHexStatus(q, r) then
+                    if terrain ~= "water" and terrain ~= "underwater_mines" and not occupiedSet[q .. "," .. r] and not status.hasNegativeHexStatus(q, r) then
                         table.insert(candidates, {q = q, r = r})
                     end
                 end
@@ -69,7 +72,7 @@ function restartGame(mapPath)
             local j = love.math.random(i)
             candidates[i], candidates[j] = candidates[j], candidates[i]
         end
-        local initialSpawn = _G.playtestSpawnLimit or 5
+        local initialSpawn = 5
         local spawned = 0
         for _, cell in ipairs(candidates) do
             if spawned >= initialSpawn then break end
@@ -81,7 +84,7 @@ function restartGame(mapPath)
         print(string.format("Spawned %d random enemies on map1", spawned))
 
         -- 50% chance to spawn SummoningRod
-        if not _G.playtestMode and love.math.random() < 0.5 then
+        if love.math.random() < 0.5 then
             local emptyCells = findRandomEmptyCells(1)
             if #emptyCells > 0 then
                 local cell = emptyCells[1]
@@ -142,8 +145,40 @@ function restartGame(mapPath)
     loss = false
     fireAppliedForTurnLimit = false
     decayAppliedForTurnLimit = false
+    chaos = 0
     status.clearAllDigSites()
 
+    -- map3 train setup: inject tunnels and railway if needed
+    if mapPath:match("map3") then
+        local hasTunnels = false
+        for _, e in ipairs(entities) do
+            if e.name == "Tunnel" then hasTunnels = true; break end
+        end
+        if not hasTunnels then
+            local envMod = require("environment")
+            local loadedMap = envMod.loadedMap
+            local tileW = (loadedMap and loadedMap.tilewidth) or 14
+            local tileH = (loadedMap and loadedMap.tileheight) or 12
+            local tunnelData = {{2,2},{6,2},{2,6},{6,6}}
+            local railCells = {{2,2},{3,2},{4,2},{5,2},{6,2},{2,6},{3,6},{4,6},{5,6},{6,6}}
+
+            for _, cell in ipairs(railCells) do
+                local q, r = cell[1], cell[2]
+                if not terrainMap[q] then terrainMap[q] = {} end
+                terrainMap[q][r] = "railway"
+            end
+
+            for _, td in ipairs(tunnelData) do
+                local tunnel = Entity.new("Tunnel", Entity.TYPES.BUILDING, td[1], td[2], 2, false, 0, nil, nil, {})
+                tunnel.isObjective = true
+                tunnel.sprite = envMod.generateBuildingSprite("Tunnel", tileW, tileH)
+                table.insert(entities, tunnel)
+                print(string.format("  Placed Tunnel at (%d,%d)", td[1], td[2]))
+            end
+        end
+    end
+
+    trains.init(entities, terrainMap, hex)
     objectives.reset()
     objectives.generate(entities, hex)
     objectives.update(entities)
@@ -218,7 +253,7 @@ function restartGame(mapPath)
     else
         gamePhase = "deploy"
     end
-    syncGlobalsToState()
+    syncState()
     print(skipDeploy and "=== MAP LOADED — GAME STARTED ===" or "=== MAP LOADED — DEPLOY YOUR ALLIES ===")
 end
 
@@ -276,20 +311,12 @@ function confirmDeploy()
     placedAllies = {}
     deploySelectedIdx = nil
 
-    syncGlobalsToState()
+    syncState()
     print("=== DEPLOY CONFIRMED — GAME STARTED ===")
 end
 
 function checkGameEnd()
     if not gameActive then return end
-
-    if globalHealth.current <= 0 then
-        loss = true
-        gameActive = false
-        print("DEFEAT: Global health depleted!")
-        syncGlobalsToState()
-        return
-    end
 
     local anyAlly = false
     for _, e in ipairs(entities) do
@@ -298,11 +325,19 @@ function checkGameEnd()
             break
         end
     end
+    if (chaos or 0) >= chaosMax then
+        loss = true
+        gameActive = false
+        print("DEFEAT: Chaos has consumed the realm!")
+        syncState()
+        return
+    end
+
     if not anyAlly then
         loss = true
         gameActive = false
         print("DEFEAT: All allies destroyed!")
-        syncGlobalsToState()
+        syncState()
         return
     end
 
@@ -318,7 +353,7 @@ function checkGameEnd()
         gameActive = false
         objectives.checkOnVictory(entities)
         print("VICTORY: All enemies defeated after turn limit!")
-        syncGlobalsToState()
+        syncState()
         return
     end
 
@@ -327,7 +362,7 @@ function checkGameEnd()
         gameActive = false
         objectives.checkOnVictory(entities)
         print("VICTORY: Turn limit reached and all enemies defeated!")
-        syncGlobalsToState()
+        syncState()
     end
 end
 
@@ -352,6 +387,24 @@ function updateDeathAnimations(dt)
         if e.isDying then
             e.deathTimer = e.deathTimer + dt
             if e.deathTimer >= e.deathDuration then
+                if e.isTrainCar then
+                    local trains_mod = require("trains")
+                    local group = trains_mod.getCarGroup(e)
+                    if group then
+                        group.active = false
+                        local loco = group.cars[1]
+                        if loco then
+                            loco.hasPreparedAttack = false
+                            loco.isTrainAttack = nil
+                        end
+                    end
+                end
+                if e.name == "Tunnel" or e.name == "OccupiedTunnel" then
+                    local dtunnel = Entity.new("DestroyedTunnel", Entity.TYPES.BUILDING, e.q, e.r, 1, false, 0, nil, nil, {})
+                    dtunnel.indestructible = true
+                    dtunnel.sprite = environment.generateBuildingSprite("DestroyedTunnel", hex.tileWidth, hex.tileHeight)
+                    table.insert(entities, dtunnel)
+                end
                 table.remove(entities, i)
             end
         end
@@ -387,7 +440,7 @@ function findRandomEmptyCells(count, excludeFn)
                 end
                 if not occupied then
                     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain ~= "water" then
+                    if terrain ~= "water" and terrain ~= "underwater_mines" and terrain ~= "railway" then
                         if not excludeFn or not excludeFn(q, r) then
                             table.insert(candidates, {q = q, r = r})
                         end
@@ -410,7 +463,7 @@ end
 function processDigSites()
     for _, entity in ipairs(entities) do
         if entity.health > 0 and status.hasDigSite(entity.q, entity.r) then
-            local wasDestroyed = entity:takeDamage(1, globalHealth)
+            local wasDestroyed = entity:takeDamage(1)
             print(string.format("Dig site damage: %s takes 1 damage!", entity.name))
             if sounds and sounds.collision then sounds.collision:play() end
             if wasDestroyed then
@@ -428,22 +481,28 @@ function processDigSites()
 
     local readyDigs = status.decrementDigTimers()
     for _, dig in ipairs(readyDigs) do
-        local occupied = false
-        for _, e in ipairs(entities) do
-            if e.q == dig.q and e.r == dig.r then
-                occupied = true
-                break
+        local canSpawn = not (state and state.disableEnemySpawn)
+        if canSpawn then
+            local occupied = false
+            for _, e in ipairs(entities) do
+                if e.q == dig.q and e.r == dig.r then
+                    occupied = true
+                    break
+                end
             end
-        end
-        local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
-        if not occupied and terrain ~= "water" and not status.hasNegativeHexStatus(dig.q, dig.r) then
-            local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
-            table.insert(entities, newEnemy)
-            local x, y = hex:hexToPixel(dig.q, dig.r)
-            visual.addEffect(x, y, "dig", 0.5)
-            print(string.format("A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r))
+            local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
+            if not occupied and terrain ~= "water" and terrain ~= "railway" and not status.hasNegativeHexStatus(dig.q, dig.r) then
+                local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
+                table.insert(entities, newEnemy)
+                local x, y = hex:hexToPixel(dig.q, dig.r)
+                visual.addEffect(x, y, "dig", 0.5)
+                print(string.format("A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r))
+            else
+                print(string.format("Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r))
+                _G.objective_digBlocks = (_G.objective_digBlocks or 0) + 1
+            end
         else
-            print(string.format("Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r))
+            print(string.format("Dig site at (%d,%d) suppressed by disableEnemySpawn", dig.q, dig.r))
             _G.objective_digBlocks = (_G.objective_digBlocks or 0) + 1
         end
         status.removeDigSite(dig.q, dig.r)
@@ -459,17 +518,19 @@ function processDigSites()
             aliveEnemies = aliveEnemies + 1
         end
     end
-    local spawnLimit = _G.playtestSpawnLimit or 7
-    local needed = spawnLimit - aliveEnemies
-    if needed > 0 then
-        local spots = findRandomEmptyCells(needed, function(q, r)
-            return status.hasDigSite(q, r) or status.hasNegativeHexStatus(q, r)
-        end)
-        local digTypes = _G.playtestEnemyTypes or { "Ghost", "Zombie", "Lich" }
-        for _, spot in ipairs(spots) do
-            local spawnType = digTypes[love.math.random(1, #digTypes)]
-            status.setDigSite(spot.q, spot.r, 1, spawnType)
-            print(string.format("New dig site at (%d,%d) -> %s", spot.q, spot.r, spawnType))
+    if not (state and state.disableEnemySpawn) then
+        local spawnLimit = 7
+        local needed = spawnLimit - aliveEnemies
+        if needed > 0 then
+            local spots = findRandomEmptyCells(needed, function(q, r)
+                return status.hasDigSite(q, r) or status.hasNegativeHexStatus(q, r)
+            end)
+            local digTypes = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
+            for _, spot in ipairs(spots) do
+                local spawnType = digTypes[love.math.random(1, #digTypes)]
+                status.setDigSite(spot.q, spot.r, 1, spawnType)
+                print(string.format("New dig site at (%d,%d) -> %s", spot.q, spot.r, spawnType))
+            end
         end
     end
 end
@@ -515,11 +576,11 @@ function strikeLightning()
 
     local target = getEntityAtHex(tq, tr)
     if target and target.health > 0 then
-        local wasDestroyed = target:takeDamage(2, globalHealth)
+        local wasDestroyed = target:takeDamage(1)
         if sounds and sounds.collision then sounds.collision:play() end
         if not wasDestroyed then
             status.applyToEntity(target, "empowered")
-            print("Lightning strikes " .. target.name .. "! 2 damage, Empowered applied")
+            print("Lightning strikes " .. target.name .. "! 1 damage, Empowered applied")
         else
             target:startDeath()
             print("Lightning destroys " .. target.name .. "!")

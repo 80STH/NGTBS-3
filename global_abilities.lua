@@ -15,21 +15,36 @@ local global_abilities = {}
 global_abilities.registry = {}
 global_abilities.activeAbility = nil
 global_abilities.dropdownOpen = false
+global_abilities.mana = 5
+global_abilities.maxMana = 5
+global_abilities.abilityUsedThisTurn = false
+global_abilities.mana = 5
+global_abilities.maxMana = 5
+global_abilities.abilityUsedThisTurn = false
 global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay"}
 
 local function getDropdownHeader()
-    local screenW = love.graphics.getWidth()
     local w = 145
-    local x = screenW - w - 10
-    return { x = x, y = 10, w = w, h = 26 }
+    local x = logicalW - w - 10
+    return { x = x, y = 1000, w = w, h = 26 }
 end
 
 function global_abilities.register(obj)
     global_abilities.registry[obj.name] = obj
 end
 
+function global_abilities.spendAbility(ab)
+    ab.hasBeenUsed = true
+    global_abilities.mana = global_abilities.mana - ab.manaCost
+    global_abilities.abilityUsedThisTurn = true
+end
+
 function global_abilities.reset()
     global_abilities.activeAbility = nil
+    global_abilities.mana = global_abilities.maxMana
+    global_abilities.abilityUsedThisTurn = false
+    global_abilities.mana = global_abilities.maxMana
+    global_abilities.abilityUsedThisTurn = false
     for _, ab in pairs(global_abilities.registry) do
         if ab.reset then ab:reset() end
         ab.hasBeenUsed = false
@@ -57,6 +72,26 @@ function global_abilities.handleButtonClick(x, y, state)
             local ix, iy, iw, ih = getAbilityItemRect(i)
             if x >= ix and x <= ix + iw and y >= iy and y <= iy + ih then
                 if state.turnState.phase == "player" and not ab.hasBeenUsed then
+                    if ab.name == "Unearth" and not ab:hasDigSites(state) then
+                        print("Unearth: No dig sites on the map!")
+                        return true
+                    end
+                    if global_abilities.abilityUsedThisTurn then
+                        print("Already used an ability this turn!")
+                        return true
+                    end
+                    if global_abilities.mana < ab.manaCost then
+                        print(ab.name .. " costs " .. ab.manaCost .. " mana, only " .. global_abilities.mana .. " left!")
+                        return true
+                    end
+                    if global_abilities.abilityUsedThisTurn then
+                        print("Already used an ability this turn!")
+                        return true
+                    end
+                    if global_abilities.mana < ab.manaCost then
+                        print(ab.name .. " costs " .. ab.manaCost .. " mana, only " .. global_abilities.mana .. " left!")
+                        return true
+                    end
                     if global_abilities.activeAbility then
                         global_abilities.activeAbility:onDeactivate(state)
                     end
@@ -94,6 +129,26 @@ function global_abilities.handleKey(key, state)
     for _, ab in pairs(global_abilities.registry) do
         if key == ab.key then
             if state.turnState.phase == "player" and not ab.hasBeenUsed then
+                if ab.name == "Unearth" and not ab:hasDigSites(state) then
+                    print("Unearth: No dig sites on the map!")
+                    return true
+                end
+                if global_abilities.abilityUsedThisTurn then
+                    print("Already used an ability this turn!")
+                    return true
+                end
+                if global_abilities.mana < ab.manaCost then
+                    print(ab.name .. " costs " .. ab.manaCost .. " mana, only " .. global_abilities.mana .. " left!")
+                    return true
+                end
+                if global_abilities.abilityUsedThisTurn then
+                    print("Already used an ability this turn!")
+                    return true
+                end
+                if global_abilities.mana < ab.manaCost then
+                    print(ab.name .. " costs " .. ab.manaCost .. " mana, only " .. global_abilities.mana .. " left!")
+                    return true
+                end
                 if global_abilities.activeAbility then
                     global_abilities.activeAbility:onDeactivate(state)
                 end
@@ -143,7 +198,8 @@ function global_abilities.drawButtons(mx, my, state)
     love.graphics.setFont(buttonFont)
     love.graphics.setColor(1, 1, 1, 1)
     local icon = global_abilities.dropdownOpen and "▼" or "▶"
-    love.graphics.printf("Abilities " .. icon, h.x, h.y + 7, h.w, "center")
+    love.graphics.printf("Abilities " .. icon .. " [" .. global_abilities.mana .. "/" .. global_abilities.maxMana .. "]", h.x, h.y + 7, h.w, "center")
+    love.graphics.printf("Abilities " .. icon .. " [" .. global_abilities.mana .. "/" .. global_abilities.maxMana .. "]", h.x, h.y + 7, h.w, "center")
     love.graphics.setFont(oldFont)
 
     if not global_abilities.dropdownOpen then return end
@@ -163,20 +219,14 @@ function global_abilities.drawButtons(mx, my, state)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
--- Начисление previewDamage только для зданий (для глобальных воздействий)
-function global_abilities.previewBuildingDamage(globalHealth, damagedEntities)
-    if not globalHealth then return end
-    for _, dmg in ipairs(damagedEntities) do
-        if dmg.entity and dmg.entity:isBuilding() and dmg.entity.health > 0 then
-            local actual = math.min(dmg.damage or 1, dmg.entity.health)
-            globalHealth.previewDamage = (globalHealth.previewDamage or 0) + actual
-        end
-    end
-end
+
 
 function global_abilities.drawAbilityButton(self, mx, my, state, cfg)
     local isActive = (global_abilities.activeAbility == self)
-    local available = (state.turnState.phase == "player" and not self.hasBeenUsed)
+    local enoughMana = global_abilities.mana >= self.manaCost
+    local available = (state.turnState.phase == "player" and not self.hasBeenUsed and not global_abilities.abilityUsedThisTurn and enoughMana)
+    local enoughMana = global_abilities.mana >= self.manaCost
+    local available = (state.turnState.phase == "player" and not self.hasBeenUsed and not global_abilities.abilityUsedThisTurn and enoughMana)
     local x, y, w, h = self.button.x, self.button.y, self.button.width, self.button.height
     local buttonFont = love.graphics.newFont(11)
     local logicalW = love.graphics.getWidth()
@@ -187,12 +237,23 @@ function global_abilities.drawAbilityButton(self, mx, my, state, cfg)
     love.graphics.setColor(1, 1, 1, 1)
     local old = love.graphics.getFont()
     love.graphics.setFont(buttonFont)
-    love.graphics.printf(isActive and cfg.activeLabel or cfg.label, x, y + 9, w, "center")
+    local label = (isActive and cfg.activeLabel or cfg.label)
+    love.graphics.printf(label, x + 4, y + 9, w - 28, "left")
+    -- Mana cost badge
+    love.graphics.setColor(1, 1, 1, enoughMana and 1 or 0.4)
+    love.graphics.print("[" .. self.manaCost .. "]", x + w - 26, y + 9)
+    local label = (isActive and cfg.activeLabel or cfg.label)
+    love.graphics.printf(label, x + 4, y + 9, w - 28, "left")
+    -- Mana cost badge
+    love.graphics.setColor(1, 1, 1, enoughMana and 1 or 0.4)
+    love.graphics.print("[" .. self.manaCost .. "]", x + w - 26, y + 9)
     love.graphics.setFont(old)
 
     local isHover = mx and my and mx >= x and mx <= x + w and my >= y and my <= y + h
     if isHover then
         local usedText = self.hasBeenUsed and " (used)" or ""
+        local manaText = " Cost: " .. self.manaCost .. " mana"
+        local manaText = " Cost: " .. self.manaCost .. " mana"
         local tooltipW = 260
         local tx, ty = x + w + 6, y
         if tx + tooltipW > logicalW - 10 then tx = x - tooltipW - 6 end
@@ -202,7 +263,8 @@ function global_abilities.drawAbilityButton(self, mx, my, state, cfg)
         love.graphics.setColor(0.8, 0.8, 0.8, 1)
         love.graphics.rectangle("line", tx, ty, tooltipW, cfg.tooltipH, 6)
         love.graphics.setColor(1, 1, 0.6, 1)
-        love.graphics.print(cfg.tooltipTitle .. usedText, tx + 8, ty + 6)
+        love.graphics.print(cfg.tooltipTitle .. usedText .. manaText, tx + 8, ty + 6)
+        love.graphics.print(cfg.tooltipTitle .. usedText .. manaText, tx + 8, ty + 6)
         love.graphics.setColor(0.8, 0.8, 0.8, 1)
         for i, line in ipairs(cfg.tooltipLines) do
             love.graphics.print(line, tx + 8, ty + 20 + (i - 1) * 16)
@@ -221,6 +283,8 @@ function UnearthAbility.new()
     local self = {
         name = "Unearth",
         key = "u",
+        manaCost = 1,
+        manaCost = 1,
         button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
     }
@@ -232,8 +296,13 @@ function UnearthAbility:reset()
 end
 
 function UnearthAbility:onActivate(state)
-    local spawned = 0
     local digSites = status.getAllDigSites()
+    if #digSites == 0 then
+        print("Unearth: No dig sites to unearth!")
+        global_abilities.activeAbility = nil
+        return
+    end
+    local spawned = 0
     for _, site in ipairs(digSites) do
         local occupied = false
         for _, e in ipairs(state.entities) do
@@ -244,7 +313,7 @@ function UnearthAbility:onActivate(state)
         end
         if not occupied then
             local terrain = state.terrainMap and state.terrainMap[site.q] and state.terrainMap[site.q][site.r] or "grass"
-            if terrain ~= "water" and not status.hasNegativeHexStatus(site.q, site.r) then
+            if terrain ~= "water" and terrain ~= "underwater_mines" and terrain ~= "railway" and not status.hasNegativeHexStatus(site.q, site.r) then
                 local newEnemy = environment.createRandomEnemy(site.q, site.r)
                 table.insert(state.entities, newEnemy)
                 spawned = spawned + 1
@@ -252,7 +321,8 @@ function UnearthAbility:onActivate(state)
         end
         status.removeDigSite(site.q, site.r)
     end
-    self.hasBeenUsed = true
+    global_abilities.spendAbility(self)
+    global_abilities.spendAbility(self)
     state.actionHistory = {}
     global_abilities.activeAbility = nil
     print("Unearth: " .. spawned .. " enemies emerged!")
@@ -266,16 +336,23 @@ function UnearthAbility:onClickHex(q, r, hex, state)
     return false
 end
 
+function UnearthAbility:hasDigSites(state)
+    return #status.getAllDigSites() > 0
+end
+
 function UnearthAbility:drawButton(mx, my, state)
+    local hasSites = self:hasDigSites(state)
     global_abilities.drawAbilityButton(self, mx, my, state, {
-        color = {0.7, 0.5, 0.2},
+        color = hasSites and {0.7, 0.5, 0.2} or {0.4, 0.4, 0.4},
         label = "Unearth (U)",
         activeLabel = "Unearth (U)",
         tooltipH = 64,
         tooltipTitle = "Unearth",
-        tooltipLines = {
+        tooltipLines = hasSites and {
             "All enemies in dig sites",
             "immediately emerge.",
+        } or {
+            "No dig sites on the map.",
         },
     })
 end
@@ -290,6 +367,8 @@ function MindControlAbility.new()
     local self = {
         name = "Mind Control",
         key = "m",
+        manaCost = 2,
+        manaCost = 2,
         button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
         phase = nil,
@@ -367,7 +446,8 @@ function MindControlAbility:onClickHex(q, r, hex, state)
         end
         self.target.q = q
         self.target.r = r
-        self.hasBeenUsed = true
+        global_abilities.spendAbility(self)
+        global_abilities.spendAbility(self)
         state.actionHistory = {}
         print(tostring(self.target.name) .. " moved by mind control!")
         restoreSelectedActor()
@@ -405,6 +485,8 @@ function AccelerateDecayAbility.new()
     local self = {
         name = "Accelerate Decay",
         key = "d",
+        manaCost = 1,
+        manaCost = 1,
         button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
     }
@@ -421,7 +503,8 @@ function AccelerateDecayAbility:onActivate(state)
         maxTurns = state.maxTurns
         print("Decay accelerated! Max turns reduced to " .. state.maxTurns)
     end
-    self.hasBeenUsed = true
+    global_abilities.spendAbility(self)
+    global_abilities.spendAbility(self)
     state.actionHistory = {}
     global_abilities.activeAbility = nil
 end
@@ -457,6 +540,8 @@ function HealAbility.new()
     local self = {
         name = "Heal",
         key = "h",
+        manaCost = 1,
+        manaCost = 1,
         button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
     }
@@ -502,7 +587,8 @@ function HealAbility:onClickHex(q, r, hex, state)
         status.removeFromHex(target.q, target.r, "fire")
         print("Fire on the ground extinguished!")
     end
-    self.hasBeenUsed = true
+    global_abilities.spendAbility(self)
+    global_abilities.spendAbility(self)
     state.actionHistory = {}
     print(tostring(target.name) .. " fully healed and all negative effects removed!")
     restoreSelectedActor()
@@ -534,6 +620,8 @@ function ExtraMoveAbility.new()
     local self = {
         name = "Extra Move",
         key = "x",
+        manaCost = 1,
+        manaCost = 1,
         button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
     }
@@ -573,7 +661,8 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
     end
 
     target.canMoveAfterAttack = true
-    self.hasBeenUsed = true
+    global_abilities.spendAbility(self)
+    global_abilities.spendAbility(self)
     state.actionHistory = {}
     print(tostring(target.name) .. " can now move after attacking!")
     restoreSelectedActor()
@@ -605,6 +694,8 @@ function WindTorrent.new()
     local self = {
         name = "Wind Torrent",
         key = "w",
+        manaCost = 3,
+        manaCost = 3,
         button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
     }
@@ -671,7 +762,7 @@ function WindTorrent:onClickHex(q, r, hex, state)
         return true
     end
 
-    self:executeGlobalWithAnimation(direction, hex, state.entities, state.sounds, state.terrainMap, state.globalHealth, function(success, message)
+    self:executeGlobalWithAnimation(direction, hex, state.entities, state.sounds, state.terrainMap, function(success, message)
         if success then
             state.actionHistory = {}
             print("Wind Torrent used! History cleared.")
@@ -780,12 +871,7 @@ function WindTorrent:drawPreview(hex, state)
     for _, pd in ipairs(previewData) do
         ui.drawPushArrow(pd.fromX, pd.fromY, pd.toX, pd.toY, nil, nil, nil, nil, pd.fromQ, pd.fromR, pd.toQ, pd.toR)
     end
-    for _, dmg in ipairs(damagedEntities) do
-        if dmg.entity and dmg.entity.health > 0 then
-            drawHealthBar(dmg.entity, dmg.x, dmg.y, dmg.damage)
-        end
-    end
-    global_abilities.previewBuildingDamage(state.globalHealth, damagedEntities)
+
 end
 
 function WindTorrent:drawButton(mx, my, state)
@@ -803,7 +889,7 @@ function WindTorrent:drawButton(mx, my, state)
     })
 end
 
-function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds, terrainMap, globalHealth, onComplete)
+function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds, terrainMap, onComplete)
     if self.hasBeenUsed then
         if onComplete then onComplete(false, "Already used") end
         return false
@@ -847,24 +933,24 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
 
         local fromKey = obj.q .. "," .. obj.r
         if occupied[fromKey] and occupied[fromKey] ~= obj then
-            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, obj.q, obj.r, hex, entities, sounds, globalHealth, occupied[fromKey])
+            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, obj.q, obj.r, hex, entities, sounds, occupied[fromKey])
             occupied[fromKey] = obj
             goto continue
         end
 
         local newQ, newR = hex_utils.applyCubeDiff(obj.q, obj.r, step.dx, step.dy, step.dz)
         if not hex:isActiveHex(newQ, newR) then
-            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, globalHealth, nil)
+            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, nil)
             occupied[fromKey] = obj
         else
             local immovableKey = newQ .. "," .. newR
             if immovableMap[immovableKey] then
-                combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, globalHealth, immovableMap[immovableKey])
+                combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, immovableMap[immovableKey])
                 occupied[fromKey] = obj
             else
                 local targetOcc = occupied[newQ .. "," .. newR]
                 if targetOcc then
-                    combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, globalHealth, targetOcc)
+                    combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, targetOcc)
                     occupied[fromKey] = obj
                 else
                     combat.addDirectPushAnimation(obj, obj.q, obj.r, newQ, newR)
@@ -876,7 +962,8 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
     end
 
     combat.startPushAnimations(hex, function()
-        self.hasBeenUsed = true
+        global_abilities.spendAbility(self)
+        global_abilities.spendAbility(self)
         if sounds and sounds.wind then sounds.wind:play() end
         if onComplete then onComplete(true, nil) end
         if _G.checkGameEnd then _G.checkGameEnd() end

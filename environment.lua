@@ -6,7 +6,7 @@ local config = require("config")
 local environment = {}
 
 local gidToTerrain = {
-    [13] = "grass",
+    [3]  = "grass",
     [2]  = "dirt",
     [1]  = "sand",
     [4]  = "stone",
@@ -15,37 +15,43 @@ local gidToTerrain = {
     [7]  = "snow",
     [8]  = "swamp",
     [14] = "water",
+    [17] = "underwater_mines",
+    [13] = "railway",
 }
 
 local gidToEntity = {
-    [34] = { type = "character", name = "Warrior", isPlayable = true,  maxHealth = 5, moveRange = 3, attacks = "warrior" },
-    [31] = { type = "character", name = "Mage",    isPlayable = true,  maxHealth = 3, moveRange = 4, attacks = "mage" },
-    [30] = { type = "character", name = "Rogue",   isPlayable = true,  maxHealth = 4, moveRange = 5, attacks = "rogue" },
-    [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "ghost" },
-    [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
-    [21] = { type = "character", name = "PoisonousZombie", isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "zombie" },
+    [34] = { type = "character", name = "Warrior", isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "warrior" },
+    [30] = { type = "character", name = "Puncher",  isPlayable = true,  maxHealth = 2, moveRange = 4, attacks = "puncher" },
+    [31] = { type = "character", name = "Rogue",   isPlayable = true,  maxHealth = 2, moveRange = 5, attacks = "rogue" },
+    [26] = { type = "character", name = "Ghost",   isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "ghost" },
+    [25] = { type = "character", name = "Zombie",  isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "zombie" },
+    [21] = { type = "character", name = "PoisonousZombie", isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "zombie" },
     [27] = { type = "character", name = "Lich",    isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "lich" },
-    [40] = { type = "character", name = "Summoner", isPlayable = true,  maxHealth = 3, moveRange = 3, attacks = "summoner" },
+    [40] = { type = "character", name = "Summoner", isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "summoner" },
     [42] = { type = "character", name = "Summoned", isPlayable = true,  maxHealth = 2, moveRange = 2, attacks = "summoned" },
     [44] = { type = "character", name = "Divided",  isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "none" },
-    [45] = { type = "character", name = "Divider",  isPlayable = true,  maxHealth = 4, moveRange = 4, attacks = "divider" },
-    [68] = { type = "character", name = "AttackTest", isPlayable = true, maxHealth = 10, moveRange = 6, attacks = "all" },
+    [45] = { type = "character", name = "Divider",  isPlayable = true,  maxHealth = 2, moveRange = 4, attacks = "divider" },
+    [68] = { type = "character", name = "AttackTest", isPlayable = true, maxHealth = 2, moveRange = 6, attacks = "all" },
     [11] = { type = "obstacle",  name = "SuperMountain", indestructible = true },
     [9]  = { type = "obstacle",  name = "MountainSlope", health = 2, maxDamagePerHit = 1, direction = {dx = 1, dy = 0, dz = -1} },
     [15] = { type = "obstacle",  name = "MountainSlope", indestructible = true, noCollisionDamage = true },
-    [17] = { type = "obstacle",  name = "DeepWater", isHazard = true },
-    [12] = { type = "building",  name = "SmallBuilding", health = 1, globalHealthCost = 1 },
-    [7] = { type = "building",  name = "BigBuilding",   health = 2, globalHealthCost = 2 },
+    -- [17] removed: DeepWater is now terrain "underwater_mines"
+    [12] = { type = "building",  name = "SmallBuilding", health = 1 },
+    [7] = { type = "building",  name = "BigBuilding",   health = 2 },
     [6] = { type = "obstacle",  name = "WeakMountain",  health = 2, maxDamagePerHit = 1 },
-    [59] = { type = "building", name = "Ship",          health = 1, globalHealthCost = 1, moveRange = 1, waterWalker = true },
-    [29] = { type = "building", name = "Tower",         health = 1, globalHealthCost = 1, isObjective = true },
-    [60] = { type = "character", name = "Brute",    isPlayable = false, maxHealth = 5, moveRange = 2, attacks = "brute" },
-    [62] = { type = "character", name = "Lancer",   isPlayable = false, maxHealth = 4, moveRange = 3, attacks = "lancer" },
-    [80] = { type = "character", name = "BogShaman", isPlayable = false, maxHealth = 3, moveRange = 2, attacks = "bogshaman" },
-    [23] = { type = "character", name = "Raider",   isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "raider" },
-    [28] = { type = "character", name = "Dervish",  isPlayable = false, maxHealth = 3, moveRange = 3, attacks = "dervish" },
-    [66] = { type = "character", name = "Crusher",  isPlayable = false, maxHealth = 4, moveRange = 2, attacks = "crusher" },
-    [83] = { type = "character", name = "SummoningRod", isPlayable = false, maxHealth = 4, moveRange = 0, attacks = "summoningrod" },
+
+    [29] = { type = "building", name = "Tower",         health = 1, isObjective = true },
+    [60] = { type = "character", name = "Brute",    isPlayable = false, maxHealth = 2, moveRange = 2, attacks = "brute" },
+    [62] = { type = "character", name = "Lancer",   isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "lancer" },
+    [80] = { type = "character", name = "BogShaman", isPlayable = false, maxHealth = 2, moveRange = 2, attacks = "bogshaman" },
+    [23] = { type = "character", name = "Raider",   isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "raider" },
+    [28] = { type = "character", name = "Dervish",  isPlayable = false, maxHealth = 2, moveRange = 3, attacks = "dervish" },
+    [66] = { type = "character", name = "Crusher",  isPlayable = false, maxHealth = 2, moveRange = 2, attacks = "crusher" },
+    [83] = { type = "character", name = "SummoningRod", isPlayable = false, maxHealth = 2, moveRange = 0, attacks = "summoningrod" },
+    [48] = { type = "building",  name = "Caravan",   health = 1, moveRange = 1 },
+    [77] = { type = "building",  name = "Blockpost", health = 2 },
+    [67] = { type = "building",  name = "Tunnel",    health = 2, isObjective = true },
+    [74] = { type = "building",  name = "TrainCar",  health = 1, moveRange = 1 },
 }
 
 environment.enemySpriteCache = {}
@@ -218,16 +224,6 @@ local function generateCustomSprite(name, w, h)
             end
         end
 
-    elseif name == "Ship" then
-        love.graphics.setColor(0.5, 0.35, 0.2)
-        love.graphics.polygon("fill", 1, h-2, w/3, h-6, w*2/3, h-6, w-1, h-2)
-        love.graphics.setColor(0.4, 0.25, 0.1)
-        love.graphics.rectangle("fill", 0, h-2, w, 2)
-        love.graphics.setColor(0.55, 0.4, 0.25)
-        love.graphics.rectangle("fill", w/3, h-6, w/3, h-8)
-        love.graphics.setColor(0.95, 0.95, 1)
-        love.graphics.polygon("fill", w*2/3-1, h-8, w*2/3-1, h-6, w-1, h-6)
-
     elseif name == "Tower" then
         love.graphics.setColor(0.55, 0.5, 0.45)
         love.graphics.rectangle("fill", w/4, 2, w/2, h-2)
@@ -239,6 +235,86 @@ local function generateCustomSprite(name, w, h)
         love.graphics.polygon("fill", w/4, h-4, w/2, h-1, w*3/4, h-4)
         love.graphics.setColor(1, 0.7, 0.3)
         love.graphics.circle("fill", w/2, h/2, 2)
+    elseif name == "Caravan" then
+        love.graphics.setColor(0.5, 0.3, 0.15)
+        love.graphics.rectangle("fill", 1, 3, w-2, h-5)
+        love.graphics.setColor(0.6, 0.4, 0.2)
+        love.graphics.rectangle("fill", 2, 2, w-4, 2)
+        love.graphics.setColor(0.8, 0.7, 0.5)
+        love.graphics.rectangle("fill", 3, 4, 4, 4)
+        love.graphics.setColor(0.3, 0.2, 0.1)
+        love.graphics.circle("fill", 3, h-1, 1)
+        love.graphics.circle("fill", w-3, h-1, 1)
+
+    elseif name == "OccupiedTunnel" then
+        love.graphics.setColor(0.2, 0.1, 0.1)
+        love.graphics.rectangle("fill", 0, 0, w, h-2)
+        love.graphics.setColor(0.5, 0.2, 0.1)
+        love.graphics.rectangle("fill", w/2-3, 0, 6, h-4)
+        love.graphics.setColor(0.3, 0.3, 0.3)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+        love.graphics.setColor(0.6, 0.3, 0.15)
+        love.graphics.arc("fill", w/2, h-2, w/3, math.pi, 0)
+        love.graphics.setColor(1, 0.8, 0.2)
+        love.graphics.circle("fill", w/2, h/2-1, 2)
+
+    elseif name == "Blockpost" then
+        love.graphics.setColor(0.4, 0.3, 0.2)
+        love.graphics.rectangle("fill", 0, 3, w, h-3)
+        love.graphics.setColor(0.55, 0.45, 0.3)
+        love.graphics.rectangle("fill", 0, 3, 2, h-3)
+        love.graphics.rectangle("fill", w-2, 3, 2, h-3)
+        love.graphics.setColor(0.6, 0.5, 0.35)
+        love.graphics.rectangle("fill", 2, 0, w-4, 4)
+        love.graphics.setColor(0.5, 0.4, 0.25)
+        love.graphics.rectangle("fill", w/2-3, 0, 6, h)
+
+    elseif name == "Tunnel" then
+        love.graphics.setColor(0.15, 0.15, 0.15)
+        love.graphics.rectangle("fill", 0, 0, w, h-2)
+        love.graphics.setColor(0.6, 0.55, 0.5)
+        love.graphics.rectangle("fill", w/2-1, 0, 2, h-2)
+        love.graphics.setColor(0.25, 0.25, 0.25)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+        love.graphics.setColor(0.4, 0.4, 0.4)
+        love.graphics.arc("fill", w/2, h-2, w/3, math.pi, 0)
+
+    elseif name == "DestroyedTunnel" then
+        love.graphics.setColor(0.25, 0.22, 0.2)
+        love.graphics.rectangle("fill", w/4, h/2-1, w/2, 3)
+        love.graphics.setColor(0.35, 0.28, 0.22)
+        love.graphics.rectangle("fill", w/3, h/2-4, w/3, 2)
+        love.graphics.rectangle("fill", w/4+1, h/2+3, w/2-2, 2)
+        love.graphics.setColor(0.2, 0.18, 0.18)
+        love.graphics.rectangle("fill", w/3+1, h/2-2, 2, 6)
+        love.graphics.setColor(0.4, 0.35, 0.3)
+        love.graphics.rectangle("fill", w/3-2, h/2-2, 2, 3)
+
+    elseif name == "Locomotive" then
+        love.graphics.setColor(0.3, 0.15, 0.1)
+        love.graphics.rectangle("fill", 1, 1, w-2, h-4)
+        love.graphics.setColor(0.5, 0.2, 0.1)
+        love.graphics.rectangle("fill", 1, 1, w-2, h-6)
+        love.graphics.setColor(1, 0.8, 0.2)
+        love.graphics.rectangle("fill", w/2-3, 2, 6, 4)
+        love.graphics.setColor(0.2, 0.2, 0.2)
+        love.graphics.rectangle("fill", 2, 6, w-4, 2)
+        love.graphics.setColor(0.3, 0.1, 0.05)
+        love.graphics.circle("fill", 2, h-1, 1.5)
+        love.graphics.circle("fill", w-2, h-1, 1.5)
+
+    elseif name == "TrainCar" then
+        love.graphics.setColor(0.6, 0.2, 0.15)
+        love.graphics.rectangle("fill", 1, 2, w-2, h-5)
+        love.graphics.setColor(0.4, 0.12, 0.08)
+        love.graphics.rectangle("fill", 0, 2, w, 2)
+        love.graphics.setColor(0.8, 0.6, 0.4)
+        love.graphics.rectangle("fill", 3, 3, 2, 3)
+        love.graphics.rectangle("fill", w-5, 3, 2, 3)
+        love.graphics.setColor(0.3, 0.1, 0.05)
+        love.graphics.circle("fill", 2, h-1, 1.5)
+        love.graphics.circle("fill", w-2, h-1, 1.5)
+
     elseif name == "MountainSlope" then
         love.graphics.setColor(0.55, 0.5, 0.45)
         love.graphics.polygon("fill", 0, h, w*0.6, h*0.2, w, h)
@@ -246,12 +322,6 @@ local function generateCustomSprite(name, w, h)
         love.graphics.polygon("fill", 0, h, w*0.6, h*0.2, w*0.6, h)
         love.graphics.setColor(0.4, 0.35, 0.3)
         love.graphics.rectangle("fill", 0, h-2, w, 2)
-    elseif name == "DeepWater" then
-        love.graphics.setColor(0.1, 0.1, 0.4, 1)
-        love.graphics.rectangle("fill", 0, 0, w, h)
-        love.graphics.setColor(0.2, 0.2, 0.6, 0.6)
-        love.graphics.ellipse("fill", w*0.3, h*0.3, w*0.2, h*0.1)
-
     end
 
     love.graphics.setCanvas()
@@ -267,7 +337,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
     local tileHeight = map.tileheight or 32
     local entitySprite
 
-        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Ship" or def.name == "Tower" or def.name == "MountainSlope" or def.name == "DeepWater" then
+        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Tower" or def.name == "MountainSlope" or def.name == "Caravan" or def.name == "Blockpost" or def.name == "Tunnel" or def.name == "TrainCar" or def.name == "Locomotive" or def.name == "OccupiedTunnel" or def.name == "DestroyedTunnel" then
         entitySprite = generateCustomSprite(def.name, tileWidth, tileHeight)
     else
         entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)
@@ -293,8 +363,8 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         local attacks = {}
         if def.attacks == "warrior" then
             attacks = environment.getWarriorAttacks()
-        elseif def.attacks == "mage" then
-            attacks = environment.getMageAttacks()
+        elseif def.attacks == "puncher" then
+            attacks = environment.getPuncherAttacks()
         elseif def.attacks == "rogue" then
             attacks = environment.getRogueAttacks()
         elseif def.attacks == "lich" then
@@ -340,19 +410,10 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         if not def.isPlayable then
             environment.enemySpriteCache[def.name] = entitySprite
         end
-        -- Apply level to non-playable characters
-        if not def.isPlayable then
-            local level = environment.getRandomLevel()
-            environment.applyLevelToEnemy(actor, level)
-        end
         if def.name == "SummoningRod" then
             actor.isSummoningRod = true
             actor.isPushable = false
             actor.moveRange = 0
-            local healthMap = {[1] = 4, [2] = 5, [3] = 6, [4] = 7}
-            local level = actor.level or 1
-            actor.maxHealth = healthMap[level] or 4
-            actor.health = actor.maxHealth
         end
         if def.name == "Ghost" then
             actor.flying = true
@@ -375,7 +436,6 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         return obstacle
     elseif def.type == "building" then
         local building = Entity.new(def.name, Entity.TYPES.BUILDING, gridX, gridY, def.health, false, (def.moveRange or 0), nil, nil, {})
-        building.globalHealthCost = def.globalHealthCost
         if def.waterWalker then building.waterWalker = true end
         if def.isObjective then building.isObjective = true end
         building.sprite = entitySprite
@@ -394,24 +454,24 @@ function environment.loadMapFromTiled(filePath)
     local map = sti(filePath)
     local width, height = map.width, map.height
 
+    local orientation = (map.staggeraxis == "x") and "flat" or "pointy"
+    local hex_utils = require("hex_utils")
+    hex_utils.setOrientation(orientation)
+
     -- Создаём карту terrain и текстур только для активных клеток шестиугольника
     local terrainMap = {}
     local terrainTextures = {}
     local entities = {}
     local walkable = {}
 
-    -- Временно создаём hex-объект для проверки isActiveHex (позже он будет пересоздан в main)
-    -- Но нам нужны координаты, поэтому используем временный hex с теми же размерами
     local tempHex = require("hexgrid").new(
         config.HEX_RADIUS,
         width, height,
         config.ACTIVE_RADIUS,
         config.CENTER_Q,
-        config.CENTER_R
+        config.CENTER_R,
+        orientation
     )
-    -- Центр шестиугольника предполагается в (5,5) при width=11, height=11
-    -- Функция isActiveHex использует жёстко заданный центр 5,5, что корректно только для карты 11x11.
-    -- Если карта другого размера, нужно вычислять центр динамически. Оставим как есть, т.к. в проекте 11x11.
 
     -- Находим слой terrain
     local groundLayer = nil
@@ -424,6 +484,9 @@ function environment.loadMapFromTiled(filePath)
     if not groundLayer then error("'terrain' layer not found!") end
 
     local rawData = groundLayer.data
+    local terrainTypesFound = {}
+    local unknownTerrainGids = {}
+
     for y = 1, height do
         for x = 1, width do
             local gid = nil
@@ -461,7 +524,31 @@ function environment.loadMapFromTiled(filePath)
                     terrainTextures[gridX][gridY] = texture
                 end
             end
+            if gid and gid > 0 then
+                local tt = gidToTerrain[gid]
+                if tt then
+                    terrainTypesFound[tt] = true
+                else
+                    unknownTerrainGids[gid] = true
+                end
+            end
         end
+    end
+
+    local typesList = {}
+    for t, _ in pairs(terrainTypesFound) do
+        table.insert(typesList, t)
+    end
+    table.sort(typesList)
+    print("Terrain types found: " .. table.concat(typesList, ", "))
+
+    local unknownList = {}
+    for gid, _ in pairs(unknownTerrainGids) do
+        table.insert(unknownList, tostring(gid))
+    end
+    table.sort(unknownList, function(a, b) return tonumber(a) < tonumber(b) end)
+    if #unknownList > 0 then
+        print("Unknown terrain GIDs: " .. table.concat(unknownList, ", "))
     end
 
     -- Загружаем entities только на активных клетках
@@ -581,7 +668,7 @@ function environment.loadMapFromTiled(filePath)
     print(string.format("Entities loaded: %d", #gameEntities))
     print(string.format("Allies for deploy: %d", #deployableAllies))
 
-    return terrainMap, gameEntities, width, height, hexStatuses, walkable, deployableAllies
+    return terrainMap, gameEntities, width, height, hexStatuses, walkable, deployableAllies, orientation
 end
 
 -- Функции атак (без изменений)
@@ -593,11 +680,11 @@ function environment.getWarriorAttacks()
     }
 end
 
-function environment.getMageAttacks()
+function environment.getPuncherAttacks()
     local combat = require("combat")
     return {
-        { attack = combat.AoePushAttack.new(), name = "Stone Throw", description = "Throw a stone that pushes enemies around" },
-        { attack = combat.AoeDirectionalAttack.new(), name = "Shockwave", description = "Pushes all 6 surrounding enemies away from the center" },
+        { attack = combat.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Melee attack, 1 damage, pushes target away. Lethal if empowered" },
+        { attack = combat.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack damage. Deals 1 damage if empowered" },
     }
 end
 
@@ -812,8 +899,8 @@ function environment.createSquadUnit(unitDef, q, r)
     local attacks = {}
     if unitDef.attacks == "warrior" then
         attacks = environment.getWarriorAttacks()
-    elseif unitDef.attacks == "mage" then
-        attacks = environment.getMageAttacks()
+    elseif unitDef.attacks == "puncher" then
+        attacks = environment.getPuncherAttacks()
     elseif unitDef.attacks == "rogue" then
         attacks = environment.getRogueAttacks()
     elseif unitDef.attacks == "summoner" then
@@ -825,7 +912,7 @@ function environment.createSquadUnit(unitDef, q, r)
     end
 
     local nameToGid = {
-        Warrior = 34, Mage = 31, Rogue = 30,
+        Warrior = 34, Puncher = 30, Rogue = 31,
         Summoner = 40, Divider = 45, Summoned = 42, Divided = 44,
         AttackTest = 68,
     }
@@ -834,8 +921,8 @@ function environment.createSquadUnit(unitDef, q, r)
 
     local colors = {
         Warrior = {0.8, 0.3, 0.2},
-        Mage = {0.2, 0.5, 0.8},
-        Rogue = {0.2, 0.8, 0.3},
+        Puncher = {0.2, 0.8, 0.3},
+        Rogue = {0.2, 0.5, 0.8},
         Summoner = {0.8, 0.2, 0.8},
         Divider = {0.9, 0.7, 0.1},
         Summoned = {0.6, 0.3, 0.9},
@@ -855,70 +942,58 @@ function environment.createEnemyByType(enemyType, q, r)
     local Entity = require("entity")
     local attacks = {}
     local name = ""
-    local maxHealth = 3
+    local maxHealth = 2
     local moveRange = 2
     local hasAura = nil
 
     if enemyType == "Ghost" then
         attacks = environment.getGhostAttacks()
         name = "Ghost"
-        maxHealth = 3
         moveRange = 3
     elseif enemyType == "Zombie" then
         attacks = environment.getZombieAttacks()
         name = "Zombie"
-        maxHealth = 3
         moveRange = 3
     elseif enemyType == "PoisonousZombie" then
         attacks = environment.getZombieAttacks()
         name = "PoisonousZombie"
-        maxHealth = 3
         moveRange = 3
     elseif enemyType == "Lich" then
         attacks = environment.getLichAttacks()
         name = "Lich"
-        maxHealth = 2
         moveRange = 3
     elseif enemyType == "Brute" then
         attacks = environment.getBruteAttacks()
         name = "Brute"
-        maxHealth = 5
         moveRange = 2
     elseif enemyType == "Lancer" then
         attacks = environment.getLancerAttacks()
         name = "Lancer"
-        maxHealth = 4
         moveRange = 3
     elseif enemyType == "BogShaman" then
         attacks = environment.getBogShamanAttacks()
         name = "BogShaman"
-        maxHealth = 3
         moveRange = 2
         hasAura = { type = "slow", radius = 1 }
     elseif enemyType == "Raider" then
         attacks = environment.getRaiderAttacks()
         name = "Raider"
-        maxHealth = 3
         moveRange = 3
     elseif enemyType == "Dervish" then
         attacks = environment.getDervishAttacks()
         name = "Dervish"
-        maxHealth = 3
         moveRange = 3
     elseif enemyType == "Crusher" then
         attacks = environment.getCrusherAttacks()
         name = "Crusher"
-        maxHealth = 4
         moveRange = 2
     elseif enemyType == "SummoningRod" then
         attacks = environment.getSummoningRodAttacks()
         name = "SummoningRod"
-        maxHealth = 4
         moveRange = 0
     else
         attacks = environment.getZombieAttacks()
         name = "Zombie"
-        maxHealth = 3
         moveRange = 3
     end
 
@@ -965,85 +1040,19 @@ function environment.createEnemyByType(enemyType, q, r)
     if hasAura then
         entity.aura = hasAura
     end
-    local level
-    if _G.playtestMode then
-        level = 1
-    else
-        level = environment.getRandomLevel()
-    end
-    environment.applyLevelToEnemy(entity, level)
-    -- Стержень призывания: переопределяем здоровье после applyLevelToEnemy
     if enemyType == "SummoningRod" then
         entity.isSummoningRod = true
         entity.isPushable = false
         entity.moveRange = 0
-        local healthMap = {[1] = 4, [2] = 5, [3] = 6, [4] = 7}
-        local lvl = entity.level or 1
-        entity.maxHealth = healthMap[lvl] or 4
-        entity.health = entity.maxHealth
     end
     return entity
 end
 
 -- Создать случайного врага (из пула)
 function environment.createRandomEnemy(q, r)
-    local types = _G.playtestEnemyTypes or { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
+    local types = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
     local rnd = love.math.random(1, #types)
     return environment.createEnemyByType(types[rnd], q, r)
-end
-
--- ============================================================
--- LEVEL SYSTEM
--- ============================================================
--- Returns a level (1-4) based on difficultyModifier (1-32)
-function environment.getRandomLevel(difficultyModifier)
-    difficultyModifier = difficultyModifier or _G.difficultyModifier or 1
-    local pool
-    if difficultyModifier <= 8 then
-        pool = {1, 1, 2}
-    elseif difficultyModifier <= 16 then
-        pool = {1, 2, 3}
-    elseif difficultyModifier <= 24 then
-        pool = {2, 3, 4}
-    elseif difficultyModifier <= 31 then
-        pool = {3, 4}
-    else
-        pool = {4}
-    end
-    return pool[love.math.random(1, #pool)]
-end
-
--- Applies level stat modifiers to an enemy entity
-function environment.applyLevelToEnemy(entity, level)
-    local levelNames = {[1] = "Weak", [2] = "Regular", [3] = "Hardened", [4] = "Leader"}
-    if levelNames[level] then
-        entity.name = levelNames[level] .. " " .. entity.name
-    end
-
-    if not level or level <= 1 then return end
-
-    if level >= 2 then
-        entity.maxHealth = entity.maxHealth + 1
-        entity.health = entity.health + 1
-        entity.moveRange = entity.moveRange + 1
-    end
-
-    if level >= 3 then
-        for _, at in ipairs(entity.attacks) do
-            at.attack.damage = (at.attack.damage or 1) + 2
-        end
-    end
-
-    if level >= 4 then
-        entity.maxHealth = entity.maxHealth + 3
-        entity.health = entity.health + 3
-        for _, at in ipairs(entity.attacks) do
-            at.attack.damage = (at.attack.damage or 1) + 2
-        end
-        entity.moveRange = entity.moveRange + 2
-    end
-
-    entity.level = level
 end
 
 function environment.generateBuildingSprite(name, w, h)

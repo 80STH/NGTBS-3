@@ -115,6 +115,7 @@ function ai.getBestTargetForEnemy(enemy, entities, hex, selectedTargets)
         local target = t.entity
         local dist = hex:getDistance(enemy.q, enemy.r, target.q, target.r)
         if dist > attack.range then goto continue end
+        if attack.minRange and dist < attack.minRange then goto continue end
 
         local valid = false
         if attackRequiresLine(attack) then
@@ -187,7 +188,7 @@ function ai.prepareAttackForEnemy(enemy, entities, hex, selectedTargets)
     return true
 end
 
-function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
+function ai.executePreparedAttack(enemy, entities, hex, sounds)
     if not enemy.hasPreparedAttack or enemy.health <= 0 then return false end
     local attack = enemy.preparedAttack
     if not attack then return false end
@@ -364,7 +365,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
     -- ===== 3. Наносим урон, если цель есть =====
     if target then
         local damage = attack.damage
-        local wasDestroyed = target:takeDamage(damage, globalHealth)
+        local wasDestroyed = target:takeDamage(damage)
         print(string.format("%s attacks %s for %d damage!", enemy.name, target.name, damage))
         if sounds and sounds.attack then sounds.attack:play() end
         if wasDestroyed then
@@ -378,7 +379,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
     -- Доп. урон для Bash/Lunge (вторая цель)
     if enemy._extraAttackTarget and enemy._extraAttackTarget.health > 0 then
         local extra = enemy._extraAttackTarget
-        local wasDestroyed = extra:takeDamage(attack.damage, globalHealth)
+        local wasDestroyed = extra:takeDamage(attack.damage)
         print(string.format("%s also hits %s for %d damage!", enemy.name, extra.name, attack.damage))
         if sounds and sounds.attack then sounds.attack:play() end
         if wasDestroyed then
@@ -391,7 +392,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds, globalHealth)
     if enemy._cleaveTargets then
         for _, ct in ipairs(enemy._cleaveTargets) do
             if ct.health > 0 then
-                local wasDestroyed = ct:takeDamage(attack.damage, globalHealth)
+                local wasDestroyed = ct:takeDamage(attack.damage)
                 print(string.format("%s cleaves %s for %d damage!", enemy.name, ct.name, attack.damage))
                 if wasDestroyed then
                     ct:startDeath()
@@ -718,7 +719,7 @@ function ai.updateEnemyMovement(enemy, dt, hex)
                 else
                     -- Применяем эффекты клетки назначения
                     if terrainMap then
-                        local died = effects.applyAllCellEffects(enemy, enemy.q, enemy.r, terrainMap, entities, globalHealth)
+                        local died = effects.applyAllCellEffects(enemy, enemy.q, enemy.r, terrainMap, entities)
                         if died then
                             checkGameEnd()
                         end
@@ -743,6 +744,10 @@ function ai.getLivingEnemies(entities)
 end
 
 function isCellDangerousForEntity(q, r, entity)
+    -- Underwater mines — смертельно, никогда туда не ходить
+    if terrainMap and terrainMap[q] and terrainMap[q][r] == "underwater_mines" then
+        return true
+    end
     local cellStatuses = status.getAtHex(q, r)
     if not cellStatuses or #cellStatuses == 0 then
         return false

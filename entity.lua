@@ -19,7 +19,7 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     self.type = type or Entity.TYPES.CHARACTER
     self.q = q or 0
     self.r = r or 0
-    self.maxHealth = maxHealth or 3
+    self.maxHealth = maxHealth or 2
     self.health = self.maxHealth
     self.isPlayable = isPlayable or false
     self.moveRange = moveRange or 0
@@ -44,8 +44,7 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     self.hasMovedThisTurn = false   -- для союзников
     self.canMoveAfterAttack = false
     
-    -- Для строительных объектов
-    self.globalHealthCost = nil
+
     
     -- Максимальный урон за один удар (nil = без ограничения)
     self.maxDamagePerHit = nil
@@ -75,6 +74,9 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     self.summonTargetR = nil
     self.summonType = nil
     
+    -- Флаг вагона поезда
+    self.isTrainCar = false
+
     -- Сохранённая дальность хода (для восстановления после нокаута)
     self._savedMoveRange = nil
 
@@ -126,7 +128,7 @@ function Entity:switchAttack()
 end
 
 -- Применить урон
-function Entity:takeDamage(damage, globalHealth)
+function Entity:takeDamage(damage)
     if self.indestructible then
         return false
     end
@@ -136,31 +138,21 @@ function Entity:takeDamage(damage, globalHealth)
     local actualDamage = math.min(damage, self.health)
     self.health = self.health - actualDamage
     
-    if self:isBuilding() and globalHealth then
-        globalHealth.current = math.max(0, globalHealth.current - actualDamage)
-        globalHealth.flashTimer = 2.0
-        if screenShake then
-            screenShake.timer = screenShake.duration
-        end
-        print(string.format("%s takes %d damage! (%d/%d HP)", 
-              self.name, actualDamage, math.max(0, self.health), self.maxHealth))
-        print(string.format(" Global health reduced by %d! (%d/%d)", 
-              actualDamage, globalHealth.current, globalHealth.max))
-        
-        -- ВЫЗЫВАЕМ ПРОВЕРКУ КОНЦА ИГРЫ
-        if checkGameEnd then checkGameEnd() end
-    else
-        print(string.format("%s takes %d damage! (%d/%d HP)", 
-              self.name, actualDamage, math.max(0, self.health), self.maxHealth))
+    if self:isBuilding() and actualDamage > 0 and not self.isTrainCar and self.name ~= "Tunnel" and self.name ~= "OccupiedTunnel" and self.name ~= "DestroyedTunnel" then
+        _G.chaos = (_G.chaos or 0) + actualDamage
+        print(string.format("Building damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos))
     end
+    
+    print(string.format("%s takes %d damage! (%d/%d HP)", 
+          self.name, actualDamage, math.max(0, self.health), self.maxHealth))
 
     -- Нокаут для союзников: вместо смерти переводим в нокаут
     if self.health <= 0 and self.isPlayable and self:isCharacter() and not status.hasEntityStatus(self, "knockout") then
-        self.health = 2
+        self.health = 1
         self._savedMoveRange = self.moveRange
         self.moveRange = 2
         status.applyToEntity(self, "knockout")
-        print(string.format(" %s is knocked out! (2 HP, move=2, cannot attack)", self.name))
+        print(string.format(" %s is knocked out! (1 HP, move=2, cannot attack)", self.name))
         return false
     end
 

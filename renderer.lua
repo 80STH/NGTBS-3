@@ -188,7 +188,7 @@ function renderer.draw(state)
         love.graphics.setLineWidth(1)
     end
     for _, entity in ipairs(state.entities) do
-        if entity:isCharacter() and not entity.isPlayable and entity.hasPreparedAttack and entity.health > 0 then
+        if (entity:isCharacter() and not entity.isPlayable or entity.isTrainAttack) and entity.hasPreparedAttack and entity.health > 0 then
             ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
         end
         -- Подсветка целевой клетки призыва стержня
@@ -286,17 +286,16 @@ function renderer.draw(state)
     ui.drawEndTurnButton(state.turnState, state.entities)
     ui.drawRestartButton(state.restartButton, state.turnState)
     global_abilities.drawButtons(mx, my, state)
-    ui.drawTestViewButton(mx, my)
 
     global_abilities.drawPreview(hex, state)
-    ui.drawGlobalHealthBar(state.globalHealth, mx, my)
+
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
     ui.drawDecayButton(mx, my, state.turnCount, state.maxTurns, state.turnState.phase)
     ui.drawAllyPanel(mx, my, state.entities, state.selectedActor)
     if state.selectedActor then
-        love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 23)
+        love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 55)
     end
-    love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 95)
+    love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 80)
 
     local hoverOrder = ui.drawEnemyOrderButton(mx, my)
     local showOrder = hoverOrder or state.showEnemyOrder
@@ -326,6 +325,19 @@ function renderer.draw(state)
                 end
             end
         end
+        for _, e in ipairs(state.entities) do
+            if e.isTrainCar and e.health > 0 then
+                local n = orderMap[e]
+                if n then
+                    num = num + 1
+                    local x, y = hex:hexToPixel(e.q, e.r)
+                    love.graphics.setColor(1, 0.8, 0.2, 0.9)
+                    love.graphics.circle("fill", x + 15, y - 20, 12)
+                    love.graphics.setColor(0, 0, 0, 1)
+                    love.graphics.print(tostring(num), x + 11, y - 28)
+                end
+            end
+        end
     end
 
     if hex.hoverQ >= 0 and hex.hoverR >= 0 then
@@ -338,6 +350,7 @@ function renderer.draw(state)
         end
     end
 
+    ui.drawChaosBar(mx, my)
     objectives.draw()
 
     if not state.gameActive then
@@ -390,7 +403,7 @@ function drawHexGrid(state, cellOverlays)
             if hex:isActiveHex(col, row) then
                 local terrainType = state.terrainMap and state.terrainMap[col] and state.terrainMap[col][row] or "grass"
                 local cellX, cellY = hex:hexToPixel(col, row)
-                local yOffset = (terrainType == "water") and state.config.WATER_Y_OFFSET or 0
+                local yOffset = (terrainType == "water" or terrainType == "underwater_mines") and state.config.WATER_Y_OFFSET or 0
                 -- Test view: shift center cell up/down
                 local testY = 0
                 if testViewActive and col == hex.centerQ and row == hex.centerR then
@@ -406,7 +419,7 @@ function drawHexGrid(state, cellOverlays)
 
     for _, cell in ipairs(cells) do
         local drawY = cell.y + (cell.testY or 0)
-        local yOffset = (cell.terrain == "water") and state.config.WATER_Y_OFFSET or 0
+        local yOffset = (cell.terrain == "water" or cell.terrain == "underwater_mines") and state.config.WATER_Y_OFFSET or 0
         hex:drawTerrainHex(cell.q, cell.r, cell.terrain, cell.x, drawY)
         local hexStatuses = status.getAtHex(cell.q, cell.r)
         if #hexStatuses > 0 then
@@ -449,11 +462,20 @@ function drawHexGrid(state, cellOverlays)
             love.graphics.setLineWidth(3)
             love.graphics.polygon("line", insetVerts)
         elseif isHovered then
-            love.graphics.setColor(0.5, 0.8, 0.3, 0.5)
-            love.graphics.polygon("fill", insetVerts)
-            love.graphics.setColor(0.5, 0.8, 0.3, 0.9)
-            love.graphics.setLineWidth(3)
-            love.graphics.polygon("line", insetVerts)
+            local hoverEntity = getEntityAtHex(cell.q, cell.r)
+            if hoverEntity and hoverEntity:isBuilding() then
+                love.graphics.setColor(1, 1, 1, 0.3)
+                love.graphics.polygon("fill", insetVerts)
+                love.graphics.setColor(1, 1, 1, 0.9)
+                love.graphics.setLineWidth(3)
+                love.graphics.polygon("line", insetVerts)
+            else
+                love.graphics.setColor(0.5, 0.8, 0.3, 0.5)
+                love.graphics.polygon("fill", insetVerts)
+                love.graphics.setColor(0.5, 0.8, 0.3, 0.9)
+                love.graphics.setLineWidth(3)
+                love.graphics.polygon("line", insetVerts)
+            end
         end
 
         -- Направленные сущности: цветовая маркировка граней (зелёный = безопасно, красный = опасно)
@@ -538,68 +560,6 @@ function getEntityDrawPosition(entity, state)
     return getDrawCoords(entity.q, entity.r)
 end
 
-function drawHealthBar(entity, x, y, damage)
-    if not x or not y then
-        if entity and entity.q ~= nil and entity.r ~= nil and _G.state and _G.state.hex then
-            x, y = _G.state.hex:hexToPixel(entity.q, entity.r)
-        else
-            return
-        end
-    end
-
-    if not entity.maxHealth or entity.maxHealth <= 0 then return end
-    if entity.maxHealth > 10 then return end
-    if entity.health <= 0 or entity.isDying then return end
-
-    local pipW, pipH = 8, 16
-    local spacing = 1
-    local totalWidth = entity.maxHealth * (pipW + spacing) - spacing
-    local startX = x - totalWidth / 2
-    local startY = y - 28
-
-    damage = damage or 0
-    if status.hasEntityStatus(entity, "acid") then
-        damage = damage * 2
-    end
-    local damageClamped = math.min(damage, entity.health)
-
-    -- Рамка вокруг всех ячеек
-    local framePad = 1
-    love.graphics.setColor(0.15, 0.15, 0.15, 0.7)
-    love.graphics.rectangle("fill", startX - framePad, startY - framePad, totalWidth + framePad * 2, pipH + framePad * 2)
-    love.graphics.setColor(0.5, 0.5, 0.5, 0.7)
-    love.graphics.rectangle("line", startX - framePad, startY - framePad, totalWidth + framePad * 2, pipH + framePad * 2)
-
-    for i = 1, entity.maxHealth do
-        local cellX = startX + (i - 1) * (pipW + spacing)
-        local cellY = startY
-        local isAlive = i <= entity.health
-        local willTakeDamage = damageClamped > 0 and i > entity.health - damageClamped and i <= entity.health
-
-        if willTakeDamage then
-            local t = love.timer.getTime()
-            local blink = 0.5 + 0.5 * math.sin(t * 8)
-            love.graphics.setColor(1, 0.2 + blink * 0.3, 0.2, 0.9)
-        elseif isAlive then
-            if status.hasEntityStatus(entity, "knockout") then
-                love.graphics.setColor(1, 0.1, 0.1, 0.9)
-            else
-                love.graphics.setColor(0, 0.8, 0, 0.9)
-            end
-        else
-            love.graphics.setColor(0.15, 0.02, 0.02, 0.4)
-        end
-        love.graphics.rectangle("fill", cellX, cellY, pipW, pipH)
-    end
-
-    -- Вертикальные разделители
-    love.graphics.setColor(0.1, 0.1, 0.1, 0.6)
-    for i = 2, entity.maxHealth do
-        local lx = startX + (i - 1) * (pipW + spacing) - 1
-        love.graphics.line(lx, startY, lx, startY + pipH)
-    end
-end
-
 function drawActionIndicator(entity, x, y)
     if not entity:isCharacter() then return end
     if status.hasEntityStatus(entity, "knockout") then
@@ -636,6 +596,14 @@ function drawEntity(entity, state)
         love.graphics.setColor(1, 1, 1, alpha)
     end
 
+    local wounded = entity:isCharacter() and entity.health > 0 and entity.health < entity.maxHealth
+
+    -- Highlight shuntable train cars
+    local shuntHighlight = false
+    if entity.isTrainCar and state.turnState and state.turnState.phase == "player" then
+        shuntHighlight = true
+    end
+
     if entity.sprite then
         local sw, sh = entity.sprite:getDimensions()
         local baseScale = 6
@@ -649,6 +617,11 @@ function drawEntity(entity, state)
         local drawY = y
         if entity:isObstacle() or entity:isBuilding() then
             drawY = y - 6
+        end
+        if wounded then
+            love.graphics.setColor(1, 0.3, 0.3, alpha)
+        elseif shuntHighlight then
+            love.graphics.setColor(0.3, 0.6, 1, alpha)
         end
         love.graphics.draw(entity.sprite, x, drawY, 0, finalScale, finalScale, sw/2, sh/2)
 
@@ -672,7 +645,6 @@ function drawEntity(entity, state)
         ui.drawEntityStatusEffects(x, y, entity, overlayRadius, love.timer.getTime())
     end
 
-    drawHealthBar(entity, x, y)
     drawActionIndicator(entity, x, y)
 
     if state.selectedActor == entity and entity:isCharacter() and not entity.isDying then
@@ -707,7 +679,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) then
                 local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
-                if terrain ~= "water" then
+                if terrain ~= "water" and terrain ~= "underwater_mines" then
                     local occupied = false
                     for _, e in ipairs(state.entities) do
                         if e.q == q and e.r == r then
@@ -748,7 +720,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
     end
 
     local panelX = 10
-    local panelY = 120
+    local panelY = 80
     local panelW = 180
     local panelH = 30 + #unplacedAllies * 22 + 10
 
@@ -806,7 +778,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
     state.deployConfirmBtn = canConfirm and {x = btnX, y = btnY, w = btnW, h = btnH} or nil
 
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("DEPLOYMENT PHASE — Place your units", 10, 23)
+    love.graphics.print("DEPLOYMENT PHASE — Place your units", 10, 55)
 end
 
 return renderer

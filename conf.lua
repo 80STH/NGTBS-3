@@ -3,9 +3,9 @@ function love.conf(t)
     t.author = "80STH"
     t.version = "11.4"
     
-    t.window.highdpi = true
-    t.window.width = 1500
-    t.window.height = 1100
+    t.window.highdpi = false
+    t.window.width = 720
+    t.window.height = 1280
     t.window.resizable = true
     
     -- Включаем доступ к файловой системе
