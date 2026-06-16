@@ -54,6 +54,19 @@ function turnManager.endPlayerTurn()
             table.insert(attackers, e)
         end
     end
+    -- Add autonomous train shunts to the attack queue
+    local trains_mod = require("trains")
+    local trainGroups = trains_mod.getTrainGroups()
+    for _, group in pairs(trainGroups) do
+        if group.active and group.cars and #group.cars > 0 then
+            local loco = group.cars[1]
+            if loco and loco.health and loco.health > 0 and not loco.isDying then
+                loco.hasPreparedAttack = true
+                loco.isTrainAttack = true
+                table.insert(attackers, loco)
+            end
+        end
+    end
     turnState.enemyAttackQueue = attackers
     turnState.enemyAttackTimer = 0
     turnState.phase = "enemy_attack"
@@ -116,7 +129,14 @@ function updateAttackPhase(dt)
         turnState.enemyAttackTimer = 0
         local enemy = table.remove(turnState.enemyAttackQueue, 1)
         if enemy and enemy.health > 0 then
-            ai.executePreparedAttack(enemy, entities, hex, sounds)
+            if enemy.isTrainAttack then
+                local trains_mod = require("trains")
+                trains_mod.shuntCar(enemy, entities)
+                enemy.hasPreparedAttack = false
+                enemy.isTrainAttack = nil
+            else
+                ai.executePreparedAttack(enemy, entities, hex, sounds)
+            end
             checkGameEnd()
         end
     end

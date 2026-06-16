@@ -325,6 +325,19 @@ function renderer.draw(state)
                 end
             end
         end
+        for _, e in ipairs(state.entities) do
+            if e.isTrainCar and e.health > 0 then
+                local n = orderMap[e]
+                if n then
+                    num = num + 1
+                    local x, y = hex:hexToPixel(e.q, e.r)
+                    love.graphics.setColor(1, 0.8, 0.2, 0.9)
+                    love.graphics.circle("fill", x + 15, y - 20, 12)
+                    love.graphics.setColor(0, 0, 0, 1)
+                    love.graphics.print(tostring(num), x + 11, y - 28)
+                end
+            end
+        end
     end
 
     if hex.hoverQ >= 0 and hex.hoverR >= 0 then

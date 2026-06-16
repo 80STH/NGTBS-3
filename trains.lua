@@ -97,21 +97,30 @@ function trains.init(entities, terrainMap, hex)
 
     for pi, route in ipairs(paths) do
         local path = route.path
+        -- Reverse path and swap tunnels so cars move forward visually
+        local reversed = {}
+        for i = #path, 1, -1 do table.insert(reversed, path[i]) end
+        route.path = reversed
+        route.tunnelA, route.tunnelB = route.tunnelB, route.tunnelA
+        path = reversed
 
         local carPositions = {}
+        local startIdx = 1
         if #path >= 2 then
-            local mid = math.floor((#path + 1) / 2)
-            table.insert(carPositions, path[mid])
-            table.insert(carPositions, path[mid + 1])
+            startIdx = math.floor((#path + 1) / 2)
+            table.insert(carPositions, path[startIdx])
+            table.insert(carPositions, path[startIdx + 1])
         else
             for _, pos in ipairs(path) do
                 table.insert(carPositions, pos)
             end
         end
 
+        -- Place cars in reverse order so locomotive is behind the train car
         local cars = {}
         for ci, pos in ipairs(carPositions) do
-            local name = (ci == 1) and "Locomotive" or "TrainCar"
+            local idx = #carPositions - ci + 1
+            local name = (idx == 1) and "Locomotive" or "TrainCar"
             local car = Entity.new(name, Entity.TYPES.BUILDING, pos.q, pos.r, 1, false, 0, nil, nil, {})
             car.isTrainCar = true
             car.isObjective = true
@@ -127,7 +136,7 @@ function trains.init(entities, terrainMap, hex)
             id = pi,
             cars = cars,
             path = path,
-            currentIdx = mid,
+            currentIdx = startIdx,
             direction = 1,
             active = true,
             tunnelA = route.tunnelA,
@@ -171,29 +180,24 @@ function trains.shuntCar(car, entities)
     local target = group.path[newHeadIdx]
 
     -- Locomotive crushes non-tunnel entities in target cell
-    local loco = group.cars[1]
+    local loco
+    for _, c in ipairs(group.cars) do
+        if c.name == "Locomotive" then loco = c; break end
+    end
     for i = #entities, 1, -1 do
         local e = entities[i]
-        if e ~= loco and e.q == target.q and e.r == target.r and e.health and e.health > 0 and not e.isDying and e.name ~= "Tunnel" then
+        if e ~= loco and e.trainGroupId ~= group.id and e.q == target.q and e.r == target.r and e.health and e.health > 0 and not e.isDying and e.name ~= "Tunnel" then
             local wasDestroyed = e:takeDamage(999)
             if wasDestroyed then e:startDeath() end
             if e.health and e.health <= 0 then table.remove(entities, i) end
         end
     end
 
-    -- Move all cars forward: lead car takes newHeadIdx, each subsequent car takes position of car ahead
-    local oldPositions = {}
+    -- Move entire train by 1 cell along the path (no swapping)
     for ci, c in ipairs(group.cars) do
-        oldPositions[ci] = { q = c.q, r = c.r }
-    end
-    for ci, c in ipairs(group.cars) do
-        if ci == 1 then
-            c.q = group.path[newHeadIdx].q
-            c.r = group.path[newHeadIdx].r
-        else
-            c.q = oldPositions[ci - 1].q
-            c.r = oldPositions[ci - 1].r
-        end
+        local idx = newHeadIdx + (ci - 1)
+        c.q = group.path[idx].q
+        c.r = group.path[idx].r
     end
     group.currentIdx = newHeadIdx
     return true

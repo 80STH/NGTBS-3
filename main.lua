@@ -274,6 +274,16 @@ function getEnemyAttackOrder(entities, turnState)
                 table.insert(queue, e)
             end
         end
+        local trains_mod = require("trains")
+        local trainGroups = trains_mod.getTrainGroups()
+        for _, group in pairs(trainGroups) do
+            if group.active and group.cars and #group.cars > 0 then
+                local loco = group.cars[1]
+                if loco and loco.health and loco.health > 0 and not loco.isDying then
+                    table.insert(queue, loco)
+                end
+            end
+        end
     end
 
     for i, enemy in ipairs(queue) do
