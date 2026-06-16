@@ -107,7 +107,6 @@ function trains.init(entities, terrainMap, hex)
         local carPositions = {}
         local startIdx = 1
         if #path >= 2 then
-            startIdx = math.floor((#path + 1) / 2)
             table.insert(carPositions, path[startIdx])
             table.insert(carPositions, path[startIdx + 1])
         else

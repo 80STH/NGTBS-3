@@ -291,7 +291,17 @@ function ui.drawPreparedAttacks(hex, entities)
     end
 end
 function ui.getPreparedAttackTarget(enemy, entities, hex)
-    if not enemy or not enemy.preparedAttack then return nil end
+    if not enemy then return nil end
+    if enemy.isTrainAttack then
+        local trains = require("trains")
+        local group = trains.getCarGroup(enemy)
+        if not group or not group.active then return nil end
+        local newIdx = group.currentIdx + group.direction
+        if newIdx < 1 or newIdx > #group.path then return nil end
+        local target = group.path[newIdx]
+        return {q = target.q, r = target.r}
+    end
+    if not enemy.preparedAttack then return nil end
     local attack = enemy.preparedAttack
     if attack.name == "Ghost Bolt" or attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Piercing Shot" then
         if enemy.attackDirection then
@@ -328,7 +338,7 @@ function ui.getPreparedAttackTarget(enemy, entities, hex)
 end
 function ui.collectPreparedAttackOverlays(hex, entities, out)
     for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.preparedAttack then
+        if ((e:isCharacter() and not e.isPlayable) or e.isTrainAttack) and e.hasPreparedAttack then
             local targetCell = ui.getPreparedAttackTarget(e, entities, hex)
             if targetCell then
                 local key = targetCell.q .. "," .. targetCell.r
