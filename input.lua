@@ -91,7 +91,8 @@ function input.mousepressed(x, y, button)
 
     if global_abilities.handleClick(x, y, state) then return end
 
-    if x >= 10 and x <= 130 and y >= 1240 and y <= 1270 then
+    local bottomY = logicalH - 65
+    if x >= 10 and x <= 130 and y >= bottomY and y <= bottomY + 30 then
         if #actionHistory > 0 then
             undoLastAction()
         else
@@ -124,7 +125,7 @@ function input.mousepressed(x, y, button)
 
     -- Enemy Order button toggle
     local orderBtnX = 160
-    local orderBtnY = 1200
+    local orderBtnY = logicalH - 105
     if x >= orderBtnX and x <= orderBtnX + 100 and y >= orderBtnY and y <= orderBtnY + 30 then
         showEnemyOrder = not showEnemyOrder
         print("Enemy order display: " .. (showEnemyOrder and "ON" or "OFF"))

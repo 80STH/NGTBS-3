@@ -86,11 +86,11 @@ function love.load()
     environment.loadUnitSprites()
 
     restartButton = {
-        x = 270, y = 1215, width = 110, height = 30,
+        x = 270, y = 0, width = 110, height = 30,
         text = "Restart Game", isHovered = false
     }
     endTurnButton = {
-        x = 140, y = 1215, width = 110, height = 30,
+        x = 140, y = 0, width = 110, height = 30,
         text = "End Turn", isHovered = false,
         holdTimer = 0, isHeld = false,
     }
@@ -226,15 +226,18 @@ function love.update(dt)
     end
 
     undoButton = undoButton or {}
-    undoButton.isHovered = (mx >= 10 and mx <= 120 and my >= 1215 and my <= 1245)
+    local bottomY = logicalH - 65
+    undoButton.isHovered = (mx >= 10 and mx <= 120 and my >= bottomY and my <= bottomY + 30)
     endTurnButton.isHovered = (mx >= endTurnButton.x and mx <= endTurnButton.x + endTurnButton.width and
                                my >= endTurnButton.y and my <= endTurnButton.y + endTurnButton.height)
 end
 
 function love.resize(w, h)
     dpiScale = love.window.getDPIScale()
+    logicalW = w / dpiScale
+    logicalH = h / dpiScale
     if hex then
-        hex:centerOnScreen(w / dpiScale, h / dpiScale)
+        hex:centerOnScreen(logicalW, logicalH)
     end
 end
 
@@ -243,6 +246,9 @@ function love.draw()
     love.graphics.scale(dpiScale)
     logicalW = love.graphics.getWidth() / dpiScale
     logicalH = love.graphics.getHeight() / dpiScale
+    local bottomY = logicalH - 65
+    restartButton.y = bottomY
+    endTurnButton.y = bottomY
 
     if gamePhase == "menu" then
         menu.draw()
