@@ -2,7 +2,19 @@ local menu = {}
 
 local playtestPhase = nil  -- nil, "select_difficulty"
 
-local mapList = {"maps/map1.lua", "maps/map2.lua", "maps/test_polygon_1.lua", "maps/test_polygon_2.lua"}
+local function loadMapList()
+    local items = love.filesystem.getDirectoryItems("maps")
+    local list = {}
+    for _, file in ipairs(items) do
+        if file:match("%.lua$") and file ~= "units_workaround.lua" then
+            table.insert(list, "maps/" .. file)
+        end
+    end
+    table.sort(list)
+    return list
+end
+
+local mapList = loadMapList()
 
 local squads = {
     {
@@ -108,33 +120,30 @@ function menu.draw()
         love.graphics.printf(unitNames, sbx + 6, sby + 20, sbw - 12, "left")
     end
 
-    -- Difficulty slider
-    local slideY = squadStartY + #squads * (sbh + 8) + 20
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.setFont(love.graphics.newFont(12))
-    love.graphics.printf("Difficulty Modifier", 0, slideY, w, "center")
+    -- Disable enemy spawn checkbox
+    local cbY = squadStartY + #squads * (sbh + 8) + 20
+    local cbSize = 18
+    local cbX = w/2 - 120
+    local cbHover = mx >= cbX and mx <= cbX + cbSize and my >= cbY and my <= cbY + cbSize
 
-    local sw, sh = 260, 16
-    local sx = w/2 - sw/2
-    local sy = slideY + 22
-    local knobW = 12
-    local knobX = sx + (difficultyModifier - 1) / 31 * (sw - knobW)
-
-    love.graphics.setColor(0.3, 0.3, 0.4, 0.9)
-    love.graphics.rectangle("fill", sx, sy, sw, sh, 4)
-    love.graphics.setColor(0.4, 0.6, 0.8, 0.6)
-    love.graphics.rectangle("line", sx, sy, sw, sh, 4)
-    love.graphics.setColor(0.8, 0.4, 0.2, 0.9)
-    love.graphics.rectangle("fill", knobX, sy - 2, knobW, sh + 4, 4)
+    love.graphics.setColor(0.2, 0.2, 0.25, 0.9)
+    love.graphics.rectangle("fill", cbX, cbY, cbSize, cbSize, 3)
+    love.graphics.setColor(cbHover and 0.6 or 0.4, cbHover and 0.6 or 0.4, cbHover and 0.8 or 0.6, cbHover and 0.9 or 0.7)
+    love.graphics.rectangle("line", cbX, cbY, cbSize, cbSize, 3)
+    if disableEnemySpawn then
+        love.graphics.setColor(0.3, 0.8, 0.3, 1)
+        love.graphics.setLineWidth(2)
+        love.graphics.line(cbX + 3, cbY + cbSize/2, cbX + cbSize/2, cbY + cbSize - 3)
+        love.graphics.line(cbX + cbSize/2, cbY + cbSize - 3, cbX + cbSize - 3, cbY + 3)
+        love.graphics.setLineWidth(1)
+    end
 
     love.graphics.setColor(1, 1, 1, 0.9)
-    love.graphics.setFont(love.graphics.newFont(11))
-    love.graphics.printf(tostring(difficultyModifier), 0, sy + sh + 4, w, "center")
-
-    local bottomY = sy + sh + 30
+    love.graphics.setFont(love.graphics.newFont(12))
+    love.graphics.printf("Disable Enemy Spawn", cbX + cbSize + 10, cbY + 2, 200, "left")
 
     -- Full Playtest button
-    local ptY = bottomY + 30
+    local ptY = cbY + 50
     local ptHover = mx >= bx and mx <= bx + bw and my >= ptY and my <= ptY + bh
     love.graphics.setColor(ptHover and 0.4 or 0.2, ptHover and 0.3 or 0.15, ptHover and 0.2 or 0.1, 0.9)
     love.graphics.rectangle("fill", bx, ptY, bw, bh, 8)
@@ -259,19 +268,17 @@ function menu.mousepressed(x, y)
         end
     end
 
-    -- Difficulty slider
-    local slideY = squadStartY + #squads * (sbh + 8) + 20
-    local sw, sh = 260, 16
-    local sx = logicalW/2 - sw/2
-    local sy = slideY + 22
-    if y >= sy - 4 and y <= sy + sh + 8 and x >= sx and x <= sx + sw then
-        local relX = (x - sx) / sw
-        difficultyModifier = math.max(1, math.min(32, math.floor(relX * 31) + 1))
+    -- Disable enemy spawn checkbox
+    local cbY = squadStartY + #squads * (sbh + 8) + 20
+    local cbSize = 18
+    local cbX = logicalW/2 - 120
+    if x >= cbX and x <= cbX + cbSize and y >= cbY and y <= cbY + cbSize then
+        disableEnemySpawn = not disableEnemySpawn
         return true
     end
 
     -- Full Playtest button
-    local ptY = sy + sh + 30 + 30
+    local ptY = cbY + 50
     if x >= bx and x <= bx + bw and y >= ptY and y <= ptY + bh then
         playtestPhase = "select_difficulty"
         return true

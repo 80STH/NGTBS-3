@@ -74,6 +74,9 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     self.summonTargetR = nil
     self.summonType = nil
     
+    -- Флаг вагона поезда
+    self.isTrainCar = false
+
     -- Сохранённая дальность хода (для восстановления после нокаута)
     self._savedMoveRange = nil
 
@@ -135,7 +138,7 @@ function Entity:takeDamage(damage)
     local actualDamage = math.min(damage, self.health)
     self.health = self.health - actualDamage
     
-    if self:isBuilding() and actualDamage > 0 then
+    if self:isBuilding() and actualDamage > 0 and not self.isTrainCar and self.name ~= "Tunnel" then
         _G.chaos = (_G.chaos or 0) + actualDamage
         print(string.format("Building damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos))
     end

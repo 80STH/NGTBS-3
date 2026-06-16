@@ -146,7 +146,7 @@ return function(ui)
         love.graphics.print("Order (O)", x + 13, y + 8)
 
         if isHover then
-            local tooltipW, tooltipH = 260, 112
+            local tooltipW, tooltipH = 260, 140
             local tx, ty = x - tooltipW - 6, y
             if tx < 10 then tx = x + btnW + 6 end
             if ty + tooltipH > logicalH - 10 then
@@ -164,6 +164,8 @@ return function(ui)
             love.graphics.print("   simultaneously to all units", tx + 8, ty + 58)
             love.graphics.print("3. Enemies attack in sequence", tx + 8, ty + 74)
             love.graphics.print("4. Dig sites damage simultaneously", tx + 8, ty + 90)
+            love.graphics.print("5. Trains move (locomotive crushes", tx + 8, ty + 106)
+            love.graphics.print("   anything in its path)", tx + 8, ty + 122)
             love.graphics.setColor(1, 1, 1, 1)
         end
 

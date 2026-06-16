@@ -585,6 +585,12 @@ function drawEntity(entity, state)
 
     local wounded = entity:isCharacter() and entity.health > 0 and entity.health < entity.maxHealth
 
+    -- Highlight shuntable train cars
+    local shuntHighlight = false
+    if entity.isTrainCar and state.turnState and state.turnState.phase == "player" then
+        shuntHighlight = true
+    end
+
     if entity.sprite then
         local sw, sh = entity.sprite:getDimensions()
         local baseScale = 6
@@ -601,6 +607,8 @@ function drawEntity(entity, state)
         end
         if wounded then
             love.graphics.setColor(1, 0.3, 0.3, alpha)
+        elseif shuntHighlight then
+            love.graphics.setColor(0.3, 0.6, 1, alpha)
         end
         love.graphics.draw(entity.sprite, x, drawY, 0, finalScale, finalScale, sw/2, sh/2)
 

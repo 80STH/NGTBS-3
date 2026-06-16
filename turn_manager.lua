@@ -103,6 +103,7 @@ function updateAttackPhase(dt)
             processDigSites()
             turnState.pendingDigProcessing = false
         end
+        -- Step 4: End of enemy turn
         turnCount = turnCount + 1
         print("Turn count increased to: " .. turnCount .. "/" .. maxTurns)
         turnState.phase = "enemy_prepare"

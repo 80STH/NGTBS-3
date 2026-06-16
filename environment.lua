@@ -6,7 +6,7 @@ local config = require("config")
 local environment = {}
 
 local gidToTerrain = {
-    [13] = "grass",
+    [3]  = "grass",
     [2]  = "dirt",
     [1]  = "sand",
     [4]  = "stone",
@@ -16,6 +16,7 @@ local gidToTerrain = {
     [8]  = "swamp",
     [14] = "water",
     [17] = "underwater_mines",
+    [13] = "railway",
 }
 
 local gidToEntity = {
@@ -49,6 +50,8 @@ local gidToEntity = {
     [83] = { type = "character", name = "SummoningRod", isPlayable = false, maxHealth = 2, moveRange = 0, attacks = "summoningrod" },
     [48] = { type = "building",  name = "Caravan",   health = 1, moveRange = 1 },
     [77] = { type = "building",  name = "Blockpost", health = 2 },
+    [67] = { type = "building",  name = "Tunnel",    health = 2, isObjective = true },
+    [74] = { type = "building",  name = "TrainCar",  health = 1, moveRange = 1 },
 }
 
 environment.enemySpriteCache = {}
@@ -254,6 +257,41 @@ local function generateCustomSprite(name, w, h)
         love.graphics.setColor(0.5, 0.4, 0.25)
         love.graphics.rectangle("fill", w/2-3, 0, 6, h)
 
+    elseif name == "Tunnel" then
+        love.graphics.setColor(0.15, 0.15, 0.15)
+        love.graphics.rectangle("fill", 0, 0, w, h-2)
+        love.graphics.setColor(0.6, 0.55, 0.5)
+        love.graphics.rectangle("fill", w/2-1, 0, 2, h-2)
+        love.graphics.setColor(0.25, 0.25, 0.25)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+        love.graphics.setColor(0.4, 0.4, 0.4)
+        love.graphics.arc("fill", w/2, h-2, w/3, math.pi, 0)
+
+    elseif name == "Locomotive" then
+        love.graphics.setColor(0.3, 0.15, 0.1)
+        love.graphics.rectangle("fill", 1, 1, w-2, h-4)
+        love.graphics.setColor(0.5, 0.2, 0.1)
+        love.graphics.rectangle("fill", 1, 1, w-2, h-6)
+        love.graphics.setColor(1, 0.8, 0.2)
+        love.graphics.rectangle("fill", w/2-3, 2, 6, 4)
+        love.graphics.setColor(0.2, 0.2, 0.2)
+        love.graphics.rectangle("fill", 2, 6, w-4, 2)
+        love.graphics.setColor(0.3, 0.1, 0.05)
+        love.graphics.circle("fill", 2, h-1, 1.5)
+        love.graphics.circle("fill", w-2, h-1, 1.5)
+
+    elseif name == "TrainCar" then
+        love.graphics.setColor(0.6, 0.2, 0.15)
+        love.graphics.rectangle("fill", 1, 2, w-2, h-5)
+        love.graphics.setColor(0.4, 0.12, 0.08)
+        love.graphics.rectangle("fill", 0, 2, w, 2)
+        love.graphics.setColor(0.8, 0.6, 0.4)
+        love.graphics.rectangle("fill", 3, 3, 2, 3)
+        love.graphics.rectangle("fill", w-5, 3, 2, 3)
+        love.graphics.setColor(0.3, 0.1, 0.05)
+        love.graphics.circle("fill", 2, h-1, 1.5)
+        love.graphics.circle("fill", w-2, h-1, 1.5)
+
     elseif name == "MountainSlope" then
         love.graphics.setColor(0.55, 0.5, 0.45)
         love.graphics.polygon("fill", 0, h, w*0.6, h*0.2, w, h)
@@ -276,7 +314,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
     local tileHeight = map.tileheight or 32
     local entitySprite
 
-        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Tower" or def.name == "MountainSlope" or def.name == "Caravan" or def.name == "Blockpost" then
+        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Tower" or def.name == "MountainSlope" or def.name == "Caravan" or def.name == "Blockpost" or def.name == "Tunnel" or def.name == "TrainCar" or def.name == "Locomotive" then
         entitySprite = generateCustomSprite(def.name, tileWidth, tileHeight)
     else
         entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)

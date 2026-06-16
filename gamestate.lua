@@ -61,6 +61,7 @@ function GameState.new()
 
     self.dpiScale = 1
     self.difficultyModifier = 1
+    self.disableEnemySpawn = false
 
     self.DEBUG_COMBAT = true
 

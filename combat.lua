@@ -793,7 +793,7 @@ combat.GhostBoltAttack = setmetatable({}, combat.Attack)
 combat.GhostBoltAttack.__index = combat.GhostBoltAttack
 
 function combat.GhostBoltAttack.new()
-    local self = combat.Attack.new("Ghost Bolt", "Piercing shot with unlimited range, hits first target", math.huge, 2, {})
+    local self = combat.Attack.new("Ghost Bolt", "Piercing shot with unlimited range, hits first target", math.huge, 1, {})
     return setmetatable(self, combat.GhostBoltAttack)
 end
 
@@ -828,7 +828,7 @@ combat.ZombieBiteAttack = setmetatable({}, combat.Attack)
 combat.ZombieBiteAttack.__index = combat.ZombieBiteAttack
 
 function combat.ZombieBiteAttack.new()
-    local self = combat.Attack.new("Bite", "Devastating bite at close range", 1, 3, {})
+    local self = combat.Attack.new("Bite", "Devastating bite at close range", 1, 1, {})
     return setmetatable(self, combat.ZombieBiteAttack)
 end
 
@@ -982,7 +982,7 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
     -- Если клетка занята — 2 урона occupant'у
     local occupant = combat.getEntityAtHex(sq, sr, entities)
     if occupant and occupant.health > 0 then
-        local wasDestroyed = occupant:takeDamage(2)
+        local wasDestroyed = occupant:takeDamage(1)
         print(string.format("SummoningRod: %s takes 2 damage from occupied summon cell!", occupant.name))
         if sounds and sounds.attack then sounds.attack:play() end
         local fx, fy = getDrawCoords(sq, sr)
@@ -1278,7 +1278,7 @@ combat.BashAttack = setmetatable({}, combat.Attack)
 combat.BashAttack.__index = combat.BashAttack
 
 function combat.BashAttack.new()
-    local self = combat.Attack.new("Bash", "Melee attack, 2 damage to target and behind attacker", 1, 2, {})
+    local self = combat.Attack.new("Bash", "Melee attack, 1 damage to target and behind attacker", 1, 1, {})
     return setmetatable(self, combat.BashAttack)
 end
 
@@ -1411,7 +1411,7 @@ combat.LungeAttack = setmetatable({}, combat.Attack)
 combat.LungeAttack.__index = combat.LungeAttack
 
 function combat.LungeAttack.new()
-    local self = combat.Attack.new("Lunge", "Melee attack, 2 damage to target and the target behind it", 1, 2, {})
+    local self = combat.Attack.new("Lunge", "Melee attack, 1 damage to target and the target behind it", 1, 1, {})
     return setmetatable(self, combat.LungeAttack)
 end
 

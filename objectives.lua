@@ -8,11 +8,14 @@ local objectiveStates = {}
 local smallFont
 local objectivePool = {}
 
-local primaryObjectiveDef = {
+local primaryObjectiveDefs = {}
+
+primaryObjectiveDefs.protect_caravans = {
     id = "protect_caravans",
     name = "Protect Caravans",
     desc = "Every caravan destroyed increases Chaos!",
     isPrimary = true,
+    forceSecondary = "protect_blockpost",
     onGenerate = function(entities, hex)
         _G.chaos = 0
         _G.caravanCount = 0
@@ -41,6 +44,42 @@ local primaryObjectiveDef = {
         end
     end,
 }
+
+primaryObjectiveDefs.protect_railway = {
+    id = "protect_railway",
+    name = "Protect Railway Infrastructure",
+    desc = "Every damage to train or tunnel increases Chaos!",
+    isPrimary = true,
+    incompatibleWithSecondary = { "protect_tower", "protect_blockpost" },
+    onGenerate = function(entities, hex)
+        _G.railwayTakenDamage = 0
+    end,
+    check = function(entities, state)
+        local totalDamage = 0
+        for _, e in ipairs(entities) do
+            if e.isTrainCar and e.health and e.maxHealth then
+                totalDamage = totalDamage + (e.maxHealth - math.max(0, e.health))
+            end
+            if e.name == "Tunnel" and e.health and e.maxHealth then
+                totalDamage = totalDamage + (e.maxHealth - math.max(0, e.health))
+            end
+        end
+        local prev = _G.railwayTakenDamage or 0
+        if totalDamage > prev then
+            local newDamage = totalDamage - prev
+            _G.chaos = (_G.chaos or 0) + newDamage
+            _G.railwayTakenDamage = totalDamage
+            print(string.format("Railway infrastructure damaged! Chaos +%d (total: %d)", newDamage, _G.chaos))
+        end
+    end,
+}
+
+local function hasTrainCars(entities)
+    for _, e in ipairs(entities) do
+        if e.name == "TrainCar" or e.name == "Locomotive" then return true end
+    end
+    return false
+end
 
 local function findEmptyCells(entities, hex)
     local candidates = {}
@@ -325,6 +364,7 @@ local function definePool()
                 state["kill_leader"] = alive and "failed" or "completed"
             end,
         },
+
     }
 end
 
@@ -342,11 +382,12 @@ function objectives.generate(entities, hex)
     activePrimaryObjective = nil
     objectiveStates = {}
 
-    -- Add primary objective
-    activePrimaryObjective = primaryObjectiveDef
-    objectiveStates[primaryObjectiveDef.id] = "pending"
-    if primaryObjectiveDef.onGenerate then
-        primaryObjectiveDef.onGenerate(entities, hex)
+    -- Choose primary: railway if map has train cars, otherwise caravans
+    local primaryId = hasTrainCars(entities) and "protect_railway" or "protect_caravans"
+    activePrimaryObjective = primaryObjectiveDefs[primaryId]
+    objectiveStates[activePrimaryObjective.id] = "pending"
+    if activePrimaryObjective.onGenerate then
+        activePrimaryObjective.onGenerate(entities, hex)
     end
 
     -- Pick 2 secondary objectives from pool
@@ -354,10 +395,11 @@ function objectives.generate(entities, hex)
     local count = 0
     local maxObj = 2
 
-    -- Force-include protect_blockpost when primary is protect_caravans
-    if activePrimaryObjective and activePrimaryObjective.id == "protect_caravans" then
+    -- Force-include the secondary linked to the primary
+    local forcedId = activePrimaryObjective.forceSecondary
+    if forcedId then
         for i = #shuffled, 1, -1 do
-            if shuffled[i].id == "protect_blockpost" then
+            if shuffled[i].id == forcedId then
                 local def = table.remove(shuffled, i)
                 table.insert(activeObjectives, def)
                 objectiveStates[def.id] = "pending"
@@ -370,15 +412,28 @@ function objectives.generate(entities, hex)
         end
     end
 
+    -- Mark incompatible secondaries based on primary
+    local primaryIncompatible = activePrimaryObjective.incompatibleWithSecondary or {}
+
     for i = 1, #shuffled do
         if count >= maxObj then break end
         local def = shuffled[i]
         local skip = false
 
         -- Check incompatibility with primary objective
-        if not skip and def.incompatibleWithPrimary and activePrimaryObjective then
-            print(string.format("Skipping '%s' due to incompatibility with primary objective '%s'", def.id, activePrimaryObjective.id))
-            skip = true
+        if not skip and activePrimaryObjective then
+            if def.incompatibleWithPrimary then
+                print(string.format("Skipping '%s' due to incompatibility with primary objective '%s'", def.id, activePrimaryObjective.id))
+                skip = true
+            elseif primaryIncompatible then
+                for _, pid in ipairs(primaryIncompatible) do
+                    if pid == def.id then
+                        print(string.format("Skipping '%s' due to incompatibility with primary '%s'", def.id, activePrimaryObjective.id))
+                        skip = true
+                        break
+                    end
+                end
+            end
         end
 
         -- Check conflict with already selected secondaries
@@ -433,6 +488,7 @@ function objectives.reset()
     _G.caravansDestroyed = 0
     _G.blockpostMaxHealth = 0
     _G.blockpostDamageTracked = 0
+    _G.railwayTakenDamage = 0
 end
 
 function objectives.getList()
@@ -482,7 +538,7 @@ function objectives.update(entities)
     -- Check secondary objectives
     for _, obj in ipairs(activeObjectives) do
         if objectiveStates[obj.id] == "pending" then
-            -- protect_tower, kill_leader, protect_blockpost check immediately; others wait for decay
+            -- Certain objectives check immediately; others wait for decay
             local canCheck = decayApplied or obj.id == "kill_leader" or obj.id == "protect_tower" or obj.id == "protect_blockpost"
             if canCheck and obj.check then
                 local prevState = objectiveStates[obj.id]

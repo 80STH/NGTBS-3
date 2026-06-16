@@ -253,6 +253,10 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
         topColor = {0.08, 0.25, 0.45, 1}
         sideColor = {0.05, 0.15, 0.35, 1}
         edgeColor = {0.02, 0.1, 0.25, 1}
+    elseif terrainType == "railway" then
+        topColor = {0.35, 0.3, 0.25, 1}
+        sideColor = {0.25, 0.2, 0.15, 1}
+        edgeColor = {0.15, 0.1, 0.05, 1}
     else
         topColor = {0.35, 0.35, 0.35, 1}
         sideColor = {0.25, 0.25, 0.25, 1}
@@ -305,6 +309,24 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
         love.graphics.setColor(0.9, 0.6, 0.1, 0.8)
         love.graphics.circle("fill", cx - radius * 0.15, cy + radius * 0.3, radius * 0.06)
         love.graphics.circle("fill", cx + radius * 0.2, cy - radius * 0.2, radius * 0.06)
+    end
+
+    if terrainType == "railway" then
+        local cx, cy = x, y + yOffset
+        love.graphics.setColor(0.5, 0.4, 0.3, 0.8)
+        love.graphics.setLineWidth(2)
+        for angle = 0, 5 do
+            local a1 = math.rad(60 * angle)
+            local a2 = math.rad(60 * (angle + 1))
+            local x1 = cx + math.cos(a1) * radius * 0.6
+            local y1 = cy + math.sin(a1) * radius * 0.6
+            local x2 = cx + math.cos(a2) * radius * 0.6
+            local y2 = cy + math.sin(a2) * radius * 0.6
+            love.graphics.line(x1, y1, x2, y2)
+        end
+        love.graphics.setColor(0.3, 0.25, 0.2, 0.6)
+        love.graphics.circle("fill", cx, cy, radius * 0.15)
+        love.graphics.setLineWidth(1)
     end
 
     love.graphics.setLineWidth(1)

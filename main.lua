@@ -36,6 +36,7 @@ gamePhase = "menu"
 selectedMapPath = nil
 selectedSquad = nil
 difficultyModifier = 1
+disableEnemySpawn = false
 chaos = 0
 chaosMax = 5
 unplacedAllies = {}
@@ -72,6 +73,7 @@ function syncState()
     state.pushAnimations = pushAnimations
     state.dpiScale = dpiScale
     state.difficultyModifier = difficultyModifier
+    state.disableEnemySpawn = disableEnemySpawn
     state.showEnemyOrder = showEnemyOrder
     state.chaos = chaos
     state.chaosMax = chaosMax

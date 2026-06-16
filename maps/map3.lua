@@ -12,7 +12,7 @@ return {
   nextlayerid = 5,
   nextobjectid = 2,
   hexsidelength = 6,
-  staggeraxis = "y",
+  staggeraxis = "x",
   staggerindex = "odd",
   properties = {},
   tilesets = {
@@ -91,6 +91,26 @@ return {
       y = 0,
       width = 9,
       height = 9,
+      id = 1,
+      name = "terrain",
+      class = "",
+      visible = true,
+      opacity = 1,
+      offsetx = 0,
+      offsety = 0,
+      parallaxx = 1,
+      parallaxy = 1,
+      properties = {},
+      encoding = "base64",
+      compression = "zlib",
+      data = "eJxjZWBgYIViRiTMioZh4sxQmheKGZHkmaEYJseMZiYjmhwueXxyvFjEyZWD+Q2fHLZwQBcDAN7oAVo="
+    },
+    {
+      type = "tilelayer",
+      x = 0,
+      y = 0,
+      width = 9,
+      height = 9,
       id = 2,
       name = "entities",
       class = "",
@@ -103,7 +123,27 @@ return {
       properties = {},
       encoding = "base64",
       compression = "zlib",
-      data = "eJyTY2BgkAdiJSDWAGJdINYCYh0gdmGAAHEgFgViSSCWAmJpIJYBYicgDoCqsQXiYCA2ZcANXPHIkaKGGEAtc4gBABHQBAs="
+      data = "eJxjYEAAbiSMDrCJOyOJYdNDSD82Nc4E1CDbScguXOpgcq5YzETX54qkjoEBu5kAZd8CuA=="
+    },
+    {
+      type = "tilelayer",
+      x = 0,
+      y = 0,
+      width = 9,
+      height = 9,
+      id = 3,
+      name = "status",
+      class = "",
+      visible = false,
+      opacity = 1,
+      offsetx = 0,
+      offsety = 0,
+      parallaxx = 1,
+      parallaxy = 1,
+      properties = {},
+      encoding = "base64",
+      compression = "zlib",
+      data = "eJwLYmBgCIJiGAjCgWFymkSoIUaekFpSMLXMIsccAErGFzo="
     }
   }
 }

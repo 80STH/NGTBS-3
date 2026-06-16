@@ -4,6 +4,8 @@
 
 local turnManager = require("turn_manager")
 local objectives = require("objectives")
+local trains = require("trains")
+local Entity = require("entity")
 
 function endTurn()
     turnManager.endPlayerTurn()
@@ -146,6 +148,37 @@ function restartGame(mapPath)
     chaos = 0
     status.clearAllDigSites()
 
+    -- map3 train setup: inject tunnels and railway if needed
+    if mapPath:match("map3") then
+        local hasTunnels = false
+        for _, e in ipairs(entities) do
+            if e.name == "Tunnel" then hasTunnels = true; break end
+        end
+        if not hasTunnels then
+            local envMod = require("environment")
+            local loadedMap = envMod.loadedMap
+            local tileW = (loadedMap and loadedMap.tilewidth) or 14
+            local tileH = (loadedMap and loadedMap.tileheight) or 12
+            local tunnelData = {{2,2},{6,2},{2,6},{6,6}}
+            local railCells = {{2,2},{3,2},{4,2},{5,2},{6,2},{2,6},{3,6},{4,6},{5,6},{6,6}}
+
+            for _, cell in ipairs(railCells) do
+                local q, r = cell[1], cell[2]
+                if not terrainMap[q] then terrainMap[q] = {} end
+                terrainMap[q][r] = "railway"
+            end
+
+            for _, td in ipairs(tunnelData) do
+                local tunnel = Entity.new("Tunnel", Entity.TYPES.BUILDING, td[1], td[2], 2, false, 0, nil, nil, {})
+                tunnel.isObjective = true
+                tunnel.sprite = envMod.generateBuildingSprite("Tunnel", tileW, tileH)
+                table.insert(entities, tunnel)
+                print(string.format("  Placed Tunnel at (%d,%d)", td[1], td[2]))
+            end
+        end
+    end
+
+    trains.init(entities, terrainMap, hex)
     objectives.reset()
     objectives.generate(entities, hex)
     objectives.update(entities)
@@ -430,22 +463,28 @@ function processDigSites()
 
     local readyDigs = status.decrementDigTimers()
     for _, dig in ipairs(readyDigs) do
-        local occupied = false
-        for _, e in ipairs(entities) do
-            if e.q == dig.q and e.r == dig.r then
-                occupied = true
-                break
+        local canSpawn = not (state and state.disableEnemySpawn)
+        if canSpawn then
+            local occupied = false
+            for _, e in ipairs(entities) do
+                if e.q == dig.q and e.r == dig.r then
+                    occupied = true
+                    break
+                end
             end
-        end
-        local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
-        if not occupied and terrain ~= "water" and not status.hasNegativeHexStatus(dig.q, dig.r) then
-            local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
-            table.insert(entities, newEnemy)
-            local x, y = hex:hexToPixel(dig.q, dig.r)
-            visual.addEffect(x, y, "dig", 0.5)
-            print(string.format("A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r))
+            local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
+            if not occupied and terrain ~= "water" and not status.hasNegativeHexStatus(dig.q, dig.r) then
+                local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
+                table.insert(entities, newEnemy)
+                local x, y = hex:hexToPixel(dig.q, dig.r)
+                visual.addEffect(x, y, "dig", 0.5)
+                print(string.format("A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r))
+            else
+                print(string.format("Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r))
+                _G.objective_digBlocks = (_G.objective_digBlocks or 0) + 1
+            end
         else
-            print(string.format("Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r))
+            print(string.format("Dig site at (%d,%d) suppressed by disableEnemySpawn", dig.q, dig.r))
             _G.objective_digBlocks = (_G.objective_digBlocks or 0) + 1
         end
         status.removeDigSite(dig.q, dig.r)
@@ -461,17 +500,19 @@ function processDigSites()
             aliveEnemies = aliveEnemies + 1
         end
     end
-    local spawnLimit = 7
-    local needed = spawnLimit - aliveEnemies
-    if needed > 0 then
-        local spots = findRandomEmptyCells(needed, function(q, r)
-            return status.hasDigSite(q, r) or status.hasNegativeHexStatus(q, r)
-        end)
-        local digTypes = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
-        for _, spot in ipairs(spots) do
-            local spawnType = digTypes[love.math.random(1, #digTypes)]
-            status.setDigSite(spot.q, spot.r, 1, spawnType)
-            print(string.format("New dig site at (%d,%d) -> %s", spot.q, spot.r, spawnType))
+    if not (state and state.disableEnemySpawn) then
+        local spawnLimit = 7
+        local needed = spawnLimit - aliveEnemies
+        if needed > 0 then
+            local spots = findRandomEmptyCells(needed, function(q, r)
+                return status.hasDigSite(q, r) or status.hasNegativeHexStatus(q, r)
+            end)
+            local digTypes = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
+            for _, spot in ipairs(spots) do
+                local spawnType = digTypes[love.math.random(1, #digTypes)]
+                status.setDigSite(spot.q, spot.r, 1, spawnType)
+                print(string.format("New dig site at (%d,%d) -> %s", spot.q, spot.r, spawnType))
+            end
         end
     end
 end
