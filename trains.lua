@@ -1,7 +1,8 @@
 -- trains.lua
--- Train system: shuntable train cars moving along railway between tunnels
+-- Train system: locomotives move forward along railway between tunnels
 
 local Entity = require("entity")
+local hex_utils = require("hex_utils")
 local trains = {}
 
 local trainGroups = {}
@@ -29,7 +30,7 @@ local function findRailPath(startQ, startR, endQ, endR, terrainMap, hex)
             local key = n.q .. "," .. n.r
             if not visited[key] and hex:isActiveHex(n.q, n.r) then
                 local t = terrainMap[n.q] and terrainMap[n.q][n.r]
-                if t == "railway" or (n.q == endQ and n.r == endR) then
+                if t == "railway" then
                     nextCell = n
                     break
                 end
@@ -62,16 +63,10 @@ function trains.findRailwayPaths(entities, terrainMap, hex)
                 if i ~= j and not usedTunnels[j] then
                     local rawPath = findRailPath(t1.q, t1.r, t2.q, t2.r, terrainMap, hex)
                     if rawPath and #rawPath >= 3 then
-                        local railPath = {}
-                        for k = 2, #rawPath - 1 do
-                            table.insert(railPath, rawPath[k])
-                        end
-                        if #railPath >= 3 then
-                            table.insert(paths, {tunnelA = t1, tunnelB = t2, path = railPath})
-                            usedTunnels[i] = true
-                            usedTunnels[j] = true
-                            break
-                        end
+                        table.insert(paths, {tunnelA = t1, tunnelB = t2, path = rawPath})
+                        usedTunnels[i] = true
+                        usedTunnels[j] = true
+                        break
                     end
                 end
             end
@@ -97,53 +92,59 @@ function trains.init(entities, terrainMap, hex)
 
     for pi, route in ipairs(paths) do
         local path = route.path
-        -- Reverse path and swap tunnels so cars move forward visually
-        local reversed = {}
-        for i = #path, 1, -1 do table.insert(reversed, path[i]) end
-        route.path = reversed
-        route.tunnelA, route.tunnelB = route.tunnelB, route.tunnelA
-        path = reversed
 
-        local carPositions = {}
-        local startIdx = 1
-        if #path >= 2 then
-            table.insert(carPositions, path[startIdx])
-            table.insert(carPositions, path[startIdx + 1])
-        else
-            for _, pos in ipairs(path) do
-                table.insert(carPositions, pos)
-            end
+        if #path < 4 then
+            print(string.format("Train group %d: path too short (%d cells), skipping", pi, #path))
+            goto continue
         end
 
-        -- Place cars in reverse order so locomotive is behind the train car
-        local cars = {}
-        for ci, pos in ipairs(carPositions) do
-            local idx = #carPositions - ci + 1
-            local name = (idx == 1) and "Locomotive" or "TrainCar"
-            local car = Entity.new(name, Entity.TYPES.BUILDING, pos.q, pos.r, 1, false, 0, nil, nil, {})
-            car.isTrainCar = true
-            car.isObjective = true
+        local locoIdx = 3
+        local wagonIdx = 2
 
-            car.sprite = env.generateBuildingSprite(name, tileW, tileH)
-            car.trainGroupId = pi
-            car.trainCarIndex = ci
-            table.insert(entities, car)
-            table.insert(cars, car)
-        end
+        local loco = Entity.new("Locomotive", Entity.TYPES.BUILDING, path[locoIdx].q, path[locoIdx].r, 1, false, 0, nil, nil, {})
+        loco.isTrainCar = true
+        loco.isObjective = true
+        loco.sprite = env.generateBuildingSprite("Locomotive", tileW, tileH)
 
+        local wagon = Entity.new("TrainCar", Entity.TYPES.BUILDING, path[wagonIdx].q, path[wagonIdx].r, 1, false, 0, nil, nil, {})
+        wagon.isTrainCar = true
+        wagon.isObjective = true
+        wagon.sprite = env.generateBuildingSprite("TrainCar", tileW, tileH)
+
+        loco.trainGroupId = pi
+        wagon.trainGroupId = pi
+
+        table.insert(entities, loco)
+        table.insert(entities, wagon)
+
+        local cars = {loco, wagon}
         local group = {
             id = pi,
             cars = cars,
             path = path,
-            currentIdx = startIdx,
-            direction = 1,
+            currentIdx = locoIdx,
             active = true,
+            animating = false,
+            animTimer = 0,
+            animSpeed = 0.3,
+            animCallback = nil,
             tunnelA = route.tunnelA,
             tunnelB = route.tunnelB,
         }
         trainGroups[pi] = group
 
-        print(string.format("Train group %d: %d cars on path of %d cells", pi, #cars, #path))
+        local targetIdx = group.currentIdx + 1
+        if targetIdx <= #path then
+            local target = path[targetIdx]
+            local dx, dy, dz = hex_utils.getCubeDiff(loco.q, loco.r, target.q, target.r)
+            loco.hasPreparedAttack = true
+            loco.isTrainAttack = true
+            loco.preparedAttack = { name = "TrainShunt", damage = 999, range = 1, minRange = 1 }
+            loco.preparedTargetOffset = { dx = dx, dy = dy, dz = dz }
+        end
+
+        print(string.format("Train group %d: %d cars, path %d cells, loco at idx %d", pi, #cars, #path, locoIdx))
+        ::continue::
     end
 end
 
@@ -156,50 +157,240 @@ function trains.getCarGroup(car)
     return nil
 end
 
-function trains.shuntCar(car, entities)
-    local group = trains.getCarGroup(car)
+function trains.isGroupActive(group)
     if not group or not group.active then return false end
+    local entities = _G.entities or {}
+    local function tunnelAliveByName(name)
+        for _, e in ipairs(entities) do
+            if e.name == name and e.q == group.tunnelA.q and e.r == group.tunnelA.r and e.health and e.health > 0 then
+                return true
+            end
+            if e.name == name and e.q == group.tunnelB.q and e.r == group.tunnelB.r and e.health and e.health > 0 then
+                return true
+            end
+        end
+        return false
+    end
+    if not tunnelAliveByName("Tunnel") and not tunnelAliveByName("OccupiedTunnel") then
+        group.active = false
+        return false
+    end
+    if group.cars then
+        for _, c in ipairs(group.cars) do
+            if c.health <= 0 or c.isDying then
+                group.active = false
+                return false
+            end
+        end
+    end
+    return true
+end
 
-    for _, c in ipairs(group.cars) do
-        if c.health <= 0 or c.isDying then
+function trains.prepareTrainAttacks(entities, hex)
+    for _, group in pairs(trainGroups) do
+        if not trains.isGroupActive(group) then
+            for _, c in ipairs(group.cars) do
+                c.hasPreparedAttack = false
+                c.isTrainAttack = nil
+            end
+            goto next_group
+        end
+
+        local loco = group.cars[1]
+        if not loco or loco.health <= 0 or loco.isDying then
             group.active = false
-            return false
+            goto next_group
+        end
+
+        local targetIdx = group.currentIdx + 1
+        if targetIdx > #group.path then
+            loco.hasPreparedAttack = false
+            loco.isTrainAttack = nil
+            goto next_group
+        end
+
+        local target = group.path[targetIdx]
+
+        local dx, dy, dz = hex_utils.getCubeDiff(loco.q, loco.r, target.q, target.r)
+        loco.hasPreparedAttack = true
+        loco.isTrainAttack = true
+        loco.preparedAttack = { name = "TrainShunt", damage = 999, range = 1, minRange = 1 }
+        loco.preparedTargetOffset = { dx = dx, dy = dy, dz = dz }
+
+        ::next_group::
+    end
+end
+
+local function convertTunnelToOccupied(tunnelEntity, entities, hex)
+    if not tunnelEntity or tunnelEntity.name ~= "Tunnel" then return end
+    if tunnelEntity.health <= 0 then return end
+
+    local env = require("environment")
+    local loadedMap = env.loadedMap
+    local tileW = (loadedMap and loadedMap.tilewidth) or 14
+    local tileH = (loadedMap and loadedMap.tileheight) or 12
+
+    local occ = Entity.new("OccupiedTunnel", Entity.TYPES.BUILDING, tunnelEntity.q, tunnelEntity.r, tunnelEntity.health, false, 0, nil, nil, {})
+    occ.isObjective = true
+    occ.isOccupiedTunnel = true
+    occ.sprite = env.generateBuildingSprite("OccupiedTunnel", tileW, tileH)
+
+    for i, e in ipairs(entities) do
+        if e == tunnelEntity then
+            entities[i] = occ
+            break
         end
     end
 
-    local tailIdx = group.currentIdx + (#group.cars - 1)
-    local newHeadIdx = group.currentIdx + group.direction
-    local newTailIdx = tailIdx + group.direction
-    if newHeadIdx < 1 or newTailIdx > #group.path then
-        group.direction = -group.direction
-        print("Train reversed direction at tunnel")
-        return false
+    print(string.format("Tunnel at (%d,%d) is now occupied!", occ.q, occ.r))
+end
+
+local function startTrainAnimation(group, entities, hex, onComplete)
+    local loco = group.cars[1]
+    local wagon = group.cars[2]
+    local targetIdx = group.currentIdx + 1
+    if targetIdx > #group.path then
+        if onComplete then onComplete() end
+        return
     end
 
-    local target = group.path[newHeadIdx]
+    local targetPos = group.path[targetIdx]
+    local wagonTargetIdx = targetIdx - 1
+    local wagonTarget = group.path[wagonTargetIdx]
 
-    -- Locomotive crushes non-tunnel entities in target cell
-    local loco
-    for _, c in ipairs(group.cars) do
-        if c.name == "Locomotive" then loco = c; break end
+    group.animating = true
+    group.animTimer = 0
+    group.animCallback = onComplete
+    group.pendingCrushQ = targetPos.q
+    group.pendingCrushR = targetPos.r
+    group.pendingLocoQ = targetPos.q
+    group.pendingLocoR = targetPos.r
+    group.pendingWagonQ = wagonTarget.q
+    group.pendingWagonR = wagonTarget.r
+
+    local hexModule = hex or _G.hex
+    if hexModule then
+        loco.startX, loco.startY = hexModule:hexToPixel(loco.q, loco.r)
+        loco.endX, loco.endY = hexModule:hexToPixel(targetPos.q, targetPos.r)
+        wagon.startX, wagon.startY = hexModule:hexToPixel(wagon.q, wagon.r)
+        wagon.endX, wagon.endY = hexModule:hexToPixel(wagonTarget.q, wagonTarget.r)
     end
+
+    loco.isMoving = true
+    loco.timer = 0
+    loco.speed = group.animSpeed
+    loco.targetQ = targetPos.q
+    loco.targetR = targetPos.r
+
+    wagon.isMoving = true
+    wagon.timer = 0
+    wagon.speed = group.animSpeed
+    wagon.targetQ = wagonTarget.q
+    wagon.targetR = wagonTarget.r
+end
+
+local function completeShunt(group, entities, hex)
+    local loco = group.cars[1]
+    local wagon = group.cars[2]
+
+    loco.q = group.pendingLocoQ
+    loco.r = group.pendingLocoR
+    wagon.q = group.pendingWagonQ
+    wagon.r = group.pendingWagonR
+
+    loco.isMoving = false
+    wagon.isMoving = false
+
+    local crushQ, crushR = group.pendingCrushQ, group.pendingCrushR
+
     for i = #entities, 1, -1 do
         local e = entities[i]
-        if e ~= loco and e.trainGroupId ~= group.id and e.q == target.q and e.r == target.r and e.health and e.health > 0 and not e.isDying and e.name ~= "Tunnel" then
+        if e ~= loco and e ~= wagon and e.trainGroupId ~= group.id
+            and e.q == crushQ and e.r == crushR
+            and e.health and e.health > 0 and not e.isDying
+            and e.name ~= "Tunnel" and e.name ~= "OccupiedTunnel" then
             local wasDestroyed = e:takeDamage(999)
             if wasDestroyed then e:startDeath() end
             if e.health and e.health <= 0 then table.remove(entities, i) end
         end
     end
 
-    -- Move entire train by 1 cell along the path (no swapping)
-    for ci, c in ipairs(group.cars) do
-        local idx = newHeadIdx + (ci - 1)
-        c.q = group.path[idx].q
-        c.r = group.path[idx].r
+    for _, e in ipairs(entities) do
+        if e.q == crushQ and e.r == crushR and e.name == "Tunnel" and e.health and e.health > 0 then
+            convertTunnelToOccupied(e, entities, hex)
+            break
+        end
     end
-    group.currentIdx = newHeadIdx
-    return true
+
+    group.currentIdx = group.currentIdx + 1
+    group.animating = false
+
+    local nextIdx = group.currentIdx + 1
+    if nextIdx <= #group.path then
+        local nextTarget = group.path[nextIdx]
+        local dx, dy, dz = hex_utils.getCubeDiff(loco.q, loco.r, nextTarget.q, nextTarget.r)
+        loco.hasPreparedAttack = true
+        loco.isTrainAttack = true
+        loco.preparedAttack = { name = "TrainShunt", damage = 999, range = 1, minRange = 1 }
+        loco.preparedTargetOffset = { dx = dx, dy = dy, dz = dz }
+    else
+        loco.hasPreparedAttack = false
+        loco.isTrainAttack = nil
+    end
+
+    if group.animCallback then
+        local cb = group.animCallback
+        group.animCallback = nil
+        cb()
+    end
+end
+
+function trains.updateMovement(dt)
+    local anyAnimating = false
+    for _, group in pairs(trainGroups) do
+        if group.animating then
+            anyAnimating = true
+            local loco = group.cars[1]
+            local wagon = group.cars[2]
+
+            loco.timer = (loco.timer or 0) + dt
+            if loco.timer >= loco.speed then
+                wagon.timer = (wagon.timer or 0) + dt
+                if wagon.timer >= wagon.speed then
+                    completeShunt(group, _G.entities or {}, _G.hex)
+                end
+            end
+        end
+    end
+    return anyAnimating
+end
+
+function trains.isAnyAnimating()
+    for _, group in pairs(trainGroups) do
+        if group.animating then return true end
+    end
+    return false
+end
+
+function trains.executeTrainShunt(loco, entities, hex, onComplete)
+    local group = trains.getCarGroup(loco)
+    if not group then
+        if onComplete then onComplete() end
+        return
+    end
+    if not trains.isGroupActive(group) then
+        if onComplete then onComplete() end
+        return
+    end
+
+    local targetIdx = group.currentIdx + 1
+    if targetIdx > #group.path then
+        print("Train at end of line, cannot shunt")
+        if onComplete then onComplete() end
+        return
+    end
+
+    startTrainAnimation(group, entities, hex, onComplete)
 end
 
 return trains

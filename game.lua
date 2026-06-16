@@ -387,6 +387,24 @@ function updateDeathAnimations(dt)
         if e.isDying then
             e.deathTimer = e.deathTimer + dt
             if e.deathTimer >= e.deathDuration then
+                if e.isTrainCar then
+                    local trains_mod = require("trains")
+                    local group = trains_mod.getCarGroup(e)
+                    if group then
+                        group.active = false
+                        local loco = group.cars[1]
+                        if loco then
+                            loco.hasPreparedAttack = false
+                            loco.isTrainAttack = nil
+                        end
+                    end
+                end
+                if e.name == "Tunnel" or e.name == "OccupiedTunnel" then
+                    local dtunnel = Entity.new("DestroyedTunnel", Entity.TYPES.BUILDING, e.q, e.r, 1, false, 0, nil, nil, {})
+                    dtunnel.indestructible = true
+                    dtunnel.sprite = environment.generateBuildingSprite("DestroyedTunnel", hex.tileWidth, hex.tileHeight)
+                    table.insert(entities, dtunnel)
+                end
                 table.remove(entities, i)
             end
         end
@@ -422,7 +440,7 @@ function findRandomEmptyCells(count, excludeFn)
                 end
                 if not occupied then
                     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain ~= "water" and terrain ~= "underwater_mines" then
+                    if terrain ~= "water" and terrain ~= "underwater_mines" and terrain ~= "railway" then
                         if not excludeFn or not excludeFn(q, r) then
                             table.insert(candidates, {q = q, r = r})
                         end
@@ -473,7 +491,7 @@ function processDigSites()
                 end
             end
             local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
-            if not occupied and terrain ~= "water" and not status.hasNegativeHexStatus(dig.q, dig.r) then
+            if not occupied and terrain ~= "water" and terrain ~= "railway" and not status.hasNegativeHexStatus(dig.q, dig.r) then
                 local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
                 table.insert(entities, newEnemy)
                 local x, y = hex:hexToPixel(dig.q, dig.r)

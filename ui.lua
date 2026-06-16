@@ -296,7 +296,7 @@ function ui.getPreparedAttackTarget(enemy, entities, hex)
         local trains = require("trains")
         local group = trains.getCarGroup(enemy)
         if not group or not group.active then return nil end
-        local newIdx = group.currentIdx + group.direction
+        local newIdx = group.currentIdx + 1
         if newIdx < 1 or newIdx > #group.path then return nil end
         local target = group.path[newIdx]
         return {q = target.q, r = target.r}
@@ -1604,6 +1604,24 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
     local fromR = enemy.preparedFromR or enemy.r
     local fromX, fromY = getDrawCoords(fromQ, fromR)
     if not fromX then return end
+    -- TrainShunt: локомотив показывает направление движения
+    if attack.name == "TrainShunt" then
+        if enemy.preparedTargetOffset then
+            local targetQ, targetR = hex_utils.applyCubeDiff(
+                enemy.q, enemy.r,
+                enemy.preparedTargetOffset.dx,
+                enemy.preparedTargetOffset.dy,
+                enemy.preparedTargetOffset.dz
+            )
+            if hex:isActiveHex(targetQ, targetR) then
+                local toX, toY = getDrawCoords(targetQ, targetR)
+                local pulse = 0.5 + 0.5 * math.sin(time * 6)
+                local alpha = 0.5 + 0.3 * pulse
+                ui.drawPushArrow(fromX, fromY, toX, toY, 0.3, 0.5, 1, alpha, fromQ, fromR, targetQ, targetR)
+            end
+        end
+        return
+    end
     -- Ghost Bolt: первая цель на линии
 if attack.name == "Ghost Bolt" then
     if enemy.attackDirection then

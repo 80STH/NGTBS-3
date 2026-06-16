@@ -21,7 +21,7 @@ global_abilities.abilityUsedThisTurn = false
 global_abilities.mana = 5
 global_abilities.maxMana = 5
 global_abilities.abilityUsedThisTurn = false
-global_abilities.abilityOrder = {"Shunt", "Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay"}
+global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay"}
 
 local function getDropdownHeader()
     local w = 145
@@ -313,7 +313,7 @@ function UnearthAbility:onActivate(state)
         end
         if not occupied then
             local terrain = state.terrainMap and state.terrainMap[site.q] and state.terrainMap[site.q][site.r] or "grass"
-            if terrain ~= "water" and terrain ~= "underwater_mines" and not status.hasNegativeHexStatus(site.q, site.r) then
+            if terrain ~= "water" and terrain ~= "underwater_mines" and terrain ~= "railway" and not status.hasNegativeHexStatus(site.q, site.r) then
                 local newEnemy = environment.createRandomEnemy(site.q, site.r)
                 table.insert(state.entities, newEnemy)
                 spawned = spawned + 1
@@ -971,84 +971,7 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
     return true
 end
 
-local ShuntAbility = {}
-ShuntAbility.__index = ShuntAbility
-
-function ShuntAbility.new()
-    local self = {
-        name = "Shunt",
-        key = "s",
-        manaCost = 0,
-        button = { x = 0, y = 0, width = 120, height = 24 },
-        hasBeenUsed = false,
-    }
-    return setmetatable(self, ShuntAbility)
-end
-
-function ShuntAbility:reset()
-    self.hasBeenUsed = false
-end
-
-function ShuntAbility:onActivate(state)
-    print("Click on a train car to shunt it forward, or press ESC to cancel")
-end
-
-function ShuntAbility:onDeactivate(state)
-    print(self.name .. " cancelled")
-end
-
-function ShuntAbility:onClickHex(q, r, hex, state)
-    local target = nil
-    for _, e in ipairs(state.entities) do
-        if e.q == q and e.r == r then
-            target = e
-            break
-        end
-    end
-    if not target or target.health <= 0 then
-        print("No valid target!")
-        return true
-    end
-    if not target.isTrainCar then
-        print("Target is not a train car!")
-        return true
-    end
-
-    if target.isDying then
-        print("Train car is destroyed!")
-        return true
-    end
-
-    local trains = require("trains")
-    local success = trains.shuntCar(target, state.entities)
-    if not success then
-        print("Cannot shunt - car at end of line!")
-        return true
-    end
-
-    global_abilities.spendAbility(self)
-    print("Train shunted forward!")
-    global_abilities.activeAbility = nil
-    return true
-end
-
-function ShuntAbility:drawButton(mx, my, state)
-    global_abilities.drawAbilityButton(self, mx, my, state, {
-        color = {0.2, 0.4, 0.9},
-        label = "Shunt (S)",
-        activeLabel = "Select train car (S)",
-        tooltipH = 64,
-        tooltipTitle = "Shunt",
-        tooltipLines = {
-            "Shunt a train car forward along",
-            "the railway. Locomotive crushes",
-            "anything in its path.",
-        },
-    })
-end
-
 -- Register all abilities
-global_abilities.register(ShuntAbility.new())
 global_abilities.register(HealAbility.new())
 global_abilities.register(ExtraMoveAbility.new())
 global_abilities.register(WindTorrent.new())

@@ -246,6 +246,18 @@ local function generateCustomSprite(name, w, h)
         love.graphics.circle("fill", 3, h-1, 1)
         love.graphics.circle("fill", w-3, h-1, 1)
 
+    elseif name == "OccupiedTunnel" then
+        love.graphics.setColor(0.2, 0.1, 0.1)
+        love.graphics.rectangle("fill", 0, 0, w, h-2)
+        love.graphics.setColor(0.5, 0.2, 0.1)
+        love.graphics.rectangle("fill", w/2-3, 0, 6, h-4)
+        love.graphics.setColor(0.3, 0.3, 0.3)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+        love.graphics.setColor(0.6, 0.3, 0.15)
+        love.graphics.arc("fill", w/2, h-2, w/3, math.pi, 0)
+        love.graphics.setColor(1, 0.8, 0.2)
+        love.graphics.circle("fill", w/2, h/2-1, 2)
+
     elseif name == "Blockpost" then
         love.graphics.setColor(0.4, 0.3, 0.2)
         love.graphics.rectangle("fill", 0, 3, w, h-3)
@@ -266,6 +278,17 @@ local function generateCustomSprite(name, w, h)
         love.graphics.rectangle("fill", 0, h-2, w, 2)
         love.graphics.setColor(0.4, 0.4, 0.4)
         love.graphics.arc("fill", w/2, h-2, w/3, math.pi, 0)
+
+    elseif name == "DestroyedTunnel" then
+        love.graphics.setColor(0.25, 0.22, 0.2)
+        love.graphics.rectangle("fill", w/4, h/2-1, w/2, 3)
+        love.graphics.setColor(0.35, 0.28, 0.22)
+        love.graphics.rectangle("fill", w/3, h/2-4, w/3, 2)
+        love.graphics.rectangle("fill", w/4+1, h/2+3, w/2-2, 2)
+        love.graphics.setColor(0.2, 0.18, 0.18)
+        love.graphics.rectangle("fill", w/3+1, h/2-2, 2, 6)
+        love.graphics.setColor(0.4, 0.35, 0.3)
+        love.graphics.rectangle("fill", w/3-2, h/2-2, 2, 3)
 
     elseif name == "Locomotive" then
         love.graphics.setColor(0.3, 0.15, 0.1)
@@ -314,7 +337,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
     local tileHeight = map.tileheight or 32
     local entitySprite
 
-        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Tower" or def.name == "MountainSlope" or def.name == "Caravan" or def.name == "Blockpost" or def.name == "Tunnel" or def.name == "TrainCar" or def.name == "Locomotive" then
+        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Tower" or def.name == "MountainSlope" or def.name == "Caravan" or def.name == "Blockpost" or def.name == "Tunnel" or def.name == "TrainCar" or def.name == "Locomotive" or def.name == "OccupiedTunnel" or def.name == "DestroyedTunnel" then
         entitySprite = generateCustomSprite(def.name, tileWidth, tileHeight)
     else
         entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)

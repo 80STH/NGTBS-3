@@ -138,7 +138,7 @@ function Entity:takeDamage(damage)
     local actualDamage = math.min(damage, self.health)
     self.health = self.health - actualDamage
     
-    if self:isBuilding() and actualDamage > 0 and not self.isTrainCar and self.name ~= "Tunnel" then
+    if self:isBuilding() and actualDamage > 0 and not self.isTrainCar and self.name ~= "Tunnel" and self.name ~= "OccupiedTunnel" and self.name ~= "DestroyedTunnel" then
         _G.chaos = (_G.chaos or 0) + actualDamage
         print(string.format("Building damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos))
     end

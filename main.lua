@@ -189,6 +189,7 @@ function love.update(dt)
             actor.pulse = actor.pulse + dt * (actor.pulseSpeed or 5)
         end
     end
+
     combat.updatePushAnimations(dt, hex)
     if decayMessageTimer > 0 then
         decayMessageTimer = decayMessageTimer - dt

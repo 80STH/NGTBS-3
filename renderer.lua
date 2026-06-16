@@ -188,7 +188,7 @@ function renderer.draw(state)
         love.graphics.setLineWidth(1)
     end
     for _, entity in ipairs(state.entities) do
-        if entity:isCharacter() and not entity.isPlayable and entity.hasPreparedAttack and entity.health > 0 then
+        if (entity:isCharacter() and not entity.isPlayable or entity.isTrainAttack) and entity.hasPreparedAttack and entity.health > 0 then
             ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
         end
         -- Подсветка целевой клетки призыва стержня

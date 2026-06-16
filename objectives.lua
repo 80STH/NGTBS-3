@@ -53,6 +53,12 @@ primaryObjectiveDefs.protect_railway = {
     incompatibleWithSecondary = { "protect_tower", "protect_blockpost" },
     onGenerate = function(entities, hex)
         _G.railwayTakenDamage = 0
+        _G.occupiedTunnelCount = 0
+        for _, e in ipairs(entities) do
+            if e.name == "OccupiedTunnel" and e.health and e.health > 0 then
+                _G.occupiedTunnelCount = (_G.occupiedTunnelCount or 0) + 1
+            end
+        end
     end,
     check = function(entities, state)
         local totalDamage = 0
@@ -71,6 +77,20 @@ primaryObjectiveDefs.protect_railway = {
             _G.railwayTakenDamage = totalDamage
             print(string.format("Railway infrastructure damaged! Chaos +%d (total: %d)", newDamage, _G.chaos))
         end
+
+        local aliveOcc = 0
+        for _, e in ipairs(entities) do
+            if e.name == "OccupiedTunnel" and e.health and e.health > 0 then
+                aliveOcc = aliveOcc + 1
+            end
+        end
+        local prevOcc = _G.occupiedTunnelCount or 0
+        if prevOcc > aliveOcc then
+            local destroyed = prevOcc - aliveOcc
+            _G.chaos = (_G.chaos or 0) + destroyed * 2
+            print(string.format("Occupied tunnel destroyed! Chaos +%d (total: %d)", destroyed * 2, _G.chaos))
+        end
+        _G.occupiedTunnelCount = aliveOcc
     end,
 }
 

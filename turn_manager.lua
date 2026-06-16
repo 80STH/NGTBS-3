@@ -5,7 +5,6 @@
 local turnManager = {}
 
 function turnManager.startGame()
-    -- Выкопка с самого первого хода
     processDigSites()
 
     turnState.phase = "enemy_prepare"
@@ -32,11 +31,9 @@ function turnManager.endPlayerTurn()
         end
     end
 
-    -- Step 0: Lightning strikes before fire/decay
     strikeLightning()
     checkGameEnd()
 
-    -- Step 1: Simultaneous effects (fire, decay) — no digging
     effects.applyEndOfTurnEffects(entities, terrainMap)
     checkGameEnd()
 
@@ -47,30 +44,34 @@ function turnManager.endPlayerTurn()
         status.clearAllDigSites()
     end
 
-    -- Step 2: Queue enemy attacks
+    -- Prepare train attacks for this turn
+    local trains_mod = require("trains")
+    trains_mod.prepareTrainAttacks(entities, hex)
+
+    -- Queue enemy attacks
     local attackers = {}
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 and not e.isDying then
             table.insert(attackers, e)
         end
     end
-    -- Add autonomous train shunts to the attack queue
-    local trains_mod = require("trains")
+
+    -- Add train attacks LAST in queue
     local trainGroups = trains_mod.getTrainGroups()
     for _, group in pairs(trainGroups) do
         if group.active and group.cars and #group.cars > 0 then
             local loco = group.cars[1]
-            if loco and loco.health and loco.health > 0 and not loco.isDying then
-                loco.hasPreparedAttack = true
-                loco.isTrainAttack = true
+            if loco and loco.health and loco.health > 0 and not loco.isDying and loco.hasPreparedAttack then
                 table.insert(attackers, loco)
             end
         end
     end
+
     turnState.enemyAttackQueue = attackers
     turnState.enemyAttackTimer = 0
     turnState.phase = "enemy_attack"
     turnState.pendingDigProcessing = true
+    turnState.trainShuntInProgress = false
     print("=== ENEMY ATTACK PHASE ===")
 end
 
@@ -110,13 +111,23 @@ function updatePreparePhase(dt)
 end
 
 function updateAttackPhase(dt)
+    -- If a train shunt animation is in progress, update it
+    if turnState.trainShuntInProgress then
+        local trains_mod = require("trains")
+        trains_mod.updateMovement(dt)
+        if not trains_mod.isAnyAnimating() then
+            turnState.trainShuntInProgress = false
+            turnState.currentTrainLoco = nil
+            checkGameEnd()
+        end
+        return
+    end
+
     if #turnState.enemyAttackQueue == 0 then
-        -- Step 3: Simultaneous digging
         if turnState.pendingDigProcessing then
             processDigSites()
             turnState.pendingDigProcessing = false
         end
-        -- Step 4: End of enemy turn
         turnCount = turnCount + 1
         print("Turn count increased to: " .. turnCount .. "/" .. maxTurns)
         turnState.phase = "enemy_prepare"
@@ -131,13 +142,16 @@ function updateAttackPhase(dt)
         if enemy and enemy.health > 0 then
             if enemy.isTrainAttack then
                 local trains_mod = require("trains")
-                trains_mod.shuntCar(enemy, entities)
-                enemy.hasPreparedAttack = false
-                enemy.isTrainAttack = nil
+                turnState.trainShuntInProgress = true
+                turnState.currentTrainLoco = enemy
+                trains_mod.executeTrainShunt(enemy, entities, hex, function()
+                end)
             else
                 ai.executePreparedAttack(enemy, entities, hex, sounds)
             end
-            checkGameEnd()
+            if not enemy.isTrainAttack then
+                checkGameEnd()
+            end
         end
     end
 end
@@ -147,7 +161,6 @@ function processNextEnemyPrepare()
         turnState.phase = "player"
         for _, a in ipairs(entities) do
             if a.isPlayable then
-                -- Снимаем нокаут в начале хода: здоровье -> 1, востанавливаем скорость
                 if status.hasEntityStatus(a, "knockout") then
                     status.removeFromEntity(a, "knockout")
                     a.health = 1
