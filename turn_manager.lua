@@ -161,15 +161,6 @@ function processNextEnemyPrepare()
         turnState.phase = "player"
         for _, a in ipairs(entities) do
             if a.isPlayable then
-                if status.hasEntityStatus(a, "knockout") then
-                    status.removeFromEntity(a, "knockout")
-                    a.health = 1
-                    if a._savedMoveRange then
-                        a.moveRange = a._savedMoveRange
-                        a._savedMoveRange = nil
-                    end
-                    print(string.format(" %s recovers from knockout! (1 HP)", a.name))
-                end
                 if a.health > 0 then
                     a.hasActedThisTurn = false
                     a.hasMovedThisTurn = false

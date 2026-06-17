@@ -77,9 +77,6 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     -- Флаг вагона поезда
     self.isTrainCar = false
 
-    -- Сохранённая дальность хода (для восстановления после нокаута)
-    self._savedMoveRange = nil
-
     -- Анимация смерти
     self.isDying = false
     self.deathTimer = 0
@@ -146,21 +143,11 @@ function Entity:takeDamage(damage)
     print(string.format("%s takes %d damage! (%d/%d HP)", 
           self.name, actualDamage, math.max(0, self.health), self.maxHealth))
 
-    -- Кислота: любой урон смертелен (обходит нокаут)
+    -- Кислота: любой урон смертелен
     if actualDamage > 0 and status.hasEntityStatus(self, "acid") then
         self.health = 0
         print(string.format(" %s dissolves in acid!", self.name))
         return true
-    end
-
-    -- Нокаут для союзников: вместо смерти переводим в нокаут
-    if self.health <= 0 and self.isPlayable and self:isCharacter() and not status.hasEntityStatus(self, "knockout") then
-        self.health = 1
-        self._savedMoveRange = self.moveRange
-        self.moveRange = 2
-        status.applyToEntity(self, "knockout")
-        print(string.format(" %s is knocked out! (1 HP, move=2, cannot attack)", self.name))
-        return false
     end
 
     -- Стержень призывания: любой урон отменяет призыв на 1 ход
