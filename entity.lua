@@ -146,6 +146,13 @@ function Entity:takeDamage(damage)
     print(string.format("%s takes %d damage! (%d/%d HP)", 
           self.name, actualDamage, math.max(0, self.health), self.maxHealth))
 
+    -- Кислота: любой урон смертелен (обходит нокаут)
+    if actualDamage > 0 and status.hasEntityStatus(self, "acid") then
+        self.health = 0
+        print(string.format(" %s dissolves in acid!", self.name))
+        return true
+    end
+
     -- Нокаут для союзников: вместо смерти переводим в нокаут
     if self.health <= 0 and self.isPlayable and self:isCharacter() and not status.hasEntityStatus(self, "knockout") then
         self.health = 1

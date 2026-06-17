@@ -1441,7 +1441,7 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
     -- Статусы
     local statusDescriptions = {
         fire = { name = "Fire", color = {1, 0.5, 0}, desc = "Burns for 1 damage at end of turn. Extinguished by water." },
-        acid = { name = "Acid", color = {0.3, 0.9, 0.3}, desc = "Doubles all incoming damage." },
+        acid = { name = "Acid", color = {0.3, 0.9, 0.3}, desc = "Any damage is instantly lethal." },
         decay = { name = "Decay", color = {0.7, 0.2, 0.8}, desc = "Takes 1 damage per move and at end of turn." },
         dig_site = { name = "Undermined", color = {0.8, 0.6, 0.2}, desc = "Standing on a dig site — enemy may spawn here!" },
         empowered = { name = "Empowered", color = {1, 0.9, 0.2}, desc = "Move +1, damage +1." },
