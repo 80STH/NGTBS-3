@@ -17,6 +17,7 @@ function input.mousepressed(x, y, button)
 
         if x >= restartButton.x and x <= restartButton.x + restartButton.width and
            y >= restartButton.y and y <= restartButton.y + restartButton.height then
+            if isMetaprogressionRun and win then return end
             restartGame()
             return
         end
@@ -70,6 +71,7 @@ function input.mousepressed(x, y, button)
     end
 
     if not gameActive then
+        if isMetaprogressionRun and win then return end
         local width = logicalW
         local height = logicalH
         local btnW, btnH = 200, 50
@@ -85,7 +87,12 @@ function input.mousepressed(x, y, button)
 
     if x >= restartButton.x and x <= restartButton.x + restartButton.width and
        y >= restartButton.y and y <= restartButton.y + restartButton.height then
-        restartGame()
+        if gamePhase == "playing" then
+            restartButton.isHeld = true
+            restartButton.holdTimer = 0
+        else
+            restartGame()
+        end
         return
     end
 
@@ -325,12 +332,14 @@ function input.keypressed(key)
         elseif key == "escape" then
             deploySelectedIdx = nil
         elseif key == "r" or key == "R" then
+            if isMetaprogressionRun and win then return end
             restartGame()
         end
         return
     end
 
     if not gameActive then
+        if isMetaprogressionRun and win then return end
         if key == "return" or key == " " or key == "r" or key == "R" then
             restartGame()
         end
@@ -376,7 +385,12 @@ function input.keypressed(key)
     end
 
     if key == "r" or key == "R" then
-        restartGame()
+        if gamePhase == "playing" then
+            restartButton.isHeld = true
+            restartButton.holdTimer = 0
+        else
+            restartGame()
+        end
         return
     end
 
@@ -448,6 +462,19 @@ function input.mousereleased(x, y, button)
     if endTurnButton.isHeld then
         endTurnButton.isHeld = false
         endTurnButton.holdTimer = 0
+    end
+    if restartButton.isHeld then
+        restartButton.isHeld = false
+        restartButton.holdTimer = 0
+    end
+end
+
+function input.keyreleased(key)
+    if key == "r" or key == "R" then
+        if restartButton.isHeld then
+            restartButton.isHeld = false
+            restartButton.holdTimer = 0
+        end
     end
 end
 

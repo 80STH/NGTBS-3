@@ -1050,7 +1050,12 @@ end
 
 -- Создать случайного врага (из пула)
 function environment.createRandomEnemy(q, r)
-    local types = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
+    local types
+    if isMetaprogressionRun then
+        types = { "Ghost", "Zombie", "Lich" }
+    else
+        types = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
+    end
     local rnd = love.math.random(1, #types)
     return environment.createEnemyByType(types[rnd], q, r)
 end

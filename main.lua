@@ -40,6 +40,12 @@ disableEnemySpawn = false
 chaos = 0
 chaosMax = 5
 unplacedAllies = {}
+isMetaprogressionRun = false
+currentMapIndex = 1
+showAbilityMenu = false
+abilityMenu = nil
+metaprogressionOverlay = nil
+mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua"}
 placedAllies = {}
 deploySelectedIdx = nil
 allyPanelButtons = {}
@@ -79,6 +85,75 @@ function syncState()
     state.chaosMax = chaosMax
 end
 
+function handleAbilityMenuClick(x, y)
+    local w, h = logicalW, logicalH
+    local menuW, menuH = 320, 340
+    local menuX = w/2 - menuW/2
+    local menuY = h/2 - menuH/2 + 30
+
+    -- Ability item rects
+    local itemH = 36
+    local itemStartY = menuY + 90
+    for i, name in ipairs(abilityMenu.available) do
+        local ix = menuX + 20
+        local iy = itemStartY + (i - 1) * (itemH + 6)
+        local iw = menuW - 40
+        if x >= ix and x <= ix + iw and y >= iy and y <= iy + itemH then
+            local already = false
+            for _, s in ipairs(abilityMenu.selected) do
+                if s == name then already = true; break end
+            end
+            if already then
+                for j = #abilityMenu.selected, 1, -1 do
+                    if abilityMenu.selected[j] == name then
+                        table.remove(abilityMenu.selected, j)
+                        break
+                    end
+                end
+            elseif #abilityMenu.selected < abilityMenu.maxSelect then
+                table.insert(abilityMenu.selected, name)
+            end
+            return
+        end
+    end
+
+    -- Confirm button
+    if #abilityMenu.selected == abilityMenu.maxSelect then
+        local btnW, btnH = 200, 40
+        local btnX = w/2 - btnW/2
+        local btnY = menuY + menuH - 60
+        if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
+            global_abilities.unlockAll(abilityMenu.selected)
+            global_abilities.maxMana = global_abilities.maxMana + 1
+            showAbilityMenu = false
+            abilityMenu = nil
+            if currentMapIndex == 1 then
+                currentMapIndex = 2
+                restartGame("maps/map2.lua")
+            else
+                currentMapIndex = 3
+                restartGame("maps/map3.lua")
+            end
+        end
+    end
+end
+
+function handleMetaprogressionOverlayClick(x, y)
+    local w = logicalW
+    local btnW, btnH = 240, 50
+    local btnX = w/2 - btnW/2
+    local btnY = logicalH/2 + 60
+
+    if metaprogressionOverlay == "complete" then
+        if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
+            metaprogressionOverlay = nil
+            isMetaprogressionRun = false
+            currentMapIndex = 1
+            gamePhase = "menu"
+        end
+    end
+end
+
 function love.load()
     dpiScale = love.window.getDPIScale()
     sti = require 'libraries/sti'
@@ -87,7 +162,8 @@ function love.load()
 
     restartButton = {
         x = 270, y = 0, width = 110, height = 30,
-        text = "Restart Game", isHovered = false
+        text = "Restart Game", isHovered = false,
+        isHeld = false, holdTimer = 0,
     }
     endTurnButton = {
         x = 140, y = 0, width = 110, height = 30,
@@ -123,6 +199,14 @@ end
 function love.mousepressed(x, y, button)
     if button ~= 1 then return end
     local lx, ly = x / dpiScale, y / dpiScale
+    if showAbilityMenu then
+        handleAbilityMenuClick(lx, ly)
+        return
+    end
+    if metaprogressionOverlay then
+        handleMetaprogressionOverlayClick(lx, ly)
+        return
+    end
     if gamePhase == "menu" then
         menu.mousepressed(lx, ly)
     else
@@ -197,10 +281,19 @@ function love.update(dt)
 
     if endTurnButton.isHeld then
         endTurnButton.holdTimer = endTurnButton.holdTimer + dt
-        if endTurnButton.holdTimer >= 0.7 then
+        if endTurnButton.holdTimer >= config.HOLD_TIME then
             endTurnButton.isHeld = false
             endTurnButton.holdTimer = 0
             endTurn()
+        end
+    end
+
+    if restartButton.isHeld then
+        restartButton.holdTimer = restartButton.holdTimer + dt
+        if restartButton.holdTimer >= config.HOLD_TIME then
+            restartButton.isHeld = false
+            restartButton.holdTimer = 0
+            restartGame()
         end
     end
 
@@ -214,6 +307,35 @@ function love.update(dt)
 
     turnManager.update(dt)
     objectives.update(entities)
+
+    if isMetaprogressionRun and win and gameActive == false and not showAbilityMenu and not metaprogressionOverlay then
+        if currentMapIndex == 1 then
+            showAbilityMenu = true
+            abilityMenu = {
+                available = {"Extra Move", "Unearth", "Mind Control", "Accelerate Decay"},
+                selected = {},
+                maxSelect = 1,
+            }
+        elseif currentMapIndex == 2 then
+            local remaining = {}
+            for _, name in ipairs(global_abilities.abilityOrder) do
+                if name ~= "Heal" and not global_abilities.unlocked[name] then
+                    table.insert(remaining, name)
+                end
+            end
+            if not global_abilities.unlocked["Wind Torrent"] then
+                table.insert(remaining, "Wind Torrent")
+            end
+            showAbilityMenu = true
+            abilityMenu = {
+                available = remaining,
+                selected = {},
+                maxSelect = 1,
+            }
+        elseif currentMapIndex == 3 then
+            metaprogressionOverlay = "complete"
+        end
+    end
 
     local mx, my = love.mouse.getPosition()
     mx = mx / dpiScale
@@ -336,9 +458,20 @@ function isCellOccupiedForStop(q, r, movingEntity)
 end
 
 function love.keypressed(key)
+    if key == "f5" and gameActive then
+        win = true
+        gameActive = false
+        print("AUTO WIN (debug)")
+        syncState()
+        return
+    end
     if gamePhase == "menu" then
         menu.keypressed(key)
     else
         input.keypressed(key)
     end
+end
+
+function love.keyreleased(key)
+    input.keyreleased(key)
 end

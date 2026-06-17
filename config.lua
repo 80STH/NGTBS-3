@@ -10,6 +10,6 @@ config.CENTER_R = 4
 config.GRID_OFFSET_X = 40
 config.WATER_Y_OFFSET = 18
 config.GRID_ROTATION_ANGLE = -math.pi / 6
-
+config.HOLD_TIME = 0.7
 
 return config

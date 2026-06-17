@@ -227,9 +227,9 @@ local function definePool()
             end,
         },
         {
-            id = "survive_poisonous_zombie",
-            name = "Poisonous Zombie Survives",
-            desc = "Poisonous zombie must not die before decay is applied",
+            id = "kill_poisonous_with_decay",
+            name = "Poisonous Dies With Decay",
+            desc = "The poisonous enemy must die with decay applied",
             incompatible = { "slaughter" },
             onGenerate = function(entities, hex)
                 local hasZombie = isEntityAlive(entities, "PoisonousZombie")
@@ -250,43 +250,44 @@ local function definePool()
                         table.insert(entities, zombie)
                     end
                 end
+                _G.poisonousSeenAlive = false
+                _G.poisonousResolved = false
+                _G.poisonousHadDecay = false
             end,
             check = function(entities, state)
-                local decayApplied = _G.decayAppliedForTurnLimit or false
-                local alive = isEntityAlive(entities, "PoisonousZombie")
-                if not alive then
-                    for _, e in ipairs(entities) do
-                        if e.health and e.health > 0 and e.name:match("Poisonous") then
-                            alive = true
-                            break
-                        end
+                if _G.poisonousResolved then return end
+                local target = nil
+                local status_mod = require("status")
+                for _, e in ipairs(entities) do
+                    if e.health and e.health > 0 and e.name:match("Poisonous") then
+                        target = e
+                        break
                     end
                 end
-                if not alive then
-                    state["survive_poisonous_zombie"] = decayApplied and "completed" or "failed"
-                elseif decayApplied then
-                    state["survive_poisonous_zombie"] = "completed"
+                if target then
+                    _G.poisonousSeenAlive = true
+                    if status_mod.hasEntityStatus(target, "decay") then
+                        _G.poisonousHadDecay = true
+                    end
+                    if target.isDying or target.health <= 0 then
+                        state["kill_poisonous_with_decay"] = _G.poisonousHadDecay and "completed" or "failed"
+                        _G.poisonousResolved = true
+                    end
+                elseif _G.poisonousSeenAlive and not _G.poisonousResolved then
+                    state["kill_poisonous_with_decay"] = _G.poisonousHadDecay and "completed" or "failed"
+                    _G.poisonousResolved = true
                 end
             end,
             checkOnVictory = function(entities, state)
-                local decayApplied = _G.decayAppliedForTurnLimit or false
-                local alive = isEntityAlive(entities, "PoisonousZombie")
-                if not alive then
-                    for _, e in ipairs(entities) do
-                        if e.health and e.health > 0 and e.name:match("Poisonous") then
-                            alive = true
-                            break
-                        end
-                    end
-                end
-                state["survive_poisonous_zombie"] = (alive or decayApplied) and "completed" or "failed"
+                if _G.poisonousResolved then return end
+                state["kill_poisonous_with_decay"] = "failed"
             end,
         },
         {
             id = "slaughter",
             name = "Slaughter",
             desc = "Kill 7 enemies before decay is applied",
-            incompatible = { "survive_poisonous_zombie" },
+            incompatible = { "kill_poisonous_with_decay" },
             onGenerate = function(entities, hex)
                 _G.objective_enemiesKilled = 0
             end,

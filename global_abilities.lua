@@ -15,13 +15,39 @@ local global_abilities = {}
 global_abilities.registry = {}
 global_abilities.activeAbility = nil
 global_abilities.dropdownOpen = false
-global_abilities.mana = 5
-global_abilities.maxMana = 5
+global_abilities.mana = 3
+global_abilities.maxMana = 3
 global_abilities.abilityUsedThisTurn = false
-global_abilities.mana = 5
-global_abilities.maxMana = 5
+global_abilities.mana = 3
+global_abilities.maxMana = 3
 global_abilities.abilityUsedThisTurn = false
 global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay"}
+
+global_abilities.unlocked = { Heal = true }
+
+function global_abilities.setUnlocked(name)
+    global_abilities.unlocked[name] = true
+end
+
+function global_abilities.unlockAll(names)
+    for _, name in ipairs(names) do
+        global_abilities.unlocked[name] = true
+    end
+end
+
+function global_abilities.resetUnlocks()
+    global_abilities.unlocked = { Heal = true }
+end
+
+function global_abilities.getDisplayOrder()
+    local result = {}
+    for _, name in ipairs(global_abilities.abilityOrder) do
+        if global_abilities.unlocked[name] then
+            table.insert(result, name)
+        end
+    end
+    return result
+end
 
 local function getDropdownHeader()
     local w = 145
@@ -66,7 +92,8 @@ function global_abilities.handleButtonClick(x, y, state)
         return true
     end
     if not global_abilities.dropdownOpen then return false end
-    for i, name in ipairs(global_abilities.abilityOrder) do
+    local displayOrder = global_abilities.getDisplayOrder()
+    for i, name in ipairs(displayOrder) do
         local ab = global_abilities.registry[name]
         if ab then
             local ix, iy, iw, ih = getAbilityItemRect(i)
@@ -128,6 +155,10 @@ end
 function global_abilities.handleKey(key, state)
     for _, ab in pairs(global_abilities.registry) do
         if key == ab.key then
+            if not global_abilities.unlocked[ab.name] then
+                print(ab.name .. " is not unlocked yet!")
+                return true
+            end
             if state.turnState.phase == "player" and not ab.hasBeenUsed then
                 if ab.name == "Unearth" and not ab:hasDigSites(state) then
                     print("Unearth: No dig sites on the map!")
@@ -205,7 +236,8 @@ function global_abilities.drawButtons(mx, my, state)
     if not global_abilities.dropdownOpen then return end
 
     -- Items
-    for i, name in ipairs(global_abilities.abilityOrder) do
+    local displayOrder = global_abilities.getDisplayOrder()
+    for i, name in ipairs(displayOrder) do
         local ab = global_abilities.registry[name]
         if ab then
             local ix, iy, iw, ih = getAbilityItemRect(i)

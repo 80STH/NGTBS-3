@@ -73,7 +73,7 @@ return function(ui)
         love.graphics.rectangle("fill", 140, btnY + pressedOffset, 110, 30 - pressedOffset, 5)
 
         if isPressed then
-            local progress = math.min(btn.holdTimer / 0.7, 1)
+            local progress = math.min(btn.holdTimer / config.HOLD_TIME, 1)
             love.graphics.setColor(0.9, 0.3, 0.2, 0.6)
             love.graphics.rectangle("fill", 140, btnY + pressedOffset, 110 * progress, 30 - pressedOffset, 5)
         end
@@ -175,13 +175,19 @@ return function(ui)
     end
 
     function ui.drawRestartButton(button, turnState)
-        local canRestart = (turnState.phase == "player") or true
+        local isPressed = button.isHeld
+        local pressedOffset = isPressed and 2 or 0
         love.graphics.setColor(0.4, 0.2, 0.6, 0.8)
-        love.graphics.rectangle("fill", button.x, button.y, button.width, button.height, 5)
+        love.graphics.rectangle("fill", button.x, button.y + pressedOffset, button.width, button.height - pressedOffset, 5)
+        if isPressed then
+            local progress = math.min(button.holdTimer / config.HOLD_TIME, 1)
+            love.graphics.setColor(0.9, 0.3, 0.6, 0.6)
+            love.graphics.rectangle("fill", button.x, button.y + pressedOffset, button.width * progress, button.height - pressedOffset, 5)
+        end
         love.graphics.setColor(1, 1, 1, 1)
         local old = love.graphics.getFont()
         love.graphics.setFont(buttonFont)
-        love.graphics.printf(button.text .. " (R)", button.x, button.y + 9, button.width, "center")
+        love.graphics.printf(button.text .. " (R)", button.x, button.y + 9 + pressedOffset, button.width, "center")
         love.graphics.setFont(old)
     end
 

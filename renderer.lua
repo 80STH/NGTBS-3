@@ -358,32 +358,152 @@ function renderer.draw(state)
         local height = logicalH
         local oldFont = love.graphics.getFont()
 
-        love.graphics.setColor(0, 0, 0, 0.85)
-        love.graphics.rectangle("fill", 0, 0, width, height)
+        if isMetaprogressionRun and state.win then
+            if showAbilityMenu and abilityMenu then
+                drawAbilityMenu(width, height)
+            elseif metaprogressionOverlay == "complete" then
+                drawMetaprogressionComplete(width, height)
+            end
+        else
+            love.graphics.setColor(0, 0, 0, 0.85)
+            love.graphics.rectangle("fill", 0, 0, width, height)
 
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.setFont(love.graphics.newFont(48))
-        if state.win then
-            love.graphics.printf("VICTORY!", 0, height/2 - 100, width, "center")
-            local total = objectives.getTotalCount()
-            local completed = objectives.getCompletedCount()
-            love.graphics.setFont(love.graphics.newFont(18))
-            love.graphics.setColor(0.8, 0.8, 0.8, 1)
-            love.graphics.printf("Objectives: " .. completed .. " / " .. total .. " completed", 0, height/2 - 50, width, "center")
-        elseif state.loss then
-            love.graphics.printf("DEFEAT!", 0, height/2 - 100, width, "center")
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.setFont(love.graphics.newFont(48))
+            if state.win then
+                love.graphics.printf("VICTORY!", 0, height/2 - 100, width, "center")
+                local total = objectives.getTotalCount()
+                local completed = objectives.getCompletedCount()
+                love.graphics.setFont(love.graphics.newFont(18))
+                love.graphics.setColor(0.8, 0.8, 0.8, 1)
+                love.graphics.printf("Objectives: " .. completed .. " / " .. total .. " completed", 0, height/2 - 50, width, "center")
+            elseif state.loss then
+                love.graphics.printf("DEFEAT!", 0, height/2 - 100, width, "center")
+            end
+
+            local btnW, btnH = 200, 50
+            local btnX = width/2 - btnW/2
+            local btnY = height/2 + 20
+            love.graphics.setFont(love.graphics.newFont(24))
+            love.graphics.setColor(0.2, 0.2, 0.6, 0.9)
+            love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 8)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print("New Game (Enter)", btnX + 20, btnY + 12)
+            love.graphics.setFont(oldFont)
+        end
+    end
+end
+
+function drawAbilityMenu(w, h)
+    local mx, my = love.mouse.getPosition()
+    mx = mx / dpiScale
+    my = my / dpiScale
+
+    -- Dark overlay
+    love.graphics.setColor(0, 0, 0, 0.88)
+    love.graphics.rectangle("fill", 0, 0, w, h)
+
+    -- Menu panel
+    local menuW, menuH = 320, 340
+    local menuX = w/2 - menuW/2
+    local menuY = h/2 - menuH/2 + 30
+
+    love.graphics.setColor(0.12, 0.12, 0.18, 0.95)
+    love.graphics.rectangle("fill", menuX, menuY, menuW, menuH, 12)
+    love.graphics.setColor(0.3, 0.7, 0.3, 0.6)
+    love.graphics.rectangle("line", menuX, menuY, menuW, menuH, 12)
+
+    -- Title
+    local mapTitle = (currentMapIndex == 1) and "MAP 1 COMPLETE" or "MAP 2 COMPLETE"
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setFont(love.graphics.newFont(22))
+    love.graphics.printf(mapTitle, menuX, menuY + 15, menuW, "center")
+    love.graphics.setFont(love.graphics.newFont(14))
+    love.graphics.setColor(0.8, 0.8, 0.8, 1)
+    love.graphics.printf("Choose " .. abilityMenu.maxSelect .. " ability to unlock:", menuX, menuY + 50, menuW, "center")
+
+    -- Selection count
+    love.graphics.setColor(0.6, 0.9, 0.6, 1)
+    love.graphics.setFont(love.graphics.newFont(13))
+    love.graphics.printf("(" .. #abilityMenu.selected .. "/" .. abilityMenu.maxSelect .. " selected)", menuX, menuY + 70, menuW, "center")
+
+    -- Ability items
+    local itemH = 36
+    local itemStartY = menuY + 90
+    for i, name in ipairs(abilityMenu.available) do
+        local ix = menuX + 20
+        local iy = itemStartY + (i - 1) * (itemH + 6)
+        local iw = menuW - 40
+        local hover = mx >= ix and mx <= ix + iw and my >= iy and my <= iy + itemH
+
+        local isSelected = false
+        for _, s in ipairs(abilityMenu.selected) do
+            if s == name then isSelected = true; break end
         end
 
-        local btnW, btnH = 200, 50
-        local btnX = width/2 - btnW/2
-        local btnY = height/2 + 20
-        love.graphics.setFont(love.graphics.newFont(24))
-        love.graphics.setColor(0.2, 0.2, 0.6, 0.9)
-        love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 8)
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print("New Game (Enter)", btnX + 20, btnY + 12)
-        love.graphics.setFont(oldFont)
+        local canSelect = #abilityMenu.selected < abilityMenu.maxSelect or isSelected
+
+        if isSelected then
+            love.graphics.setColor(0.2, 0.6, 0.25, 0.9)
+        elseif hover and canSelect then
+            love.graphics.setColor(0.25, 0.3, 0.4, 0.9)
+        else
+            love.graphics.setColor(0.15, 0.18, 0.25, 0.9)
+        end
+        love.graphics.rectangle("fill", ix, iy, iw, itemH, 6)
+        love.graphics.setColor(isSelected and 0.4 or 0.3, isSelected and 0.8 or 0.4, isSelected and 0.4 or 0.5, isSelected and 0.9 or 0.5)
+        love.graphics.rectangle("line", ix, iy, iw, itemH, 6)
+
+        love.graphics.setColor(1, 1, 1, isSelected and 1 or 0.7)
+        love.graphics.setFont(love.graphics.newFont(13))
+        love.graphics.print((isSelected and "✓ " or "  ") .. name, ix + 10, iy + 10)
     end
+
+    -- Confirm button
+    if #abilityMenu.selected == abilityMenu.maxSelect then
+        local btnW, btnH = 200, 40
+        local btnX = w/2 - btnW/2
+        local btnY = menuY + menuH - 60
+        local btnHover = mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH
+
+        love.graphics.setColor(btnHover and 0.25 or 0.15, btnHover and 0.7 or 0.4, btnHover and 0.3 or 0.2, 0.95)
+        love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 8)
+        love.graphics.setColor(0.3, 0.9, 0.3, btnHover and 0.9 or 0.6)
+        love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 8)
+
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setFont(love.graphics.newFont(16))
+        love.graphics.printf("CONFIRM", btnX, btnY + 10, btnW, "center")
+    end
+end
+
+function drawMetaprogressionComplete(w, h)
+    love.graphics.setColor(0, 0, 0, 0.88)
+    love.graphics.rectangle("fill", 0, 0, w, h)
+
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setFont(love.graphics.newFont(26))
+    love.graphics.printf("METAPROGRESSION TEST", 0, h/2 - 90, w, "center")
+    love.graphics.setFont(love.graphics.newFont(32))
+    love.graphics.setColor(0.4, 1, 0.4, 1)
+    love.graphics.printf("COMPLETE!", 0, h/2 - 40, w, "center")
+
+    local mx, my = love.mouse.getPosition()
+    mx = mx / dpiScale
+    my = my / dpiScale
+
+    local btnW, btnH = 240, 50
+    local btnX = w/2 - btnW/2
+    local btnY = h/2 + 50
+    local btnHover = mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH
+
+    love.graphics.setFont(love.graphics.newFont(16))
+    love.graphics.setColor(btnHover and 0.4 or 0.2, btnHover and 0.25 or 0.15, btnHover and 0.2 or 0.1, 0.9)
+    love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 8)
+    love.graphics.setColor(0.6, 0.4, 0.2, btnHover and 0.8 or 0.4)
+    love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 8)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf("Back to Menu", btnX, btnY + 15, btnW, "center")
 end
 
 -- ============================================================
