@@ -75,10 +75,7 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
                 else
                     status.removeFromEntity(entity, "fire")
                 end
-                -- Для союзников огонь действует всего 1 ход
-                if entity.isPlayable then
-                    status.removeFromEntity(entity, "fire")
-                end
+
             end
 
             -- ===== ДОБАВИТЬ ОБРАБОТКУ DECAY =====
