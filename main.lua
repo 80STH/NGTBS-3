@@ -40,15 +40,49 @@ disableEnemySpawn = false
 chaos = 0
 chaosMax = 5
 unplacedAllies = {}
-isMetaprogressionRun = false
+isProgressionRun = false
 currentMapIndex = 1
 showAbilityMenu = false
 abilityMenu = nil
-metaprogressionOverlay = nil
+progressionOverlay = nil
 mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua"}
+unitUpgrades = {}  -- "Warrior" → { choices = {"rootImmune", "dashToFlipChain"} }
 placedAllies = {}
 deploySelectedIdx = nil
 allyPanelButtons = {}
+
+UPGRADE_CHOICES = {
+    Warrior = {
+        {
+            { id = "rootImmune", name = "Iron Will", desc = "Immune to roots/slowing auras" },
+            { id = "deployAnywhere", name = "Scout", desc = "Can deploy on water and non-playable cells" },
+        },
+        {
+            { id = "dashToFlipChain", name = "Dash→Flip", desc = "After Dash, can Flip the same target" },
+            { id = "flipToDashChain", name = "Flip→Dash", desc = "After Flip, can Dash the same target" },
+        },
+    },
+    Puncher = {
+        {
+            { id = "armor", name = "Fortress", desc = "-1 damage taken" },
+            { id = "moveSpeed", name = "Swift", desc = "+1 movement range" },
+        },
+        {
+            { id = "empowerAtStart", name = "Empowered Start", desc = "Start each map empowered" },
+            { id = "choosePushDir", name = "Windup", desc = "Choose push direction" },
+        },
+    },
+    Rogue = {
+        {
+            { id = "canMoveAfterAttack", name = "Hit & Run", desc = "Move after attacking" },
+            { id = "phaseThroughEnemies", name = "Ghost", desc = "Phase through enemies" },
+        },
+        {
+            { id = "redirectShot", name = "Ricochet", desc = "Redirect shot to second target" },
+            { id = "pointBlankLethal", name = "Close Quarters", desc = "Point-blank shot is lethal" },
+        },
+    },
+}
 
 function syncState()
     state.entities = entities
@@ -65,6 +99,7 @@ function syncState()
     state.attackMode = attackMode
     state.flipTargetActor = flipTargetActor
     state.vortexTargetCell = vortexTargetCell
+    state.pushDirTargetCell = pushDirTargetCell
     state.pullHookTargetCell = pullHookTargetCell
     state.attackButtons = attackButtons
     state.sounds = sounds
@@ -87,9 +122,73 @@ end
 
 function handleAbilityMenuClick(x, y)
     local w, h = logicalW, logicalH
-    local menuW, menuH = 320, 340
+    local menuW, menuH = 340, 340
     local menuX = w/2 - menuW/2
     local menuY = h/2 - menuH/2 + 30
+
+    if abilityMenu.mode == "upgrade" then
+        local itemH = 60
+        local itemStartY = menuY + 90
+
+        if not abilityMenu.selectedUnit then
+            -- Stage 1: pick a unit
+            for i, entry in ipairs(abilityMenu.available) do
+                local ix = menuX + 20
+                local iy = itemStartY + (i - 1) * (itemH + 6)
+                local iw = menuW - 40
+                if x >= ix and x <= ix + iw and y >= iy and y <= iy + itemH then
+                    abilityMenu.selectedUnit = entry
+                    local choices = UPGRADE_CHOICES[entry.name]
+                    abilityMenu.availableChoices = choices[entry.level + 1]
+                    abilityMenu.selectedChoice = nil
+                    return
+                end
+            end
+        else
+            -- Stage 2: pick a choice
+            local choiceH = 50
+            for i, choice in ipairs(abilityMenu.availableChoices) do
+                local ix = menuX + 20
+                local iy = itemStartY + (i - 1) * (choiceH + 6)
+                local iw = menuW - 40
+                if x >= ix and x <= ix + iw and y >= iy and y <= iy + choiceH then
+                    abilityMenu.selectedChoice = choice.id
+                    return
+                end
+            end
+
+            -- Back button
+            local backBtnY = itemStartY + #abilityMenu.availableChoices * (choiceH + 6) + 10
+            if x >= menuX + 20 and x <= menuX + 20 + 100 and y >= backBtnY and y <= backBtnY + 30 then
+                abilityMenu.selectedUnit = nil
+                abilityMenu.selectedChoice = nil
+                abilityMenu.availableChoices = nil
+                return
+            end
+
+            -- Confirm button
+            if abilityMenu.selectedChoice then
+                local btnW, btnH = 200, 40
+                local btnX = w/2 - btnW/2
+                local btnY = menuY + menuH - 60
+                if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
+                    local data = unitUpgrades[abilityMenu.selectedUnit.name] or { choices = {} }
+                    table.insert(data.choices, abilityMenu.selectedChoice)
+                    unitUpgrades[abilityMenu.selectedUnit.name] = data
+                    showAbilityMenu = false
+                    abilityMenu = nil
+                    local nextMap = currentMapIndex + 1
+                    if nextMap <= #mapProgression then
+                        currentMapIndex = nextMap
+                        restartGame(mapProgression[nextMap])
+                    else
+                        progressionOverlay = "complete"
+                    end
+                end
+            end
+        end
+        return
+    end
 
     -- Ability item rects
     local itemH = 36
@@ -138,16 +237,16 @@ function handleAbilityMenuClick(x, y)
     end
 end
 
-function handleMetaprogressionOverlayClick(x, y)
+function handleProgressionOverlayClick(x, y)
     local w = logicalW
     local btnW, btnH = 240, 50
     local btnX = w/2 - btnW/2
     local btnY = logicalH/2 + 60
 
-    if metaprogressionOverlay == "complete" then
+    if progressionOverlay == "complete" then
         if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
-            metaprogressionOverlay = nil
-            isMetaprogressionRun = false
+            progressionOverlay = nil
+            isProgressionRun = false
             currentMapIndex = 1
             gamePhase = "menu"
         end
@@ -203,8 +302,8 @@ function love.mousepressed(x, y, button)
         handleAbilityMenuClick(lx, ly)
         return
     end
-    if metaprogressionOverlay then
-        handleMetaprogressionOverlayClick(lx, ly)
+    if progressionOverlay then
+        handleProgressionOverlayClick(lx, ly)
         return
     end
     if gamePhase == "menu" then
@@ -232,11 +331,26 @@ function isPositionOccupied(q, r, movingEntity)
     for _, e in ipairs(entities) do
         if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
             if not (e:isCharacter() and e.isPlayable == movingEntity.isPlayable) then
-                return true
+                -- phaseThroughEnemies: allow passing through enemies (but not allies)
+                if movingEntity.phaseThroughEnemies and e:isCharacter() and not e.isPlayable then
+                    -- skip - can phase through enemies
+                else
+                    return true
+                end
             end
         end
     end
     return false
+end
+
+-- Returns 3 push direction choices for choosePushDir (Puncher lvl3)
+-- Uses cube coordinate rotation (±60°)
+function getPushDirChoices(stepX, stepY, stepZ)
+    -- Rotate +60° clockwise: (x,y,z) → (-z, -x, -y)
+    local cw = {x = -stepZ, y = -stepX, z = -stepY}
+    -- Rotate -60° counter-clockwise: (x,y,z) → (-y, -z, -x)
+    local ccw = {x = -stepY, y = -stepZ, z = -stepX}
+    return {ccw, {x = stepX, y = stepY, z = stepZ}, cw}
 end
 
 function getEntityAtHex(q, r)
@@ -308,32 +422,34 @@ function love.update(dt)
     turnManager.update(dt)
     objectives.update(entities)
 
-    if isMetaprogressionRun and win and gameActive == false and not showAbilityMenu and not metaprogressionOverlay then
-        if currentMapIndex == 1 then
-            showAbilityMenu = true
-            abilityMenu = {
-                available = {"Extra Move", "Unearth", "Mind Control", "Accelerate Decay"},
-                selected = {},
-                maxSelect = 1,
-            }
-        elseif currentMapIndex == 2 then
-            local remaining = {}
-            for _, name in ipairs(global_abilities.abilityOrder) do
-                if name ~= "Heal" and not global_abilities.unlocked[name] then
-                    table.insert(remaining, name)
+    if isProgressionRun and win and gameActive == false and not showAbilityMenu and not progressionOverlay then
+        local squad = menu.getSquads()[selectedSquad]
+        local upgradable = {}
+        if squad then
+            for _, unitDef in ipairs(squad.units) do
+                local name = unitDef.name
+                if name == "Warrior" or name == "Puncher" or name == "Rogue" then
+                    local data = unitUpgrades[name]
+                    local lvl = data and #data.choices or 0
+                    if lvl < 2 then
+                        table.insert(upgradable, { name = name, level = lvl })
+                    end
                 end
             end
-            if not global_abilities.unlocked["Wind Torrent"] then
-                table.insert(remaining, "Wind Torrent")
-            end
+        end
+        if #upgradable > 0 then
             showAbilityMenu = true
             abilityMenu = {
-                available = remaining,
+                available = upgradable,
                 selected = {},
                 maxSelect = 1,
+                mode = "upgrade",
+                selectedUnit = nil,
+                selectedChoice = nil,
+                availableChoices = nil,
             }
-        elseif currentMapIndex == 3 then
-            metaprogressionOverlay = "complete"
+        else
+            progressionOverlay = "complete"
         end
     end
 

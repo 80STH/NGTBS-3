@@ -81,6 +81,14 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     self.isDying = false
     self.deathTimer = 0
     self.deathDuration = 0.4   -- длительность анимации исчезновения
+
+    -- Уровень улучшения юнита (0 = базовый, 1 = lvl2, 2 = lvl3)
+    self.upgradeLevel = 0
+
+    -- Warrior chain: после Dash можно Flip (и наоборот)
+    self.chainAttack = nil  -- "Dash" или "Flip"
+    -- Rogue redirect: после Shoot можно выстрелить ещё раз
+    self.redirectPending = nil
     
     return self
 end
@@ -171,6 +179,11 @@ function Entity:startDeath()
     self.isDying = true
     self.deathTimer = 0
     self.health = 0
+    if self.rootedTarget then
+        local status = require("status")
+        status.removeFromEntity(self.rootedTarget, "rooted")
+        self.rootedTarget = nil
+    end
     if not self.isPlayable and self:isCharacter() then
         _G.objective_enemiesKilled = (_G.objective_enemiesKilled or 0) + 1
     end

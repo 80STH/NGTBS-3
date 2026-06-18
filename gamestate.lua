@@ -33,6 +33,9 @@ function GameState.new()
     self.selectedAttack = nil
     self.attackMode = false
     self.flipTargetActor = nil
+    self.vortexTargetCell = nil
+    self.pullHookTargetCell = nil
+    self.pushDirTargetCell = nil
     self.attackButtons = {}
     self.sounds = {}
 

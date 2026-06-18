@@ -943,27 +943,46 @@ end
                 local totalDmg = attack.damage or 0
                 local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
                 if stepX then
-                    local pushQ, pushR = hex_utils.applyCubeStep(hoverQ, hoverR, stepX, stepY, stepZ)
-                    local pushX, pushY
-                    if hex:isValidHex(pushQ, pushR) then
-                        pushX, pushY = getDrawCoords(pushQ, pushR)
-                    end
-                    ui.drawPushArrow(tx, ty, pushX or tx, pushY or ty, nil, nil, nil, nil, hoverQ, hoverR, pushQ, pushR)
-                    local colDmg, colReason, colOcc = ui.checkCollisionDamage(target, hoverQ, hoverR, pushQ, pushR, hex, entities)
-                    if colDmg > 0 then
-                        totalDmg = totalDmg + colDmg
-                        if colReason == "edge" then
-                            local crashX, crashY = pushX or tx, pushY or ty
-                            ui.drawCollisionIcon(crashX, crashY, 1, false)
-                        elseif colOcc then
-                            local occX, occY = getDrawCoords(colOcc.q, colOcc.r)
-                            if colReason == "collision_both" then
-                                ui.drawCollisionIcon(occX, occY, 1, true)
-                                ui.drawCollisionIcon(pushX or occX, pushY or occY, 1, true)
-                            else
-                                ui.drawCollisionIcon(pushX or occX, pushY or occY, 1, false)
+                    if attacker.choosePushDir and not pushDirTargetCell then
+                        -- Show 3 push direction choices for Puncher lvl3
+                        local dirs = getPushDirChoices(stepX, stepY, stepZ)
+                        for _, d in ipairs(dirs) do
+                            local pushQ, pushR = hex_utils.applyCubeStep(hoverQ, hoverR, d.x, d.y, d.z)
+                            if hex:isValidHex(pushQ, pushR) then
+                                local pushX, pushY = getDrawCoords(pushQ, pushR)
+                                love.graphics.setColor(0.4, 0.8, 1, 0.3)
+                                local dv = hex:drawInsetHexagon(pushX, pushY, hex.radius, 0.92)
+                                love.graphics.polygon("fill", dv)
+                                love.graphics.setColor(0.4, 0.8, 1, 0.8)
+                                love.graphics.setLineWidth(2)
+                                love.graphics.polygon("line", dv)
+                                love.graphics.setLineWidth(1)
+                                ui.drawPushArrow(tx, ty, pushX, pushY, nil, nil, nil, nil, hoverQ, hoverR, pushQ, pushR)
                             end
-                            if colOcc:isBuilding() then
+                        end
+                    else
+                        local pushQ, pushR = hex_utils.applyCubeStep(hoverQ, hoverR, stepX, stepY, stepZ)
+                        local pushX, pushY
+                        if hex:isValidHex(pushQ, pushR) then
+                            pushX, pushY = getDrawCoords(pushQ, pushR)
+                        end
+                        ui.drawPushArrow(tx, ty, pushX or tx, pushY or ty, nil, nil, nil, nil, hoverQ, hoverR, pushQ, pushR)
+                        local colDmg, colReason, colOcc = ui.checkCollisionDamage(target, hoverQ, hoverR, pushQ, pushR, hex, entities)
+                        if colDmg > 0 then
+                            totalDmg = totalDmg + colDmg
+                            if colReason == "edge" then
+                                local crashX, crashY = pushX or tx, pushY or ty
+                                ui.drawCollisionIcon(crashX, crashY, 1, false)
+                            elseif colOcc then
+                                local occX, occY = getDrawCoords(colOcc.q, colOcc.r)
+                                if colReason == "collision_both" then
+                                    ui.drawCollisionIcon(occX, occY, 1, true)
+                                    ui.drawCollisionIcon(pushX or occX, pushY or occY, 1, true)
+                                else
+                                    ui.drawCollisionIcon(pushX or occX, pushY or occY, 1, false)
+                                end
+                                if colOcc:isBuilding() then
+                                end
                             end
                         end
                     end
@@ -1441,7 +1460,8 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         decay = { name = "Decay", color = {0.7, 0.2, 0.8}, desc = "Takes 1 damage per move and at end of turn." },
         dig_site = { name = "Undermined", color = {0.8, 0.6, 0.2}, desc = "Standing on a dig site — enemy may spawn here!" },
         empowered = { name = "Empowered", color = {1, 0.9, 0.2}, desc = "Move +1, damage +1." },
-        double_damage = { name = "Double Damage", color = {1, 0.5, 0.5}, desc = "Next attack deals double damage (one-time)." },
+        fatal_damage = { name = "Fatal Damage", color = {1, 0.5, 0.5}, desc = "Next attack is lethal (one-time)." },
+        rooted = { name = "Rooted", color = {0.6, 0.8, 0.2}, desc = "Immobilized by a Zombie — cannot move until the Zombie is displaced." },
         wounded = { name = "Wounded", color = {1, 0.4, 0.2}, desc = "Health below max. Move range reduced by 1." },
 
     }
@@ -2030,17 +2050,24 @@ function updateAttackButtons(actor)
     end
     local startX = logicalW - 160
     local startY = 100
+    local idx = 0
     for i, attackInfo in ipairs(actor.attacks) do
-        local btn = {
-            x = startX,
-            y = startY + (i-1) * 35,
-            width = 150,
-            height = 30,
-            attack = attackInfo.attack,
-            name = attackInfo.name,
-            desc = attackInfo.description
-        }
-        table.insert(attackButtons, btn)
+        -- If chain is active, only show the chained attack
+        if actor.chainAttack and actor.chainAttack ~= attackInfo.name then
+            -- skip
+        else
+            idx = idx + 1
+            local btn = {
+                x = startX,
+                y = startY + (idx-1) * 35,
+                width = 150,
+                height = 30,
+                attack = attackInfo.attack,
+                name = attackInfo.name,
+                desc = attackInfo.description
+            }
+            table.insert(attackButtons, btn)
+        end
     end
 end
 function clearSelectedActor()

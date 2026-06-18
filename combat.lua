@@ -1500,7 +1500,13 @@ function combat.HeavyPunchAttack:execute(attacker, targetQ, targetR, hex, entiti
     end
 
     if target.health > 0 then
-        local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+        local stepX, stepY, stepZ
+        if self._pushDirOverride then
+            stepX, stepY, stepZ = self._pushDirOverride.x, self._pushDirOverride.y, self._pushDirOverride.z
+            self._pushDirOverride = nil
+        else
+            stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+        end
         if stepX then
             local pushQ, pushR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
             self:pushTargetToHex(target, targetQ, targetR, pushQ, pushR, hex, entities, sounds)
@@ -1559,7 +1565,13 @@ function combat.EmpowerPunchAttack:execute(attacker, targetQ, targetR, hex, enti
     end
 
     if target.health > 0 then
-        local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+        local stepX, stepY, stepZ
+        if self._pushDirOverride then
+            stepX, stepY, stepZ = self._pushDirOverride.x, self._pushDirOverride.y, self._pushDirOverride.z
+            self._pushDirOverride = nil
+        else
+            stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+        end
         if stepX then
             local pushQ, pushR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
             self:pushTargetToHex(target, targetQ, targetR, pushQ, pushR, hex, entities, sounds)
@@ -1568,7 +1580,7 @@ function combat.EmpowerPunchAttack:execute(attacker, targetQ, targetR, hex, enti
     end
 
     -- Empower: следующий удар наносит удвоенный урон (одноразово)
-    status.applyToEntity(attacker, "double_damage")
+    status.applyToEntity(attacker, "fatal_damage")
 
     attacker.hasActedThisTurn = true
     return true
@@ -1602,6 +1614,7 @@ end
 
 -- Проверяет, находится ли entity в радиусе ауры врага
 function combat.isInSlowingAura(entity, entities, hex)
+    if entity.rootImmune then return false end
     for _, e in ipairs(entities) do
         if e ~= entity and e.health > 0 and e.aura and e.aura.type == "slow" then
             local dist = hex:getDistance(entity.q, entity.r, e.q, e.r)
@@ -1661,6 +1674,11 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
                 -- Клетка свободна – выполняем перемещение
                 pushedObj.q = toQ
                 pushedObj.r = toR
+                -- Если сдвинули зомби — снять rooted с его цели
+                if pushedObj.rootedTarget then
+                    status.removeFromEntity(pushedObj.rootedTarget, "rooted")
+                    pushedObj.rootedTarget = nil
+                end
                 -- Применяем эффекты клетки после перемещения
                 if pushedObj and terrainMap then
                     local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities)
@@ -1686,6 +1704,10 @@ function combat.addDirectPushAnimation(obj, fromQ, fromR, toQ, toR)
         onComplete = function(pushedObj)
             pushedObj.q = toQ
             pushedObj.r = toR
+            if pushedObj.rootedTarget then
+                status.removeFromEntity(pushedObj.rootedTarget, "rooted")
+                pushedObj.rootedTarget = nil
+            end
             if terrainMap then
                 local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities)
                 if died then pushedObj:startDeath() end
@@ -1844,10 +1866,18 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
         finalDamage = finalDamage + 1
     end
 
-    -- Double damage next: удваивает урон (одноразово, снимается после атаки)
-    if damage > 0 and status.hasEntityStatus(attacker, "double_damage") then
-        finalDamage = finalDamage * 2
-        status.removeFromEntity(attacker, "double_damage")
+    -- Fatal damage: увеличивает урон до 99 (одноразово, снимается после атаки)
+    if damage > 0 and status.hasEntityStatus(attacker, "fatal_damage") then
+        finalDamage = 99
+        status.removeFromEntity(attacker, "fatal_damage")
+    end
+
+    -- Point-blank lethal: Shoot at distance 1 instantly kills
+    if damage > 0 and attacker.pointBlankLethal and hex then
+        local dist = hex:getDistance(attacker.q, attacker.r, target.q, target.r)
+        if dist == 1 then
+            finalDamage = 99
+        end
     end
 
     if finalDamage < 1 and damage > 0 then finalDamage = 1 end
@@ -1962,6 +1992,10 @@ function performMove(actor, targetQ, targetR)
         return false
     end
     if actor.isMoving then return false end
+    if status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
+        print(actor.name .. " is rooted by a Zombie and cannot move!")
+        return false
+    end
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return false end
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then
         print(actor.name .. " has already moved this turn!")
@@ -2086,12 +2120,48 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
     print("[DEBUG] Attack result:", success, message)
 
     if success then
-        attacker.hasActedThisTurn = true
-        actionHistory = {}
-        print(attacker.name .. " attacked and ended turn. Move history cleared.")
-        attackMode = false
-        selectedAttack = nil
-        checkGameEnd()
+        local endTurn = true
+
+        -- Warrior chain: directional (Dash→Flip or Flip→Dash)
+        if attacker.dashToFlipChain and attack.name == "Dash" then
+            if attacker.chainAttack == "Dash" then
+                attacker.chainAttack = nil
+            elseif not attacker.chainAttack then
+                attacker.chainAttack = "Flip"
+                endTurn = false
+                updateAttackButtons(attacker)
+            end
+        elseif attacker.flipToDashChain and attack.name == "Flip" then
+            if attacker.chainAttack == "Flip" then
+                attacker.chainAttack = nil
+            elseif not attacker.chainAttack then
+                attacker.chainAttack = "Dash"
+                endTurn = false
+                updateAttackButtons(attacker)
+            end
+        end
+
+        -- Redirect shot: Rogue lvl3, Shoot/Piercing Shot can be used twice
+        if endTurn and attacker.redirectShot and not attacker.redirectPending and
+           (attack.name == "Shoot" or attack.name == "Piercing Shot") then
+            attacker.redirectPending = true
+            endTurn = false
+            print(attacker.name .. " can redirect shot")
+        elseif attacker.redirectPending and (attack.name == "Shoot" or attack.name == "Piercing Shot") then
+            attacker.redirectPending = nil
+        end
+
+        if endTurn then
+            attacker.hasActedThisTurn = true
+            actionHistory = {}
+            print(attacker.name .. " attacked and ended turn.")
+            attackMode = false
+            selectedAttack = nil
+            checkGameEnd()
+        else
+            attackMode = false
+            selectedAttack = nil
+        end
     else
         print("Attack failed: " .. (message or "unknown"))
     end

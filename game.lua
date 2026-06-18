@@ -46,6 +46,10 @@ function restartGame(mapPath)
             e.path = {}
             e.currentPathIndex = 0
         end
+        if e.rootedTarget then
+            status.removeFromEntity(e.rootedTarget, "rooted")
+            e.rootedTarget = nil
+        end
     end
 
     -- For map1, spawn 5 random enemies if none are present (user cleared the entity layer)
@@ -127,6 +131,7 @@ function restartGame(mapPath)
     flipTargetActor = nil
     vortexTargetCell = nil
     pullHookTargetCell = nil
+    pushDirTargetCell = nil
     attackMode = false
     selectedAttack = nil
     attackButtons = {}
@@ -233,20 +238,24 @@ function restartGame(mapPath)
             delayBetweenAttacks = 0.4,
             pendingDigProcessing = false,
         }
-        for _, e in ipairs(entities) do
-            if e:isCharacter() and not e.isPlayable then
-                e.hasPreparedAttack = false
-                e.preparePos = nil
-                e.preparedTarget = nil
-                e.movementFinished = false
-                e.isMoving = false
-                e.path = {}
-                e.currentPathIndex = 0
-            end
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable then
+            e.hasPreparedAttack = false
+            e.preparePos = nil
+            e.preparedTarget = nil
+            e.movementFinished = false
+            e.isMoving = false
+            e.path = {}
+            e.currentPathIndex = 0
         end
-        updateAttackButtons(selectedActor)
-        maxUndoCount = countPlayableActors()
-        turnManager.startGame()
+        if e.rootedTarget then
+            status.removeFromEntity(e.rootedTarget, "rooted")
+            e.rootedTarget = nil
+        end
+    end
+    updateAttackButtons(selectedActor)
+    maxUndoCount = countPlayableActors()
+    turnManager.startGame()
         gamePhase = "playing"
     else
         gamePhase = "deploy"
@@ -295,6 +304,10 @@ function confirmDeploy()
             e.isMoving = false
             e.path = {}
             e.currentPathIndex = 0
+        end
+        if e.rootedTarget then
+            status.removeFromEntity(e.rootedTarget, "rooted")
+            e.rootedTarget = nil
         end
     end
 
@@ -523,7 +536,7 @@ function processDigSites()
             local spots = findRandomEmptyCells(needed, function(q, r)
                 return status.hasDigSite(q, r) or status.hasNegativeHexStatus(q, r)
             end)
-            local digTypes = isMetaprogressionRun and { "Ghost", "Zombie", "Lich" } or { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
+            local digTypes = isProgressionRun and { "Ghost", "Zombie", "Lich" } or { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
             for _, spot in ipairs(spots) do
                 local spawnType = digTypes[love.math.random(1, #digTypes)]
                 status.setDigSite(spot.q, spot.r, 1, spawnType)

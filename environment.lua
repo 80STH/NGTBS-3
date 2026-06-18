@@ -930,12 +930,33 @@ function environment.createSquadUnit(unitDef, q, r)
         AttackTest = {0.2, 0.9, 0.9},
     }
 
-    return Entity.new(
+    local entity = Entity.new(
         unitDef.name, Entity.TYPES.CHARACTER, q, r,
         unitDef.maxHealth, true, unitDef.moveRange,
         sprite, sprite and nil or (colors[unitDef.name] or {0.5, 0.5, 0.5}),
         attacks
     )
+
+    -- Apply progression upgrades (choice-based)
+    local upgradeData = _G.unitUpgrades and _G.unitUpgrades[unitDef.name] or { choices = {} }
+    entity.upgradeLevel = #upgradeData.choices
+
+    for _, choiceId in ipairs(upgradeData.choices) do
+        if choiceId == "rootImmune" then entity.rootImmune = true end
+        if choiceId == "deployAnywhere" then entity.deployAnywhere = true end
+        if choiceId == "dashToFlipChain" then entity.dashToFlipChain = true end
+        if choiceId == "flipToDashChain" then entity.flipToDashChain = true end
+        if choiceId == "armor" then entity.armor = 1 end
+        if choiceId == "moveSpeed" then entity.moveRange = entity.moveRange + 1 end
+        if choiceId == "empowerAtStart" then entity.empowerAtStart = true end
+        if choiceId == "choosePushDir" then entity.choosePushDir = true end
+        if choiceId == "canMoveAfterAttack" then entity.canMoveAfterAttack = true end
+        if choiceId == "phaseThroughEnemies" then entity.phaseThroughEnemies = true end
+        if choiceId == "redirectShot" then entity.redirectShot = true end
+        if choiceId == "pointBlankLethal" then entity.pointBlankLethal = true end
+    end
+
+    return entity
 end
 
 function environment.createEnemyByType(enemyType, q, r)
@@ -1051,7 +1072,7 @@ end
 -- Создать случайного врага (из пула)
 function environment.createRandomEnemy(q, r)
     local types
-    if isMetaprogressionRun then
+    if isProgressionRun then
         types = { "Ghost", "Zombie", "Lich" }
     else
         types = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }

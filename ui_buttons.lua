@@ -134,6 +134,11 @@ return function(ui)
                 love.graphics.print(btn.desc, btn.x + 5, btn.y - 18)
             end
         end
+        -- Show chain indicator
+        if selectedActor.chainAttack then
+            love.graphics.setColor(1, 0.8, 0.2, 1)
+            love.graphics.print("Chain: " .. selectedActor.chainAttack, logicalW - 155, 100 - 16)
+        end
     end
 
     function ui.drawEnemyOrderButton(mouseX, mouseY)

@@ -159,6 +159,12 @@ function ai.prepareAttackForEnemy(enemy, entities, hex, selectedTargets)
     if not enemy:isCharacter() or enemy.isPlayable or enemy.health <= 0 then return false end
     if not ai.canPrepareAttack(enemy, entities) then return false end
 
+    -- Clear previous rooted target if any
+    if enemy.rootedTarget then
+        status.removeFromEntity(enemy.rootedTarget, "rooted")
+        enemy.rootedTarget = nil
+    end
+
     local attack = getEnemyAttack(enemy)
     if not attack then return false end
 
@@ -180,8 +186,14 @@ function ai.prepareAttackForEnemy(enemy, entities, hex, selectedTargets)
     local dx, dy, dz = hex_utils.getCubeDiff(enemy.q, enemy.r, bestTarget.q, bestTarget.r)
     enemy.preparedTargetOffset = { dx = dx, dy = dy, dz = dz }
     enemy.preparedAttack = attack
-    enemy.preparedTargetQ = nil   -- добавить
-    enemy.preparedTargetR = nil   -- добавить
+    enemy.preparedTargetQ = nil
+    enemy.preparedTargetR = nil
+
+    -- Zombie: immobilise target
+    if (enemy.name == "Zombie" or enemy.name == "PoisonousZombie") and bestTarget:isCharacter() then
+        status.applyToEntity(bestTarget, "rooted")
+        enemy.rootedTarget = bestTarget
+    end
 
     debugPrint(string.format("%s prepared attack targeting %s (%s)", 
                enemy.name, bestTarget.name, bestTarget:isBuilding() and "building" or "player"))
@@ -403,6 +415,10 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
     end
 
     -- ===== 4. Сбрасываем состояние атаки =====
+    if enemy.rootedTarget then
+        status.removeFromEntity(enemy.rootedTarget, "rooted")
+        enemy.rootedTarget = nil
+    end
     enemy.hasPreparedAttack = false
     enemy.attackDirection = nil
     enemy.preparedTargetOffset = nil

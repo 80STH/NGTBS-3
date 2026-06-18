@@ -135,7 +135,7 @@ function menu.draw()
     love.graphics.setFont(love.graphics.newFont(12))
     love.graphics.printf("Disable Enemy Spawn", cbX + cbSize + 10, cbY + 2, 200, "left")
 
-    -- Metaprogression Test button
+    -- Progression Test button
     local ptY = cbY + 50
     local ptHover = mx >= bx and mx <= bx + bw and my >= ptY and my <= ptY + bh
     love.graphics.setColor(ptHover and 0.3 or 0.15, ptHover and 0.5 or 0.25, ptHover and 0.2 or 0.1, 0.9)
@@ -144,7 +144,7 @@ function menu.draw()
     love.graphics.rectangle("line", bx, ptY, bw, bh, 8)
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(love.graphics.newFont(13))
-    love.graphics.printf("Metaprogression Test", bx + 10, ptY + bh/2 - 8, bw - 20, "center")
+    love.graphics.printf("Progression Test", bx + 10, ptY + bh/2 - 8, bw - 20, "center")
 
     love.graphics.setFont(love.graphics.newFont(12))
     love.graphics.setColor(0.5, 0.5, 0.5, 1)
@@ -160,7 +160,7 @@ function menu.mousepressed(x, y)
         local by = mapStartY + (i - 1) * (bh + 10)
         if x >= bx and x <= bx + bw and y >= by and y <= by + bh then
             if not selectedSquad then selectedSquad = 1 end
-            isMetaprogressionRun = false
+            isProgressionRun = false
             global_abilities.resetUnlocks()
             restartGame(mapPath)
             return true
@@ -188,12 +188,13 @@ function menu.mousepressed(x, y)
         return true
     end
 
-    -- Metaprogression Test button
+    -- Progression Test button
     local ptY = cbY + 50
     if x >= bx and x <= bx + bw and y >= ptY and y <= ptY + bh then
         if not selectedSquad then selectedSquad = 1 end
         global_abilities.resetUnlocks()
-        isMetaprogressionRun = true
+        unitUpgrades = {}
+        isProgressionRun = true
         currentMapIndex = 1
         restartGame("maps/map1.lua")
         return true

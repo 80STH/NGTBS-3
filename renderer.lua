@@ -358,11 +358,11 @@ function renderer.draw(state)
         local height = logicalH
         local oldFont = love.graphics.getFont()
 
-        if isMetaprogressionRun and state.win then
+        if isProgressionRun and state.win then
             if showAbilityMenu and abilityMenu then
                 drawAbilityMenu(width, height)
-            elseif metaprogressionOverlay == "complete" then
-                drawMetaprogressionComplete(width, height)
+            elseif progressionOverlay == "complete" then
+                drawProgressionComplete(width, height)
             end
         else
             love.graphics.setColor(0, 0, 0, 0.85)
@@ -404,7 +404,7 @@ function drawAbilityMenu(w, h)
     love.graphics.rectangle("fill", 0, 0, w, h)
 
     -- Menu panel
-    local menuW, menuH = 320, 340
+    local menuW, menuH = abilityMenu.mode == "upgrade" and 340 or 320, 340
     local menuX = w/2 - menuW/2
     local menuY = h/2 - menuH/2 + 30
 
@@ -414,10 +414,107 @@ function drawAbilityMenu(w, h)
     love.graphics.rectangle("line", menuX, menuY, menuW, menuH, 12)
 
     -- Title
-    local mapTitle = (currentMapIndex == 1) and "MAP 1 COMPLETE" or "MAP 2 COMPLETE"
+    local mapTitle = "MAP " .. currentMapIndex .. " COMPLETE"
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(love.graphics.newFont(22))
     love.graphics.printf(mapTitle, menuX, menuY + 15, menuW, "center")
+    love.graphics.setFont(love.graphics.newFont(14))
+    love.graphics.setColor(0.8, 0.8, 0.8, 1)
+
+    if abilityMenu.mode == "upgrade" then
+        if not abilityMenu.selectedUnit then
+            love.graphics.printf("Choose a unit to upgrade:", menuX, menuY + 50, menuW, "center")
+        else
+            love.graphics.setColor(0.6, 0.9, 0.6, 1)
+            love.graphics.setFont(love.graphics.newFont(13))
+            love.graphics.printf("Choose upgrade for " .. abilityMenu.selectedUnit.name .. ":", menuX, menuY + 50, menuW, "center")
+        end
+
+        local itemH = 60
+        local itemStartY = menuY + 90
+
+        if not abilityMenu.selectedUnit then
+            -- Stage 1: draw units
+            for i, entry in ipairs(abilityMenu.available) do
+                local ix = menuX + 20
+                local iy = itemStartY + (i - 1) * (itemH + 6)
+                local iw = menuW - 40
+                local hover = mx >= ix and mx <= ix + iw and my >= iy and my <= iy + itemH
+
+                if hover then
+                    love.graphics.setColor(0.25, 0.3, 0.4, 0.9)
+                else
+                    love.graphics.setColor(0.15, 0.18, 0.25, 0.9)
+                end
+                love.graphics.rectangle("fill", ix, iy, iw, itemH, 6)
+                love.graphics.setColor(0.3, 0.4, 0.5, 0.5)
+                love.graphics.rectangle("line", ix, iy, iw, itemH, 6)
+
+                love.graphics.setColor(1, 1, 1, 0.8)
+                love.graphics.setFont(love.graphics.newFont(15))
+                local lvlText = (entry.level == 0) and " (lvl1)" or " (lvl2)"
+                love.graphics.print("  " .. entry.name .. lvlText, ix + 10, iy + 18)
+            end
+        else
+            -- Stage 2: draw choices
+            local choiceH = 50
+            for i, choice in ipairs(abilityMenu.availableChoices) do
+                local ix = menuX + 20
+                local iy = itemStartY + (i - 1) * (choiceH + 6)
+                local iw = menuW - 40
+                local hover = mx >= ix and mx <= ix + iw and my >= iy and my <= iy + choiceH
+                local isSelected = abilityMenu.selectedChoice == choice.id
+
+                if isSelected then
+                    love.graphics.setColor(0.2, 0.6, 0.25, 0.9)
+                elseif hover then
+                    love.graphics.setColor(0.25, 0.3, 0.4, 0.9)
+                else
+                    love.graphics.setColor(0.15, 0.18, 0.25, 0.9)
+                end
+                love.graphics.rectangle("fill", ix, iy, iw, choiceH, 6)
+                love.graphics.setColor(isSelected and 0.4 or 0.3, isSelected and 0.8 or 0.4, isSelected and 0.4 or 0.5, isSelected and 0.9 or 0.5)
+                love.graphics.rectangle("line", ix, iy, iw, choiceH, 6)
+
+                love.graphics.setColor(1, 1, 1, isSelected and 1 or 0.8)
+                love.graphics.setFont(love.graphics.newFont(14))
+                love.graphics.print((isSelected and "✓ " or "  ") .. choice.name, ix + 10, iy + 6)
+
+                love.graphics.setFont(love.graphics.newFont(11))
+                love.graphics.setColor(0.7, 0.7, 0.7, isSelected and 1 or 0.6)
+                love.graphics.printf(choice.desc, ix + 10, iy + 26, iw - 20, "left")
+            end
+
+            -- Back button
+            local backBtnY = itemStartY + #abilityMenu.availableChoices * (choiceH + 6) + 10
+            local backHover = mx >= menuX + 20 and mx <= menuX + 20 + 100 and my >= backBtnY and my <= backBtnY + 30
+            love.graphics.setColor(backHover and 0.35 or 0.25, backHover and 0.35 or 0.25, backHover and 0.5 or 0.35, 0.9)
+            love.graphics.rectangle("fill", menuX + 20, backBtnY, 100, 30, 4)
+            love.graphics.setColor(0.8, 0.8, 0.8, 1)
+            love.graphics.setFont(love.graphics.newFont(12))
+            love.graphics.printf("← Back", menuX + 20, backBtnY + 6, 100, "center")
+
+            -- Confirm button
+            if abilityMenu.selectedChoice then
+                local btnW, btnH = 200, 40
+                local btnX = w/2 - btnW/2
+                local btnY = menuY + menuH - 60
+                local btnHover = mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH
+
+                love.graphics.setColor(btnHover and 0.25 or 0.15, btnHover and 0.7 or 0.4, btnHover and 0.3 or 0.2, 0.95)
+                love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 8)
+                love.graphics.setColor(0.3, 0.9, 0.3, btnHover and 0.9 or 0.6)
+                love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 8)
+
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.setFont(love.graphics.newFont(16))
+                love.graphics.printf("CONFIRM", btnX, btnY + 10, btnW, "center")
+            end
+        end
+        return
+    end
+
+    -- Original ability mode
     love.graphics.setFont(love.graphics.newFont(14))
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
     love.graphics.printf("Choose " .. abilityMenu.maxSelect .. " ability to unlock:", menuX, menuY + 50, menuW, "center")
@@ -477,13 +574,13 @@ function drawAbilityMenu(w, h)
     end
 end
 
-function drawMetaprogressionComplete(w, h)
+function drawProgressionComplete(w, h)
     love.graphics.setColor(0, 0, 0, 0.88)
     love.graphics.rectangle("fill", 0, 0, w, h)
 
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(love.graphics.newFont(26))
-    love.graphics.printf("METAPROGRESSION TEST", 0, h/2 - 90, w, "center")
+    love.graphics.printf("PROGRESSION TEST", 0, h/2 - 90, w, "center")
     love.graphics.setFont(love.graphics.newFont(32))
     love.graphics.setColor(0.4, 1, 0.4, 1)
     love.graphics.printf("COMPLETE!", 0, h/2 - 40, w, "center")

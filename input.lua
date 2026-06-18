@@ -2,6 +2,7 @@
 -- Обработка ввода (мышь, клавиатура). Использует глобалы, как и остальные модули.
 local input = {}
 local global_abilities = require("global_abilities")
+local hex_utils = require("hex_utils")
 
 function input.mousepressed(x, y, button)
     if button ~= 1 then return end
@@ -17,7 +18,7 @@ function input.mousepressed(x, y, button)
 
         if x >= restartButton.x and x <= restartButton.x + restartButton.width and
            y >= restartButton.y and y <= restartButton.y + restartButton.height then
-            if isMetaprogressionRun and win then return end
+            if isProgressionRun and win then return end
             restartGame()
             return
         end
@@ -25,53 +26,66 @@ function input.mousepressed(x, y, button)
     if turnState and turnState.phase ~= "player" then return end
 
     local tq, tr = hex:pixelToHex(x, y)
-        if not hex or not hex:isValidHex(tq, tr) then return end
-        if not hex:isActiveHex(tq, tr) then return end
+    if not hex or not hex:isValidHex(tq, tr) then return end
+    if not hex:isActiveHex(tq, tr) then return end
 
+    -- Check if deploying entity has deployAnywhere (Warrior lvl2)
+    local deployingEntity = nil
+    if deploySelectedIdx and placedAllies[deploySelectedIdx] then
+        deployingEntity = placedAllies[deploySelectedIdx]
+    elseif #unplacedAllies > 0 and unplacedAllies[1] then
+        deployingEntity = unplacedAllies[1]
+    end
+    local canDeployAnywhere = deployingEntity and deployingEntity.deployAnywhere
+
+    if not canDeployAnywhere then
         if terrainMap and terrainMap[tq] and terrainMap[tq][tr] == "water" then return end
-
         local occupant = getEntityAtHex(tq, tr)
         if occupant and not occupant.isPlayable then return end
-
-        local placedIdx = nil
-        for i, ally in ipairs(placedAllies) do
-            if ally.q == tq and ally.r == tr then
-                placedIdx = i
-                break
-            end
-        end
-
-        if placedIdx then
-            if deploySelectedIdx then
-                if deploySelectedIdx == placedIdx then
-                    deploySelectedIdx = nil
-                else
-                    local a = placedAllies[deploySelectedIdx]
-                    local b = placedAllies[placedIdx]
-                    a.q, b.q = b.q, a.q
-                    a.r, b.r = b.r, a.r
-                    deploySelectedIdx = nil
-                end
-            else
-                deploySelectedIdx = placedIdx
-            end
-        elseif not occupant then
-            if deploySelectedIdx then
-                placedAllies[deploySelectedIdx].q = tq
-                placedAllies[deploySelectedIdx].r = tr
-                deploySelectedIdx = nil
-            elseif #unplacedAllies > 0 then
-                local ally = table.remove(unplacedAllies, 1)
-                ally.q = tq
-                ally.r = tr
-                table.insert(placedAllies, ally)
-            end
-        end
-        return
     end
 
+    local placedIdx = nil
+    for i, ally in ipairs(placedAllies) do
+        if ally.q == tq and ally.r == tr then
+            placedIdx = i
+            break
+        end
+    end
+
+    if placedIdx then
+        if deploySelectedIdx then
+            if deploySelectedIdx == placedIdx then
+                deploySelectedIdx = nil
+            else
+                local a = placedAllies[deploySelectedIdx]
+                local b = placedAllies[placedIdx]
+                a.q, b.q = b.q, a.q
+                a.r, b.r = b.r, a.r
+                deploySelectedIdx = nil
+            end
+        else
+            deploySelectedIdx = placedIdx
+        end
+    elseif not getEntityAtHex(tq, tr) then
+        if deploySelectedIdx then
+            placedAllies[deploySelectedIdx].q = tq
+            placedAllies[deploySelectedIdx].r = tr
+            deploySelectedIdx = nil
+        elseif #unplacedAllies > 0 then
+            local ally = table.remove(unplacedAllies, 1)
+            ally.q = tq
+            ally.r = tr
+            table.insert(placedAllies, ally)
+            if ally.empowerAtStart then
+                status.applyToEntity(ally, "empowered")
+            end
+        end
+    end
+    return
+end
+
     if not gameActive then
-        if isMetaprogressionRun and win then return end
+        if isProgressionRun and win then return end
         local width = logicalW
         local height = logicalH
         local btnW, btnH = 200, 50
@@ -283,6 +297,38 @@ function input.mousepressed(x, y, button)
                 end
             end
             return
+        elseif (selectedAttack.name == "Heavy Punch" or selectedAttack.name == "Empower Punch") and selectedActor.choosePushDir then
+            if pushDirTargetCell then
+                -- Second click: choose push direction cell
+                local stepX, stepY, stepZ = selectedAttack:getLineDirection(selectedActor.q, selectedActor.r, pushDirTargetCell.q, pushDirTargetCell.r, hex)
+                if stepX then
+                    local dirs = getPushDirChoices(stepX, stepY, stepZ)
+                    local chosen = nil
+                    for _, d in ipairs(dirs) do
+                        local pushQ, pushR = hex_utils.applyCubeStep(pushDirTargetCell.q, pushDirTargetCell.r, d.x, d.y, d.z)
+                        if pushQ == tq and pushR == tr then
+                            chosen = d
+                            break
+                        end
+                    end
+                    if chosen then
+                        selectedAttack._pushDirOverride = {x = chosen.x, y = chosen.y, z = chosen.z}
+                        local success, msg = performAttackWithSelectedAttack(selectedActor, pushDirTargetCell.q, pushDirTargetCell.r, selectedAttack)
+                        if not success then print("Attack failed: " .. msg) end
+                    end
+                end
+                attackMode = false
+                selectedAttack = nil
+                pushDirTargetCell = nil
+            else
+                -- First click: select attack target
+                local clicked = getEntityAtHex(tq, tr)
+                if clicked and clicked:isCharacter() and clicked ~= selectedActor and
+                   hex:getDistance(selectedActor.q, selectedActor.r, tq, tr) == 1 then
+                    pushDirTargetCell = {q = tq, r = tr}
+                end
+            end
+            return
         elseif selectedAttack.name == "Electric Hook" then
             local dist = hex:getDistance(selectedActor.q, selectedActor.r, tq, tr)
             if dist >= 2 then
@@ -332,14 +378,14 @@ function input.keypressed(key)
         elseif key == "escape" then
             deploySelectedIdx = nil
         elseif key == "r" or key == "R" then
-            if isMetaprogressionRun and win then return end
+            if isProgressionRun and win then return end
             restartGame()
         end
         return
     end
 
     if not gameActive then
-        if isMetaprogressionRun and win then return end
+        if isProgressionRun and win then return end
         if key == "return" or key == " " or key == "r" or key == "R" then
             restartGame()
         end

@@ -165,6 +165,8 @@ function processNextEnemyPrepare()
                     a.hasActedThisTurn = false
                     a.hasMovedThisTurn = false
                     a.canMoveAfterAttack = false
+                    a.chainAttack = nil
+                    a.redirectPending = nil
                 end
             end
         end
