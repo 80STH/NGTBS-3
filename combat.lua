@@ -295,12 +295,12 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
 
     local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
-    -- Визуальный эффект рывка (только в направлении до lastFree)
+    -- Визуальный эффект рывка до клетки цели
     local fxEndQ, fxEndR
-    if lastFree then
-        fxEndQ, fxEndR = lastFree.q, lastFree.r
-    elseif targetHex then
+    if targetHex then
         fxEndQ, fxEndR = targetHex.q, targetHex.r
+    elseif lastFree then
+        fxEndQ, fxEndR = lastFree.q, lastFree.r
     else
         fxEndQ, fxEndR = targetQ, targetR
     end
@@ -311,39 +311,38 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
         self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
     end
 
-    -- Функция для пуша цели (вызывается в любом сценарии)
-    local function pushTarget()
-        if firstTarget and targetHex and firstTarget.isPushable and firstTarget.health and firstTarget.health > 0 then
-            local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-            local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
-            local isEdge = not hex:isActiveHex(pushQ, pushR)
-            if isEdge or occupant then
-                combat.addCollisionBounceAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities, sounds, occupant)
-            else
-                combat.addPushAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR)
-            end
-        end
-    end
-
-    -- Если последняя свободная клетка — вода, юнит тонет (без возврата), цель всё равно пушится
-    if lastFree and terrainMap and terrainMap[lastFree.q] and terrainMap[lastFree.q][lastFree.r] == "water" and not attacker.waterWalker then
-        pushTarget()
-        combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
+    -- Если цели нет — просто двигаемся в targetQ/targetR
+    if not firstTarget or not targetHex then
+        combat.addPushAnimation(attacker, attacker.q, attacker.r, fxEndQ, fxEndR)
         combat.startPushAnimations(hex)
         return true
     end
 
-    -- Анимация: атакующий рвётся в направлении до первого препятствия.
-    -- Вначале движение атакующего к lastFree, затем отталкивание цели.
-    if lastFree then
-        combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
+    local targetAlive = firstTarget.health and firstTarget.health > 0
+
+    if targetAlive and firstTarget.isPushable then
+        -- Цель жива и отталкиваема: отталкиваем, атакующий встаёт на её место
+        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+        local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
+        local isEdge = not hex:isActiveHex(pushQ, pushR)
+        if isEdge or occupant then
+            combat.addCollisionBounceAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities, sounds, occupant)
+        else
+            combat.addPushAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR)
+        end
         combat.startPushAnimations(hex, function()
-            pushTarget()
+            combat.addPushAnimation(attacker, attacker.q, attacker.r, targetHex.q, targetHex.r)
             combat.startPushAnimations(hex)
         end)
+    elseif targetAlive then
+        -- Цель жива, но неотталкиваема: атакующий останавливается перед ней
+        if lastFree then
+            combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
+            combat.startPushAnimations(hex)
+        end
     else
-        -- Атакующий уже у цели, просто отталкиваем
-        pushTarget()
+        -- Цель мертва: атакующий встаёт на её клетку
+        combat.addPushAnimation(attacker, attacker.q, attacker.r, targetHex.q, targetHex.r)
         combat.startPushAnimations(hex)
     end
     return true
