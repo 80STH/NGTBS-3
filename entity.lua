@@ -54,6 +54,10 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     
     -- Летающий юнит (игнорирует препятствия и воду при поиске пути)
     self.flying = false
+    -- Парящий юнит (не тонет в воде, но учитывает препятствия)
+    self.hovering = false
+    -- Размер ячейки здоровья (защита от летального урона, nil = нет защиты)
+    self.healthCellSize = nil
     
     -- Неразрушимая сущность (игнорирует весь урон)
     self.indestructible = false
@@ -139,6 +143,10 @@ function Entity:takeDamage(damage)
     end
     if self.maxDamagePerHit then
         damage = math.min(damage, self.maxDamagePerHit)
+    end
+    -- Защита ячейкой здоровья: нельзя потерять больше, чем выше порога
+    if self.healthCellSize and self.health > self.healthCellSize then
+        damage = math.min(damage, self.health - self.healthCellSize)
     end
     local actualDamage = math.min(damage, self.health)
     self.health = self.health - actualDamage

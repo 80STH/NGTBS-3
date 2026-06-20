@@ -403,12 +403,21 @@ function objectives.generate(entities, hex)
     activePrimaryObjective = nil
     objectiveStates = {}
 
-    -- Choose primary: railway if map has train cars, otherwise caravans
-    local primaryId = hasTrainCars(entities) and "protect_railway" or "protect_caravans"
-    activePrimaryObjective = primaryObjectiveDefs[primaryId]
-    objectiveStates[activePrimaryObjective.id] = "pending"
-    if activePrimaryObjective.onGenerate then
-        activePrimaryObjective.onGenerate(entities, hex)
+    -- В режиме прогрессии kill_leader — основной босс (заменяет обычный primary)
+    if _G.isProgressionRun then
+        activePrimaryObjective = killLeaderDef
+        objectiveStates[killLeaderDef.id] = "pending"
+        if killLeaderDef.onGenerate then
+            killLeaderDef.onGenerate(entities, hex)
+        end
+    else
+        -- Choose primary: railway if map has train cars, otherwise caravans
+        local primaryId = hasTrainCars(entities) and "protect_railway" or "protect_caravans"
+        activePrimaryObjective = primaryObjectiveDefs[primaryId]
+        objectiveStates[activePrimaryObjective.id] = "pending"
+        if activePrimaryObjective.onGenerate then
+            activePrimaryObjective.onGenerate(entities, hex)
+        end
     end
 
     -- Pick 2 secondary objectives from pool
@@ -440,6 +449,11 @@ function objectives.generate(entities, hex)
         if count >= maxObj then break end
         local def = shuffled[i]
         local skip = false
+
+        -- Skip kill_leader from pool in progression mode (it's the primary boss)
+        if not skip and _G.isProgressionRun and def.id == "kill_leader" then
+            skip = true
+        end
 
         -- Check incompatibility with primary objective
         if not skip and activePrimaryObjective then
@@ -554,13 +568,26 @@ function objectives.update(entities)
         if activePrimaryObjective.check then
             activePrimaryObjective.check(entities, objectiveStates)
         end
+        -- kill_leader (Power Lich босс) — завершение/поражение
+        if activePrimaryObjective.id == "kill_leader" then
+            local state = objectiveStates["kill_leader"]
+            if state == "failed" then
+                _G.loss = true
+                _G.gameActive = false
+                print("DEFEAT: Power Lich has slain a hero!")
+            elseif state == "completed" then
+                _G.win = true
+                _G.gameActive = false
+                print("VICTORY: Power Lich has been destroyed!")
+            end
+        end
     end
 
     -- Check secondary objectives
     for _, obj in ipairs(activeObjectives) do
         if objectiveStates[obj.id] == "pending" then
             -- Certain objectives check immediately; others wait for decay
-            local canCheck = decayApplied or obj.id == "kill_leader" or obj.id == "protect_tower" or obj.id == "protect_blockpost"
+            local canCheck = decayApplied or obj.id == "protect_tower" or obj.id == "protect_blockpost"
             if canCheck and obj.check then
                 local prevState = objectiveStates[obj.id]
                 obj.check(entities, objectiveStates)

@@ -134,7 +134,7 @@ function ai.getBestTargetForEnemy(enemy, entities, hex, selectedTargets)
             end
         elseif attack.name == "Bite" then
             valid = (dist <= attack.range)
-        elseif attack.name == "Magic Bolt" then
+        elseif attack.name == "Magic Bolt" or attack.name == "Power Bolt" then
             valid = (dist <= attack.range) and isOnStraightLine(enemy.q, enemy.r, target.q, target.r, hex)
         end
 
@@ -256,7 +256,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
             -- Проверяем, есть ли там живая цель
             local e = combat.getEntityAtHex(targetQ, targetR, entities)
             if e and e.health > 0 and e ~= enemy then
-                if attack.name == "Magic Bolt" then
+                if attack.name == "Magic Bolt" or attack.name == "Power Bolt" then
                     if isOnStraightLine(enemy.q, enemy.r, targetQ, targetR, hex) then
                         target = e
                     end
@@ -297,6 +297,10 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
             local midY = (fromY + toY) / 2
             visual.addArcEffect(fromX, fromY, toX, toY, 0.6, 0.2, 1.0, 0.3, midX, midY - 60)
             visual.addEffect(toX, toY, "hit", 0.4)
+        end
+    elseif attack.name == "Power Bolt" then
+        if target then
+            attack_effects.magicBolt(enemy, target, hex)
         end
     elseif attack.name == "Dash" then
         -- Для рывка можно нарисовать линию до целевой клетки (если есть)
@@ -374,8 +378,12 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         enemy._cleaveTargets = frontTargets
     end
 
-    -- ===== 3. Наносим урон, если цель есть =====
-    if target then
+    -- ===== 3. PowerLichBoltAttack использует собственный execute =====
+    if attack.name == "Power Bolt" then
+        if target or (targetQ and targetR) then
+            attack:execute(enemy, targetQ, targetR, hex, entities, sounds)
+        end
+    elseif target then
         local damage = attack.damage
         local wasDestroyed = target:takeDamage(damage)
         print(string.format("%s attacks %s for %d damage!", enemy.name, target.name, damage))
@@ -688,7 +696,7 @@ function ai.isPositionOccupied(q, r, movingEntity, entities, hex)
         return true
     end
     if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
-        if movingEntity and (movingEntity.waterWalker or movingEntity.flying) then
+        if movingEntity and (movingEntity.waterWalker or movingEntity.flying or movingEntity.hovering) then
             -- ok
         else
             return true

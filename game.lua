@@ -149,6 +149,7 @@ function restartGame(mapPath)
     fireAppliedForTurnLimit = false
     decayAppliedForTurnLimit = false
     chaos = 0
+    lichKilledPlayer = false
     status.clearAllDigSites()
 
     -- map3 train setup: inject tunnels and railway if needed

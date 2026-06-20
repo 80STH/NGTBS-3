@@ -787,6 +787,100 @@ function combat.LichBoltAttack:getTargetCell(attacker, targetQ, targetR, hex, en
     return nil
 end
 
+-- 7b. POWER LICH: смертельный снаряд (99 урона) по цели и 3 клеткам впереди
+combat.PowerLichBoltAttack = setmetatable({}, combat.Attack)
+combat.PowerLichBoltAttack.__index = combat.PowerLichBoltAttack
+
+function combat.PowerLichBoltAttack.new(range)
+    local self = combat.Attack.new("Power Bolt", "Lethal bolt hitting target and 3 cells in front", range or 5, 99, {})
+    self.minRange = 2
+    return setmetatable(self, combat.PowerLichBoltAttack)
+end
+
+function combat.PowerLichBoltAttack:getConeCells(attacker, targetQ, targetR, hex)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return {{q = targetQ, r = targetR}} end
+    local cells = {{q = targetQ, r = targetR}}
+    -- Клетка прямо впереди цели
+    local q1, r1 = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+    table.insert(cells, {q = q1, r = r1})
+    -- Клетки по бокам (+-60 градусов)
+    local sx1, sy1, sz1 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+    local sx2, sy2, sz2 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
+    local q2, r2 = hex_utils.applyCubeStep(targetQ, targetR, sx1, sy1, sz1)
+    local q3, r3 = hex_utils.applyCubeStep(targetQ, targetR, sx2, sy2, sz2)
+    table.insert(cells, {q = q2, r = r2})
+    table.insert(cells, {q = q3, r = r3})
+    return cells
+end
+
+function combat.PowerLichBoltAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance < self.minRange then return false, "Target too close!" end
+    if distance > self.range then return false, "Target out of range" end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Target not in a straight line!" end
+
+    local cells = self:getConeCells(attacker, targetQ, targetR, hex)
+    local anyHit = false
+    for _, cell in ipairs(cells) do
+        local target = nil
+        for _, e in ipairs(entities) do
+            if e.q == cell.q and e.r == cell.r and e.health > 0 then
+                if (e:isCharacter() and e.isPlayable) or e:isBuilding() then
+                    target = e
+                    break
+                end
+            end
+        end
+        if target then
+            local wasDestroyed = target:takeDamage(self.damage)
+            print(string.format(" Power Lich's bolt hits %s for %d damage!", target.name, self.damage))
+            if sounds and sounds.attack then sounds.attack:play() end
+            if hex and visual then
+                local x, y = getDrawCoords(target.q, target.r)
+                visual.addEffect(x, y, "hit", 0.4)
+            end
+            if wasDestroyed then
+                target:startDeath()
+                if target.isPlayable then
+                    _G.lichKilledPlayer = true
+                end
+            end
+            anyHit = true
+        end
+    end
+
+    if anyHit then
+        attack_effects.magicBolt(attacker, cells[1], hex) -- visual on primary target
+        attacker.hasActedThisTurn = true
+    end
+    return anyHit
+end
+
+function combat.PowerLichBoltAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    local dist = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if dist < self.minRange or dist > self.range then return nil end
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    for _, e in ipairs(entities) do
+        if e.q == targetQ and e.r == targetR and e.health > 0 then
+            if (e:isCharacter() and e.isPlayable) or e:isBuilding() then
+                return {q = targetQ, r = targetR}
+            end
+        end
+    end
+    return nil
+end
+
+function combat.PowerLichBoltAttack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
+    local cells = self:getConeCells(attacker, targetQ, targetR, hex)
+    for _, cell in ipairs(cells) do
+        cell.damage = self.damage
+    end
+    return cells
+end
+
 -- 8. GHOST: магический снаряд с неограниченной дальностью, первая цель на линии, урон 2
 combat.GhostBoltAttack = setmetatable({}, combat.Attack)
 combat.GhostBoltAttack.__index = combat.GhostBoltAttack

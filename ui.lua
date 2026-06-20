@@ -55,9 +55,9 @@ end
 function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     if not hex:isActiveHex(targetQ, targetR) then return false end
     
-    -- Вода непроходима (кроме летающих)
+    -- Вода непроходима (кроме летающих/парящих)
     if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
-        if not (actor and actor.flying) then
+        if not (actor and (actor.flying or actor.hovering)) then
             return false
         end
     end
@@ -1821,7 +1821,7 @@ end
 function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMap, hex)
     if not hex:isActiveHex(targetQ, targetR) then return false end
     if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
-        if not (enemy and enemy.flying) then
+        if not (enemy and (enemy.flying or enemy.hovering)) then
             return false
         end
     end
@@ -1846,7 +1846,7 @@ function isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
     if not hex:isActiveHex(q, r) then return false end
     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
     if terrain == "water" then
-        if enemy and enemy.flying then
+        if enemy and (enemy.flying or enemy.hovering) then
             -- ok
         else
             return false
@@ -2334,6 +2334,86 @@ function ui.drawChaosBar(mx, my)
             {text = "At maximum, the realm collapses.", color = {0.8, 0.8, 0.8, 1}},
             {text = "", color = {1, 1, 1, 1}},
             {text = string.format("Current: %d / %d", chaosVal, chaosMaxVal), color = chaosVal >= chaosMaxVal and {1, 0.3, 0.3, 1} or {1, 0.9, 0.2, 1}},
+        }
+        local curY = tty + 6
+        for _, l in ipairs(lines) do
+            love.graphics.setColor(l.color[1], l.color[2], l.color[3], l.color[4] or 1)
+            love.graphics.print(l.text, ttx + 6, curY)
+            curY = curY + 14
+        end
+    end
+end
+
+function ui.drawLeaderHPBar(mx, my)
+    if not _G.isProgressionRun then return end
+    local leader = nil
+    for _, e in ipairs(_G.entities or {}) do
+        if e.isLeader and e.health and e.health > 0 then
+            leader = e
+            break
+        end
+    end
+    if not leader then return end
+
+    local barX = 10
+    local barY = 80
+    local barW = 150
+    local barH = 18
+    local cellW = 30
+    local cellH = 14
+    local gap = 3
+    local pad = 4
+    local cellCount = 2
+
+    if not smallFont then smallFont = love.graphics.newFont(12) end
+    love.graphics.setFont(smallFont)
+
+    -- Label
+    love.graphics.setColor(0.9, 0.1, 0.3, 1)
+    love.graphics.print("Power Lich", barX, barY)
+
+    -- Health bar background
+    local bgY = barY + 16
+    local totalW = (cellW + gap) * cellCount + pad * 2
+    love.graphics.setColor(0.08, 0.08, 0.15, 0.85)
+    love.graphics.rectangle("fill", barX, bgY, totalW, cellH + pad * 2, 4)
+    love.graphics.setColor(0.5, 0.1, 0.2, 0.6)
+    love.graphics.rectangle("line", barX, bgY, totalW, cellH + pad * 2, 4)
+
+    -- Cells
+    local healthPerCell = 3
+    for i = 1, cellCount do
+        local cx = barX + pad + (i - 1) * (cellW + gap)
+        local cy = bgY + pad
+        local remaining = leader.health - (i - 1) * healthPerCell
+        local fill = math.max(0, math.min(healthPerCell, remaining))
+        local fraction = fill / healthPerCell
+        if fraction > 0 then
+            local t = love.timer.getTime()
+            local pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 1.5)
+            love.graphics.setColor(0.9 * pulse, 0.1 * fraction * pulse, 0.2 * pulse, 0.9)
+            love.graphics.rectangle("fill", cx, cy, cellW * fraction, cellH, 2)
+        end
+        love.graphics.setColor(0.5, 0.1, 0.2, 0.5)
+        love.graphics.rectangle("line", cx, cy, cellW, cellH, 2)
+    end
+
+    -- Tooltip
+    if mx >= barX and mx <= barX + totalW and my >= bgY and my <= bgY + cellH + pad * 2 then
+        local ttW = 200
+        local ttH = 80
+        local ttx = barX
+        local tty = bgY + cellH + pad * 2 + 6
+        love.graphics.setColor(0.1, 0.1, 0.2, 0.92)
+        love.graphics.rectangle("fill", ttx, tty, ttW, ttH, 5)
+        love.graphics.setColor(0.5, 0.1, 0.2, 0.8)
+        love.graphics.rectangle("line", ttx, tty, ttW, ttH, 5)
+
+        local lines = {
+            {text = string.format("HP: %d / 6", leader.health), color = {0.9, 0.1, 0.3, 1}},
+            {text = "", color = {1, 1, 1, 1}},
+            {text = "Kill the Power Lich to win!", color = {0.8, 0.8, 0.8, 1}},
+            {text = "If it kills a hero, you lose.", color = {0.8, 0.3, 0.3, 1}},
         }
         local curY = tty + 6
         for _, l in ipairs(lines) do

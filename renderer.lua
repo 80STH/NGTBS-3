@@ -351,6 +351,7 @@ function renderer.draw(state)
     end
 
     ui.drawChaosBar(mx, my)
+    ui.drawLeaderHPBar(mx, my)
     objectives.draw()
 
     if not state.gameActive then

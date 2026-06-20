@@ -330,7 +330,7 @@ function isPositionOccupied(q, r, movingEntity)
         return true
     end
     if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
-        if movingEntity and (movingEntity.waterWalker or movingEntity.flying) then
+        if movingEntity and (movingEntity.waterWalker or movingEntity.flying or movingEntity.hovering) then
             -- ok
         else
             return true
@@ -559,7 +559,7 @@ function isCellPassable(q, r, movingEntity)
     if not hex:isActiveHex(q, r) then return false end
     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
     if terrain == "water" then
-        if movingEntity and (movingEntity.waterWalker or movingEntity.flying) then
+        if movingEntity and (movingEntity.waterWalker or movingEntity.flying or movingEntity.hovering) then
             -- ok
         else
             return false

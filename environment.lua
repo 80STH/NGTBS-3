@@ -798,6 +798,13 @@ function environment.getSummoningRodAttacks()
     }
 end
 
+function environment.getPowerLichAttacks()
+    local combat = require("combat")
+    return {
+        { attack = combat.PowerLichBoltAttack.new(), name = "Power Bolt", description = "Lethal bolt hitting target and 3 cells in front" },
+    }
+end
+
 function environment.getLancerAttacks()
     local combat = require("combat")
     return {
@@ -1013,10 +1020,11 @@ function environment.createEnemyByType(enemyType, q, r)
         attacks = environment.getCrusherAttacks()
         name = "Crusher"
         moveRange = 2
-    elseif enemyType == "SummoningRod" then
-        attacks = environment.getSummoningRodAttacks()
-        name = "SummoningRod"
-        moveRange = 0
+    elseif enemyType == "PowerLich" then
+        attacks = environment.getPowerLichAttacks()
+        name = "PowerLich"
+        maxHealth = 6
+        moveRange = 3
     else
         attacks = environment.getZombieAttacks()
         name = "Zombie"
@@ -1027,7 +1035,7 @@ function environment.createEnemyByType(enemyType, q, r)
         Ghost = 26, Zombie = 25, PoisonousZombie = 21, Lich = 27,
         Brute = 60, Lancer = 62, BogShaman = 80,
         Raider = 23, Dervish = 28, Crusher = 66,
-        SummoningRod = 83,
+        SummoningRod = 83, PowerLich = 84,
     }
     local gid = enemyTypeToGid[enemyType]
     local sprite = gid and environment.unitSpriteCache[gid]
@@ -1051,6 +1059,11 @@ function environment.createEnemyByType(enemyType, q, r)
         elseif enemyType == "Lich" then
             love.graphics.setColor(0.8, 0.2, 0.8, 1)
             love.graphics.circle("fill", size/2, size/2, size/2 - 1)
+        elseif enemyType == "PowerLich" then
+            love.graphics.setColor(0.9, 0.1, 0.3, 1)
+            love.graphics.circle("fill", size/2, size/2, size/2 - 1)
+            love.graphics.setColor(0.5, 0, 0.1, 1)
+            love.graphics.circle("line", size/2, size/2, size/2 - 2, 6)
         else
             love.graphics.setColor(1, 0.5, 0, 1)
             love.graphics.circle("fill", size/2, size/2, size/2 - 1)
@@ -1070,6 +1083,10 @@ function environment.createEnemyByType(enemyType, q, r)
         entity.isSummoningRod = true
         entity.isPushable = false
         entity.moveRange = 0
+    end
+    if enemyType == "PowerLich" then
+        entity.hovering = true
+        entity.healthCellSize = 3
     end
     return entity
 end
