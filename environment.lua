@@ -942,18 +942,23 @@ function environment.createSquadUnit(unitDef, q, r)
     entity.upgradeLevel = #upgradeData.choices
 
     for _, choiceId in ipairs(upgradeData.choices) do
-        if choiceId == "rootImmune" then entity.rootImmune = true end
-        if choiceId == "deployAnywhere" then entity.deployAnywhere = true end
         if choiceId == "dashToFlipChain" then entity.dashToFlipChain = true end
         if choiceId == "flipToDashChain" then entity.flipToDashChain = true end
-        if choiceId == "armor" then entity.armor = 1 end
-        if choiceId == "moveSpeed" then entity.moveRange = entity.moveRange + 1 end
         if choiceId == "empowerAtStart" then entity.empowerAtStart = true end
         if choiceId == "choosePushDir" then entity.choosePushDir = true end
-        if choiceId == "canMoveAfterAttack" then entity.canMoveAfterAttack = true end
-        if choiceId == "phaseThroughEnemies" then entity.phaseThroughEnemies = true end
         if choiceId == "redirectShot" then entity.redirectShot = true end
         if choiceId == "pointBlankLethal" then entity.pointBlankLethal = true end
+    end
+
+    -- Apply artifacts (global bonuses)
+    local artifactList = _G.artifacts or {}
+    for _, artId in ipairs(artifactList) do
+        if artId == "rootImmune" then entity.rootImmune = true end
+        if artId == "deployAnywhere" then entity.deployAnywhere = true end
+        if artId == "armor" then entity.armor = 1 end
+        if artId == "moveSpeed" then entity.moveRange = entity.moveRange + 1 end
+        if artId == "canMoveAfterAttack" then entity.canMoveAfterAttack = true end
+        if artId == "phaseThroughEnemies" then entity.phaseThroughEnemies = true end
     end
 
     return entity

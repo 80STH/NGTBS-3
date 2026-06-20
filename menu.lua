@@ -1,4 +1,5 @@
 local menu = {}
+local shop = require("shop")
 
 local function loadMapList()
     local items = love.filesystem.getDirectoryItems("maps")
@@ -146,9 +147,20 @@ function menu.draw()
     love.graphics.setFont(love.graphics.newFont(13))
     love.graphics.printf("Progression Test", bx + 10, ptY + bh/2 - 8, bw - 20, "center")
 
+    -- Shop button
+    local shopY = ptY + bh + 16
+    local shopHover = mx >= bx and mx <= bx + bw and my >= shopY and my <= shopY + bh
+    love.graphics.setColor(shopHover and 0.4 or 0.2, shopHover and 0.35 or 0.18, shopHover and 0.2 or 0.1, 0.9)
+    love.graphics.rectangle("fill", bx, shopY, bw, bh, 8)
+    love.graphics.setColor(0.8, 0.7, 0.2, shopHover and 0.8 or 0.4)
+    love.graphics.rectangle("line", bx, shopY, bw, bh, 8)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setFont(love.graphics.newFont(13))
+    love.graphics.printf("Shop", bx + 10, shopY + bh/2 - 8, bw - 20, "center")
+
     love.graphics.setFont(love.graphics.newFont(12))
     love.graphics.setColor(0.5, 0.5, 0.5, 1)
-    love.graphics.printf("Click a map to start  |  Hold R to restart", 0, ptY + bh + 12, w, "center")
+    love.graphics.printf("Click a map to start  |  Hold R to restart", 0, shopY + bh + 12, w, "center")
 end
 
 function menu.mousepressed(x, y)
@@ -194,9 +206,17 @@ function menu.mousepressed(x, y)
         if not selectedSquad then selectedSquad = 1 end
         global_abilities.resetUnlocks()
         unitUpgrades = {}
+        artifacts = {}
         isProgressionRun = true
         currentMapIndex = 1
         restartGame("maps/map1.lua")
+        return true
+    end
+
+    -- Shop button
+    local shopY = ptY + bh + 16
+    if x >= bx and x <= bx + bw and y >= shopY and y <= shopY + bh then
+        shop.isOpen = true
         return true
     end
 
@@ -204,6 +224,7 @@ function menu.mousepressed(x, y)
 end
 
 function menu.keypressed(key)
+    if shop.keypressed(key) then return true end
     if key == "return" or key == " " then
         if #mapList > 0 then
             if not selectedSquad then selectedSquad = 1 end

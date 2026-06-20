@@ -82,7 +82,7 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     self.deathTimer = 0
     self.deathDuration = 0.4   -- длительность анимации исчезновения
 
-    -- Уровень улучшения юнита (0 = базовый, 1 = lvl2, 2 = lvl3)
+    -- Уровень улучшения юнита (0 = базовый, 1 = улучшен)
     self.upgradeLevel = 0
 
     -- Warrior chain: после Dash можно Flip (и наоборот)

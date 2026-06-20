@@ -422,19 +422,23 @@ function drawAbilityMenu(w, h)
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
 
     if abilityMenu.mode == "upgrade" then
-        if not abilityMenu.selectedUnit then
-            love.graphics.printf("Choose a unit to upgrade:", menuX, menuY + 50, menuW, "center")
+        if not abilityMenu.selectedItem then
+            love.graphics.printf("Choose upgrade or artifact:", menuX, menuY + 50, menuW, "center")
         else
             love.graphics.setColor(0.6, 0.9, 0.6, 1)
             love.graphics.setFont(love.graphics.newFont(13))
-            love.graphics.printf("Choose upgrade for " .. abilityMenu.selectedUnit.name .. ":", menuX, menuY + 50, menuW, "center")
+            if abilityMenu.selectedItem.type == "unit" then
+                love.graphics.printf("Choose upgrade for " .. abilityMenu.selectedItem.name .. ":", menuX, menuY + 50, menuW, "center")
+            else
+                love.graphics.printf("Artifact selected — confirm to unlock:", menuX, menuY + 50, menuW, "center")
+            end
         end
 
         local itemH = 60
         local itemStartY = menuY + 90
 
-        if not abilityMenu.selectedUnit then
-            -- Stage 1: draw units
+        if not abilityMenu.selectedItem then
+            -- Stage 1: draw all available items (units + artifacts)
             for i, entry in ipairs(abilityMenu.available) do
                 local ix = menuX + 20
                 local iy = itemStartY + (i - 1) * (itemH + 6)
@@ -451,50 +455,60 @@ function drawAbilityMenu(w, h)
                 love.graphics.rectangle("line", ix, iy, iw, itemH, 6)
 
                 love.graphics.setColor(1, 1, 1, 0.8)
-                love.graphics.setFont(love.graphics.newFont(15))
-                local lvlText = (entry.level == 0) and " (lvl1)" or " (lvl2)"
-                love.graphics.print("  " .. entry.name .. lvlText, ix + 10, iy + 18)
+                love.graphics.setFont(love.graphics.newFont(14))
+                if entry.type == "unit" then
+                    love.graphics.print("  ⚔ " .. entry.name, ix + 10, iy + 18)
+                else
+                    love.graphics.setColor(0.8, 0.8, 0.4, 0.9)
+                    love.graphics.print("  ◆ " .. entry.name, ix + 10, iy + 8)
+                    love.graphics.setFont(love.graphics.newFont(11))
+                    love.graphics.setColor(0.7, 0.7, 0.5, 0.7)
+                    love.graphics.printf(entry.desc, ix + 10, iy + 30, iw - 20, "left")
+                end
             end
         else
-            -- Stage 2: draw choices
-            local choiceH = 50
-            for i, choice in ipairs(abilityMenu.availableChoices) do
-                local ix = menuX + 20
-                local iy = itemStartY + (i - 1) * (choiceH + 6)
-                local iw = menuW - 40
-                local hover = mx >= ix and mx <= ix + iw and my >= iy and my <= iy + choiceH
-                local isSelected = abilityMenu.selectedChoice == choice.id
+            local entry = abilityMenu.selectedItem
+            if entry.type == "unit" then
+                -- Stage 2: draw upgrade choices for selected unit
+                local choiceH = 50
+                for i, choice in ipairs(abilityMenu.availableChoices) do
+                    local ix = menuX + 20
+                    local iy = itemStartY + (i - 1) * (choiceH + 6)
+                    local iw = menuW - 40
+                    local hover = mx >= ix and mx <= ix + iw and my >= iy and my <= iy + choiceH
+                    local isSelected = abilityMenu.selectedChoice == choice.id
 
-                if isSelected then
-                    love.graphics.setColor(0.2, 0.6, 0.25, 0.9)
-                elseif hover then
-                    love.graphics.setColor(0.25, 0.3, 0.4, 0.9)
-                else
-                    love.graphics.setColor(0.15, 0.18, 0.25, 0.9)
+                    if isSelected then
+                        love.graphics.setColor(0.2, 0.6, 0.25, 0.9)
+                    elseif hover then
+                        love.graphics.setColor(0.25, 0.3, 0.4, 0.9)
+                    else
+                        love.graphics.setColor(0.15, 0.18, 0.25, 0.9)
+                    end
+                    love.graphics.rectangle("fill", ix, iy, iw, choiceH, 6)
+                    love.graphics.setColor(isSelected and 0.4 or 0.3, isSelected and 0.8 or 0.4, isSelected and 0.4 or 0.5, isSelected and 0.9 or 0.5)
+                    love.graphics.rectangle("line", ix, iy, iw, choiceH, 6)
+
+                    love.graphics.setColor(1, 1, 1, isSelected and 1 or 0.8)
+                    love.graphics.setFont(love.graphics.newFont(14))
+                    love.graphics.print((isSelected and "✓ " or "  ") .. choice.name, ix + 10, iy + 6)
+
+                    love.graphics.setFont(love.graphics.newFont(11))
+                    love.graphics.setColor(0.7, 0.7, 0.7, isSelected and 1 or 0.6)
+                    love.graphics.printf(choice.desc, ix + 10, iy + 26, iw - 20, "left")
                 end
-                love.graphics.rectangle("fill", ix, iy, iw, choiceH, 6)
-                love.graphics.setColor(isSelected and 0.4 or 0.3, isSelected and 0.8 or 0.4, isSelected and 0.4 or 0.5, isSelected and 0.9 or 0.5)
-                love.graphics.rectangle("line", ix, iy, iw, choiceH, 6)
 
-                love.graphics.setColor(1, 1, 1, isSelected and 1 or 0.8)
-                love.graphics.setFont(love.graphics.newFont(14))
-                love.graphics.print((isSelected and "✓ " or "  ") .. choice.name, ix + 10, iy + 6)
-
-                love.graphics.setFont(love.graphics.newFont(11))
-                love.graphics.setColor(0.7, 0.7, 0.7, isSelected and 1 or 0.6)
-                love.graphics.printf(choice.desc, ix + 10, iy + 26, iw - 20, "left")
+                -- Back button
+                local backBtnY = itemStartY + #abilityMenu.availableChoices * (choiceH + 6) + 10
+                local backHover = mx >= menuX + 20 and mx <= menuX + 20 + 100 and my >= backBtnY and my <= backBtnY + 30
+                love.graphics.setColor(backHover and 0.35 or 0.25, backHover and 0.35 or 0.25, backHover and 0.5 or 0.35, 0.9)
+                love.graphics.rectangle("fill", menuX + 20, backBtnY, 100, 30, 4)
+                love.graphics.setColor(0.8, 0.8, 0.8, 1)
+                love.graphics.setFont(love.graphics.newFont(12))
+                love.graphics.printf("← Back", menuX + 20, backBtnY + 6, 100, "center")
             end
 
-            -- Back button
-            local backBtnY = itemStartY + #abilityMenu.availableChoices * (choiceH + 6) + 10
-            local backHover = mx >= menuX + 20 and mx <= menuX + 20 + 100 and my >= backBtnY and my <= backBtnY + 30
-            love.graphics.setColor(backHover and 0.35 or 0.25, backHover and 0.35 or 0.25, backHover and 0.5 or 0.35, 0.9)
-            love.graphics.rectangle("fill", menuX + 20, backBtnY, 100, 30, 4)
-            love.graphics.setColor(0.8, 0.8, 0.8, 1)
-            love.graphics.setFont(love.graphics.newFont(12))
-            love.graphics.printf("← Back", menuX + 20, backBtnY + 6, 100, "center")
-
-            -- Confirm button
+            -- Confirm button (for both unit upgrades and artifacts)
             if abilityMenu.selectedChoice then
                 local btnW, btnH = 200, 40
                 local btnX = w/2 - btnW/2

@@ -22,6 +22,7 @@ local turnManager = require("turn_manager")
 menu = require("menu")
 local objectives = require("objectives")
 global_abilities = require("global_abilities")
+shop = require("shop")
 require("game")
 
 pushAnimations = state.pushAnimations
@@ -46,42 +47,34 @@ showAbilityMenu = false
 abilityMenu = nil
 progressionOverlay = nil
 mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua"}
-unitUpgrades = {}  -- "Warrior" → { choices = {"rootImmune", "dashToFlipChain"} }
+unitUpgrades = {}  -- "Warrior" → { choices = {"dashToFlipChain"} }
+artifacts = {}  -- list of unlocked artifact IDs
 placedAllies = {}
 deploySelectedIdx = nil
 allyPanelButtons = {}
 
 UPGRADE_CHOICES = {
     Warrior = {
-        {
-            { id = "rootImmune", name = "Iron Will", desc = "Immune to roots/slowing auras" },
-            { id = "deployAnywhere", name = "Scout", desc = "Can deploy on water and non-playable cells" },
-        },
-        {
-            { id = "dashToFlipChain", name = "Dash→Flip", desc = "After Dash, can Flip the same target" },
-            { id = "flipToDashChain", name = "Flip→Dash", desc = "After Flip, can Dash the same target" },
-        },
+        { id = "dashToFlipChain", name = "Dash→Flip", desc = "After Dash, can Flip the same target" },
+        { id = "flipToDashChain", name = "Flip→Dash", desc = "After Flip, can Dash the same target" },
     },
     Puncher = {
-        {
-            { id = "armor", name = "Fortress", desc = "-1 damage taken" },
-            { id = "moveSpeed", name = "Swift", desc = "+1 movement range" },
-        },
-        {
-            { id = "empowerAtStart", name = "Empowered Start", desc = "Start each map empowered" },
-            { id = "choosePushDir", name = "Windup", desc = "Choose push direction" },
-        },
+        { id = "empowerAtStart", name = "Empowered Start", desc = "Start each map empowered" },
+        { id = "choosePushDir", name = "Windup", desc = "Choose push direction" },
     },
     Rogue = {
-        {
-            { id = "canMoveAfterAttack", name = "Hit & Run", desc = "Move after attacking" },
-            { id = "phaseThroughEnemies", name = "Ghost", desc = "Phase through enemies" },
-        },
-        {
-            { id = "redirectShot", name = "Ricochet", desc = "Redirect shot to second target" },
-            { id = "pointBlankLethal", name = "Close Quarters", desc = "Point-blank shot is lethal" },
-        },
+        { id = "redirectShot", name = "Ricochet", desc = "Redirect shot to second target" },
+        { id = "pointBlankLethal", name = "Close Quarters", desc = "Point-blank shot is lethal" },
     },
+}
+
+ARTIFACT_CHOICES = {
+    { id = "rootImmune", name = "Iron Will", desc = "All units immune to roots/slowing auras" },
+    { id = "deployAnywhere", name = "Scout", desc = "All units deploy on any terrain" },
+    { id = "armor", name = "Fortress", desc = "All units take -1 damage" },
+    { id = "moveSpeed", name = "Swift Boots", desc = "All units gain +1 move range" },
+    { id = "canMoveAfterAttack", name = "Hit & Run", desc = "All units move after attacking" },
+    { id = "phaseThroughEnemies", name = "Ghost Cloak", desc = "All units phase through enemies" },
 }
 
 function syncState()
@@ -130,51 +123,62 @@ function handleAbilityMenuClick(x, y)
         local itemH = 60
         local itemStartY = menuY + 90
 
-        if not abilityMenu.selectedUnit then
-            -- Stage 1: pick a unit
+        if not abilityMenu.selectedItem then
+            -- Stage 1: pick a unit to upgrade or an artifact
             for i, entry in ipairs(abilityMenu.available) do
                 local ix = menuX + 20
                 local iy = itemStartY + (i - 1) * (itemH + 6)
                 local iw = menuW - 40
                 if x >= ix and x <= ix + iw and y >= iy and y <= iy + itemH then
-                    abilityMenu.selectedUnit = entry
-                    local choices = UPGRADE_CHOICES[entry.name]
-                    abilityMenu.availableChoices = choices[entry.level + 1]
-                    abilityMenu.selectedChoice = nil
+                    abilityMenu.selectedItem = entry
+                    if entry.type == "unit" then
+                        abilityMenu.availableChoices = UPGRADE_CHOICES[entry.name]
+                        abilityMenu.selectedChoice = nil
+                    else
+                        abilityMenu.selectedChoice = entry.id
+                        abilityMenu.availableChoices = nil
+                    end
                     return
                 end
             end
         else
-            -- Stage 2: pick a choice
-            local choiceH = 50
-            for i, choice in ipairs(abilityMenu.availableChoices) do
-                local ix = menuX + 20
-                local iy = itemStartY + (i - 1) * (choiceH + 6)
-                local iw = menuW - 40
-                if x >= ix and x <= ix + iw and y >= iy and y <= iy + choiceH then
-                    abilityMenu.selectedChoice = choice.id
+            local entry = abilityMenu.selectedItem
+            if entry.type == "unit" then
+                -- Stage 2: pick a choice for the unit
+                local choiceH = 50
+                for i, choice in ipairs(abilityMenu.availableChoices) do
+                    local ix = menuX + 20
+                    local iy = itemStartY + (i - 1) * (choiceH + 6)
+                    local iw = menuW - 40
+                    if x >= ix and x <= ix + iw and y >= iy and y <= iy + choiceH then
+                        abilityMenu.selectedChoice = choice.id
+                        return
+                    end
+                end
+
+                -- Back button
+                local backBtnY = itemStartY + #abilityMenu.availableChoices * (choiceH + 6) + 10
+                if x >= menuX + 20 and x <= menuX + 20 + 100 and y >= backBtnY and y <= backBtnY + 30 then
+                    abilityMenu.selectedItem = nil
+                    abilityMenu.selectedChoice = nil
+                    abilityMenu.availableChoices = nil
                     return
                 end
             end
 
-            -- Back button
-            local backBtnY = itemStartY + #abilityMenu.availableChoices * (choiceH + 6) + 10
-            if x >= menuX + 20 and x <= menuX + 20 + 100 and y >= backBtnY and y <= backBtnY + 30 then
-                abilityMenu.selectedUnit = nil
-                abilityMenu.selectedChoice = nil
-                abilityMenu.availableChoices = nil
-                return
-            end
-
-            -- Confirm button
+            -- Confirm button (unit upgrade or artifact)
             if abilityMenu.selectedChoice then
                 local btnW, btnH = 200, 40
                 local btnX = w/2 - btnW/2
                 local btnY = menuY + menuH - 60
                 if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
-                    local data = unitUpgrades[abilityMenu.selectedUnit.name] or { choices = {} }
-                    table.insert(data.choices, abilityMenu.selectedChoice)
-                    unitUpgrades[abilityMenu.selectedUnit.name] = data
+                    if abilityMenu.selectedItem.type == "unit" then
+                        local data = unitUpgrades[abilityMenu.selectedItem.name] or { choices = {} }
+                        table.insert(data.choices, abilityMenu.selectedChoice)
+                        unitUpgrades[abilityMenu.selectedItem.name] = data
+                    else
+                        table.insert(artifacts, abilityMenu.selectedChoice)
+                    end
                     showAbilityMenu = false
                     abilityMenu = nil
                     local nextMap = currentMapIndex + 1
@@ -298,6 +302,10 @@ end
 function love.mousepressed(x, y, button)
     if button ~= 1 then return end
     local lx, ly = x / dpiScale, y / dpiScale
+    if shop.isOpen then
+        shop.mousepressed(lx, ly)
+        return
+    end
     if showAbilityMenu then
         handleAbilityMenuClick(lx, ly)
         return
@@ -363,6 +371,7 @@ function getEntityAtHex(q, r)
 end
 
 function love.update(dt)
+    shop.update(dt)
     if gamePhase == "deploy" then
         local mx, my = love.mouse.getPosition()
         mx = mx / dpiScale
@@ -424,27 +433,34 @@ function love.update(dt)
 
     if isProgressionRun and win and gameActive == false and not showAbilityMenu and not progressionOverlay then
         local squad = menu.getSquads()[selectedSquad]
-        local upgradable = {}
+        local available = {}
         if squad then
             for _, unitDef in ipairs(squad.units) do
                 local name = unitDef.name
                 if name == "Warrior" or name == "Puncher" or name == "Rogue" then
                     local data = unitUpgrades[name]
-                    local lvl = data and #data.choices or 0
-                    if lvl < 2 then
-                        table.insert(upgradable, { name = name, level = lvl })
+                    local hasUpgrade = data and #data.choices > 0
+                    if not hasUpgrade then
+                        table.insert(available, { type = "unit", name = name })
                     end
                 end
             end
+            for _, art in ipairs(ARTIFACT_CHOICES) do
+                local already = false
+                for _, a in ipairs(artifacts) do
+                    if a == art.id then already = true; break end
+                end
+                if not already then
+                    table.insert(available, { type = "artifact", id = art.id, name = art.name, desc = art.desc })
+                end
+            end
         end
-        if #upgradable > 0 then
+        if #available > 0 then
             showAbilityMenu = true
             abilityMenu = {
-                available = upgradable,
-                selected = {},
-                maxSelect = 1,
+                available = available,
                 mode = "upgrade",
-                selectedUnit = nil,
+                selectedItem = nil,
                 selectedChoice = nil,
                 availableChoices = nil,
             }
@@ -503,6 +519,8 @@ function love.draw()
         syncState()
         renderer.draw(state)
     end
+
+    shop.draw()
 
     love.graphics.pop()
 end
