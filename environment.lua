@@ -1035,7 +1035,7 @@ function environment.createEnemyByType(enemyType, q, r)
         Ghost = 26, Zombie = 25, PoisonousZombie = 21, Lich = 27,
         Brute = 60, Lancer = 62, BogShaman = 80,
         Raider = 23, Dervish = 28, Crusher = 66,
-        SummoningRod = 83, PowerLich = 84,
+        SummoningRod = 83,
     }
     local gid = enemyTypeToGid[enemyType]
     local sprite = gid and environment.unitSpriteCache[gid]
@@ -1060,10 +1060,26 @@ function environment.createEnemyByType(enemyType, q, r)
             love.graphics.setColor(0.8, 0.2, 0.8, 1)
             love.graphics.circle("fill", size/2, size/2, size/2 - 1)
         elseif enemyType == "PowerLich" then
-            love.graphics.setColor(0.9, 0.1, 0.3, 1)
-            love.graphics.circle("fill", size/2, size/2, size/2 - 1)
-            love.graphics.setColor(0.5, 0, 0.1, 1)
-            love.graphics.circle("line", size/2, size/2, size/2 - 2, 6)
+            -- Body (dark purple)
+            love.graphics.setColor(0.15, 0.05, 0.2, 1)
+            love.graphics.rectangle("fill", 2, 4, size-4, size-4, 2)
+            -- Cape (dark red)
+            love.graphics.setColor(0.4, 0.05, 0.1, 0.8)
+            love.graphics.rectangle("fill", 1, 5, size-2, size-5, 2)
+            -- Glowing eyes
+            love.graphics.setColor(0.1, 0.9, 0.3, 1)
+            love.graphics.rectangle("fill", 4, 6, 3, 2)
+            love.graphics.rectangle("fill", 9, 6, 3, 2)
+            -- Crown spikes
+            love.graphics.setColor(0.6, 0.1, 0.15, 1)
+            love.graphics.polygon("fill", 8, 2, 6, 5, 10, 5)
+            love.graphics.polygon("fill", 5, 3, 3, 6, 7, 6)
+            love.graphics.polygon("fill", 11, 3, 9, 6, 13, 6)
+            -- Staff
+            love.graphics.setColor(0.3, 0.3, 0.4, 1)
+            love.graphics.rectangle("fill", 13, 5, 2, 10)
+            love.graphics.setColor(0.8, 0.1, 0.3, 1)
+            love.graphics.circle("fill", 14, 4, 2)
         else
             love.graphics.setColor(1, 0.5, 0, 1)
             love.graphics.circle("fill", size/2, size/2, size/2 - 1)

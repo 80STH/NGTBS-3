@@ -162,6 +162,36 @@ local function isEntityAlive(entities, name)
     return false
 end
 
+local killLeaderDef = {
+    id = "kill_leader",
+    name = "Destroy the Leader",
+    desc = "Find and eliminate the enemy leader!",
+    onGenerate = function(entities, hex)
+        -- Power Lich уже размещён в game.lua — просто помечаем
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and not e.isPlayable and e.name == "PowerLich" then
+                e.isLeader = true
+                print(string.format("Objective 'kill_leader': PowerLich found at (%d,%d)", e.q, e.r))
+                break
+            end
+        end
+    end,
+    check = function(entities, state)
+        local leaderAlive = false
+        for _, e in ipairs(entities) do
+            if e.isLeader and e.health and e.health > 0 then
+                leaderAlive = true
+                break
+            end
+        end
+        if _G.lichKilledPlayer then
+            state["kill_leader"] = "failed"
+        elseif not leaderAlive then
+            state["kill_leader"] = "completed"
+        end
+    end,
+}
+
 local function definePool()
     objectivePool = {
         {
@@ -403,13 +433,15 @@ function objectives.generate(entities, hex)
     activePrimaryObjective = nil
     objectiveStates = {}
 
-    -- В режиме прогрессии kill_leader — основной босс (заменяет обычный primary)
-    if _G.isProgressionRun then
+    -- kill_leader ВСЕГДА на map4, независимо от режима
+    local isMap4 = _G.selectedMapPath and _G.selectedMapPath:match("map4")
+    if isMap4 then
         activePrimaryObjective = killLeaderDef
         objectiveStates[killLeaderDef.id] = "pending"
         if killLeaderDef.onGenerate then
             killLeaderDef.onGenerate(entities, hex)
         end
+        print("kill_leader set as primary objective on map4")
     else
         -- Choose primary: railway if map has train cars, otherwise caravans
         local primaryId = hasTrainCars(entities) and "protect_railway" or "protect_caravans"
@@ -450,8 +482,9 @@ function objectives.generate(entities, hex)
         local def = shuffled[i]
         local skip = false
 
-        -- Skip kill_leader from pool in progression mode (it's the primary boss)
-        if not skip and _G.isProgressionRun and def.id == "kill_leader" then
+        -- kill_leader эксклюзивно для map4 в прогрессии
+        -- kill_leader уже первичный на map4 — исключаем из пула
+        if not skip and def.id == "kill_leader" then
             skip = true
         end
 

@@ -2345,7 +2345,8 @@ function ui.drawChaosBar(mx, my)
 end
 
 function ui.drawLeaderHPBar(mx, my)
-    if not _G.isProgressionRun then return end
+    local isMap4 = _G.selectedMapPath and _G.selectedMapPath:match("map4")
+    if not isMap4 then return end
     local leader = nil
     for _, e in ipairs(_G.entities or {}) do
         if e.isLeader and e.health and e.health > 0 then

@@ -52,8 +52,49 @@ function restartGame(mapPath)
         end
     end
 
+    -- Map4: Power Lich boss + 4 pre-dug enemies
+    if mapPath:match("map4") then
+        local occupiedSet = {}
+        for _, e in ipairs(entities) do
+            local k = e.q .. "," .. e.r
+            occupiedSet[k] = true
+        end
+        local candidates = {}
+        for q = 0, width - 1 do
+            for r = 0, height - 1 do
+                if hex:isActiveHex(q, r) then
+                    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
+                    if terrain ~= "water" and terrain ~= "underwater_mines" and not occupiedSet[q .. "," .. r] and not status.hasNegativeHexStatus(q, r) then
+                        table.insert(candidates, {q = q, r = r})
+                    end
+                end
+            end
+        end
+        for i = #candidates, 2, -1 do
+            local j = love.math.random(i)
+            candidates[i], candidates[j] = candidates[j], candidates[i]
+        end
+
+        -- Place Power Lich
+        if #candidates >= 1 then
+            local cell = candidates[1]
+            local lich = environment.createEnemyByType("PowerLich", cell.q, cell.r)
+            lich.isLeader = true
+            table.insert(entities, lich)
+            print(string.format("  Power Lich placed at (%d,%d)", cell.q, cell.r))
+        end
+
+        -- Place 4 pre-dug enemies
+        local enemyTypes = { "Zombie", "Ghost", "Lich", "Brute" }
+        for i = 1, math.min(4, #candidates - 1) do
+            local cell = candidates[i + 1]
+            local etype = enemyTypes[(i - 1) % #enemyTypes + 1]
+            local enemy = environment.createEnemyByType(etype, cell.q, cell.r)
+            table.insert(entities, enemy)
+            print(string.format("  Pre-dug %s placed at (%d,%d)", etype, cell.q, cell.r))
+        end
     -- For map1, spawn 5 random enemies if none are present (user cleared the entity layer)
-    if mapPath:match("map1%.lua$") then
+    elseif mapPath:match("map1%.lua$") then
         local occupiedSet = {}
         for _, e in ipairs(entities) do
             local k = e.q .. "," .. e.r

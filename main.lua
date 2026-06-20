@@ -46,7 +46,7 @@ currentMapIndex = 1
 showAbilityMenu = false
 abilityMenu = nil
 progressionOverlay = nil
-mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua"}
+mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua", "maps/map4.lua"}
 unitUpgrades = {}  -- "Warrior" → { choices = {"dashToFlipChain"} }
 artifacts = {}  -- list of unlocked artifact IDs
 placedAllies = {}
@@ -230,12 +230,12 @@ function handleAbilityMenuClick(x, y)
             global_abilities.maxMana = global_abilities.maxMana + 1
             showAbilityMenu = false
             abilityMenu = nil
-            if currentMapIndex == 1 then
-                currentMapIndex = 2
-                restartGame("maps/map2.lua")
+            local nextMap = currentMapIndex + 1
+            if nextMap <= #mapProgression then
+                currentMapIndex = nextMap
+                restartGame(mapProgression[nextMap])
             else
-                currentMapIndex = 3
-                restartGame("maps/map3.lua")
+                progressionOverlay = "complete"
             end
         end
     end
