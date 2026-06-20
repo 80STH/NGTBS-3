@@ -9,8 +9,8 @@ local terrainDefs = require("src.content.terrain")
 local terrain = {}
 
 local S0 = 64                  -- reference hex size (centre -> vertex)
-local CW, CH = 128, 148        -- canvas size
-local CX, CY = 64, 70          -- hex centre in canvas
+local CW, CH = 148, 128        -- canvas size (flat-top: wider than tall)
+local CX, CY = 74, 64          -- hex centre in canvas
 
 local function hexPath(size)
     local pts = hexmath.corners(CX, CY, size)

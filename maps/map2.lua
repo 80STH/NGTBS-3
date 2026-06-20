@@ -5,7 +5,7 @@
 return {
     name = "Last Stand",
     radius = 4,
-    size = 46,
+    size = 51,
     maxTurns = 12,
 
     terrain = {

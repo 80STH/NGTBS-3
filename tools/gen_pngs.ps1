@@ -113,9 +113,9 @@ Draw-Building 'TrainCar' { param($gx,$S)
   FillEl $gx (br (C 76 25 12)) ($S-24) ($S-18) 12 12
 }
 
-# ---------- terrain (hex-shaped) ----------
-$S0=64; $CW=128; $CH=148; $CX=64; $CY=70
-function HexPts($size){ $pts=@(); for($i=0;$i -lt 6;$i++){ $a=[Math]::PI/180*(60*$i-30); $pts+=[System.Drawing.PointF]::new(($CX+$size*[Math]::Cos($a)),($CY+$size*[Math]::Sin($a))) }; return $pts }
+# ---------- terrain (hex-shaped, flat-top) ----------
+$S0=64; $CW=148; $CH=128; $CX=74; $CY=64
+function HexPts($size){ $pts=@(); for($i=0;$i -lt 6;$i++){ $a=[Math]::PI/180*(60*$i); $pts+=[System.Drawing.PointF]::new(($CX+$size*[Math]::Cos($a)),($CY+$size*[Math]::Sin($a))) }; return $pts }
 function Draw-Terrain($id,$r,$g,$bl,$pattern){
     $b=New-Bit $CW $CH; $gx=Open-G $b
     FillPl $gx (br (C $r $g $bl)) (HexPts $S0)

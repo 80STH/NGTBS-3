@@ -6,7 +6,7 @@
 return {
     name = "Crossroads",
     radius = 4,
-    size = 46,
+    size = 51,
     maxTurns = 14,
 
     -- terrain (defaults to "grass" where not listed)

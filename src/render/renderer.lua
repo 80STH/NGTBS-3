@@ -247,14 +247,16 @@ function renderer.draw(game)
         drawHexShape(g, g.hoverQ, g.hoverR, "line", { 1, 1, 1, 0.5 })
     end
 
-    -- entities sorted by r for depth
+    -- entities sorted by screen y for depth (orientation-independent)
     local sorted = {}
     for _, e in ipairs(game.entities) do table.insert(sorted, e) end
     table.sort(sorted, function(a, b)
         local aq, ar = game:entityDrawPos(a)
         local bq, br = game:entityDrawPos(b)
-        if ar == br then return aq < bq end
-        return ar < br
+        local _, ay = g:hexToPixel(aq, ar)
+        local _, by = g:hexToPixel(bq, br)
+        if ay == by then return aq < bq end
+        return ay < by
     end)
     for _, e in ipairs(sorted) do
         if e:isAlive() or e.isDying then drawEntity(game, e) end

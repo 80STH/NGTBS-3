@@ -1,5 +1,5 @@
 -- src/core/hex.lua
--- Axial hex coordinates (pointy-top). Math + active-cell set.
+-- Axial hex coordinates (flat-top). Math + active-cell set.
 -- A "grid" instance knows its hex size, origin, and the set of active cells.
 
 local hex = {}
@@ -11,13 +11,13 @@ local SQRT3 = math.sqrt(3)
 function hex.axialToCube(q, r) return q, -q - r, r end
 function hex.cubeToAxial(x, y, z) return x, z end
 
--- 6 axial neighbour directions (pointy-top)
+-- 6 axial neighbour directions (flat-top)
 hex.DIRECTIONS = {
-    { q =  1, r = -1 },  -- E/NE
-    { q =  1, r =  0 },  -- E/SE
+    { q =  1, r = -1 },  -- NE
+    { q =  1, r =  0 },  -- SE
     { q =  0, r =  1 },  -- S
-    { q = -1, r =  1 },  -- W/SW
-    { q = -1, r =  0 },  -- W/NW
+    { q = -1, r =  1 },  -- SW
+    { q = -1, r =  0 },  -- NW
     { q =  0, r = -1 },  -- N
 }
 
@@ -82,20 +82,20 @@ function hex.lineCells(q1, r1, q2, r2)
     return out
 end
 
--- pixel conversion (pointy-top), size = center->vertex
+-- pixel conversion (flat-top), size = center->vertex
 -- Module-level (no `self`); instance methods below wrap these.
 function hex.toPixel(q, r, size, ox, oy)
     ox = ox or 0; oy = oy or 0
-    local x = size * SQRT3 * (q + r / 2)
-    local y = size * 1.5 * r
+    local x = size * 1.5 * q
+    local y = size * SQRT3 * (r + q / 2)
     return x + ox, y + oy
 end
 
 function hex.toHex(px, py, size, ox, oy)
     ox = ox or 0; oy = oy or 0
     px = px - ox; py = py - oy
-    local q = (SQRT3 / 3 * px - 1 / 3 * py) / size
-    local r = (2 / 3 * py) / size
+    local q = (2 / 3 * px) / size
+    local r = (SQRT3 / 3 * py - 1 / 3 * px) / size
     return hex.axialRound(q, r)
 end
 
@@ -105,11 +105,11 @@ function hex.axialRound(q, r)
     return hex.cubeToAxial(cx, cy, cz)
 end
 
--- The 6 corner points of a pointy-top hex at pixel (cx,cy)
+-- The 6 corner points of a flat-top hex at pixel (cx,cy)
 function hex.corners(cx, cy, size)
     local pts = {}
     for i = 0, 5 do
-        local angle = math.pi / 180 * (60 * i - 30)
+        local angle = math.pi / 180 * (60 * i)
         table.insert(pts, { x = cx + size * math.cos(angle), y = cy + size * math.sin(angle) })
     end
     return pts
@@ -183,10 +183,10 @@ function hex:centerOnScreen(w, h)
         minX = math.min(minX, x); maxX = math.max(maxX, x)
         minY = math.min(minY, y); maxY = math.max(maxY, y)
     end
-    local gw = (maxX - minX) + self.size * SQRT3
-    local gh = (maxY - minY) + self.size * 2
-    self.originX = (w - gw) / 2 - minX + self.size * SQRT3 / 2
-    self.originY = (h - gh) / 2 - minY + self.size
+    local gw = (maxX - minX) + self.size * 2
+    local gh = (maxY - minY) + self.size * SQRT3
+    self.originX = (w - gw) / 2 - minX + self.size
+    self.originY = (h - gh) / 2 - minY + self.size * SQRT3 / 2
     -- shift down a bit to leave room for top HUD
     self.originY = self.originY + 40
 end
