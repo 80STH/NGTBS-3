@@ -1,149 +1,56 @@
+-- maps/map1.lua
+-- A hex-shaped battlefield (radius 4). Lua-table format (no Tiled).
+-- Allies deploy in the bottom rows; enemies start at the top.
+-- A train runs along a railway into the player's side; a building raises chaos.
+
 return {
-  version = "1.10",
-  luaversion = "5.1",
-  tiledversion = "1.12.1",
-  class = "",
-  orientation = "hexagonal",
-  renderorder = "right-down",
-  width = 9,
-  height = 9,
-  tilewidth = 14,
-  tileheight = 12,
-  nextlayerid = 5,
-  nextobjectid = 2,
-  hexsidelength = 6,
-  staggeraxis = "x",
-  staggerindex = "odd",
-  properties = {},
-  tilesets = {
-    {
-      name = "hex mini",
-      firstgid = 1,
-      class = "",
-      tilewidth = 18,
-      tileheight = 18,
-      spacing = 0,
-      margin = 0,
-      columns = 5,
-      image = "hexmini.png",
-      imagewidth = 106,
-      imageheight = 72,
-      objectalignment = "unspecified",
-      tilerendersize = "tile",
-      fillmode = "stretch",
-      tileoffset = {
-        x = 0,
-        y = 1
-      },
-      grid = {
-        orientation = "orthogonal",
-        width = 18,
-        height = 18
-      },
-      properties = {},
-      wangsets = {},
-      tilecount = 20,
-      tiles = {}
+    name = "Crossroads",
+    radius = 4,
+    size = 46,
+    maxTurns = 14,
+
+    -- terrain (defaults to "grass" where not listed)
+    terrain = {
+        ["4,-2"] = "water",
+        ["-4,2"] = "lava",
+        ["2,-1"] = "railway",
+        ["1,0"]  = "railway",
+        ["0,1"]  = "railway",
+        ["-1,2"] = "railway",
+        ["-2,3"] = "railway",
+        ["3,1"]  = "stone",
+        ["-3,2"] = "stone",
     },
-    {
-      name = "entities",
-      firstgid = 21,
-      class = "",
-      tilewidth = 16,
-      tileheight = 16,
-      spacing = 0,
-      margin = 0,
-      columns = 9,
-      image = "entities.png",
-      imagewidth = 159,
-      imageheight = 142,
-      objectalignment = "unspecified",
-      tilerendersize = "tile",
-      fillmode = "stretch",
-      tileoffset = {
-        x = 0,
-        y = 0
-      },
-      grid = {
-        orientation = "orthogonal",
-        width = 16,
-        height = 16
-      },
-      properties = {},
-      wangsets = {},
-      tilecount = 72,
-      tiles = {
-        {
-          id = 4,
-          properties = {
-            ["IsPlayable"] = false,
-            ["MaxHealth"] = 5,
-            ["Name"] = "Zombie"
-          }
-        }
-      }
-    }
-  },
-  layers = {
-    {
-      type = "tilelayer",
-      x = 0,
-      y = 0,
-      width = 9,
-      height = 9,
-      id = 1,
-      name = "terrain",
-      class = "",
-      visible = true,
-      opacity = 1,
-      offsetx = 0,
-      offsety = 0,
-      parallaxx = 1,
-      parallaxy = 1,
-      properties = {},
-      encoding = "base64",
-      compression = "zlib",
-      data = "eJxjZWBgYIViRiTMioYZcWBmIuRxyRHCfFCMS46QfkEcZgii+VEQSS2Mje5/ZLXoYgCj3AFk"
+
+    -- enemies & buildings (allies come from the squad via deploy)
+    entities = {
+        { def = "Zombie",      q =  0, r = -4, side = "enemy" },
+        { def = "Zombie",      q =  2, r = -4, side = "enemy" },
+        { def = "Lich",        q = -2, r = -2, side = "enemy" },
+        { def = "Brute",       q =  3, r = -3, side = "enemy" },
+        { def = "BogShaman",   q = -3, r = -1, side = "enemy" },
+        { def = "BigBuilding", q =  3, r =  1, side = "neutral" },
+        { def = "Tower",       q = -3, r =  2, side = "neutral" },
     },
-    {
-      type = "tilelayer",
-      x = 0,
-      y = 0,
-      width = 9,
-      height = 9,
-      id = 2,
-      name = "entities",
-      class = "",
-      visible = true,
-      opacity = 1,
-      offsetx = 0,
-      offsety = 0,
-      parallaxx = 1,
-      parallaxy = 1,
-      properties = {},
-      encoding = "base64",
-      compression = "zlib",
-      data = "eJxjYEAAbiSMDkBi7FjEYGr50eTYsKhFVsODRS26GmyAHY8amJno5lhjUQtS40rALgaoGkLqAPqkAfY="
+
+    statuses = {
+        { type = "fire", q =  0, r = -3, data = { duration = 6 } },
+        { type = "acid", q =  1, r = -2, data = { duration = 6 } },
     },
-    {
-      type = "tilelayer",
-      x = 0,
-      y = 0,
-      width = 9,
-      height = 9,
-      id = 3,
-      name = "status",
-      class = "",
-      visible = false,
-      opacity = 1,
-      offsetx = 0,
-      offsety = 0,
-      parallaxx = 1,
-      parallaxy = 1,
-      properties = {},
-      encoding = "base64",
-      compression = "zlib",
-      data = "eJwLYmBgCIJiGAjCgWFymkSoIUaekFpSMLXMIsccAErGFzo="
-    }
-  }
+
+    digSites = {
+        { q = -1, r = 0, timer = 3, spawn = "Zombie" },
+    },
+
+    trains = {
+        { path = { { q = 2, r = -1 }, { q = 1, r = 0 }, { q = 0, r = 1 }, { q = -1, r = 2 }, { q = -2, r = 3 } },
+          length = 2, isObjective = false },
+    },
+
+    deployZone = {
+        { q = -4, r = 4 }, { q = -3, r = 4 }, { q = -2, r = 4 }, { q = -1, r = 4 }, { q = 0, r = 4 },
+        { q = -4, r = 3 }, { q = -3, r = 3 }, { q = -2, r = 3 }, { q = -1, r = 3 }, { q = 0, r = 3 }, { q = 1, r = 3 },
+    },
+
+    objective = { type = "kill_all" },
 }
