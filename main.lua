@@ -57,6 +57,7 @@ testViewOffsetY = 0
 gamePhase = "menu"
 selectedMapPath = nil
 selectedSquad = nil
+selectedCommander = nil
 difficultyModifier = 1
 disableEnemySpawn = false
 chaos = 0
@@ -70,6 +71,7 @@ progressionOverlay = nil
 mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua", "maps/map4.lua"}
 unitUpgrades = {}  -- "Warrior" > { choices = {"dashToFlipChain"} }
 artifacts = {}  -- list of unlocked artifact IDs
+commanderArtifacts = {}  -- commander-specific artifact IDs
 placedAllies = {}
 deploySelectedIdx = nil
 allyPanelButtons = {}
@@ -168,6 +170,11 @@ function handleAbilityMenuClick(x, y)
                         local data = unitUpgrades[abilityMenu.selectedItem.name] or { choices = {} }
                         table.insert(data.choices, abilityMenu.selectedChoice)
                         unitUpgrades[abilityMenu.selectedItem.name] = data
+                    elseif abilityMenu.selectedItem.type == "commander_artifact" then
+                        table.insert(commanderArtifacts, abilityMenu.selectedChoice)
+                        if abilityMenu.selectedItem.apply then
+                            abilityMenu.selectedItem.apply()
+                        end
                     else
                         table.insert(artifacts, abilityMenu.selectedChoice)
                     end
@@ -417,6 +424,22 @@ function love.update(dt)
                 end
                 if not already then
                     table.insert(available, { type = "artifact", id = art.id, name = art.name, desc = art.desc })
+                end
+            end
+            -- Commander exclusive artifacts
+            if selectedCommander then
+                local commanders = require("system.commanders")
+                local cmd = commanders.get(selectedCommander)
+                if cmd and cmd.exclusiveArtifacts then
+                    for _, cart in ipairs(cmd.exclusiveArtifacts) do
+                        local already = false
+                        for _, a in ipairs(commanderArtifacts) do
+                            if a == cart.id then already = true; break end
+                        end
+                        if not already then
+                            table.insert(available, { type = "commander_artifact", id = cart.id, name = cart.name, desc = cart.desc, apply = cart.apply })
+                        end
+                    end
                 end
             end
         end

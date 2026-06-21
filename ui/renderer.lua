@@ -460,6 +460,12 @@ function drawAbilityMenu(w, h)
                 love.graphics.setFont(love.graphics.newFont(14))
                 if entry.type == "unit" then
                     love.graphics.print("  ⚔ " .. entry.name, ix + 10, iy + 18)
+                elseif entry.type == "commander_artifact" then
+                    love.graphics.setColor(0.4, 0.8, 1.0, 0.9)
+                    love.graphics.print("  ★ " .. entry.name, ix + 10, iy + 8)
+                    love.graphics.setFont(love.graphics.newFont(11))
+                    love.graphics.setColor(0.5, 0.7, 0.9, 0.7)
+                    love.graphics.printf(entry.desc, ix + 10, iy + 30, iw - 20, "left")
                 else
                     love.graphics.setColor(0.8, 0.8, 0.4, 0.9)
                     love.graphics.print("  ◆ " .. entry.name, ix + 10, iy + 8)

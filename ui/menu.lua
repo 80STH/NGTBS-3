@@ -1,5 +1,6 @@
 local menu = {}
 local shop = require("ui.shop")
+local commanders = require("system.commanders")
 
 local function loadMapList()
     local items = love.filesystem.getDirectoryItems("maps")
@@ -54,26 +55,75 @@ function menu.draw()
     love.graphics.setColor(0.08, 0.08, 0.12, 1)
     love.graphics.rectangle("fill", 0, 0, w, h)
 
-    -- Draw normal menu
     local titleFont = love.graphics.newFont(math.max(16, math.floor(h * 0.03)))
-    love.graphics.setFont(titleFont)
-    love.graphics.printf("Select Map", 0, h * 0.10, w, "center")
-
-    local bw, bh = 260, 50
-    local mapStartY = h * 0.20
-    local bx = w/2 - bw/2
-
+    local smallFont = love.graphics.newFont(11)
     local mx, my = love.mouse.getPosition()
     mx = mx / dpiScale
     my = my / dpiScale
 
-    for i, mapPath in ipairs(mapList) do
-        local by = mapStartY + (i - 1) * (bh + 10)
-        local hover = mx >= bx and mx <= bx + bw and my >= by and my <= by + bh
+    -- ============================================================
+    -- COMMANDER SELECTION
+    -- ============================================================
+    local cmdStartY = h * 0.04
+    love.graphics.setFont(titleFont)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf("Select Commander", 0, cmdStartY, w, "center")
 
-        love.graphics.setColor(hover and 0.3 or 0.15, hover and 0.5 or 0.25, hover and 0.7 or 0.35, 0.9)
+    local cbw, cbh = w - 40, 70
+    local cbx = 20
+    local cmdNames = {}
+    for name, _ in pairs(commanders.list) do table.insert(cmdNames, name) end
+    table.sort(cmdNames)
+
+    for i, name in ipairs(cmdNames) do
+        local cmd = commanders.get(name)
+        local cby = cmdStartY + 35 + (i - 1) * (cbh + 6)
+        local hover = mx >= cbx and mx <= cbx + cbw and my >= cby and my <= cby + cbh
+        local isSelected = selectedCommander == name
+
+        love.graphics.setColor(hover and 0.25 or 0.15, hover and 0.35 or 0.2, hover and 0.5 or 0.3, 0.9)
+        love.graphics.rectangle("fill", cbx, cby, cbw, cbh, 8)
+        if isSelected then
+            love.graphics.setColor(cmd.color[1], cmd.color[2], cmd.color[3], 0.8)
+            love.graphics.setLineWidth(2)
+            love.graphics.rectangle("line", cbx, cby, cbw, cbh, 8)
+            love.graphics.setLineWidth(1)
+        else
+            love.graphics.setColor(cmd.color[1] * 0.5, cmd.color[2] * 0.5, cmd.color[3] * 0.5, 0.4)
+            love.graphics.rectangle("line", cbx, cby, cbw, cbh, 8)
+        end
+
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setFont(love.graphics.newFont(13))
+        love.graphics.printf(cmd.name, cbx + 10, cby + 4, cbw - 20, "left")
+        love.graphics.setColor(0.7, 0.7, 0.7, 0.8)
+        love.graphics.setFont(smallFont)
+        local abNames = {}
+        for _, aid in ipairs(cmd.startAbilities) do table.insert(abNames, aid) end
+        love.graphics.printf("Starts with: " .. table.concat(abNames, ", "), cbx + 10, cby + 28, cbw - 20, "left")
+        love.graphics.printf(cmd.desc, cbx + 10, cby + 48, cbw - 20, "left")
+    end
+
+    -- ============================================================
+    -- MAP SELECTION
+    -- ============================================================
+    local mapStartY = cmdStartY + 35 + #cmdNames * (cbh + 6) + 20
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setFont(titleFont)
+    love.graphics.printf("Select Map", 0, mapStartY, w, "center")
+
+    local bw, bh = 260, 50
+    local bx = w/2 - bw/2
+    local mapButtonsY = mapStartY + 35
+
+    for i, mapPath in ipairs(mapList) do
+        local by = mapButtonsY + (i - 1) * (bh + 10)
+        local hover = mx >= bx and mx <= bx + bw and my >= by and my <= by + bh
+        local canClick = selectedCommander ~= nil
+
+        love.graphics.setColor(hover and canClick and 0.3 or 0.15, hover and canClick and 0.5 or 0.25, hover and canClick and 0.7 or 0.35, 0.9)
         love.graphics.rectangle("fill", bx, by, bw, bh, 8)
-        love.graphics.setColor(0.4, 0.6, 0.8, hover and 0.8 or 0.4)
+        love.graphics.setColor(0.4, 0.6, 0.8, (hover and canClick) and 0.8 or 0.4)
         love.graphics.rectangle("line", bx, by, bw, bh, 8)
 
         local name = mapPath:match("/([^/]+)%.lua$") or mapPath
@@ -82,20 +132,30 @@ function menu.draw()
         love.graphics.printf(name, bx + 10, by + bh/2 - 8, bw - 20, "center")
     end
 
-    local squadStartY = mapStartY + #mapList * (bh + 10) + 160
+    if not selectedCommander then
+        love.graphics.setFont(smallFont)
+        love.graphics.setColor(0.8, 0.5, 0.2, 1)
+        love.graphics.printf("Select a commander first", 0, mapButtonsY - 16, w, "center")
+    end
+
+    -- ============================================================
+    -- SQUAD SELECTION + EXTRAS
+    -- ============================================================
+    local squadStartY = mapButtonsY + #mapList * (bh + 10) + 50
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(titleFont)
-    love.graphics.printf("Select Squad", 0, squadStartY - 80, w, "center")
+    love.graphics.printf("Select Squad", 0, squadStartY, w, "center")
 
     local sbw, sbh = 200, 40
     local sbx = w/2 - sbw/2
 
     for i, squad in ipairs(squads) do
-        local sby = squadStartY + (i - 1) * (sbh + 8)
+        local sby = squadStartY + 35 + (i - 1) * (sbh + 8)
         local hover = mx >= sbx and mx <= sbx + sbw and my >= sby and my <= sby + sbh
         local isSelected = selectedSquad == i
+        local canSelect = selectedCommander ~= nil
 
-        love.graphics.setColor(hover and 0.35 or 0.2, hover and 0.25 or 0.15, isSelected and 0.5 or 0.2, 0.9)
+        love.graphics.setColor(hover and canSelect and 0.35 or 0.2, hover and canSelect and 0.25 or 0.15, isSelected and 0.5 or 0.2, 0.9)
         love.graphics.rectangle("fill", sbx, sby, sbw, sbh, 6)
         love.graphics.setColor(isSelected and 0.5 or 0.3, isSelected and 0.4 or 0.3, isSelected and 0.9 or 0.4, isSelected and 0.9 or 0.5)
         love.graphics.rectangle("line", sbx, sby, sbw, sbh, 6)
@@ -115,7 +175,7 @@ function menu.draw()
     end
 
     -- Disable enemy spawn checkbox
-    local cbY = squadStartY + #squads * (sbh + 8) + 20
+    local cbY = squadStartY + 35 + #squads * (sbh + 8) + 20
     local cbSize = 18
     local cbX = w/2 - 120
     local cbHover = mx >= cbX and mx <= cbX + cbSize and my >= cbY and my <= cbY + cbSize
@@ -139,9 +199,10 @@ function menu.draw()
     -- Progression Test button
     local ptY = cbY + 50
     local ptHover = mx >= bx and mx <= bx + bw and my >= ptY and my <= ptY + bh
-    love.graphics.setColor(ptHover and 0.3 or 0.15, ptHover and 0.5 or 0.25, ptHover and 0.2 or 0.1, 0.9)
+    local canProgress = selectedCommander ~= nil
+    love.graphics.setColor(ptHover and canProgress and 0.3 or 0.15, ptHover and canProgress and 0.5 or 0.25, ptHover and canProgress and 0.2 or 0.1, 0.9)
     love.graphics.rectangle("fill", bx, ptY, bw, bh, 8)
-    love.graphics.setColor(0.2, 0.8, 0.4, ptHover and 0.8 or 0.4)
+    love.graphics.setColor(0.2, 0.8, 0.4, (ptHover and canProgress) and 0.8 or 0.4)
     love.graphics.rectangle("line", bx, ptY, bw, bh, 8)
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(love.graphics.newFont(13))
@@ -164,37 +225,61 @@ function menu.draw()
 end
 
 function menu.mousepressed(x, y)
+    local w = logicalW
+    local h = logicalH
+
+    -- Commander selection
+    local cmdStartY = h * 0.04
+    local cbw, cbh = w - 40, 70
+    local cbx = 20
+    local cmdNames = {}
+    for name, _ in pairs(commanders.list) do table.insert(cmdNames, name) end
+    table.sort(cmdNames)
+
+    for i, name in ipairs(cmdNames) do
+        local cby = cmdStartY + 35 + (i - 1) * (cbh + 6)
+        if x >= cbx and x <= cbx + cbw and y >= cby and y <= cby + cbh then
+            selectedCommander = name
+            return true
+        end
+    end
+
+    -- Map selection (requires commander)
     local bw, bh = 260, 50
-    local mapStartY = logicalH * 0.20
-    local bx = logicalW/2 - bw/2
+    local bx = w/2 - bw/2
+    local mapStartY = cmdStartY + 35 + #cmdNames * (cbh + 6) + 20
+    local mapButtonsY = mapStartY + 35
 
     for i, mapPath in ipairs(mapList) do
-        local by = mapStartY + (i - 1) * (bh + 10)
+        local by = mapButtonsY + (i - 1) * (bh + 10)
         if x >= bx and x <= bx + bw and y >= by and y <= by + bh then
+            if not selectedCommander then return true end
             if not selectedSquad then selectedSquad = 1 end
             isProgressionRun = false
-            global_abilities.resetUnlocks()
+            global_abilities.initWithCommander(selectedCommander)
             restartGame(mapPath)
             return true
         end
     end
 
+    -- Squad selection
     local sbw, sbh = 200, 40
-    local squadStartY = mapStartY + #mapList * (bh + 10) + 160
-    local sbx = logicalW/2 - sbw/2
+    local squadStartY = mapButtonsY + #mapList * (bh + 10) + 50
+    local sbx = w/2 - sbw/2
 
     for i in ipairs(squads) do
-        local sby = squadStartY + (i - 1) * (sbh + 8)
+        local sby = squadStartY + 35 + (i - 1) * (sbh + 8)
         if x >= sbx and x <= sbx + sbw and y >= sby and y <= sby + sbh then
+            if not selectedCommander then return true end
             selectedSquad = i
             return true
         end
     end
 
     -- Disable enemy spawn checkbox
-    local cbY = squadStartY + #squads * (sbh + 8) + 20
+    local cbY = squadStartY + 35 + #squads * (sbh + 8) + 20
     local cbSize = 18
-    local cbX = logicalW/2 - 120
+    local cbX = w/2 - 120
     if x >= cbX and x <= cbX + cbSize and y >= cbY and y <= cbY + cbSize then
         disableEnemySpawn = not disableEnemySpawn
         return true
@@ -203,12 +288,14 @@ function menu.mousepressed(x, y)
     -- Progression Test button
     local ptY = cbY + 50
     if x >= bx and x <= bx + bw and y >= ptY and y <= ptY + bh then
+        if not selectedCommander then return true end
         if not selectedSquad then selectedSquad = 1 end
-        global_abilities.resetUnlocks()
         unitUpgrades = {}
         artifacts = {}
+        commanderArtifacts = {}
         isProgressionRun = true
         currentMapIndex = 1
+        global_abilities.initWithCommander(selectedCommander)
         restartGame("maps/map1.lua")
         return true
     end
@@ -227,7 +314,9 @@ function menu.keypressed(key)
     if shop.keypressed(key) then return true end
     if key == "return" or key == " " then
         if #mapList > 0 then
+            if not selectedCommander then return true end
             if not selectedSquad then selectedSquad = 1 end
+            global_abilities.initWithCommander(selectedCommander)
             restartGame(mapList[1])
             return true
         end

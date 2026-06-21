@@ -24,10 +24,10 @@ global_abilities.maxMana = 3
 global_abilities.abilityUsedThisTurn = false
 global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay"}
 
-global_abilities.unlocked = { Heal = true }
+global_abilities.unlocked = {}
 
 function global_abilities.setUnlocked(name)
-    global_abilities.unlocked[name] = true
+    if name then global_abilities.unlocked[name] = true end
 end
 
 function global_abilities.unlockAll(names)
@@ -37,7 +37,24 @@ function global_abilities.unlockAll(names)
 end
 
 function global_abilities.resetUnlocks()
-    global_abilities.unlocked = { Heal = true }
+    global_abilities.unlocked = {}
+end
+
+function global_abilities.initWithCommander(commanderName)
+    local commanders = require("system.commanders")
+    local cmd = commanders.get(commanderName)
+    if not cmd then
+        global_abilities.unlocked = { Heal = true }
+        global_abilities.mana = 3
+        global_abilities.maxMana = 3
+        return
+    end
+    global_abilities.unlocked = {}
+    for _, ab in ipairs(cmd.startAbilities) do
+        global_abilities.unlocked[ab] = true
+    end
+    global_abilities.mana = cmd.startMana
+    global_abilities.maxMana = cmd.startMaxMana
 end
 
 function global_abilities.getDisplayOrder()
@@ -665,53 +682,116 @@ function ExtraMoveAbility.new()
         name = "Extra Move",
         key = "x",
         manaCost = 1,
-        manaCost = 1,
         button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
+        phase = nil,
+        target = nil,
     }
     return setmetatable(self, ExtraMoveAbility)
 end
 
 function ExtraMoveAbility:reset()
     self.hasBeenUsed = false
+    self.phase = nil
+    self.target = nil
 end
 
 function ExtraMoveAbility:onActivate(state)
-    log.info("abilities", "Click on an ally that has already attacked, or press ESC to cancel")
+    self.phase = "select_ally"
+    self.target = nil
+    log.info("abilities", "Click on an ally to cleanse and shift, or press ESC to cancel")
 end
 
 function ExtraMoveAbility:onDeactivate(state)
+    self.phase = nil
+    self.target = nil
     restoreSelectedActor()
-        log.infof("abilities", "%s cancelled", self.name)
+    log.infof("abilities", "%s cancelled", self.name)
 end
 
 function ExtraMoveAbility:onClickHex(q, r, hex, state)
-    local target = nil
-    for _, e in ipairs(state.entities) do
-        if e.q == q and e.r == r then
-            target = e
-            break
+    if self.phase == "select_ally" then
+        local target = nil
+        for _, e in ipairs(state.entities) do
+            if e.q == q and e.r == r then
+                target = e
+                break
+            end
         end
-    end
-
-    if not target or not target.isPlayable or target.health <= 0 then
-        log.warn("abilities", "No valid ally targeted!")
+        if not target or not target.isPlayable or target.health <= 0 then
+            log.warn("abilities", "No valid ally at this cell!")
+            return true
+        end
+        self.target = target
+        self.phase = "select_dest"
+        log.infof("abilities", "Now click on an adjacent empty cell to shift %s to", tostring(target.name))
         return true
     end
 
-    if not target.hasActedThisTurn then
-        log.warnf("abilities", "%s hasn't attacked yet — cannot use Extra Move!", tostring(target.name))
+    if self.phase == "select_dest" then
+        if not self.target then
+            self:onDeactivate(state)
+            return true
+        end
+        if q == self.target.q and r == self.target.r then
+            log.info("abilities", "Target is already at this cell!")
+            return true
+        end
+        local dist = hex:getDistance(self.target.q, self.target.r, q, r)
+        if dist ~= 1 then
+            log.warn("abilities", "Destination must be adjacent!")
+            return true
+        end
+        if not hex:isActiveHex(q, r) then
+            log.warn("abilities", "Invalid destination!")
+            return true
+        end
+        -- Check terrain
+        local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
+        if terrain == "water" and not (self.target.waterWalker or self.target.flying or self.target.hovering) then
+            log.warn("abilities", "Cannot shift into water!")
+            return true
+        end
+        if terrain == "underwater_mines" then
+            log.warn("abilities", "Cannot shift into underwater mines!")
+            return true
+        end
+        -- Check occupancy
+        for _, e in ipairs(state.entities) do
+            if e.q == q and e.r == r and e.health > 0 then
+                log.warn("abilities", "Destination is occupied!")
+                return true
+            end
+        end
+
+        -- Remove all negative statuses
+        local statuses = status.getEntityStatuses(self.target)
+        for _, st in ipairs(statuses) do
+            if st ~= "empowered" then
+                status.removeFromEntity(self.target, st)
+            end
+        end
+        if status.hasAtHex(self.target.q, self.target.r, "fire") then
+            status.removeFromHex(self.target.q, self.target.r, "fire")
+            log.info("abilities", "Fire on the ground extinguished!")
+        end
+
+        -- Animate the 1-cell shift
+        local fromQ, fromR = self.target.q, self.target.r
+        self.target.q = q
+        self.target.r = r
+        if _G.hex then _G.hex.selectedQ, _G.hex.selectedR = q, r end
+
+        global_abilities.spendAbility(self)
+        global_abilities.spendAbility(self)
+        state.actionHistory = {}
+        log.infof("abilities", "%s cleansed and shifted to (%d,%d)!", tostring(self.target.name), q, r)
+        restoreSelectedActor()
+        global_abilities.activeAbility = nil
         return true
     end
 
-    target.canMoveAfterAttack = true
-    global_abilities.spendAbility(self)
-    global_abilities.spendAbility(self)
-    state.actionHistory = {}
-    log.infof("abilities", "%s can now move after attacking!", tostring(target.name))
-    restoreSelectedActor()
-    global_abilities.activeAbility = nil
-    return true
+    return false
 end
 
 function ExtraMoveAbility:drawButton(mx, my, state)
@@ -722,8 +802,8 @@ function ExtraMoveAbility:drawButton(mx, my, state)
         tooltipH = 64,
         tooltipTitle = "Extra Move",
         tooltipLines = {
-            "Allow one ally who has already",
-            "acted to move again.",
+            "Cleanse an ally of all debuffs",
+            "and shift them 1 cell.",
         },
     })
 end

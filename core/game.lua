@@ -179,6 +179,7 @@ function restartGame(mapPath)
     hex.hoverQ = -1
     hex.hoverR = -1
 
+    global_abilities.initWithCommander(selectedCommander)
     global_abilities.reset()
     dpiScale = love.window.getDPIScale()
 
