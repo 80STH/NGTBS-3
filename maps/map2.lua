@@ -1,45 +1,149 @@
--- maps/map2.lua
--- Protect the Tower (a neutral objective building) from enemies for the turn limit.
--- A Power Lich leads the assault. Allies deploy around the tower.
-
 return {
-    name = "Last Stand",
-    radius = 4,
-    size = 51,
-    maxTurns = 12,
-
-    terrain = {
-        ["-4,0"] = "water",
-        ["4,-1"] = "water",
-        ["0,-4"] = "lava",
-        ["2,2"]  = "swamp",
-        ["-2,2"] = "swamp",
+  version = "1.10",
+  luaversion = "5.1",
+  tiledversion = "1.12.1",
+  class = "",
+  orientation = "hexagonal",
+  renderorder = "right-down",
+  width = 9,
+  height = 9,
+  tilewidth = 14,
+  tileheight = 12,
+  nextlayerid = 5,
+  nextobjectid = 2,
+  hexsidelength = 6,
+  staggeraxis = "x",
+  staggerindex = "odd",
+  properties = {},
+  tilesets = {
+    {
+      name = "hex mini",
+      firstgid = 1,
+      class = "",
+      tilewidth = 18,
+      tileheight = 18,
+      spacing = 0,
+      margin = 0,
+      columns = 5,
+      image = "hexmini.png",
+      imagewidth = 106,
+      imageheight = 72,
+      objectalignment = "unspecified",
+      tilerendersize = "tile",
+      fillmode = "stretch",
+      tileoffset = {
+        x = 0,
+        y = 1
+      },
+      grid = {
+        orientation = "orthogonal",
+        width = 18,
+        height = 18
+      },
+      properties = {},
+      wangsets = {},
+      tilecount = 20,
+      tiles = {}
     },
-
-    entities = {
-        { def = "PowerLich",   q =  0, r = -4, side = "enemy" },
-        { def = "Zombie",      q = -3, r = -1, side = "enemy" },
-        { def = "Zombie",      q =  3, r = -2, side = "enemy" },
-        { def = "Ghost",       q = -2, r = -3, side = "enemy" },
-        { def = "Lancer",      q =  2, r = -3, side = "enemy" },
-        { def = "Tower",       q =  0, r =  1, side = "neutral" },
-        { def = "SuperMountain", q =  0, r = -2, side = "neutral" },
+    {
+      name = "entities",
+      firstgid = 21,
+      class = "",
+      tilewidth = 16,
+      tileheight = 16,
+      spacing = 0,
+      margin = 0,
+      columns = 9,
+      image = "entities.png",
+      imagewidth = 159,
+      imageheight = 142,
+      objectalignment = "unspecified",
+      tilerendersize = "tile",
+      fillmode = "stretch",
+      tileoffset = {
+        x = 0,
+        y = 0
+      },
+      grid = {
+        orientation = "orthogonal",
+        width = 16,
+        height = 16
+      },
+      properties = {},
+      wangsets = {},
+      tilecount = 72,
+      tiles = {
+        {
+          id = 4,
+          properties = {
+            ["IsPlayable"] = false,
+            ["MaxHealth"] = 5,
+            ["Name"] = "Zombie"
+          }
+        }
+      }
+    }
+  },
+  layers = {
+    {
+      type = "tilelayer",
+      x = 0,
+      y = 0,
+      width = 9,
+      height = 9,
+      id = 1,
+      name = "terrain",
+      class = "",
+      visible = true,
+      opacity = 1,
+      offsetx = 0,
+      offsety = 0,
+      parallaxx = 1,
+      parallaxy = 1,
+      properties = {},
+      encoding = "base64",
+      compression = "zlib",
+      data = "eJx9zzEKADAIA0CluAr+/7N1iBCC7XCLRtEwswBvBSEcTkvg7PRU0uyW8cWvN3TvpuhWrTv9VpR9/c9ZrV0R7wHF"
     },
-
-    statuses = {
-        { type = "fire", q =  3, r =  1, data = { duration = 8 } },
+    {
+      type = "tilelayer",
+      x = 0,
+      y = 0,
+      width = 9,
+      height = 9,
+      id = 2,
+      name = "entities",
+      class = "",
+      visible = true,
+      opacity = 1,
+      offsetx = 0,
+      offsety = 0,
+      parallaxx = 1,
+      parallaxy = 1,
+      properties = {},
+      encoding = "base64",
+      compression = "zlib",
+      data = "eJxjYEAAbgbcACTHjkeeH41vgEU/Pw45AyxqcJnji8ccbHaBgDUO97ji0I8MXIlQBwCZ4wMM"
     },
-
-    digSites = {
-        { q = -3, r = 2, timer = 4, spawn = "Zombie" },
-    },
-
-    deployZone = {
-        { q = -1, r = 3 }, { q =  0, r = 3 }, { q =  1, r = 2 },
-        { q = -2, r = 3 }, { q =  2, r = 2 },
-        { q = -1, r = 2 }, { q =  1, r = 3 },
-        { q = -3, r = 3 }, { q =  3, r = 1 },
-    },
-
-    objective = { type = "protect", targetId = "Tower", targetName = "Tower", alsoKillAll = false },
+    {
+      type = "tilelayer",
+      x = 0,
+      y = 0,
+      width = 9,
+      height = 9,
+      id = 3,
+      name = "status",
+      class = "",
+      visible = false,
+      opacity = 1,
+      offsetx = 0,
+      offsety = 0,
+      parallaxx = 1,
+      parallaxy = 1,
+      properties = {},
+      encoding = "base64",
+      compression = "zlib",
+      data = "eJwLYmBgCIJiGAjCgWFymkSoIUaekFpSMLXMIsccAErGFzo="
+    }
+  }
 }
