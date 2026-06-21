@@ -3,10 +3,15 @@ function love.conf(t)
     t.author = "80STH"
     t.version = "11.4"
     
-    t.window.highdpi = false
+    t.window.highdpi = true
     t.window.width = 720
     t.window.height = 1280
     t.window.resizable = true
+    t.window.fullscreen = false
+    t.window.borderless = false
+
+    -- Android: use fullscreen, hide status bar via love.keyboard.setTextInput
+    -- The 720x1280 resolution acts as logical canvas; dpiScale handles physical pixels
     
     -- Enable filesystem access
     t.identity = "HexTacticsGame"  -- Creates save folder

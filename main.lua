@@ -2,7 +2,6 @@
 -- Entry point. Initialization, update, input dispatching.
 -- Game state is stored in state (gamestate).
 -- Rendering is delegated to the renderer.
--- Rendering is delegated to the renderer.
 state = require("core.gamestate").new()
 
 combat = require("combat.combat")
@@ -26,23 +25,23 @@ global_abilities = require("system.global_abilities")
 shop = require("ui.shop")
 require("core.game")
 
--- �����������: �������� ����� (��� ����� _G.LOG_ENABLED).
 -- Logging: enable here (or via _G.LOG_ENABLED).
 -- Categories: ai, combat, effects, entity, env, game, input, objectives,
 --            status, trains, turn, ui, main, map.
+_G.log = require("util.log")
 log.enabled = false
 log.level = "debug"
 
--- �������� ������ � ���� ����� ���������� ��������� NGTBS_LOG_FILE.
 -- Enable file logging via the NGTBS_LOG_FILE environment variable.
 -- This allows checking game loading without a window: set the path, run
 -- love, read the file. Does not affect normal launch.
+do
     local logFile = os.getenv("NGTBS_LOG_FILE")
     if logFile and logFile ~= "" then
         log.enabled = true
         log.file = logFile
-        -- ������� ���� ��� ������
         -- clear file on start
+        local f = io.open(logFile, "w")
         if f then f:close() end
     end
 end
@@ -99,13 +98,10 @@ ARTIFACT_CHOICES = {
     { id = "phaseThroughEnemies", name = "Ghost Cloak", desc = "All units phase through enemies" },
 }
 
--- ������������� �������� -> state (renderer � gamestate-������ ������ �� state).
 -- Synchronization of globals -> state (renderer and gamestate methods read from state).
 -- Implementation is in gamestate.lua:GameState:syncFromGlobals().
 -- The goal of future migration: remove this function, accessing state.* directly.
--- Synchronization of globals -> state (renderer and gamestate methods read from state).
--- Implementation is in gamestate.lua:GameState:syncFromGlobals().
--- The goal of future migration: remove this function, accessing state.* directly.
+function syncState()
     state:syncFromGlobals()
 end
 
@@ -255,6 +251,8 @@ end
 
 function love.load()
     dpiScale = love.window.getDPIScale()
+    logicalW = love.graphics.getWidth() / dpiScale
+    logicalH = love.graphics.getHeight() / dpiScale
     sti = require 'libraries/sti'
     maxTurns = 5
     environment.loadUnitSprites()
@@ -283,7 +281,6 @@ function love.load()
     showEnemyOrder = false
     gamePhase = "menu"
 
-    -- ������������� ����������� turnState (������ ��������� �� confirmDeploy/
     -- Initialize global turnState (previously relied on confirmDeploy/
     -- skipDeploy block in restartGame, which caused crashes on autostart).
 end
@@ -326,16 +323,15 @@ function love.mousereleased(x, y, button)
 end
 
 function isPositionOccupied(q, r, movingEntity)
-    -- ���������� � cell_rules.isOccupied (� ����� � phaseThroughEnemies).
     -- Delegates to cell_rules.isOccupied (with water and phaseThroughEnemies).
 end
 
 -- Returns 3 push direction choices for choosePushDir (Puncher lvl3)
--- Uses cube coordinate rotation (�60�)
+-- Uses cube coordinate rotation (+-60)
 function getPushDirChoices(stepX, stepY, stepZ)
-    -- Rotate +60� clockwise: (x,y,z) > (-z, -x, -y)
+    -- Rotate +60 clockwise: (x,y,z) -> (-z, -x, -y)
     local cw = {x = -stepZ, y = -stepX, z = -stepY}
-    -- Rotate -60� counter-clockwise: (x,y,z) > (-y, -z, -x)
+    -- Rotate -60 counter-clockwise: (x,y,z) -> (-y, -z, -x)
     local ccw = {x = -stepY, y = -stepZ, z = -stepX}
     return {ccw, {x = stepX, y = stepY, z = stepZ}, cw}
 end
@@ -381,8 +377,8 @@ function love.update(dt)
         decayMessageTimer = decayMessageTimer - dt
     end
 
-    -- Hold-to-confirm ��� ������ (����� ������)
     -- Hold-to-confirm for buttons (common logic)
+    local function updateHoldButton(btn, onTrigger)
         if btn.isHeld then
             btn.holdTimer = (btn.holdTimer or 0) + dt
             if btn.holdTimer >= config.HOLD_TIME then
