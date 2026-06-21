@@ -3,6 +3,7 @@
 -- Использует глобалы (entities, hex, turnState, sounds, terrainMap).
 
 local turnManager = {}
+local log = require("log")
 
 function turnManager.startGame()
     processDigSites()
@@ -72,7 +73,7 @@ function turnManager.endPlayerTurn()
     turnState.phase = "enemy_attack"
     turnState.pendingDigProcessing = true
     turnState.trainShuntInProgress = false
-    print("=== ENEMY ATTACK PHASE ===")
+    log.info("turn", "=== ENEMY ATTACK PHASE ===")
 end
 
 function turnManager.update(dt)
@@ -129,7 +130,7 @@ function updateAttackPhase(dt)
             turnState.pendingDigProcessing = false
         end
         turnCount = turnCount + 1
-        print("Turn count increased to: " .. turnCount .. "/" .. maxTurns)
+        log.infof("turn", "Turn count increased to: %s/%s", turnCount, maxTurns)
         turnState.phase = "enemy_prepare"
         startEnemyPreparePhase()
         return
@@ -173,7 +174,7 @@ function processNextEnemyPrepare()
         actionHistory = {}
         global_abilities.abilityUsedThisTurn = false
         selectLightningTarget()
-        print("=== PLAYER TURN ===")
+        log.info("turn", "=== PLAYER TURN ===")
         return
     end
 
@@ -186,7 +187,7 @@ function processNextEnemyPrepare()
         turnState.currentPreparingEnemy = nil
         processNextEnemyPrepare()
     elseif status == "failed" then
-        print(enemy.name .. " cannot prepare attack, skipping")
+        log.debug("turn", enemy.name .. " cannot prepare attack, skipping")
         turnState.currentPreparingEnemy = nil
         processNextEnemyPrepare()
     elseif status == "moving" then

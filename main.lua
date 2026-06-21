@@ -19,11 +19,33 @@ local hex_utils = require("hex_utils")
 local renderer = require("renderer")
 local input = require("input")
 local turnManager = require("turn_manager")
+local cell_rules = require("cell_rules")
 menu = require("menu")
 local objectives = require("objectives")
 global_abilities = require("global_abilities")
 shop = require("shop")
 require("game")
+
+-- Логирование: включить здесь (или через _G.LOG_ENABLED).
+-- Категории: ai, combat, effects, entity, env, game, input, objectives,
+--            status, trains, turn, ui, main, map.
+_G.log = require("log")
+log.enabled = false
+log.level = "debug"
+
+-- Включить запись в файл через переменную окружения NGTBS_LOG_FILE.
+-- Это позволяет проверить загрузку игры без окна: задаём путь, запускаем
+-- love, читаем файл. Не влияет на обычный запуск.
+do
+    local logFile = os.getenv("NGTBS_LOG_FILE")
+    if logFile and logFile ~= "" then
+        log.enabled = true
+        log.file = logFile
+        -- очищаем файл при старте
+        local f = io.open(logFile, "w")
+        if f then f:close() end
+    end
+end
 
 pushAnimations = state.pushAnimations
 dpiScale = 1
@@ -77,40 +99,14 @@ ARTIFACT_CHOICES = {
     { id = "phaseThroughEnemies", name = "Ghost Cloak", desc = "All units phase through enemies" },
 }
 
+-- Синхронизация глобалов -> state (renderer и gamestate-методы читают из state).
+-- Реализация вынесена в gamestate.lua:GameState:syncFromGlobals().
+-- Цель будущей миграции — убрать эту функцию, обращаясь к state.* напрямую.
+-- Синхронизация глобалов -> state (renderer и gamestate-методы читают из state).
+-- Реализация вынесена в gamestate.lua:GameState:syncFromGlobals().
+-- Цель будущей миграции — убрать эту функцию, обращаясь к state.* напрямую.
 function syncState()
-    state.entities = entities
-    state.hex = hex
-    state.terrainMap = terrainMap
-    state.turnState = turnState
-    state.turnCount = turnCount
-    state.maxTurns = maxTurns
-    state.gameActive = gameActive
-    state.win = win
-    state.loss = loss
-    state.selectedActor = selectedActor
-    state.selectedAttack = selectedAttack
-    state.attackMode = attackMode
-    state.flipTargetActor = flipTargetActor
-    state.vortexTargetCell = vortexTargetCell
-    state.pushDirTargetCell = pushDirTargetCell
-    state.pullHookTargetCell = pullHookTargetCell
-    state.attackButtons = attackButtons
-    state.sounds = sounds
-    state.actionHistory = actionHistory
-    state.maxUndoCount = maxUndoCount
-    state.restartButton = restartButton
-    state.endTurnButton = endTurnButton
-    state.undoButton = undoButton
-    state.decayAppliedForTurnLimit = decayAppliedForTurnLimit
-    state.decayMessageTimer = decayMessageTimer
-    state.fireAppliedForTurnLimit = fireAppliedForTurnLimit
-    state.pushAnimations = pushAnimations
-    state.dpiScale = dpiScale
-    state.difficultyModifier = difficultyModifier
-    state.disableEnemySpawn = disableEnemySpawn
-    state.showEnemyOrder = showEnemyOrder
-    state.chaos = chaos
-    state.chaosMax = chaosMax
+    state:syncFromGlobals()
 end
 
 function handleAbilityMenuClick(x, y)
@@ -286,6 +282,10 @@ function love.load()
 
     showEnemyOrder = false
     gamePhase = "menu"
+
+    -- Инициализация глобального turnState (раньше полагался на confirmDeploy/
+    -- skipDeploy-блок restartGame, что приводило к падению при autostart).
+    turnState = state.turnState
 end
 
 function getDrawCoords(q, r)
@@ -326,29 +326,8 @@ function love.mousereleased(x, y, button)
 end
 
 function isPositionOccupied(q, r, movingEntity)
-    if not hex:isActiveHex(q, r) then
-        return true
-    end
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
-        if movingEntity and (movingEntity.waterWalker or movingEntity.flying or movingEntity.hovering) then
-            -- ok
-        else
-            return true
-        end
-    end
-    for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
-            if not (e:isCharacter() and e.isPlayable == movingEntity.isPlayable) then
-                -- phaseThroughEnemies: allow passing through enemies (but not allies)
-                if movingEntity.phaseThroughEnemies and e:isCharacter() and not e.isPlayable then
-                    -- skip - can phase through enemies
-                else
-                    return true
-                end
-            end
-        end
-    end
-    return false
+    -- Делегирует в cell_rules.isOccupied (с водой и phaseThroughEnemies).
+    return cell_rules.isOccupied(q, r, movingEntity)
 end
 
 -- Returns 3 push direction choices for choosePushDir (Puncher lvl3)
@@ -402,23 +381,19 @@ function love.update(dt)
         decayMessageTimer = decayMessageTimer - dt
     end
 
-    if endTurnButton.isHeld then
-        endTurnButton.holdTimer = endTurnButton.holdTimer + dt
-        if endTurnButton.holdTimer >= config.HOLD_TIME then
-            endTurnButton.isHeld = false
-            endTurnButton.holdTimer = 0
-            endTurn()
+    -- Hold-to-confirm для кнопок (общая логика)
+    local function updateHoldButton(btn, onTrigger)
+        if btn.isHeld then
+            btn.holdTimer = (btn.holdTimer or 0) + dt
+            if btn.holdTimer >= config.HOLD_TIME then
+                btn.isHeld = false
+                btn.holdTimer = 0
+                onTrigger()
+            end
         end
     end
-
-    if restartButton.isHeld then
-        restartButton.holdTimer = restartButton.holdTimer + dt
-        if restartButton.holdTimer >= config.HOLD_TIME then
-            restartButton.isHeld = false
-            restartButton.holdTimer = 0
-            restartGame()
-        end
-    end
+    updateHoldButton(endTurnButton, endTurn)
+    updateHoldButton(restartButton, restartGame)
 
     if testViewActive then
         testViewOffsetY = math.sin(love.timer.getTime() * 1.5) * 60
@@ -556,46 +531,18 @@ function getEnemyAttackOrder(entities, turnState)
 end
 
 function isCellPassable(q, r, movingEntity)
-    if not hex:isActiveHex(q, r) then return false end
-    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-    if terrain == "water" then
-        if movingEntity and (movingEntity.waterWalker or movingEntity.flying or movingEntity.hovering) then
-            -- ok
-        else
-            return false
-        end
-    end
-    if terrain == "underwater_mines" then
-        return false
-    end
-    if movingEntity and movingEntity.flying then
-        return true
-    end
-    for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
-            if not (e:isCharacter() and e.isPlayable == movingEntity.isPlayable) then
-                return false
-            end
-        end
-    end
-    return true
+    return cell_rules.isPassable(q, r, movingEntity)
 end
 
 function isCellOccupiedForStop(q, r, movingEntity)
-    if not hex:isActiveHex(q, r) then return true end
-    for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
-            return true
-        end
-    end
-    return false
+    return cell_rules.isOccupiedForStop(q, r, movingEntity)
 end
 
 function love.keypressed(key)
     if key == "f5" and gameActive then
         win = true
         gameActive = false
-        print("AUTO WIN (debug)")
+        log.warn("main", "AUTO WIN (debug)")
         syncState()
         return
     end

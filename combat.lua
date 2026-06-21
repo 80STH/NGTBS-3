@@ -5,6 +5,8 @@ local visual = require("visual_effects")
 local status = require("status")
 local Entity = require("entity")
 local attack_effects = require("attack_effects")
+local log = require("log")
+local sprites = require("sprites")
 
 local hex_utils = require("hex_utils")
 -- ============================================================
@@ -141,7 +143,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
     if not hex:isActiveHex(toQ, toR) then
         if target:isCharacter() then
             target.health = target.health - 1
-            print(target.name .. " is slammed against the edge! Takes 1 damage!")
+            log.infof("combat", "%s is slammed against the edge! Takes 1 damage!", target.name)
             if sounds and sounds.collision then sounds.collision:play() end
             if target.health <= 0 then
                 target.startDeath()
@@ -415,7 +417,7 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     attack_effects.flip(attacker, targetActor, destQ, destR, hex)
     combat.addPushAnimation(targetActor, targetQ, targetR, destQ, destR)
     combat.startPushAnimations(hex)
-    print(string.format("%s flips %s to (%d,%d)!", attacker.name, targetActor.name, destQ, destR))
+    log.debugf("combat", "%s flips %s to (%d,%d)!", attacker.name, targetActor.name, destQ, destR)
     if sounds and sounds.attack then sounds.attack:play() end
     attacker.hasActedThisTurn = true
     return true
@@ -575,14 +577,14 @@ elseif terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "w
     -- Камень тонет в воде
     local cx, cy = hex:hexToPixel(targetQ, targetR)
     visual.addEffect(cx, cy, "drown", 0.3)
-    print("[Stone] Stone sinks in water at (" .. targetQ .. "," .. targetR .. ")")
+    log.debugf("combat", "[Stone] Stone sinks in water at (%d,%d)", targetQ, targetR)
 else
     -- Создаём камень (как было)
     local stone = Entity.new("Stone", Entity.TYPES.OBSTACLE, targetQ, targetR, 1, false, 0, nil, nil, {})
     stone.isPushable = true
     stone.color = {0.5,0.5,0.5,1}
     table.insert(entities, stone)
-    print("[Stone] A stone appears at (" .. targetQ .. "," .. targetR .. ")")
+    log.debugf("combat", "[Stone] A stone appears at (%d,%d)", targetQ, targetR)
 end
 
     -- Направление от атакующего к цели
@@ -754,7 +756,7 @@ function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities
 
     local damage = self.damage
     local wasDestroyed = target:takeDamage(damage)
-    print(string.format(" %s throws a magic bolt at %s for %d damage!", attacker.name, target.name, damage))
+    log.infof("combat", "%s throws a magic bolt at %s for %d damage!", attacker.name, target.name, damage)
     if sounds and sounds.attack then sounds.attack:play() end
 
     if hex and visual then
@@ -835,7 +837,7 @@ function combat.PowerLichBoltAttack:execute(attacker, targetQ, targetR, hex, ent
         end
         if target then
             local wasDestroyed = target:takeDamage(self.damage)
-            print(string.format(" Power Lich's bolt hits %s for %d damage!", target.name, self.damage))
+            log.infof("combat", "Power Lich's bolt hits %s for %d damage!", target.name, self.damage)
             if sounds and sounds.attack then sounds.attack:play() end
             if hex and visual then
                 local x, y = getDrawCoords(target.q, target.r)
@@ -979,9 +981,7 @@ function combat.SummonAttack:execute(attacker, targetQ, targetR, hex, entities, 
     local occupant = combat.getEntityAtHex(targetQ, targetR, entities)
     if occupant then return false, "Cell occupied" end
 
-    local Entity = require("entity")
-    local env = require("environment")
-    local sprite = env.unitSpriteCache and env.unitSpriteCache[42] or nil
+    local sprite = sprites.get(42)
     local minion = Entity.new("Summoned", Entity.TYPES.CHARACTER, targetQ, targetR, 2, true, 2, sprite, sprite and nil or {0.6, 0.3, 0.9}, {
         { attack = combat.PushAttack.new(5), name = "Push", description = "Push first enemy in line" },
     })
@@ -1027,9 +1027,7 @@ function combat.DividerAttack:execute(attacker, targetQ, targetR, hex, entities,
     local occupant = combat.getEntityAtHex(targetQ, targetR, entities)
     if occupant then return false, "Cell occupied" end
 
-    local Entity = require("entity")
-    local env = require("environment")
-    local sprite44 = env.unitSpriteCache and env.unitSpriteCache[44] or nil
+    local sprite44 = sprites.get(44)
 
     -- Create Divided at target cell
     local divided = Entity.new("Divided", Entity.TYPES.CHARACTER, targetQ, targetR, 2, true, 3, sprite44, sprite44 and nil or {0.6, 0.4, 0.1}, {})
@@ -1076,7 +1074,7 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
     local occupant = combat.getEntityAtHex(sq, sr, entities)
     if occupant and occupant.health > 0 then
         local wasDestroyed = occupant:takeDamage(1)
-        print(string.format("SummoningRod: %s takes 2 damage from occupied summon cell!", occupant.name))
+        log.infof("combat", "SummoningRod: %s takes 2 damage from occupied summon cell!", occupant.name)
         if sounds and sounds.attack then sounds.attack:play() end
         local fx, fy = getDrawCoords(sq, sr)
         visual.addEffect(fx, fy, "hit", 0.4)
@@ -1093,7 +1091,7 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
         local fx, fy = getDrawCoords(sq, sr)
         visual.addMagicExplosion(fx, fy, 0.6, 0.4, 0.2)
         if sounds and sounds.attack then sounds.attack:play() end
-        print(string.format("SummoningRod summons %s at (%d,%d)!", newEnemy.name, sq, sr))
+        log.infof("combat", "SummoningRod summons %s at (%d,%d)!", newEnemy.name, sq, sr)
     end
 
     attacker.hasActedThisTurn = true
@@ -1587,7 +1585,7 @@ function combat.HeavyPunchAttack:execute(attacker, targetQ, targetR, hex, entiti
     if status.hasEntityStatus(attacker, "empowered") then
         target.health = 0
         target:startDeath()
-        print(string.format(" %s lands a lethal Heavy Punch on %s!", attacker.name, target.name))
+        log.infof("combat", "%s lands a lethal Heavy Punch on %s!", attacker.name, target.name)
     else
         self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
     end
@@ -1742,7 +1740,7 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
                 -- Столкновение: урон толкаемому юниту, недвижимые цели урон не получают
                 if pushedObj.health and pushedObj.health > 0 then
                     pushedObj.health = pushedObj.health - 1
-                    print(string.format(" %s collides with %s! %s takes 1 damage!", pushedObj.name, occupant.name, pushedObj.name))
+                    log.infof("combat", "%s collides with %s! %s takes 1 damage!", pushedObj.name, occupant.name, pushedObj.name)
                     if sounds and sounds.collision then sounds.collision:play() end
                 end
                 if occupant.health and occupant.isPushable ~= false then
@@ -1946,7 +1944,7 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
     -- Уязвимая точка
     if target.weakPoint ~= nil and directionIndex == target.weakPoint then
         multiplier = multiplier * 2.0
-        print(string.format(" Critical hit! %s hits %s's weak point!", attacker.name, target.name))
+        log.infof("combat", "Critical hit! %s hits %s's weak point!", attacker.name, target.name)
     end
 
     local statusMultiplier = status.getDamageMultiplier(target)
@@ -2081,17 +2079,17 @@ end
 function performMove(actor, targetQ, targetR)
     if not actor.isPlayable then return false end
     if not hex:isActiveHex(targetQ, targetR) then
-        print("Target cell is outside the playable hexagon")
+        log.warn("combat", "Target cell is outside the playable hexagon")
         return false
     end
     if actor.isMoving then return false end
     if status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
-        print(actor.name .. " is rooted by a Zombie and cannot move!")
+        log.infof("combat", "%s is rooted by a Zombie and cannot move!", actor.name)
         return false
     end
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return false end
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then
-        print(actor.name .. " has already moved this turn!")
+        log.debugf("combat", "%s has already moved this turn!", actor.name)
         return false
     end
     if actor.q == targetQ and actor.r == targetR then return false end
@@ -2104,17 +2102,17 @@ function performMove(actor, targetQ, targetR)
     end
     local effectiveRange = baseRange
     if distance > effectiveRange then
-        print("Too far")
+        log.debug("combat", "Too far")
         return false
     end
     if isCellOccupiedForStop(targetQ, targetR, actor) then
-        print("Cell occupied")
+        log.debug("combat", "Cell occupied")
         return false
     end
     local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, effectiveRange,
         function(q, r) return not isCellPassable(q, r, actor) end, hex)
     if not path or #path == 0 then
-        print("No valid path")
+        log.debug("combat", "No valid path")
         return false
     end
     addToHistory(actor, actor.q, actor.r, targetQ, targetR)
@@ -2184,33 +2182,33 @@ function updateActorMovement(actor, dt)
 end
 
 function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
-    print("[DEBUG] performAttackWithSelectedAttack called")
-    print("  attacker:", attacker and attacker.name, "hasActed:", attacker and attacker.hasActedThisTurn)
-    print("  targetQ,targetR:", targetQ, targetR)
-    print("  attack:", attack and attack.name)
+    log.debug("combat", "performAttackWithSelectedAttack called")
+    log.debug("combat", "attacker:", attacker and attacker.name, "hasActed:", attacker and attacker.hasActedThisTurn)
+    log.debug("combat", "targetQ,targetR:", targetQ, targetR)
+    log.debug("combat", "attack:", attack and attack.name)
 
     if not attacker.isPlayable then
-        print("[DEBUG] Not a playable character")
+        log.debug("combat", "Not a playable character")
         return false, "Not a playable character"
     end
     if attacker.hasActedThisTurn then
-        print("[DEBUG] Already acted this turn")
+        log.debug("combat", "Already acted this turn")
         return false, "Already acted this turn"
     end
     if not attack then
-        print("[DEBUG] No attack selected")
+        log.debug("combat", "No attack selected")
         return false, "No attack selected"
     end
 
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    print("[DEBUG] Distance to target:", distance, "Attack range:", attack.range)
+    log.debug("combat", "Distance to target:", distance, "Attack range:", attack.range)
     if distance > attack.range then
         return false, "Target out of range"
     end
 
-    print("[DEBUG] Executing attack...")
+    log.debug("combat", "Executing attack...")
     local success, message = attack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    print("[DEBUG] Attack result:", success, message)
+    log.debug("combat", "Attack result:", success, message)
 
     if success then
         local endTurn = true
@@ -2239,7 +2237,7 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
            (attack.name == "Shoot" or attack.name == "Piercing Shot") then
             attacker.redirectPending = true
             endTurn = false
-            print(attacker.name .. " can redirect shot")
+            log.debugf("combat", "%s can redirect shot", attacker.name)
         elseif attacker.redirectPending and (attack.name == "Shoot" or attack.name == "Piercing Shot") then
             attacker.redirectPending = nil
         end
@@ -2247,7 +2245,7 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
         if endTurn then
             attacker.hasActedThisTurn = true
             actionHistory = {}
-            print(attacker.name .. " attacked and ended turn.")
+            log.debugf("combat", "%s attacked and ended turn.", attacker.name)
             attackMode = false
             selectedAttack = nil
             checkGameEnd()
@@ -2256,14 +2254,14 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
             selectedAttack = nil
         end
     else
-        print("Attack failed: " .. (message or "unknown"))
+        log.warnf("combat", "Attack failed: %s", (message or "unknown"))
     end
     return success, message
 end
 
 function undoLastAction()
     if #actionHistory == 0 then
-        print("No moves to undo!")
+        log.info("combat", "No moves to undo!")
         return false
     end
 
@@ -2276,7 +2274,7 @@ function undoLastAction()
     end
 
     if actor.isMoving then
-        print("Cannot undo while moving")
+        log.info("combat", "Cannot undo while moving")
         return false
     end
 
@@ -2314,7 +2312,7 @@ function undoLastAction()
         end
         if not found then
             table.insert(entities, actor)
-            print(actor.name .. " was resurrected by undo!")
+            log.infof("combat", "%s was resurrected by undo!", actor.name)
         end
     end
 
@@ -2328,7 +2326,7 @@ function undoLastAction()
     table.remove(actionHistory)
 
     sounds.undo:play()
-    print("Undone move for " .. actor.name .. ". History size: " .. #actionHistory)
+    log.debugf("combat", "Undone move for %s. History size: %d", actor.name, #actionHistory)
     return true
 end
 
@@ -2347,7 +2345,7 @@ function addToHistory(actor, fromQ, fromR, toQ, toR)
         statusesBefore = status.copyEntityStatuses(actor),
         destHexStatuses = destHexStatuses,
     })
-    print("Move recorded. History size: " .. #actionHistory)
+    log.debugf("combat", "Move recorded. History size: %d", #actionHistory)
 end
 
 return combat

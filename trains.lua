@@ -3,6 +3,8 @@
 
 local Entity = require("entity")
 local hex_utils = require("hex_utils")
+local log = require("log")
+local env = require("environment")
 local trains = {}
 
 local trainGroups = {}
@@ -81,11 +83,10 @@ function trains.init(entities, terrainMap, hex)
 
     local paths = trains.findRailwayPaths(entities, terrainMap, hex)
     if #paths == 0 then
-        print("No train paths found - no railway or tunnels on this map")
+        log.info("trains", "No train paths found - no railway or tunnels on this map")
         return
     end
 
-    local env = require("environment")
     local loadedMap = env.loadedMap
     local tileW = (loadedMap and loadedMap.tilewidth) or 14
     local tileH = (loadedMap and loadedMap.tileheight) or 12
@@ -94,7 +95,7 @@ function trains.init(entities, terrainMap, hex)
         local path = route.path
 
         if #path < 4 then
-            print(string.format("Train group %d: path too short (%d cells), skipping", pi, #path))
+            log.debugf("trains", "Train group %d: path too short (%d cells), skipping", pi, #path)
             goto continue
         end
 
@@ -143,7 +144,7 @@ function trains.init(entities, terrainMap, hex)
             loco.preparedTargetOffset = { dx = dx, dy = dy, dz = dz }
         end
 
-        print(string.format("Train group %d: %d cars, path %d cells, loco at idx %d", pi, #cars, #path, locoIdx))
+        log.debugf("trains", "Train group %d: %d cars, path %d cells, loco at idx %d", pi, #cars, #path, locoIdx)
         ::continue::
     end
 end
@@ -225,7 +226,6 @@ local function convertTunnelToOccupied(tunnelEntity, entities, hex)
     if not tunnelEntity or tunnelEntity.name ~= "Tunnel" then return end
     if tunnelEntity.health <= 0 then return end
 
-    local env = require("environment")
     local loadedMap = env.loadedMap
     local tileW = (loadedMap and loadedMap.tilewidth) or 14
     local tileH = (loadedMap and loadedMap.tileheight) or 12
@@ -242,7 +242,7 @@ local function convertTunnelToOccupied(tunnelEntity, entities, hex)
         end
     end
 
-    print(string.format("Tunnel at (%d,%d) is now occupied!", occ.q, occ.r))
+    log.infof("trains", "Tunnel at (%d,%d) is now occupied!", occ.q, occ.r)
 end
 
 local function startTrainAnimation(group, entities, hex, onComplete)
@@ -385,7 +385,7 @@ function trains.executeTrainShunt(loco, entities, hex, onComplete)
 
     local targetIdx = group.currentIdx + 1
     if targetIdx > #group.path then
-        print("Train at end of line, cannot shunt")
+        log.warn("trains", "Train at end of line, cannot shunt")
         if onComplete then onComplete() end
         return
     end

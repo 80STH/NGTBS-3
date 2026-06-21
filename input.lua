@@ -3,6 +3,7 @@
 local input = {}
 local global_abilities = require("global_abilities")
 local hex_utils = require("hex_utils")
+local log = require("log")
 
 function input.mousepressed(x, y, button)
     if button ~= 1 then return end
@@ -117,7 +118,7 @@ end
         if #actionHistory > 0 then
             undoLastAction()
         else
-            print("No actions to undo!")
+            log.info("input", "No actions to undo!")
         end
         return
     end
@@ -139,7 +140,7 @@ end
                 endTurn()
             end
         else
-            print("Not your turn")
+            log.debug("input", "Not your turn")
         end
         return
     end
@@ -149,7 +150,7 @@ end
     local orderBtnY = logicalH - 105
     if x >= orderBtnX and x <= orderBtnX + 100 and y >= orderBtnY and y <= orderBtnY + 30 then
         showEnemyOrder = not showEnemyOrder
-        print("Enemy order display: " .. (showEnemyOrder and "ON" or "OFF"))
+        log.debugf("input", "Enemy order display: %s", (showEnemyOrder and "ON" or "OFF"))
         return
     end
 
@@ -158,7 +159,7 @@ end
             if x >= btn.x and x <= btn.x + btn.width and y >= btn.y and y <= btn.y + btn.height then
                 selectedAttack = btn.attack
                 attackMode = true
-                print("[DEBUG] Attack selected: " .. btn.name .. " (attackMode = true)")
+                log.debugf("input", "Attack selected: %s (attackMode = true)", btn.name)
                 return
             end
         end
@@ -201,7 +202,7 @@ end
                 if isValidDest then
                     selectedAttack._flipDestCell = {q = destQ, r = destR}
                     local success, msg = performAttackWithSelectedAttack(selectedActor, targetQ, targetR, selectedAttack)
-                    if not success then print("Attack failed: " .. msg) end
+                    if not success then log.warnf("input", "Attack failed: %s", msg) end
                     attackMode = false
                     selectedAttack = nil
                     flipTargetActor = nil
@@ -224,7 +225,7 @@ end
                     if dc.q == tq and dc.r == tr then
                         selectedAttack._vortexDestCell = {q = dc.q, r = dc.r, dir = dc.dir}
                         local success, msg = performAttackWithSelectedAttack(selectedActor, vortexTargetCell.q, vortexTargetCell.r, selectedAttack)
-                        if not success then print("Attack failed: " .. msg) end
+                        if not success then log.warnf("input", "Attack failed: %s", msg) end
                         isValidDest = true
                         break
                     end
@@ -250,7 +251,7 @@ end
                     if dc.q == tq and dc.r == tr then
                         selectedAttack._vortexShiftDir = dc.dir
                         local success, msg = performAttackWithSelectedAttack(selectedActor, vortexTargetCell.q, vortexTargetCell.r, selectedAttack)
-                        if not success then print("Attack failed: " .. msg) end
+                        if not success then log.warnf("input", "Attack failed: %s", msg) end
                         isValidDest = true
                         break
                     end
@@ -278,7 +279,7 @@ end
                         if c.q == tq and c.r == tr then
                             selectedAttack._pullHookTarget = {q = pullHookTargetCell.q, r = pullHookTargetCell.r}
                             local success, msg = performAttackWithSelectedAttack(selectedActor, tq, tr, selectedAttack)
-                            if not success then print("Attack failed: " .. msg) end
+                            if not success then log.warnf("input", "Attack failed: %s", msg) end
                             isValid = true
                             break
                         end
@@ -314,7 +315,7 @@ end
                     if chosen then
                         selectedAttack._pushDirOverride = {x = chosen.x, y = chosen.y, z = chosen.z}
                         local success, msg = performAttackWithSelectedAttack(selectedActor, pushDirTargetCell.q, pushDirTargetCell.r, selectedAttack)
-                        if not success then print("Attack failed: " .. msg) end
+                        if not success then log.warnf("input", "Attack failed: %s", msg) end
                     end
                 end
                 attackMode = false
@@ -333,7 +334,7 @@ end
             local dist = hex:getDistance(selectedActor.q, selectedActor.r, tq, tr)
             if dist >= 2 then
                 local success, msg = performAttackWithSelectedAttack(selectedActor, tq, tr, selectedAttack)
-                if not success then print("Attack failed: " .. msg) end
+                if not success then log.warnf("input", "Attack failed: %s", msg) end
                 attackMode = false
                 selectedAttack = nil
 
@@ -341,7 +342,7 @@ end
             return
         else
             local success, msg = performAttackWithSelectedAttack(selectedActor, tq, tr, selectedAttack)
-            if not success then print("Attack failed: " .. msg) end
+            if not success then log.warnf("input", "Attack failed: %s", msg) end
         end
         attackMode = false
         selectedAttack = nil
@@ -356,7 +357,7 @@ end
         updateAttackButtons(selectedActor)
         attackMode = false
         selectedAttack = nil
-        print("Selected: " .. clicked.name .. (clicked.hasActedThisTurn and " (acted)" or ""))
+        log.debugf("input", "Selected: %s%s", clicked.name, (clicked.hasActedThisTurn and " (acted)" or ""))
         return
     end
 
@@ -398,17 +399,17 @@ function input.keypressed(key)
             global_abilities.activeAbility = nil
         elseif flipTargetActor then
             flipTargetActor = nil
-            print("Flip target cancelled")
+            log.debug("input", "Flip target cancelled")
         elseif vortexTargetCell then
             vortexTargetCell = nil
-            print("Vortex target cancelled")
+            log.debug("input", "Vortex target cancelled")
         elseif pullHookTargetCell then
             pullHookTargetCell = nil
-            print("Pull Hook cancelled")
+            log.debug("input", "Pull Hook cancelled")
         elseif attackMode then
             attackMode = false
             selectedAttack = nil
-            print("Attack cancelled")
+            log.debug("input", "Attack cancelled")
         end
         return
     end
@@ -426,7 +427,7 @@ function input.keypressed(key)
     if key == "t" or key == "T" then
         testViewActive = not testViewActive
         if not testViewActive then testViewOffsetY = 0 end
-        print("Test view: " .. (testViewActive and "ON" or "OFF"))
+        log.debugf("input", "Test view: %s", (testViewActive and "ON" or "OFF"))
         return
     end
 
@@ -442,7 +443,7 @@ function input.keypressed(key)
 
     if key == "o" or key == "O" then
         showEnemyOrder = not showEnemyOrder
-        print("Enemy order display: " .. (showEnemyOrder and "ON" or "OFF"))
+        log.debugf("input", "Enemy order display: %s", (showEnemyOrder and "ON" or "OFF"))
         return
     end
 
@@ -452,7 +453,7 @@ function input.keypressed(key)
         if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and #attackButtons >= 1 then
             selectedAttack = attackButtons[1].attack
             attackMode = true
-            print("[DEBUG] Attack selected: " .. attackButtons[1].name)
+            log.debugf("input", "Attack selected: %s", attackButtons[1].name)
         end
         return
     end
@@ -461,7 +462,7 @@ function input.keypressed(key)
         if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and #attackButtons >= 2 then
             selectedAttack = attackButtons[2].attack
             attackMode = true
-            print("[DEBUG] Attack selected: " .. attackButtons[2].name)
+            log.debugf("input", "Attack selected: %s", attackButtons[2].name)
         end
         return
     end
@@ -496,7 +497,7 @@ function input.keypressed(key)
                 updateAttackButtons(selectedActor)
                 attackMode = false
                 selectedAttack = nil
-                print("Selected: " .. selectedActor.name)
+                log.debugf("input", "Selected: %s", selectedActor.name)
             end
         end
         return

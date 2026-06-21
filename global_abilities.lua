@@ -9,6 +9,7 @@ local combat = require("combat")
 local hex_utils = require("hex_utils")
 local status = require("status")
 local environment = require("environment")
+local log = require("log")
 
 local global_abilities = {}
 
@@ -100,23 +101,23 @@ function global_abilities.handleButtonClick(x, y, state)
             if x >= ix and x <= ix + iw and y >= iy and y <= iy + ih then
                 if state.turnState.phase == "player" and not ab.hasBeenUsed then
                     if ab.name == "Unearth" and not ab:hasDigSites(state) then
-                        print("Unearth: No dig sites on the map!")
+                        log.info("abilities", "Unearth: No dig sites on the map!")
                         return true
                     end
                     if global_abilities.abilityUsedThisTurn then
-                        print("Already used an ability this turn!")
+                        log.info("abilities", "Already used an ability this turn!")
                         return true
                     end
                     if global_abilities.mana < ab.manaCost then
-                        print(ab.name .. " costs " .. ab.manaCost .. " mana, only " .. global_abilities.mana .. " left!")
+                        log.infof("abilities", "%s costs %s mana, only %s left!", ab.name, ab.manaCost, global_abilities.mana)
                         return true
                     end
                     if global_abilities.abilityUsedThisTurn then
-                        print("Already used an ability this turn!")
+                        log.info("abilities", "Already used an ability this turn!")
                         return true
                     end
                     if global_abilities.mana < ab.manaCost then
-                        print(ab.name .. " costs " .. ab.manaCost .. " mana, only " .. global_abilities.mana .. " left!")
+                        log.infof("abilities", "%s costs %s mana, only %s left!", ab.name, ab.manaCost, global_abilities.mana)
                         return true
                     end
                     if global_abilities.activeAbility then
@@ -126,9 +127,9 @@ function global_abilities.handleButtonClick(x, y, state)
                     ab:onActivate(state)
                     global_abilities.dropdownOpen = false
                 elseif ab.hasBeenUsed then
-                    print(ab.name .. " has already been used this game!")
+                    log.infof("abilities", "%s has already been used this game!", ab.name)
                 elseif state.turnState.phase ~= "player" then
-                    print("Can only use abilities during your turn!")
+                    log.info("abilities", "Can only use abilities during your turn!")
                 end
                 return true
             end
@@ -147,7 +148,7 @@ function global_abilities.handleClick(x, y, state)
     else
         ab:onDeactivate(state)
         global_abilities.activeAbility = nil
-        print(ab.name .. " cancelled")
+        log.infof("abilities", "%s cancelled", ab.name)
         return true
     end
 end
@@ -156,28 +157,28 @@ function global_abilities.handleKey(key, state)
     for _, ab in pairs(global_abilities.registry) do
         if key == ab.key then
             if not global_abilities.unlocked[ab.name] then
-                print(ab.name .. " is not unlocked yet!")
+                log.infof("abilities", "%s is not unlocked yet!", ab.name)
                 return true
             end
             if state.turnState.phase == "player" and not ab.hasBeenUsed then
                 if ab.name == "Unearth" and not ab:hasDigSites(state) then
-                    print("Unearth: No dig sites on the map!")
+                    log.info("abilities", "Unearth: No dig sites on the map!")
                     return true
                 end
                 if global_abilities.abilityUsedThisTurn then
-                    print("Already used an ability this turn!")
+                    log.info("abilities", "Already used an ability this turn!")
                     return true
                 end
                 if global_abilities.mana < ab.manaCost then
-                    print(ab.name .. " costs " .. ab.manaCost .. " mana, only " .. global_abilities.mana .. " left!")
+                    log.infof("abilities", "%s costs %s mana, only %s left!", ab.name, ab.manaCost, global_abilities.mana)
                     return true
                 end
                 if global_abilities.abilityUsedThisTurn then
-                    print("Already used an ability this turn!")
+                    log.info("abilities", "Already used an ability this turn!")
                     return true
                 end
                 if global_abilities.mana < ab.manaCost then
-                    print(ab.name .. " costs " .. ab.manaCost .. " mana, only " .. global_abilities.mana .. " left!")
+                    log.infof("abilities", "%s costs %s mana, only %s left!", ab.name, ab.manaCost, global_abilities.mana)
                     return true
                 end
                 if global_abilities.activeAbility then
@@ -186,9 +187,9 @@ function global_abilities.handleKey(key, state)
                 global_abilities.activeAbility = ab
                 ab:onActivate(state)
             elseif ab.hasBeenUsed then
-                print(ab.name .. " has already been used this game!")
+                log.infof("abilities", "%s has already been used this game!", ab.name)
             elseif state.turnState.phase ~= "player" then
-                print("Can only use abilities during your turn!")
+                log.info("abilities", "Can only use abilities during your turn!")
             end
             return true
         end
@@ -330,7 +331,7 @@ end
 function UnearthAbility:onActivate(state)
     local digSites = status.getAllDigSites()
     if #digSites == 0 then
-        print("Unearth: No dig sites to unearth!")
+        log.info("abilities", "Unearth: No dig sites to unearth!")
         global_abilities.activeAbility = nil
         return
     end
@@ -357,7 +358,7 @@ function UnearthAbility:onActivate(state)
     global_abilities.spendAbility(self)
     state.actionHistory = {}
     global_abilities.activeAbility = nil
-    print("Unearth: " .. spawned .. " enemies emerged!")
+    log.infof("abilities", "Unearth: %d enemies emerged!", spawned)
     if _G.checkGameEnd then _G.checkGameEnd() end
 end
 
@@ -418,14 +419,14 @@ end
 function MindControlAbility:onActivate(state)
     self.phase = "select_enemy"
     self.target = nil
-    print("Click on an enemy to mind control, or press ESC to cancel")
+    log.info("abilities", "Click on an enemy to mind control, or press ESC to cancel")
 end
 
 function MindControlAbility:onDeactivate(state)
     self.phase = nil
     self.target = nil
     restoreSelectedActor()
-    print(self.name .. " cancelled")
+        log.infof("abilities", "%s cancelled", self.name)
 end
 
 function MindControlAbility:onClickHex(q, r, hex, state)
@@ -438,12 +439,12 @@ function MindControlAbility:onClickHex(q, r, hex, state)
             end
         end
         if not target then
-            print("No valid enemy at this cell!")
+            log.warn("abilities", "No valid enemy at this cell!")
             return true
         end
         self.target = target
         self.phase = "select_dest"
-        print("Now click on an adjacent empty cell to move " .. tostring(target.name) .. " to")
+        log.infof("abilities", "Now click on an adjacent empty cell to move %s to", tostring(target.name))
         return true
     end
 
@@ -453,16 +454,16 @@ function MindControlAbility:onClickHex(q, r, hex, state)
             return true
         end
         if q == self.target.q and r == self.target.r then
-            print("Target is already at this cell!")
+            log.info("abilities", "Target is already at this cell!")
             return true
         end
         local dist = hex:getDistance(self.target.q, self.target.r, q, r)
         if dist ~= 1 then
-            print("Destination must be adjacent!")
+            log.warn("abilities", "Destination must be adjacent!")
             return true
         end
         if not hex:isActiveHex(q, r) then
-            print("Invalid destination!")
+            log.warn("abilities", "Invalid destination!")
             return true
         end
         local occupied = false
@@ -473,7 +474,7 @@ function MindControlAbility:onClickHex(q, r, hex, state)
             end
         end
         if occupied then
-            print("Destination is occupied!")
+            log.warn("abilities", "Destination is occupied!")
             return true
         end
         self.target.q = q
@@ -481,7 +482,7 @@ function MindControlAbility:onClickHex(q, r, hex, state)
         global_abilities.spendAbility(self)
         global_abilities.spendAbility(self)
         state.actionHistory = {}
-        print(tostring(self.target.name) .. " moved by mind control!")
+        log.infof("abilities", "%s moved by mind control!", tostring(self.target.name))
         restoreSelectedActor()
         global_abilities.activeAbility = nil
         self.phase = nil
@@ -533,7 +534,7 @@ function AccelerateDecayAbility:onActivate(state)
     if state.maxTurns then
         state.maxTurns = math.max(state.turnCount + 1, state.maxTurns - 1)
         maxTurns = state.maxTurns
-        print("Decay accelerated! Max turns reduced to " .. state.maxTurns)
+        log.infof("abilities", "Decay accelerated! Max turns reduced to %s", state.maxTurns)
     end
     global_abilities.spendAbility(self)
     global_abilities.spendAbility(self)
@@ -585,12 +586,12 @@ function HealAbility:reset()
 end
 
 function HealAbility:onActivate(state)
-    print("Click on an ally to heal, or press ESC to cancel")
+    log.info("abilities", "Click on an ally to heal, or press ESC to cancel")
 end
 
 function HealAbility:onDeactivate(state)
     restoreSelectedActor()
-    print(self.name .. " cancelled")
+        log.infof("abilities", "%s cancelled", self.name)
 end
 
 function HealAbility:onClickHex(q, r, hex, state)
@@ -603,13 +604,13 @@ function HealAbility:onClickHex(q, r, hex, state)
     end
 
     if not target or target.health <= 0 or target:isBuilding() then
-        print("No valid target!")
+        log.warn("abilities", "No valid target!")
         return true
     end
 
     local hasDebuffs = #status.getEntityStatuses(target) > 0 or status.hasDigSite(target.q, target.r)
     if target.health >= target.maxHealth and not hasDebuffs then
-        print(tostring(target.name) .. " is at full health with no debuffs to cure!")
+        log.infof("abilities", "%s is at full health with no debuffs to cure!", tostring(target.name))
         return true
     end
 
@@ -617,12 +618,12 @@ function HealAbility:onClickHex(q, r, hex, state)
     status.entityStatuses[target] = nil
     if status.hasAtHex(target.q, target.r, "fire") then
         status.removeFromHex(target.q, target.r, "fire")
-        print("Fire on the ground extinguished!")
+        log.info("abilities", "Fire on the ground extinguished!")
     end
     global_abilities.spendAbility(self)
     global_abilities.spendAbility(self)
     state.actionHistory = {}
-    print(tostring(target.name) .. " fully healed and all negative effects removed!")
+    log.infof("abilities", "%s fully healed and all negative effects removed!", tostring(target.name))
     restoreSelectedActor()
     global_abilities.activeAbility = nil
     return true
@@ -665,12 +666,12 @@ function ExtraMoveAbility:reset()
 end
 
 function ExtraMoveAbility:onActivate(state)
-    print("Click on an ally that has already attacked, or press ESC to cancel")
+    log.info("abilities", "Click on an ally that has already attacked, or press ESC to cancel")
 end
 
 function ExtraMoveAbility:onDeactivate(state)
     restoreSelectedActor()
-    print(self.name .. " cancelled")
+        log.infof("abilities", "%s cancelled", self.name)
 end
 
 function ExtraMoveAbility:onClickHex(q, r, hex, state)
@@ -683,12 +684,12 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
     end
 
     if not target or not target.isPlayable or target.health <= 0 then
-        print("No valid ally targeted!")
+        log.warn("abilities", "No valid ally targeted!")
         return true
     end
 
     if not target.hasActedThisTurn then
-        print(tostring(target.name) .. " hasn't attacked yet — cannot use Extra Move!")
+        log.warnf("abilities", "%s hasn't attacked yet — cannot use Extra Move!", tostring(target.name))
         return true
     end
 
@@ -696,7 +697,7 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
     global_abilities.spendAbility(self)
     global_abilities.spendAbility(self)
     state.actionHistory = {}
-    print(tostring(target.name) .. " can now move after attacking!")
+    log.infof("abilities", "%s can now move after attacking!", tostring(target.name))
     restoreSelectedActor()
     global_abilities.activeAbility = nil
     return true
@@ -778,18 +779,18 @@ end
 
 function WindTorrent:onActivate(state)
     clearSelectedActor()
-    print("Click on any hex to choose wind direction, or press ESC to cancel")
+    log.info("abilities", "Click on any hex to choose wind direction, or press ESC to cancel")
 end
 
 function WindTorrent:onDeactivate(state)
     restoreSelectedActor()
-    print(self.name .. " cancelled")
+        log.infof("abilities", "%s cancelled", self.name)
 end
 
 function WindTorrent:onClickHex(q, r, hex, state)
     local direction = self:_getDirectionFromHex(q, r, hex.centerQ, hex.centerR, hex)
     if not direction then
-        print("Cannot determine direction from center")
+        log.warn("abilities", "Cannot determine direction from center")
         restoreSelectedActor()
         return true
     end
@@ -797,9 +798,9 @@ function WindTorrent:onClickHex(q, r, hex, state)
     self:executeGlobalWithAnimation(direction, hex, state.entities, state.sounds, state.terrainMap, function(success, message)
         if success then
             state.actionHistory = {}
-            print("Wind Torrent used! History cleared.")
+            log.info("abilities", "Wind Torrent used! History cleared.")
         else
-            print("Wind Torrent failed: " .. (message or "unknown error"))
+            log.warnf("abilities", "Wind Torrent failed: %s", (message or "unknown error"))
         end
         restoreSelectedActor()
     end)
@@ -933,7 +934,7 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
         return false
     end
 
-    print(string.format(" WIND TORRENT: Pushing everything %s!", direction))
+    log.infof("abilities", "WIND TORRENT: Pushing everything %s!", direction)
 
     local movableObjects = {}
     for _, entity in ipairs(entities) do

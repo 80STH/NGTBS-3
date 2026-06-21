@@ -6,6 +6,7 @@ local turnManager = require("turn_manager")
 local objectives = require("objectives")
 local trains = require("trains")
 local Entity = require("entity")
+local log = require("log")
 
 function endTurn()
     turnManager.endPlayerTurn()
@@ -14,7 +15,19 @@ end
 function restartGame(mapPath)
     mapPath = mapPath or selectedMapPath or 'maps/map1.lua'
     selectedMapPath = mapPath
-    print("=== RESTARTING GAME: " .. mapPath .. " ===")
+    log.infof("game", "=== RESTARTING GAME: %s ===", mapPath)
+
+    -- Гарантируем чистый turnState при каждом рестарте (раньше для deploy-карт
+    -- он не переинициализировался, что могло тащить состояние из прошлой игры).
+    turnState = {
+        phase = "enemy_prepare",
+        enemyPrepareQueue = {},
+        currentPreparingEnemy = nil,
+        enemyAttackQueue = {},
+        enemyAttackTimer = 0,
+        delayBetweenAttacks = 0.4,
+        pendingDigProcessing = false,
+    }
 
     local hexStatuses
     local deployableAllies
@@ -81,7 +94,7 @@ function restartGame(mapPath)
             local lich = environment.createEnemyByType("PowerLich", cell.q, cell.r)
             lich.isLeader = true
             table.insert(entities, lich)
-            print(string.format("  Power Lich placed at (%d,%d)", cell.q, cell.r))
+            log.debugf("game", "Power Lich placed at (%d,%d)", cell.q, cell.r)
         end
 
         -- Place 4 pre-dug enemies
@@ -91,7 +104,7 @@ function restartGame(mapPath)
             local etype = enemyTypes[(i - 1) % #enemyTypes + 1]
             local enemy = environment.createEnemyByType(etype, cell.q, cell.r)
             table.insert(entities, enemy)
-            print(string.format("  Pre-dug %s placed at (%d,%d)", etype, cell.q, cell.r))
+            log.debugf("game", "Pre-dug %s placed at (%d,%d)", etype, cell.q, cell.r)
         end
     -- For map1, spawn 5 random enemies if none are present (user cleared the entity layer)
     elseif mapPath:match("map1%.lua$") then
@@ -122,9 +135,9 @@ function restartGame(mapPath)
             local enemy = environment.createRandomEnemy(cell.q, cell.r)
             table.insert(entities, enemy)
             spawned = spawned + 1
-            print(string.format("  Spawned random enemy %s at (%d,%d)", enemy.name, cell.q, cell.r))
+            log.debugf("game", "Spawned random enemy %s at (%d,%d)", enemy.name, cell.q, cell.r)
         end
-        print(string.format("Spawned %d random enemies on map1", spawned))
+        log.debugf("game", "Spawned %d random enemies on map1", spawned)
 
         -- 50% chance to spawn SummoningRod
         if love.math.random() < 0.5 then
@@ -133,7 +146,7 @@ function restartGame(mapPath)
                 local cell = emptyCells[1]
                 local rod = environment.createEnemyByType("SummoningRod", cell.q, cell.r)
                 table.insert(entities, rod)
-                print(string.format("  SummoningRod spawned at (%d,%d) with 50%% chance", cell.q, cell.r))
+                log.debugf("game", "SummoningRod spawned at (%d,%d) with 50%% chance", cell.q, cell.r)
             end
         end
     end
@@ -218,7 +231,7 @@ function restartGame(mapPath)
                 tunnel.isObjective = true
                 tunnel.sprite = envMod.generateBuildingSprite("Tunnel", tileW, tileH)
                 table.insert(entities, tunnel)
-                print(string.format("  Placed Tunnel at (%d,%d)", td[1], td[2]))
+                log.debugf("game", "Placed Tunnel at (%d,%d)", td[1], td[2])
             end
         end
     end
@@ -297,13 +310,15 @@ function restartGame(mapPath)
     end
     updateAttackButtons(selectedActor)
     maxUndoCount = countPlayableActors()
+    updateAttackButtons(selectedActor)
+    maxUndoCount = countPlayableActors()
     turnManager.startGame()
         gamePhase = "playing"
     else
         gamePhase = "deploy"
     end
     syncState()
-    print(skipDeploy and "=== MAP LOADED — GAME STARTED ===" or "=== MAP LOADED — DEPLOY YOUR ALLIES ===")
+    log.infof("game", "=== MAP LOADED — %s ===", (skipDeploy and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
 end
 
 function confirmDeploy()
@@ -365,7 +380,7 @@ function confirmDeploy()
     deploySelectedIdx = nil
 
     syncState()
-    print("=== DEPLOY CONFIRMED — GAME STARTED ===")
+    log.info("game", "=== DEPLOY CONFIRMED — GAME STARTED ===")
 end
 
 function checkGameEnd()
@@ -381,7 +396,7 @@ function checkGameEnd()
     if (chaos or 0) >= chaosMax then
         loss = true
         gameActive = false
-        print("DEFEAT: Chaos has consumed the realm!")
+        log.warn("game", "DEFEAT: Chaos has consumed the realm!")
         syncState()
         return
     end
@@ -389,7 +404,7 @@ function checkGameEnd()
     if not anyAlly then
         loss = true
         gameActive = false
-        print("DEFEAT: All allies destroyed!")
+        log.warn("game", "DEFEAT: All allies destroyed!")
         syncState()
         return
     end
@@ -405,7 +420,7 @@ function checkGameEnd()
         win = true
         gameActive = false
         objectives.checkOnVictory(entities)
-        print("VICTORY: All enemies defeated after turn limit!")
+        log.info("game", "VICTORY: All enemies defeated after turn limit!")
         syncState()
         return
     end
@@ -414,24 +429,24 @@ function checkGameEnd()
         win = true
         gameActive = false
         objectives.checkOnVictory(entities)
-        print("VICTORY: Turn limit reached and all enemies defeated!")
+        log.info("game", "VICTORY: Turn limit reached and all enemies defeated!")
         syncState()
     end
 end
 
 function applyDecayToAllEnemies()
-    print("applyDecayToAllEnemies called, turnCount=", turnCount, "maxTurns=", maxTurns)
+    log.debugf("game", "applyDecayToAllEnemies called, turnCount=%s maxTurns=%s", turnCount, maxTurns)
     local count = 0
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.health > 0 then
             count = count + 1
             if not status.hasEntityStatus(e, "decay") then
                 status.applyToEntity(e, "decay")
-                print("Decay afflicts " .. e.name)
+                log.debugf("game", "Decay afflicts %s", e.name)
             end
         end
     end
-    print("Total living enemies found:", count)
+    log.debugf("game", "Total living enemies found: %d", count)
 end
 
 function updateDeathAnimations(dt)
@@ -517,7 +532,7 @@ function processDigSites()
     for _, entity in ipairs(entities) do
         if entity.health > 0 and status.hasDigSite(entity.q, entity.r) then
             local wasDestroyed = entity:takeDamage(1)
-            print(string.format("Dig site damage: %s takes 1 damage!", entity.name))
+            log.infof("game", "Dig site damage: %s takes 1 damage!", entity.name)
             if sounds and sounds.collision then sounds.collision:play() end
             if wasDestroyed then
                 entity:startDeath()
@@ -549,13 +564,13 @@ function processDigSites()
                 table.insert(entities, newEnemy)
                 local x, y = hex:hexToPixel(dig.q, dig.r)
                 visual.addEffect(x, y, "dig", 0.5)
-                print(string.format("A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r))
+                log.infof("game", "A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r)
             else
-                print(string.format("Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r))
+                log.debugf("game", "Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r)
                 _G.objective_digBlocks = (_G.objective_digBlocks or 0) + 1
             end
         else
-            print(string.format("Dig site at (%d,%d) suppressed by disableEnemySpawn", dig.q, dig.r))
+            log.debugf("game", "Dig site at (%d,%d) suppressed by disableEnemySpawn", dig.q, dig.r)
             _G.objective_digBlocks = (_G.objective_digBlocks or 0) + 1
         end
         status.removeDigSite(dig.q, dig.r)
@@ -582,7 +597,7 @@ function processDigSites()
             for _, spot in ipairs(spots) do
                 local spawnType = digTypes[love.math.random(1, #digTypes)]
                 status.setDigSite(spot.q, spot.r, 1, spawnType)
-                print(string.format("New dig site at (%d,%d) -> %s", spot.q, spot.r, spawnType))
+                log.debugf("game", "New dig site at (%d,%d) -> %s", spot.q, spot.r, spawnType)
             end
         end
     end
@@ -608,7 +623,7 @@ function selectLightningTarget()
     lightningTargetQ = spot.q
     lightningTargetR = spot.r
     lightningWarning = true
-    print(string.format("Lightning warning at (%d,%d)", spot.q, spot.r))
+    log.debugf("game", "Lightning warning at (%d,%d)", spot.q, spot.r)
 end
 
 function strikeLightning()
@@ -633,10 +648,10 @@ function strikeLightning()
         if sounds and sounds.collision then sounds.collision:play() end
         if not wasDestroyed then
             status.applyToEntity(target, "empowered")
-            print("Lightning strikes " .. target.name .. "! 1 damage, Empowered applied")
+            log.infof("game", "Lightning strikes %s! 1 damage, Empowered applied", target.name)
         else
             target:startDeath()
-            print("Lightning destroys " .. target.name .. "!")
+            log.infof("game", "Lightning destroys %s!", target.name)
         end
     end
 

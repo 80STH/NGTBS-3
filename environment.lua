@@ -2,6 +2,170 @@
 local Entity = require("entity")
 local sti = require("libraries.sti")
 local config = require("config")
+local log = require("log")
+
+-- ============================================================
+-- РЕЕСТР КОНТЕНТА: наборы атак и типы врагов.
+-- Раньше было 19 функций get*Attacks() + длинные if/elseif
+-- в трёх местах. Теперь — две таблицы.
+-- ============================================================
+
+-- Каждый набор — это функция, возвращающая список атак.
+-- Фабрикой выступает combat (require внутри, чтобы разорвать цикл combat<->environment).
+local ATTACK_SETS = {
+    warrior = function()
+        local c = require("combat")
+        return {
+            { attack = c.DashAttack.new(), name = "Dash", description = "Charge and push" },
+            { attack = c.FlipAttack.new(), name = "Flip", description = "Flip enemy behind" },
+        }
+    end,
+    puncher = function()
+        local c = require("combat")
+        return {
+            { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Melee attack, 1 damage, pushes target away. Lethal if empowered" },
+            { attack = c.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack damage. Deals 1 damage if empowered" },
+        }
+    end,
+    rogue = function()
+        local c = require("combat")
+        return {
+            { attack = c.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
+            { attack = c.PiercingShootAttack.new(), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
+        }
+    end,
+    ghost = function()
+        local c = require("combat")
+        return {
+            { attack = c.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, 2 damage" },
+        }
+    end,
+    zombie = function()
+        local c = require("combat")
+        return {
+            { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
+        }
+    end,
+    lich = function()
+        local c = require("combat")
+        return {
+            { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any target cell, ignores obstacles" },
+        }
+    end,
+    powerlich = function()
+        local c = require("combat")
+        return {
+            { attack = c.PowerLichBoltAttack.new(), name = "Power Bolt", description = "Lethal bolt hitting target and 3 cells in front" },
+        }
+    end,
+    summoner = function()
+        local c = require("combat")
+        return {
+            { attack = c.SummonAttack.new(), name = "Summon", description = "Summon a minion at target cell (min 2)" },
+        }
+    end,
+    summoned = function()
+        local c = require("combat")
+        return {
+            { attack = c.PushAttack.new(5), name = "Shoot", description = "Push first enemy in line (no damage)" },
+        }
+    end,
+    divider = function()
+        local c = require("combat")
+        return {
+            { attack = c.DividerAttack.new(), name = "Split", description = "Split into two Divided units" },
+        }
+    end,
+    brute = function()
+        local c = require("combat")
+        return {
+            { attack = c.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
+        }
+    end,
+    dervish = function()
+        local c = require("combat")
+        return {
+            { attack = c.CleaveAttack.new(), name = "Cleave", description = "Melee 1 dmg to 3 targets in front" },
+        }
+    end,
+    raider = function()
+        local c = require("combat")
+        return {
+            { attack = c.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
+        }
+    end,
+    crusher = function()
+        local c = require("combat")
+        return {
+            { attack = c.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
+        }
+    end,
+    lancer = function()
+        local c = require("combat")
+        return {
+            { attack = c.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
+        }
+    end,
+    bogshaman = function()
+        local c = require("combat")
+        return {
+            { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
+        }
+    end,
+    summoningrod = function()
+        local c = require("combat")
+        return {
+            { attack = c.SummonEnemyAttack.new(), name = "Summon", description = "Summon a random enemy" },
+        }
+    end,
+    none = function()
+        return {}
+    end,
+    all = function()
+        local c = require("combat")
+        return {
+            { attack = c.DashAttack.new(), name = "Dash", description = "Charge and push" },
+            { attack = c.FlipAttack.new(), name = "Flip", description = "Flip enemy behind" },
+            { attack = c.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
+            { attack = c.PushAttack.new(5), name = "Push", description = "Push first enemy in line (no damage)" },
+            { attack = c.PiercingShootAttack.new(), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
+            { attack = c.AoePushAttack.new(), name = "Stone Throw", description = "Throw a stone that pushes enemies around" },
+            { attack = c.AoeDirectionalAttack.new(), name = "Shockwave", description = "Pushes all 6 surrounding enemies away from the center" },
+            { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any target cell, ignores obstacles" },
+            { attack = c.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, 2 damage" },
+            { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
+            { attack = c.SummonAttack.new(), name = "Summon", description = "Summon a minion at target cell" },
+            { attack = c.DividerAttack.new(), name = "Split", description = "Split into two Divided units" },
+            { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shift an enemy right or left and deal 1 damage" },
+            { attack = c.WideVortexAttack.new(), name = "Wide Vortex", description = "Shift 3 enemies in front right or left" },
+            { attack = c.PullHookAttack.new(), name = "Pull Hook", description = "Hook a target and pull it towards you" },
+            { attack = c.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning that damages everyone on the line" },
+            { attack = c.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
+            { attack = c.CleaveAttack.new(), name = "Cleave", description = "Melee 1 dmg to 3 targets in front" },
+            { attack = c.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
+            { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Melee 2 dmg and push target away" },
+            { attack = c.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Melee 1 dmg, push target, double next attack damage" },
+        }
+    end,
+}
+
+-- Реестр типов врагов: имя -> спецификация.
+-- Используется в createEnemyByType. Дополняет ATTACK_SETS
+-- данными о health/moveRange/aura/флагах.
+local ENEMY_TYPES = {
+    Ghost           = { attackSet = "ghost",       moveRange = 3, flying = true },
+    Zombie          = { attackSet = "zombie",      moveRange = 3 },
+    PoisonousZombie = { attackSet = "zombie",      moveRange = 3 },
+    Lich            = { attackSet = "lich",        moveRange = 3 },
+    Brute           = { attackSet = "brute",       moveRange = 2 },
+    Lancer          = { attackSet = "lancer",      moveRange = 3 },
+    BogShaman       = { attackSet = "bogshaman",   moveRange = 2, aura = { type = "slow", radius = 1 } },
+    Raider          = { attackSet = "raider",      moveRange = 3 },
+    Dervish         = { attackSet = "dervish",     moveRange = 3 },
+    Crusher         = { attackSet = "crusher",     moveRange = 2 },
+    PowerLich       = { attackSet = "powerlich",   moveRange = 3, maxHealth = 6, hovering = true, healthCellSize = 3 },
+    SummoningRod    = { attackSet = "summoningrod",moveRange = 0, isSummoningRod = true, isPushable = false },
+}
 
 local environment = {}
 
@@ -78,7 +242,7 @@ local function loadTerrainSprite(map, gid, tileWidth, tileHeight)
             
             texture = tileset.image or tileset.texture
             if not texture then
-                print("Warning: No texture for tileset with firstgid", firstGid)
+                log.warnf("env", "Warning: No texture for tileset with firstgid %s", firstGid)
                 return nil
             end
             
@@ -140,7 +304,7 @@ local function loadTileSprite(map, gid, tileWidth, tileHeight)
             end
             
             if not texture then
-                print("Warning: No texture for tileset with firstgid", firstGid)
+                log.warnf("env", "Warning: No texture for tileset with firstgid %s", firstGid)
                 return nil
             end
             
@@ -158,7 +322,7 @@ local function loadTileSprite(map, gid, tileWidth, tileHeight)
     end
     
     if not texture or not quad then
-        print("Warning: Could not extract tile for GID", gid)
+        log.warnf("env", "Warning: Could not extract tile for GID %s", gid)
         return nil
     end
     
@@ -360,46 +524,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
     end
 
     if def.type == "character" then
-        local attacks = {}
-        if def.attacks == "warrior" then
-            attacks = environment.getWarriorAttacks()
-        elseif def.attacks == "puncher" then
-            attacks = environment.getPuncherAttacks()
-        elseif def.attacks == "rogue" then
-            attacks = environment.getRogueAttacks()
-        elseif def.attacks == "lich" then
-            attacks = environment.getLichAttacks()
-        elseif def.attacks == "ghost" then
-            attacks = environment.getGhostAttacks()
-        elseif def.attacks == "zombie" then
-            attacks = environment.getZombieAttacks()
-        elseif def.attacks == "summoner" then
-            attacks = environment.getSummonerAttacks()
-        elseif def.attacks == "summoned" then
-            attacks = environment.getSummonedAttacks()
-        elseif def.attacks == "divider" then
-            attacks = environment.getDividerAttacks()
-        elseif def.attacks == "none" then
-            attacks = environment.getNoneAttacks()
-        elseif def.attacks == "all" then
-            attacks = environment.getAllAttacks()
-        elseif def.attacks == "brute" then
-            attacks = environment.getBruteAttacks()
-        elseif def.attacks == "lancer" then
-            attacks = environment.getLancerAttacks()
-        elseif def.attacks == "bogshaman" then
-            attacks = environment.getBogShamanAttacks()
-        elseif def.attacks == "raider" then
-            attacks = environment.getRaiderAttacks()
-        elseif def.attacks == "dervish" then
-            attacks = environment.getDervishAttacks()
-        elseif def.attacks == "crusher" then
-            attacks = environment.getCrusherAttacks()
-        elseif def.attacks == "summoningrod" then
-            attacks = environment.getSummoningRodAttacks()
-        else
-            attacks = {}
-        end
+        local attacks = environment.getAttacks(def.attacks)
 
         local actor = Entity.new(
             def.name, Entity.TYPES.CHARACTER, gridX, gridY,
@@ -446,7 +571,7 @@ end
 
 -- environment.lua (фрагмент loadMapFromTiled)
 function environment.loadMapFromTiled(filePath)
-    print("\n=== LOADING MAP: " .. filePath .. " ===")
+    log.infof("env", "=== LOADING MAP: %s ===", filePath)
 
     local file = love.filesystem.getInfo(filePath)
     if not file then error("File not found: " .. filePath) end
@@ -540,7 +665,7 @@ function environment.loadMapFromTiled(filePath)
         table.insert(typesList, t)
     end
     table.sort(typesList)
-    print("Terrain types found: " .. table.concat(typesList, ", "))
+    log.debugf("env", "Terrain types found: %s", table.concat(typesList, ", "))
 
     local unknownList = {}
     for gid, _ in pairs(unknownTerrainGids) do
@@ -548,7 +673,7 @@ function environment.loadMapFromTiled(filePath)
     end
     table.sort(unknownList, function(a, b) return tonumber(a) < tonumber(b) end)
     if #unknownList > 0 then
-        print("Unknown terrain GIDs: " .. table.concat(unknownList, ", "))
+        log.warnf("env", "Unknown terrain GIDs: %s", table.concat(unknownList, ", "))
     end
 
     -- Загружаем entities только на активных клетках
@@ -590,9 +715,9 @@ function environment.loadMapFromTiled(filePath)
                         local entity = createEntityFromGID(map, gid, gridX, gridY)
                         if entity then
                             table.insert(entities, entity)
-                            print(string.format("  Created %s at grid(%d,%d)", entity.name, gridX, gridY))
+                            log.debugf("env", "Created %s at grid(%d,%d)", entity.name, gridX, gridY)
                         elseif not gidToEntity[gid] then
-                            print(string.format("  Warning: Unknown entity GID %d at grid(%d,%d)", gid, gridX, gridY))
+                            log.warnf("env", "Warning: Unknown entity GID %d at grid(%d,%d)", gid, gridX, gridY)
                         end
                     end
                 end
@@ -640,7 +765,7 @@ function environment.loadMapFromTiled(filePath)
                             local key = gridX .. "," .. gridY
                             if not hexStatuses[key] then hexStatuses[key] = {} end
                             table.insert(hexStatuses[key], statusType)
-                            print(string.format("  Status %s at (%d,%d)", statusType, gridX, gridY))
+                            log.debugf("env", "Status %s at (%d,%d)", statusType, gridX, gridY)
                         end
                     end
                 end
@@ -663,177 +788,60 @@ function environment.loadMapFromTiled(filePath)
     environment.loadedMap = map
     environment.terrainTextures = terrainTextures
 
-    print("\n--- LOADING COMPLETE ---")
-    print(string.format("Active terrain cells: %d", (function() local count = 0 for _,row in pairs(terrainMap) do for _ in pairs(row) do count = count + 1 end end return count end)()))
-    print(string.format("Entities loaded: %d", #gameEntities))
-    print(string.format("Allies for deploy: %d", #deployableAllies))
+    log.info("env", "--- LOADING COMPLETE ---")
+    log.infof("env", "Active terrain cells: %d", (function() local count = 0 for _,row in pairs(terrainMap) do for _ in pairs(row) do count = count + 1 end end return count end)())
+    log.infof("env", "Entities loaded: %d", #gameEntities)
+    log.infof("env", "Allies for deploy: %d", #deployableAllies)
 
     return terrainMap, gameEntities, width, height, hexStatuses, walkable, deployableAllies, orientation
 end
 
--- Функции атак (без изменений)
-function environment.getWarriorAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.DashAttack.new(), name = "Dash", description = "Charge and push" },
-        { attack = combat.FlipAttack.new(), name = "Flip", description = "Flip enemy behind" },
-    }
+-- ============================================================
+-- API доступа к реестру атак
+-- ============================================================
+
+-- Возвращает список атак по идентификатору набора ("warrior", "lich", ...).
+-- Заменяет 19 старых функций getXxxAttacks().
+-- Возвращает пустой список для неизвестного setId.
+function environment.getAttacks(setId)
+    local factory = setId and ATTACK_SETS[setId]
+    if not factory then return {} end
+    return factory()
 end
 
-function environment.getPuncherAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Melee attack, 1 damage, pushes target away. Lethal if empowered" },
-        { attack = combat.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack damage. Deals 1 damage if empowered" },
-    }
-end
+-- Backward-compat: тонкие обёртки для тех, кто зовёт get*Attacks() по имени.
+-- (на случай внешних вызовов; в самом проекте уже не используется)
+function environment.getWarriorAttacks()      return environment.getAttacks("warrior") end
+function environment.getPuncherAttacks()      return environment.getAttacks("puncher") end
+function environment.getRogueAttacks()        return environment.getAttacks("rogue") end
+function environment.getGhostAttacks()        return environment.getAttacks("ghost") end
+function environment.getZombieAttacks()       return environment.getAttacks("zombie") end
+function environment.getLichAttacks()         return environment.getAttacks("lich") end
+function environment.getNoneAttacks()         return environment.getAttacks("none") end
+function environment.getAllAttacks()          return environment.getAttacks("all") end
+function environment.getDividerAttacks()      return environment.getAttacks("divider") end
+function environment.getSummonerAttacks()     return environment.getAttacks("summoner") end
+function environment.getBruteAttacks()        return environment.getAttacks("brute") end
+function environment.getDervishAttacks()      return environment.getAttacks("dervish") end
+function environment.getRaiderAttacks()       return environment.getAttacks("raider") end
+function environment.getCrusherAttacks()      return environment.getAttacks("crusher") end
+function environment.getSummoningRodAttacks() return environment.getAttacks("summoningrod") end
+function environment.getPowerLichAttacks()    return environment.getAttacks("powerlich") end
+function environment.getLancerAttacks()       return environment.getAttacks("lancer") end
+function environment.getBogShamanAttacks()    return environment.getAttacks("bogshaman") end
+function environment.getSummonedAttacks()     return environment.getAttacks("summoned") end
 
-function environment.getRogueAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
-        { attack = combat.PiercingShootAttack.new(), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
-    }
-end
-
-function environment.getGhostAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, 2 damage" },
-    }
-end
-
-function environment.getZombieAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
-    }
-end
-
--- Добавить функцию getLichAttacks()
-function environment.getLichAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any target cell, ignores obstacles" },
-    }
-end
-
-function environment.getNoneAttacks()
-    return {}
-end
-
-function environment.getAllAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.DashAttack.new(), name = "Dash", description = "Charge and push" },
-        { attack = combat.FlipAttack.new(), name = "Flip", description = "Flip enemy behind" },
-        { attack = combat.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
-        { attack = combat.PushAttack.new(5), name = "Push", description = "Push first enemy in line (no damage)" },
-        { attack = combat.PiercingShootAttack.new(), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
-        { attack = combat.AoePushAttack.new(), name = "Stone Throw", description = "Throw a stone that pushes enemies around" },
-        { attack = combat.AoeDirectionalAttack.new(), name = "Shockwave", description = "Pushes all 6 surrounding enemies away from the center" },
-        { attack = combat.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any target cell, ignores obstacles" },
-        { attack = combat.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, 2 damage" },
-        { attack = combat.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
-        { attack = combat.SummonAttack.new(), name = "Summon", description = "Summon a minion at target cell" },
-        { attack = combat.DividerAttack.new(), name = "Split", description = "Split into two Divided units" },
-        { attack = combat.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shift an enemy right or left and deal 1 damage" },
-        { attack = combat.WideVortexAttack.new(), name = "Wide Vortex", description = "Shift 3 enemies in front right or left" },
-        { attack = combat.PullHookAttack.new(), name = "Pull Hook", description = "Hook a target and pull it towards you" },
-        { attack = combat.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning that damages everyone on the line" },
-        { attack = combat.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
-        { attack = combat.CleaveAttack.new(), name = "Cleave", description = "Melee 1 dmg to 3 targets in front" },
-        { attack = combat.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
-        { attack = combat.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Melee 2 dmg and push target away" },
-        { attack = combat.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Melee 1 dmg, push target, double next attack damage" },
-    }
-end
-
-function environment.getDividerAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.DividerAttack.new(), name = "Split", description = "Split into two Divided units" },
-    }
-end
-
-function environment.getSummonerAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.SummonAttack.new(), name = "Summon", description = "Summon a minion at target cell (min 2)" },
-    }
-end
-
-function environment.getBruteAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
-    }
-end
-
-function environment.getDervishAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.CleaveAttack.new(), name = "Cleave", description = "Melee 1 dmg to 3 targets in front" },
-    }
-end
-
-function environment.getRaiderAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
-    }
-end
-
-function environment.getCrusherAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
-    }
-end
-
-function environment.getSummoningRodAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.SummonEnemyAttack.new(), name = "Summon", description = "Summon a random enemy" },
-    }
-end
-
-function environment.getPowerLichAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.PowerLichBoltAttack.new(), name = "Power Bolt", description = "Lethal bolt hitting target and 3 cells in front" },
-    }
-end
-
-function environment.getLancerAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
-    }
-end
-
-function environment.getBogShamanAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
-    }
-end
-
-function environment.getSummonedAttacks()
-    local combat = require("combat")
-    return {
-        { attack = combat.PushAttack.new(5), name = "Shoot", description = "Push first enemy in line (no damage)" },
-    }
-end
-
-local unitSpriteCache = {}
+-- Кэш спрайтов: источник истины — модуль sprites (для разрыва цикла combat↔environment).
+-- environment.unitSpriteCache оставлен как алиас для обратной совместимости.
+local sprites = require("sprites")
+local unitSpriteCache = sprites.raw()
 environment.unitSpriteCache = unitSpriteCache
 
 function environment.loadUnitSprites()
     local workaroundPath = "maps/units_workaround.lua"
     local info = love.filesystem.getInfo(workaroundPath)
     if not info then
-        print("No units_workaround.lua found, squad units will use fallback colors")
+        log.info("env", "No units_workaround.lua found, squad units will use fallback colors")
         return
     end
     local map = sti(workaroundPath)
@@ -851,26 +859,26 @@ function environment.loadUnitSprites()
     if entitiesTileset then
         local firstGid = entitiesTileset.firstgid
         local lastGid = firstGid + (entitiesTileset.tilecount or 1) - 1
-        print("=== All entity GIDs from workaround ===")
+        log.debug("env", "=== All entity GIDs from workaround ===")
         for gid = firstGid, lastGid do
             local sprite = loadTileSprite(map, gid, tileWidth, tileHeight)
             local def = gidToEntity[gid]
             local name = def and def.name or "nil"
             local info = def and string.format("type=%s hp=%s", def.type, def.maxHealth or def.health or "?") or ""
             if sprite then
-                unitSpriteCache[gid] = sprite
-                print(string.format("  [OK]   GID %3d -> %-20s %s", gid, name, info))
+                sprites.set(gid, sprite)
+                log.debugf("env", "  [OK]   GID %3d -> %-20s %s", gid, name, info)
             else
-                print(string.format("  [FAIL] GID %3d -> %-20s (no sprite)", gid, name, info))
+                log.warnf("env", "  [FAIL] GID %3d -> %-20s (no sprite)", gid, name, info)
             end
         end
     end
 
-    print("=== Tile positions on workaround map ===")
+    log.debug("env", "=== Tile positions on workaround map ===")
     for _, layer in ipairs(map.layers) do
         if layer.type == "tilelayer" then
             local data = layer.data
-            print(string.format("  Layer '%s' (%d x %d):", layer.name, layer.width, layer.height))
+            log.debugf("env", "  Layer '%s' (%d x %d):", layer.name, layer.width, layer.height)
             for y = 1, layer.height do
                 for x = 1, layer.width do
                     local gid = nil
@@ -893,7 +901,7 @@ function environment.loadUnitSprites()
                     if gid and gid > 0 then
                         local def = gidToEntity[gid]
                         local name = def and def.name or (gid < 21 and "terrain" or "entity")
-                        print(string.format("    (%d,%d) -> GID %d (%s)", x-1, y-1, gid, name))
+                        log.debugf("env", "    (%d,%d) -> GID %d (%s)", x-1, y-1, gid, name)
                     end
                 end
             end
@@ -902,21 +910,7 @@ function environment.loadUnitSprites()
 end
 
 function environment.createSquadUnit(unitDef, q, r)
-    local Entity = require("entity")
-    local attacks = {}
-    if unitDef.attacks == "warrior" then
-        attacks = environment.getWarriorAttacks()
-    elseif unitDef.attacks == "puncher" then
-        attacks = environment.getPuncherAttacks()
-    elseif unitDef.attacks == "rogue" then
-        attacks = environment.getRogueAttacks()
-    elseif unitDef.attacks == "summoner" then
-        attacks = environment.getSummonerAttacks()
-    elseif unitDef.attacks == "divider" then
-        attacks = environment.getDividerAttacks()
-    elseif unitDef.attacks == "all" then
-        attacks = environment.getAllAttacks()
-    end
+    local attacks = environment.getAttacks(unitDef.attacks)
 
     local nameToGid = {
         Warrior = 34, Puncher = 30, Rogue = 31,
@@ -972,64 +966,13 @@ function environment.createSquadUnit(unitDef, q, r)
 end
 
 function environment.createEnemyByType(enemyType, q, r)
-    local Entity = require("entity")
-    local attacks = {}
-    local name = ""
-    local maxHealth = 2
-    local moveRange = 2
-    local hasAura = nil
-
-    if enemyType == "Ghost" then
-        attacks = environment.getGhostAttacks()
-        name = "Ghost"
-        moveRange = 3
-    elseif enemyType == "Zombie" then
-        attacks = environment.getZombieAttacks()
-        name = "Zombie"
-        moveRange = 3
-    elseif enemyType == "PoisonousZombie" then
-        attacks = environment.getZombieAttacks()
-        name = "PoisonousZombie"
-        moveRange = 3
-    elseif enemyType == "Lich" then
-        attacks = environment.getLichAttacks()
-        name = "Lich"
-        moveRange = 3
-    elseif enemyType == "Brute" then
-        attacks = environment.getBruteAttacks()
-        name = "Brute"
-        moveRange = 2
-    elseif enemyType == "Lancer" then
-        attacks = environment.getLancerAttacks()
-        name = "Lancer"
-        moveRange = 3
-    elseif enemyType == "BogShaman" then
-        attacks = environment.getBogShamanAttacks()
-        name = "BogShaman"
-        moveRange = 2
-        hasAura = { type = "slow", radius = 1 }
-    elseif enemyType == "Raider" then
-        attacks = environment.getRaiderAttacks()
-        name = "Raider"
-        moveRange = 3
-    elseif enemyType == "Dervish" then
-        attacks = environment.getDervishAttacks()
-        name = "Dervish"
-        moveRange = 3
-    elseif enemyType == "Crusher" then
-        attacks = environment.getCrusherAttacks()
-        name = "Crusher"
-        moveRange = 2
-    elseif enemyType == "PowerLich" then
-        attacks = environment.getPowerLichAttacks()
-        name = "PowerLich"
-        maxHealth = 6
-        moveRange = 3
-    else
-        attacks = environment.getZombieAttacks()
-        name = "Zombie"
-        moveRange = 3
-    end
+    -- Спецификация из реестра; fallback — Zombie.
+    local spec = ENEMY_TYPES[enemyType] or ENEMY_TYPES.Zombie
+    local name = (ENEMY_TYPES[enemyType] and enemyType) or "Zombie"
+    local attacks = environment.getAttacks(spec.attackSet)
+    local maxHealth = spec.maxHealth or 2
+    local moveRange = spec.moveRange or 2
+    local hasAura = spec.aura
 
     local enemyTypeToGid = {
         Ghost = 26, Zombie = 25, PoisonousZombie = 21, Lich = 27,
@@ -1089,20 +1032,14 @@ function environment.createEnemyByType(enemyType, q, r)
     end
 
     local entity = Entity.new(name, Entity.TYPES.CHARACTER, q, r, maxHealth, false, moveRange, sprite, nil, attacks)
-    if enemyType == "Ghost" then
-        entity.flying = true
-    end
+    -- Флаги из реестра (только те, что заданы явно).
+    if spec.flying          then entity.flying = true end
+    if spec.hovering        then entity.hovering = true end
+    if spec.healthCellSize  then entity.healthCellSize = spec.healthCellSize end
+    if spec.isSummoningRod  then entity.isSummoningRod = true end
+    if spec.isPushable == false then entity.isPushable = false end
     if hasAura then
         entity.aura = hasAura
-    end
-    if enemyType == "SummoningRod" then
-        entity.isSummoningRod = true
-        entity.isPushable = false
-        entity.moveRange = 0
-    end
-    if enemyType == "PowerLich" then
-        entity.hovering = true
-        entity.healthCellSize = 3
     end
     return entity
 end

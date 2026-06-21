@@ -5,6 +5,7 @@ local pathfinding = require("pathfinding")
 local combat = require("combat")
 local visual = require("visual_effects")
 local hex_utils = require("hex_utils")
+local cell_rules = require("cell_rules")
 require("ui_buttons")(ui)
 require("ui_status_effects")(ui)
 -- ============================================================
@@ -1843,29 +1844,13 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
     return path ~= nil and #path > 0
 end
 function isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
-    if not hex:isActiveHex(q, r) then return false end
-    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-    if terrain == "water" then
-        if enemy and (enemy.flying or enemy.hovering) then
-            -- ok
-        else
-            return false
-        end
-    end
-    if terrain == "underwater_mines" then
-        return false
-    end
-    if enemy and enemy.flying then
-        return true
-    end
-    for _, e in ipairs(entities) do
-        if e ~= enemy and e.q == q and e.r == r and not e.isHazard then
-            if not (e:isCharacter() and not e.isPlayable) then
-                return false  -- другие враги проходимы, всё остальное блокирует
-            end
-        end
-    end
-    return true
+    -- Делегирует в cell_rules.isPassable с passableSide = "enemy".
+    -- Враги могут проходить сквозь других врагов, но не сквозь союзников/препятствия.
+    return cell_rules.isPassable(q, r, enemy, {
+        entities = entities, terrainMap = terrainMap, hex = hex,
+        passableSide = "enemy",
+        allowPhaseThroughEnemies = false,
+    })
 end
 function ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
     local dx = toX - fromX

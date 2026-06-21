@@ -1,4 +1,7 @@
 local Entity = require("entity")
+local log = require("log")
+local status = require("status")
+local env = require("environment")
 
 local objectives = {}
 
@@ -39,7 +42,7 @@ primaryObjectiveDefs.protect_caravans = {
             _G.chaos = (_G.chaos or 0) + newDead
             _G.caravansDestroyed = dead
             for i = 1, newDead do
-                print(string.format("Caravan destroyed! Chaos +1 (total: %d)", _G.chaos))
+                log.infof("objectives", "Caravan destroyed! Chaos +1 (total: %d)", _G.chaos)
             end
         end
     end,
@@ -75,7 +78,7 @@ primaryObjectiveDefs.protect_railway = {
             local newDamage = totalDamage - prev
             _G.chaos = (_G.chaos or 0) + newDamage
             _G.railwayTakenDamage = totalDamage
-            print(string.format("Railway infrastructure damaged! Chaos +%d (total: %d)", newDamage, _G.chaos))
+            log.infof("objectives", "Railway infrastructure damaged! Chaos +%d (total: %d)", newDamage, _G.chaos)
         end
 
         local aliveOcc = 0
@@ -88,7 +91,7 @@ primaryObjectiveDefs.protect_railway = {
         if prevOcc > aliveOcc then
             local destroyed = prevOcc - aliveOcc
             _G.chaos = (_G.chaos or 0) + destroyed * 2
-            print(string.format("Occupied tunnel destroyed! Chaos +%d (total: %d)", destroyed * 2, _G.chaos))
+            log.infof("objectives", "Occupied tunnel destroyed! Chaos +%d (total: %d)", destroyed * 2, _G.chaos)
         end
         _G.occupiedTunnelCount = aliveOcc
     end,
@@ -116,7 +119,6 @@ local function findEmptyCells(entities, hex)
                 if not occupied then
                     local terrain = _G.terrainMap and _G.terrainMap[q] and _G.terrainMap[q][r] or "grass"
                     if terrain ~= "water" and terrain ~= "underwater_mines" then
-                        local status = require("status")
                         if not status.hasNegativeHexStatus(q, r) then
                             table.insert(candidates, {q = q, r = r})
                         end
@@ -143,7 +145,6 @@ local function findBuildingToReplace(entities)
 end
 
 local function createTowerAt(q, r)
-    local env = require("environment")
     local loadedMap = env.loadedMap
     local tileW = (loadedMap and loadedMap.tilewidth) or 14
     local tileH = (loadedMap and loadedMap.tileheight) or 12
@@ -171,7 +172,7 @@ local killLeaderDef = {
         for _, e in ipairs(entities) do
             if e:isCharacter() and not e.isPlayable and e.name == "PowerLich" then
                 e.isLeader = true
-                print(string.format("Objective 'kill_leader': PowerLich found at (%d,%d)", e.q, e.r))
+                log.debugf("objectives", "Objective 'kill_leader': PowerLich found at (%d,%d)", e.q, e.r)
                 break
             end
         end
@@ -216,7 +217,7 @@ local function definePool()
                             local newDamage = damageTaken - prevDamage
                             _G.chaos = (_G.chaos or 0) + newDamage
                             _G.blockpostDamageTracked = damageTaken
-                            print(string.format("Blockpost damaged! Chaos +%d (total: %d)", newDamage, _G.chaos))
+                            log.infof("objectives", "Blockpost damaged! Chaos +%d (total: %d)", newDamage, _G.chaos)
                         end
                         return
                     end
@@ -272,7 +273,6 @@ local function definePool()
                     end
                 end
                 if not hasZombie then
-                    local env = require("environment")
                     local cells = findEmptyCells(entities, hex)
                     if #cells > 0 then
                         local cell = cells[love.math.random(1, #cells)]
@@ -356,7 +356,6 @@ local function definePool()
             name = "Destroy the Leader",
             desc = "Find and eliminate the enemy leader!",
             onGenerate = function(entities, hex)
-                local env = require("environment")
                 local candidates = {}
                 for _, e in ipairs(entities) do
                     if e.health and e.health > 0 and e:isCharacter() and not e.isPlayable and not e.isSummoningRod then
@@ -389,7 +388,7 @@ local function definePool()
                         end
                     end
                     leader.name = "Leader " .. (leader.name or "Enemy")
-                    print(string.format("Objective 'kill_leader': Leader created at (%d,%d) - %s", leader.q, leader.r, leader.name))
+                    log.debugf("objectives", "Objective 'kill_leader': Leader created at (%d,%d) - %s", leader.q, leader.r, leader.name)
                 end
             end,
             check = function(entities, state)
@@ -441,7 +440,7 @@ function objectives.generate(entities, hex)
         if killLeaderDef.onGenerate then
             killLeaderDef.onGenerate(entities, hex)
         end
-        print("kill_leader set as primary objective on map4")
+        log.info("objectives", "kill_leader set as primary objective on map4")
     else
         -- Choose primary: railway if map has train cars, otherwise caravans
         local primaryId = hasTrainCars(entities) and "protect_railway" or "protect_caravans"
@@ -491,12 +490,12 @@ function objectives.generate(entities, hex)
         -- Check incompatibility with primary objective
         if not skip and activePrimaryObjective then
             if def.incompatibleWithPrimary then
-                print(string.format("Skipping '%s' due to incompatibility with primary objective '%s'", def.id, activePrimaryObjective.id))
+                log.debugf("objectives", "Skipping '%s' due to incompatibility with primary objective '%s'", def.id, activePrimaryObjective.id)
                 skip = true
             elseif primaryIncompatible then
                 for _, pid in ipairs(primaryIncompatible) do
                     if pid == def.id then
-                        print(string.format("Skipping '%s' due to incompatibility with primary '%s'", def.id, activePrimaryObjective.id))
+                        log.debugf("objectives", "Skipping '%s' due to incompatibility with primary '%s'", def.id, activePrimaryObjective.id)
                         skip = true
                         break
                     end
@@ -528,7 +527,7 @@ function objectives.generate(entities, hex)
         end
 
         if skip then
-            print(string.format("Skipping '%s' due to conflict with selected objectives", def.id))
+            log.debugf("objectives", "Skipping '%s' due to conflict with selected objectives", def.id)
         else
             table.insert(activeObjectives, def)
             objectiveStates[def.id] = "pending"
@@ -539,9 +538,9 @@ function objectives.generate(entities, hex)
         end
     end
 
-    print(string.format("Generated %d secondary objectives:", #activeObjectives))
+    log.debugf("objectives", "Generated %d secondary objectives:", #activeObjectives)
     for _, obj in ipairs(activeObjectives) do
-        print(string.format("  - %s (%s)", obj.name, obj.id))
+        log.debugf("objectives", "  - %s (%s)", obj.name, obj.id)
     end
 end
 
@@ -607,11 +606,11 @@ function objectives.update(entities)
             if state == "failed" then
                 _G.loss = true
                 _G.gameActive = false
-                print("DEFEAT: Power Lich has slain a hero!")
+                log.warn("objectives", "DEFEAT: Power Lich has slain a hero!")
             elseif state == "completed" then
                 _G.win = true
                 _G.gameActive = false
-                print("VICTORY: Power Lich has been destroyed!")
+                log.warn("objectives", "VICTORY: Power Lich has been destroyed!")
             end
         end
     end
@@ -626,7 +625,7 @@ function objectives.update(entities)
                 obj.check(entities, objectiveStates)
                 if prevState == "pending" and objectiveStates[obj.id] == "failed" then
                     _G.chaos = (_G.chaos or 0) + 1
-                    print(string.format("Objective '%s' failed! Chaos +1 (total: %d)", obj.id, _G.chaos))
+                    log.infof("objectives", "Objective '%s' failed! Chaos +1 (total: %d)", obj.id, _G.chaos)
                 end
             end
         end

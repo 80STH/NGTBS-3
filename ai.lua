@@ -8,8 +8,7 @@ local hex_utils = require("hex_utils")
 local visual = require("visual_effects")
 local attack_effects = require("attack_effects")
 local status = require("status")
-
-ai.DEBUG = true
+local log = require("log")
 
 -- Проверка, лежит ли цель на одной из шести прямых от источника (включая любую дистанцию)
 local function isOnStraightLine(fromQ, fromR, toQ, toR, hex)
@@ -39,9 +38,7 @@ local function isOnStraightLine(fromQ, fromR, toQ, toR, hex)
 end
 
 local function debugPrint(...)
-    if ai.DEBUG then
-        print("[AI DEBUG]", ...)
-    end
+    log.debug("ai", ...)
 end
 
 -- Требует ли атака прямой линии (для Bite и Magic Bolt – нет)
@@ -386,7 +383,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
     elseif target then
         local damage = attack.damage
         local wasDestroyed = target:takeDamage(damage)
-        print(string.format("%s attacks %s for %d damage!", enemy.name, target.name, damage))
+        log.infof("ai", "%s attacks %s for %d damage!", enemy.name, target.name, damage)
         if sounds and sounds.attack then sounds.attack:play() end
         if wasDestroyed then
             target:startDeath()
@@ -400,7 +397,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
     if enemy._extraAttackTarget and enemy._extraAttackTarget.health > 0 then
         local extra = enemy._extraAttackTarget
         local wasDestroyed = extra:takeDamage(attack.damage)
-        print(string.format("%s also hits %s for %d damage!", enemy.name, extra.name, attack.damage))
+        log.infof("ai", "%s also hits %s for %d damage!", enemy.name, extra.name, attack.damage)
         if sounds and sounds.attack then sounds.attack:play() end
         if wasDestroyed then
             extra:startDeath()
@@ -413,7 +410,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         for _, ct in ipairs(enemy._cleaveTargets) do
             if ct.health > 0 then
                 local wasDestroyed = ct:takeDamage(attack.damage)
-                print(string.format("%s cleaves %s for %d damage!", enemy.name, ct.name, attack.damage))
+                    log.infof("ai", "%s cleaves %s for %d damage!", enemy.name, ct.name, attack.damage)
                 if wasDestroyed then
                     ct:startDeath()
                 end
@@ -498,7 +495,6 @@ function ai.moveAndPrepare(enemy, entities, hex)
             local target = freeCells[love.math.random(1, #freeCells)]
             enemy.summonTargetQ = target.q
             enemy.summonTargetR = target.r
-            local env = require("environment")
             local types = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
             enemy.summonType = types[love.math.random(1, #types)]
             enemy.hasPreparedAttack = true
@@ -692,24 +688,12 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
 end
 
 function ai.isPositionOccupied(q, r, movingEntity, entities, hex)
-    if not hex:isActiveHex(q, r) then
-        return true
-    end
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
-        if movingEntity and (movingEntity.waterWalker or movingEntity.flying or movingEntity.hovering) then
-            -- ok
-        else
-            return true
-        end
-    end
-    for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
-            if not (e:isCharacter() and e.isPlayable == movingEntity.isPlayable) then
-                return true
-            end
-        end
-    end
-    return false
+    -- Делегирует в cell_rules.isOccupied. У врагов нет phaseThroughEnemies,
+    -- поэтому отключаем эту проверку — поведение эквивалентно старой версии.
+    return require("cell_rules").isOccupied(q, r, movingEntity, {
+        entities = entities, hex = hex,
+        allowPhaseThroughEnemies = false,
+    })
 end
 
 function ai.startEnemyMove(enemy, hex)

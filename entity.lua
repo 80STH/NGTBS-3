@@ -4,6 +4,7 @@
 local Entity = {}
 Entity.__index = Entity
 local status = require("status")
+local log = require("log")
 
 -- Типы сущностей
 Entity.TYPES = {
@@ -130,7 +131,7 @@ function Entity:switchAttack()
     if #self.attacks > 0 and not self.hasActedThisTurn and not self.isMoving then
         self.currentAttackIndex = (self.currentAttackIndex % #self.attacks) + 1
         local attack = self:getCurrentAttack()
-        print(string.format("%s switched to: %s", self.name, attack.name))
+        log.debugf("entity", "%s switched to: %s", self.name, attack.name)
         return true
     end
     return false
@@ -153,16 +154,16 @@ function Entity:takeDamage(damage)
     
     if self:isBuilding() and actualDamage > 0 and not self.isTrainCar and self.name ~= "Tunnel" and self.name ~= "OccupiedTunnel" and self.name ~= "DestroyedTunnel" then
         _G.chaos = (_G.chaos or 0) + actualDamage
-        print(string.format("Building damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos))
+        log.infof("entity", "Building damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos)
     end
-    
-    print(string.format("%s takes %d damage! (%d/%d HP)", 
-          self.name, actualDamage, math.max(0, self.health), self.maxHealth))
+
+    log.debugf("entity", "%s takes %d damage! (%d/%d HP)",
+          self.name, actualDamage, math.max(0, self.health), self.maxHealth)
 
     -- Кислота: любой урон смертелен
     if actualDamage > 0 and status.hasEntityStatus(self, "acid") then
         self.health = 0
-        print(string.format(" %s dissolves in acid!", self.name))
+        log.infof("entity", "%s dissolves in acid!", self.name)
         return true
     end
 
@@ -174,7 +175,7 @@ function Entity:takeDamage(damage)
             self.preparedAttack = nil
             self.summonTargetQ = nil
             self.summonTargetR = nil
-            print("SummoningRod summon cancelled by damage!")
+            log.debug("entity", "SummoningRod summon cancelled by damage!")
         end
     end
     
@@ -188,7 +189,6 @@ function Entity:startDeath()
     self.deathTimer = 0
     self.health = 0
     if self.rootedTarget then
-        local status = require("status")
         status.removeFromEntity(self.rootedTarget, "rooted")
         self.rootedTarget = nil
     end

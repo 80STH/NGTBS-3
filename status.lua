@@ -1,6 +1,7 @@
 -- status.lua
 -- Управление статусами на гексах и на сущностях
 local status = {}
+local log = require("log")
 
 -- Таблицы хранения статусов
 status.hexStatuses = {}      -- key "q,r" -> список статусов
@@ -45,7 +46,7 @@ end
 -- Получить статусы на гексе
 function status.getAtHex(q, r)
     if q == nil or r == nil then
-        print("ERROR: getAtHex called with nil q or r", q, r, debug.traceback())
+        log.error("status", "getAtHex called with nil q or r", q, r, debug.traceback())
         return {}
     end
     local key = q .. "," .. r
@@ -70,7 +71,7 @@ function status.applyToEntity(entity, statusType)
         if st == statusType then return end
     end
     table.insert(status.entityStatuses[entity], statusType)
-    print(string.format(" %s got %s debuff!", entity.name, statusType))
+    log.infof("status", "%s got %s debuff!", entity.name, statusType)
 end
 
 -- Удалить статус с сущности
@@ -79,7 +80,7 @@ function status.removeFromEntity(entity, statusType)
         for i, st in ipairs(status.entityStatuses[entity]) do
             if st == statusType then
                 table.remove(status.entityStatuses[entity], i)
-                print(string.format(" %s lost %s debuff", entity.name, statusType))
+                log.infof("status", "%s lost %s debuff", entity.name, statusType)
                 break
             end
         end
