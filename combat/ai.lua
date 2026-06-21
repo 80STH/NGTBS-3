@@ -384,7 +384,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         local damage = attack.damage
         local wasDestroyed = target:takeDamage(damage)
         log.infof("ai", "%s attacks %s for %d damage!", enemy.name, target.name, damage)
-        if sounds and sounds.attack then sounds.attack:play() end
+        sounds.play("attack")
         if wasDestroyed then
             target:startDeath()
         end
@@ -398,7 +398,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         local extra = enemy._extraAttackTarget
         local wasDestroyed = extra:takeDamage(attack.damage)
         log.infof("ai", "%s also hits %s for %d damage!", enemy.name, extra.name, attack.damage)
-        if sounds and sounds.attack then sounds.attack:play() end
+        sounds.play("attack")
         if wasDestroyed then
             extra:startDeath()
         end
@@ -673,13 +673,20 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
     if distance > effRange then return false end
 
     local isBlockedFn
+    local isOccupiedFn
     if enemy.flying then
         isBlockedFn = function(q, r) return not hex:isActiveHex(q, r) end
     else
         isBlockedFn = function(q, r) return ai.isPositionOccupied(q, r, enemy, entities, hex) end
+        isOccupiedFn = function(q, r)
+            for _, e in ipairs(entities) do
+                if e ~= enemy and e.q == q and e.r == r and not e.isHazard then return true end
+            end
+            return false
+        end
     end
     local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effRange,
-        isBlockedFn, hex)
+        isBlockedFn, hex, isOccupiedFn)
 
     if path and #path > 0 and #path <= effRange then
         enemy.path = path

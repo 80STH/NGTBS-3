@@ -144,7 +144,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         if target:isCharacter() then
             target.health = target.health - 1
             log.infof("combat", "%s is slammed against the edge! Takes 1 damage!", target.name)
-            if sounds and sounds.collision then sounds.collision:play() end
+            sounds.play("collision")
             if target.health <= 0 then
                 target.startDeath()
             end
@@ -418,7 +418,7 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     combat.addPushAnimation(targetActor, targetQ, targetR, destQ, destR)
     combat.startPushAnimations(hex)
     log.debugf("combat", "%s flips %s to (%d,%d)!", attacker.name, targetActor.name, destQ, destR)
-    if sounds and sounds.attack then sounds.attack:play() end
+    sounds.play("flip")
     attacker.hasActedThisTurn = true
     return true
 end
@@ -671,6 +671,7 @@ function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, en
     if not stepX then return false, "Not a straight line!" end
 
     attack_effects.coneBlast(targetQ, targetR, hex)
+    sounds.play("cone_blast")
 
     -- All 6 neighbors
     local allNeighbors = hex:getNeighbors(targetQ, targetR)
@@ -757,7 +758,7 @@ function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities
     local damage = self.damage
     local wasDestroyed = target:takeDamage(damage)
     log.infof("combat", "%s throws a magic bolt at %s for %d damage!", attacker.name, target.name, damage)
-    if sounds and sounds.attack then sounds.attack:play() end
+    sounds.play("magic_bolt")
 
     if hex and visual then
         local x, y = getDrawCoords(target.q, target.r)
@@ -838,7 +839,7 @@ function combat.PowerLichBoltAttack:execute(attacker, targetQ, targetR, hex, ent
         if target then
             local wasDestroyed = target:takeDamage(self.damage)
             log.infof("combat", "Power Lich's bolt hits %s for %d damage!", target.name, self.damage)
-            if sounds and sounds.attack then sounds.attack:play() end
+            sounds.play("power_bolt")
             if hex and visual then
                 local x, y = getDrawCoords(target.q, target.r)
                 visual.addEffect(x, y, "hit", 0.4)
@@ -990,7 +991,7 @@ function combat.SummonAttack:execute(attacker, targetQ, targetR, hex, entities, 
 
     local fx, fy = getDrawCoords(targetQ, targetR)
     visual.addMagicExplosion(fx, fy, 0.6, 0.2, 1.0)
-    if sounds and sounds.attack then sounds.attack:play() end
+    sounds.play("summon_attack")
 
     attacker.hasActedThisTurn = true
     return true
@@ -1048,7 +1049,7 @@ function combat.DividerAttack:execute(attacker, targetQ, targetR, hex, entities,
     local fx2, fy2 = getDrawCoords(targetQ, targetR)
     visual.addMagicExplosion(fx1, fy1, 0.9, 0.7, 0.1)
     visual.addMagicExplosion(fx2, fy2, 0.9, 0.7, 0.1)
-    if sounds and sounds.attack then sounds.attack:play() end
+    sounds.play("split_attack")
 
     return true
 end
@@ -1075,7 +1076,7 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
     if occupant and occupant.health > 0 then
         local wasDestroyed = occupant:takeDamage(1)
         log.infof("combat", "SummoningRod: %s takes 2 damage from occupied summon cell!", occupant.name)
-        if sounds and sounds.attack then sounds.attack:play() end
+        sounds.play("summon_enemy")
         local fx, fy = getDrawCoords(sq, sr)
         visual.addEffect(fx, fy, "hit", 0.4)
         if wasDestroyed then occupant:startDeath() end
@@ -1090,7 +1091,7 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
         table.insert(entities, newEnemy)
         local fx, fy = getDrawCoords(sq, sr)
         visual.addMagicExplosion(fx, fy, 0.6, 0.4, 0.2)
-        if sounds and sounds.attack then sounds.attack:play() end
+        sounds.play("summon_enemy")
         log.infof("combat", "SummoningRod summons %s at (%d,%d)!", newEnemy.name, sq, sr)
     end
 
@@ -1227,6 +1228,7 @@ function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entiti
         end
         combat.startPushAnimations(hex)
     end
+    sounds.play("wide_vortex")
     attacker.hasActedThisTurn = true
     return true
 end
@@ -1309,7 +1311,7 @@ function combat.PullHookAttack:execute(attacker, targetQ, targetR, hex, entities
         end)
     end
 
-    if sounds and sounds.attack then sounds.attack:play() end
+    sounds.play("pull_hook")
     attacker.hasActedThisTurn = true
     return true
 end
@@ -1357,7 +1359,7 @@ function combat.ElectricHookAttack:execute(attacker, targetQ, targetR, hex, enti
     local tx, ty = getDrawCoords(targetQ, targetR)
     visual.addArcEffect(fx, fy, tx, ty, 0.3, 0.8, 1.0, 0.5)
 
-    if sounds and sounds.attack then sounds.attack:play() end
+    sounds.play("electric_hook")
     attacker.hasActedThisTurn = true
     return true
 end
@@ -1741,7 +1743,7 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
                 if pushedObj.health and pushedObj.health > 0 then
                     pushedObj.health = pushedObj.health - 1
                     log.infof("combat", "%s collides with %s! %s takes 1 damage!", pushedObj.name, occupant.name, pushedObj.name)
-                    if sounds and sounds.collision then sounds.collision:play() end
+                    sounds.play("collision")
                 end
                 if occupant.health and occupant.isPushable ~= false then
                     occupant.health = occupant.health - 1
@@ -1974,7 +1976,7 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
     if finalDamage < 1 and damage > 0 then finalDamage = 1 end
 
     local wasDestroyed = target:takeDamage(finalDamage)
-    if sounds and sounds.attack then sounds.attack:play() end
+    sounds.play("attack")
 
     if hex and visual then
         local x, y = getDrawCoords(target.q, target.r)
@@ -2020,7 +2022,7 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
     -- Collision effect at target cell (visual, no damage)
     local x, y = getDrawCoords(toQ, toR)
     visual.addEffect(x, y, "collision", 0.3)
-    if sounds and sounds.collision then sounds.collision:play() end
+    sounds.play("collision")
 
     -- Delayed damage application after animation
     local function applyDamage()
@@ -2110,7 +2112,8 @@ function performMove(actor, targetQ, targetR)
         return false
     end
     local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, effectiveRange,
-        function(q, r) return not isCellPassable(q, r, actor) end, hex)
+        function(q, r) return not isCellPassable(q, r, actor) end, hex,
+        function(q, r) local e = getEntityAtHex(q, r); return e and e ~= actor and not e.isHazard end)
     if not path or #path == 0 then
         log.debug("combat", "No valid path")
         return false
@@ -2152,6 +2155,7 @@ function updateActorMovement(actor, dt)
             actor.q = actor.targetQ
             actor.r = actor.targetR
             -- Apply cell effects at each step of the path
+            sounds.play("move")
             if terrainMap then
                 local died = effects.applyAllCellEffects(actor, actor.q, actor.r, terrainMap, entities)
                 if died then
@@ -2325,7 +2329,7 @@ function undoLastAction()
 
     table.remove(actionHistory)
 
-    sounds.undo:play()
+    sounds.play("undo")
     log.debugf("combat", "Undone move for %s. History size: %d", actor.name, #actionHistory)
     return true
 end

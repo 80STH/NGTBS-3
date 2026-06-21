@@ -391,6 +391,7 @@ function trains.executeTrainShunt(loco, entities, hex, onComplete)
     end
 
     startTrainAnimation(group, entities, hex, onComplete)
+    sounds.play("train")
 end
 
 return trains

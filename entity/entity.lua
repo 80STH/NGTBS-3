@@ -196,7 +196,7 @@ function Entity:startDeath()
         _G.objective_enemiesKilled = (_G.objective_enemiesKilled or 0) + 1
     end
     if sounds and sounds.death then
-        sounds.death:play()
+        sounds.play("death")
     end
 end
 

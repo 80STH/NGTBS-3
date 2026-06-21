@@ -27,6 +27,7 @@ function input.mousepressed(x, y, button)
     local tq, tr = hex:pixelToHex(x, y)
     if not hex or not hex:isValidHex(tq, tr) then return end
     if not hex:isActiveHex(tq, tr) then return end
+    if tq > 3 then return end
 
     -- Check if deploying entity has deployAnywhere (Warrior lvl2)
     local deployingEntity = nil
@@ -114,8 +115,10 @@ end
     local bottomY = logicalH - 65
     if x >= 10 and x <= 130 and y >= bottomY and y <= bottomY + 30 then
         if #actionHistory > 0 then
+            sounds.play("ui_click")
             undoLastAction()
         else
+            sounds.play("cant")
             log.info("input", "No actions to undo!")
         end
         return

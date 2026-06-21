@@ -36,7 +36,7 @@ function effects.applyAllCellEffects(entity, q, r, terrainMap, entities)
     -- 4. Drowning in water (only for characters, not obstacles, not for flying/hovering)
     if terrain == "water" and entity:isCharacter() and not entity.flying and not entity.hovering then
         log.infof("effects", "%s drowns in water!", entity.name)
-        if sounds and sounds.collision then sounds.collision:play() end
+        sounds.play("collision")
         entity.health = 0
         entity:startDeath()
         died = true
@@ -47,7 +47,7 @@ function effects.applyAllCellEffects(entity, q, r, terrainMap, entities)
         local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
         if terrain == "underwater_mines" then
             log.infof("effects", "%s destroyed by underwater mines!", entity.name)
-            if sounds and sounds.collision then sounds.collision:play() end
+            sounds.play("collision")
             entity.health = 0
             entity:startDeath()
             died = true
@@ -69,7 +69,7 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
                     local damage = 1
                     log.infof("effects", "%s burns for %d damage!", entity.name, damage)
                     local wasDestroyed = entity:takeDamage(damage)
-                    if sounds and sounds.fire then sounds.fire:play() end
+                    sounds.play("fire")
                     if wasDestroyed then
                         entity:startDeath()
                     end
@@ -84,7 +84,7 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
                 local damage = 1
                 log.infof("effects", "%s decays for %d damage!", entity.name, damage)
                 local wasDestroyed = entity:takeDamage(damage)
-                if sounds and sounds.decay then sounds.decay:play() end
+                sounds.play("decay")
                 if wasDestroyed then
                     entity:startDeath()
                 end
@@ -96,7 +96,7 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
                 local terrain = terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] or "grass"
                 if terrain == "water" and entity.health > 0 then
                     log.infof("effects", "%s drowns at end of turn!", entity.name)
-                    if sounds and sounds.collision then sounds.collision:play() end
+                    sounds.play("collision")
                     entity.health = 0
                     entity:startDeath()
                 end
@@ -107,7 +107,7 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
                 local terrain = terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] or "grass"
                 if terrain == "underwater_mines" then
                     log.infof("effects", "%s destroyed by underwater mines at end of turn!", entity.name)
-                    if sounds and sounds.collision then sounds.collision:play() end
+                    sounds.play("collision")
                     entity.health = 0
                     entity:startDeath()
                 end

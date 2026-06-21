@@ -53,7 +53,7 @@ end
 local function getDropdownHeader()
     local w = 145
     local x = logicalW - w - 10
-    return { x = x, y = 1000, w = w, h = 26 }
+    return { x = x, y = logicalH - 310, w = w, h = 26 }
 end
 
 function global_abilities.register(obj)
@@ -64,6 +64,16 @@ function global_abilities.spendAbility(ab)
     ab.hasBeenUsed = true
     global_abilities.mana = global_abilities.mana - ab.manaCost
     global_abilities.abilityUsedThisTurn = true
+    local abilitySounds = {
+        ["Heal"] = "heal_ability",
+        ["Extra Move"] = "extra_move",
+        ["Wind Torrent"] = "wind_torrent",
+        ["Unearth"] = "unearth",
+        ["Mind Control"] = "mind_control",
+        ["Accelerate Decay"] = "accelerate_decay",
+    }
+    local soundName = abilitySounds[ab.name]
+    if soundName then sounds.play(soundName) end
 end
 
 function global_abilities.reset()
@@ -356,6 +366,7 @@ function UnearthAbility:onActivate(state)
     end
     global_abilities.spendAbility(self)
     global_abilities.spendAbility(self)
+    sounds.play("unearth")
     state.actionHistory = {}
     global_abilities.activeAbility = nil
     log.infof("abilities", "Unearth: %d enemies emerged!", spawned)
@@ -997,7 +1008,7 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
     combat.startPushAnimations(hex, function()
         global_abilities.spendAbility(self)
         global_abilities.spendAbility(self)
-        if sounds and sounds.wind then sounds.wind:play() end
+        sounds.play("wind_torrent")
         if onComplete then onComplete(true, nil) end
         if _G.checkGameEnd then _G.checkGameEnd() end
     end)

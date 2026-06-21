@@ -494,36 +494,43 @@ end
 -- ============================================================
 
 -- Finds N random empty (unoccupied, non-water) cells
-function findRandomEmptyCells(count, excludeFn)
+function findRandomEmptyCells(count, excludeFn, qMin)
+    qMin = qMin or 0
     local candidates = {}
+    local candidatesBias = {}
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) then
                 local occupied = false
                 for _, e in ipairs(entities) do
-                    if e.q == q and e.r == r then
-                        occupied = true
-                        break
-                    end
+                    if e.q == q and e.r == r then occupied = true; break end
                 end
                 if not occupied then
                     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
                     if terrain ~= "water" and terrain ~= "underwater_mines" and terrain ~= "railway" then
                         if not excludeFn or not excludeFn(q, r) then
-                            table.insert(candidates, {q = q, r = r})
+                            if q >= qMin then
+                                table.insert(candidatesBias, {q = q, r = r})
+                            else
+                                table.insert(candidates, {q = q, r = r})
+                            end
                         end
                     end
                 end
             end
         end
     end
-    for i = #candidates, 2, -1 do
-        local j = love.math.random(i)
-        candidates[i], candidates[j] = candidates[j], candidates[i]
+    -- Prefer biased cells, fill remainder from any cells
+    local function shuffle(t)
+        for i = #t, 2, -1 do local j = love.math.random(i); t[i], t[j] = t[j], t[i] end
+        return t
     end
+    shuffle(candidatesBias)
+    shuffle(candidates)
+    for _, c in ipairs(candidates) do table.insert(candidatesBias, c) end
     local result = {}
-    for i = 1, math.min(count, #candidates) do
-        table.insert(result, candidates[i])
+    for i = 1, math.min(count, #candidatesBias) do
+        table.insert(result, candidatesBias[i])
     end
     return result
 end
@@ -533,7 +540,7 @@ function processDigSites()
         if entity.health > 0 and status.hasDigSite(entity.q, entity.r) then
             local wasDestroyed = entity:takeDamage(1)
             log.infof("game", "Dig site damage: %s takes 1 damage!", entity.name)
-            if sounds and sounds.collision then sounds.collision:play() end
+            sounds.play("collision")
             if wasDestroyed then
                 entity:startDeath()
             end
@@ -564,6 +571,7 @@ function processDigSites()
                 table.insert(entities, newEnemy)
                 local x, y = hex:hexToPixel(dig.q, dig.r)
                 visual.addEffect(x, y, "dig", 0.5)
+                sounds.play("dig")
                 log.infof("game", "A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r)
             else
                 log.debugf("game", "Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r)
@@ -592,7 +600,7 @@ function processDigSites()
         if needed > 0 then
             local spots = findRandomEmptyCells(needed, function(q, r)
                 return status.hasDigSite(q, r) or status.hasNegativeHexStatus(q, r)
-            end)
+            end, 4)
             local digTypes = isProgressionRun and { "Ghost", "Zombie", "Lich" } or { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
             for _, spot in ipairs(spots) do
                 local spawnType = digTypes[love.math.random(1, #digTypes)]
@@ -641,11 +649,12 @@ function strikeLightning()
     if visual and visual.addLightning then
         visual.addLightning(fx, fy, 0.3)
     end
+    sounds.play("lightning")
 
     local target = getEntityAtHex(tq, tr)
     if target and target.health > 0 then
         local wasDestroyed = target:takeDamage(1)
-        if sounds and sounds.collision then sounds.collision:play() end
+        sounds.play("collision")
         if not wasDestroyed then
             status.applyToEntity(target, "empowered")
             log.infof("game", "Lightning strikes %s! 1 damage, Empowered applied", target.name)

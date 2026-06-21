@@ -160,6 +160,7 @@ end
 function processNextEnemyPrepare()
     if #turnState.enemyPrepareQueue == 0 then
         turnState.phase = "player"
+        sounds.play("turn_start")
         for _, a in ipairs(entities) do
             if a.isPlayable then
                 if a.health > 0 then

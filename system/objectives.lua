@@ -104,30 +104,34 @@ local function hasTrainCars(entities)
     return false
 end
 
-local function findEmptyCells(entities, hex)
+local function findEmptyCells(entities, hex, qMin)
+    qMin = qMin or 0
     local candidates = {}
+    local candidatesBias = {}
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) then
                 local occupied = false
                 for _, e in ipairs(entities) do
-                    if e.q == q and e.r == r then
-                        occupied = true
-                        break
-                    end
+                    if e.q == q and e.r == r then occupied = true; break end
                 end
                 if not occupied then
                     local terrain = _G.terrainMap and _G.terrainMap[q] and _G.terrainMap[q][r] or "grass"
                     if terrain ~= "water" and terrain ~= "underwater_mines" then
                         if not status.hasNegativeHexStatus(q, r) then
-                            table.insert(candidates, {q = q, r = r})
+                            if q >= qMin then
+                                table.insert(candidatesBias, {q = q, r = r})
+                            else
+                                table.insert(candidates, {q = q, r = r})
+                            end
                         end
                     end
                 end
             end
         end
     end
-    return candidates
+    for _, c in ipairs(candidates) do table.insert(candidatesBias, c) end
+    return candidatesBias
 end
 
 local function findBuildingToReplace(entities)
@@ -240,7 +244,7 @@ local function definePool()
                         local old = entities[idx]
                         entities[idx] = createTowerAt(old.q, old.r)
                     else
-                        local cells = findEmptyCells(entities, hex)
+                        local cells = findEmptyCells(entities, hex, 4)
                         if #cells > 0 then
                             local cell = cells[love.math.random(1, #cells)]
                             table.insert(entities, createTowerAt(cell.q, cell.r))

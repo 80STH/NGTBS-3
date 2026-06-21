@@ -268,15 +268,8 @@ function love.load()
         holdTimer = 0, isHeld = false,
     }
 
-    sounds = {}
-    sounds.undo = love.audio.newSource("sounds/hover.wav", "static")
-    sounds.undo:setVolume(0.4)
-    sounds.turn = love.audio.newSource("sounds/hover.wav", "static")
-    sounds.turn:setVolume(0.3)
-    sounds.attack = love.audio.newSource("sounds/blip.wav", "static")
-    sounds.attack:setVolume(0.5)
-    sounds.collision = love.audio.newSource("sounds/blip.wav", "static")
-    sounds.collision:setVolume(0.6)
+    sounds = require("system.sounds")
+    sounds.init()
 
     showEnemyOrder = false
     gamePhase = "menu"
@@ -456,6 +449,10 @@ function love.update(dt)
     undoButton.isHovered = (mx >= 10 and mx <= 120 and my >= bottomY and my <= bottomY + 30)
     endTurnButton.isHovered = (mx >= endTurnButton.x and mx <= endTurnButton.x + endTurnButton.width and
                                my >= endTurnButton.y and my <= endTurnButton.y + endTurnButton.height)
+    -- UI hover sound (rate-limited internally)
+    if undoButton.isHovered or endTurnButton.isHovered or restartButton.isHovered then
+        sounds.hover(dt)
+    end
 end
 
 function love.resize(w, h)

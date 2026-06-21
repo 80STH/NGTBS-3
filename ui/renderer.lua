@@ -294,9 +294,9 @@ function renderer.draw(state)
     ui.drawDecayButton(mx, my, state.turnCount, state.maxTurns, state.turnState.phase)
     ui.drawAllyPanel(mx, my, state.entities, state.selectedActor)
     if state.selectedActor then
-        love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 55)
+        love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 45)
     end
-    love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 80)
+    love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 65)
 
     local hoverOrder = ui.drawEnemyOrderButton(mx, my)
     local showOrder = hoverOrder or state.showEnemyOrder
@@ -906,7 +906,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
         drawEntity(ally, state)
     end
 
-    for q = 0, hex.gridWidth - 1 do
+    for q = 0, 3 do
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) then
                 local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"

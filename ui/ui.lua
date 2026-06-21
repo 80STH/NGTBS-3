@@ -78,13 +78,18 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     -- Pathfinding with range limit and blockers
     local effectiveRange = ui.getEffectiveMoveRange(actor, entities, hex)
     local isBlockedFn
+    local isOccupiedFn
     if actor.flying then
         isBlockedFn = function(q, r) return not hex:isActiveHex(q, r) end
     else
         isBlockedFn = function(q, r) return isPositionOccupied(q, r, actor) end
+        isOccupiedFn = function(q, r)
+            local e = getEntityAtHex(q, r)
+            return e and e ~= actor and not e.isHazard
+        end
     end
     local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, effectiveRange,
-        isBlockedFn, hex)
+        isBlockedFn, hex, isOccupiedFn)
     
     return path ~= nil and #path > 0
 end
@@ -100,7 +105,8 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
         return
     end
     local path = pathfinding.findPath(actor.q, actor.r, hoverQ, hoverR, effectiveRange,
-        function(q, r) return not isCellPassable(q, r, actor) end, hex)
+        function(q, r) return not isCellPassable(q, r, actor) end, hex,
+        function(q, r) local e = getEntityAtHex(q, r); return e and e ~= actor and not e.isHazard end)
     if not path or #path == 0 then return end
     -- Draw line and silhouette (as before)
     local points = {}
@@ -1844,13 +1850,18 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
     end
     local effectiveRange = ui.getEffectiveMoveRange(enemy, entities, hex)
     local isBlockedFn
+    local isOccupiedFn
     if enemy.flying then
         isBlockedFn = function(q, r) return not hex:isActiveHex(q, r) end
     else
         isBlockedFn = function(q, r) return not isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex) end
+        isOccupiedFn = function(q, r)
+            local e = getEntityAtHex(q, r)
+            return e and e ~= enemy and not e.isHazard
+        end
     end
     local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effectiveRange,
-        isBlockedFn, hex)
+        isBlockedFn, hex, isOccupiedFn)
     return path ~= nil and #path > 0
 end
 function isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
@@ -2214,11 +2225,11 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
         end
     end
     if #allies == 0 then return end
-    local x = logicalW - 145
+    local x = 10
     local btnW = 135
     local btnH = 30
     local gap = 2
-    local startY = 140
+    local startY = 130
     for i, ally in ipairs(allies) do
         local by = startY + (i - 1) * (btnH + gap)
         local hover = mx >= x and mx <= x + btnW and my >= by and my <= by + btnH
@@ -2357,7 +2368,7 @@ function ui.drawLeaderHPBar(mx, my)
     if not leader then return end
 
     local barX = 10
-    local barY = 80
+    local barY = 90
     local barW = 150
     local barH = 18
     local cellW = 30
