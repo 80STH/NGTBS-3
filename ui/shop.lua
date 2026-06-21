@@ -1,67 +1,146 @@
+-- shop.lua
+-- Reworked: three random buff slots (unit upgrade, commander artifact, unit artifact, ability)
+-- Reroll button for testing, no gold/categories
+
 local shop = {}
+local log = require("util.log")
 
 shop.isOpen = false
-shop.gold = 9999
-shop.purchased = {}
-shop.notification = nil
-shop.notificationTimer = 0
-shop.selectedCategory = 1
+shop.slots = {}  -- { {type, id, name, desc, icon, taken}, ... }
+shop.autoOpened = false  -- true when shop opens after map completion
 
-shop.categories = {
-    { name = "All", filter = nil },
-    { name = "Consumables", filter = "consumable" },
-    { name = "Artifacts", filter = "artifact" },
-    { name = "Spells", filter = "spell" },
-    { name = "Cores", filter = "core" },
-}
-
-shop.allItems = {
-    { id = "chaos_reduction", name = "Chaos Reduction", desc = "Reduces chaos level by 1", price = 100, category = "consumable", icon = "*" },
-    { id = "iron_will", name = "Iron Will", desc = "Artifact: immunity to roots and slow", price = 200, category = "artifact", icon = "#" },
-    { id = "scout", name = "Scout", desc = "Artifact: deploy on any terrain", price = 200, category = "artifact", icon = "#" },
-    { id = "fortress", name = "Fortress", desc = "Artifact: all units take -1 damage", price = 200, category = "artifact", icon = "#" },
-    { id = "swift_boots", name = "Swift Boots", desc = "Artifact: all units +1 move range", price = 200, category = "artifact", icon = "#" },
-    { id = "hit_and_run", name = "Hit & Run", desc = "Artifact: move after attacking", price = 200, category = "artifact", icon = "#" },
-    { id = "ghost_cloak", name = "Ghost Cloak", desc = "Artifact: phase through enemies", price = 200, category = "artifact", icon = "#" },
-    { id = "heal", name = "Heal Sphere", desc = "Spell: restores squad health", price = 150, category = "spell", icon = "~" },
-    { id = "extra_move", name = "Speed Sphere", desc = "Spell: extra move for a unit", price = 150, category = "spell", icon = "~" },
-    { id = "wind_torrent", name = "Wind Sphere", desc = "Spell: pushes enemies away", price = 150, category = "spell", icon = "~" },
-    { id = "unearth", name = "Earth Sphere", desc = "Spell: summons obstacles", price = 150, category = "spell", icon = "~" },
-    { id = "energy_core", name = "Energy Core", desc = "Upgrades one unit in your squad", price = 300, category = "core", icon = "+" },
-    { id = "energy_core_plus", name = "Large Energy Core", desc = "Upgrades two units in your squad", price = 500, category = "core", icon = "+" },
-}
-
-function shop.getFilteredItems()
-    local cat = shop.categories[shop.selectedCategory]
-    if not cat.filter then
-        return shop.allItems
+-- Ensure slots are populated
+local function ensureSlots()
+    if #shop.slots == 0 then
+        shop.reroll()
     end
-    local result = {}
-    for _, item in ipairs(shop.allItems) do
-        if item.category == cat.filter then
-            table.insert(result, item)
+end
+
+-- Build pool of available buffs
+local function buildPool()
+    local pool = {}
+    local takenCommander = _G.commanderArtifacts or {}
+    local takenArtifacts = _G.artifacts or {}
+    local takenUpgrades = _G.unitUpgrades or {}
+    local takenAbilities = {}
+    for name, unlocked in pairs((_G.global_abilities and _G.global_abilities.unlocked) or {}) do
+        takenAbilities[name] = true
+    end
+
+    -- Unit upgrades (per squad unit type)
+    if _G.selectedSquad then
+        local squad = require("system.commanders")
+        local squads = _G.menu and _G.menu.getSquads() or {}
+        local squadDef = squads[_G.selectedSquad]
+        if squadDef then
+            for _, unitDef in ipairs(squadDef.units) do
+                local choices = (_G.UPGRADE_CHOICES or {})[unitDef.name]
+                if choices then
+                    local data = takenUpgrades[unitDef.name] or { choices = {} }
+                    for _, ch in ipairs(choices) do
+                        local already = false
+                        for _, c in ipairs(data.choices) do
+                            if c == ch.id then already = true; break end
+                        end
+                        if not already then
+                            table.insert(pool, { type = "upgrade", id = unitDef.name .. "|" .. ch.id, name = ch.name .. " (" .. unitDef.name .. ")", desc = ch.desc, icon = "⚔", sourceType = "unit" })
+                        end
+                    end
+                end
+            end
         end
     end
-    return result
+
+    -- Commander artifacts
+    if _G.selectedCommander then
+        local cmdMod = require("system.commanders")
+        local cmd = cmdMod.get(_G.selectedCommander)
+        if cmd and cmd.exclusiveArtifacts then
+            for _, cart in ipairs(cmd.exclusiveArtifacts) do
+                local already = false
+                for _, a in ipairs(takenCommander) do
+                    if a == cart.id then already = true; break end
+                end
+                if not already then
+                    table.insert(pool, { type = "commander_artifact", id = cart.id, name = cart.name, desc = cart.desc, icon = "★", apply = cart.apply, sourceType = "commander" })
+                end
+            end
+        end
+    end
+
+    -- Unit artifacts
+    for _, art in ipairs(_G.ARTIFACT_CHOICES or {}) do
+        local already = false
+        for _, a in ipairs(takenArtifacts) do
+            if a == art.id then already = true; break end
+        end
+        if not already then
+            table.insert(pool, { type = "artifact", id = art.id, name = art.name, desc = art.desc, icon = "◆", sourceType = "unit" })
+        end
+    end
+
+    -- Abilities
+    if _G.global_abilities then
+        for _, abName in ipairs(_G.global_abilities.abilityOrder or {}) do
+            if not _G.global_abilities.unlocked[abName] then
+                table.insert(pool, { type = "ability", id = abName, name = abName, desc = "Unlocks the " .. abName .. " ability for your commander.", icon = "~", sourceType = "ability" })
+            end
+        end
+    end
+
+    return pool
+end
+
+function shop.reroll()
+    shop.slots = {}
+    local pool = buildPool()
+
+    -- Fallback generic buffs if pool is too small
+    if #pool < 3 then
+        local fallbacks = {
+            { type = "generic", id = "shop_generic_armor", name = "Reinforced Armor", desc = "All units take -1 damage this game.", icon = "🛡", sourceType = "generic" },
+            { type = "generic", id = "shop_generic_hp", name = "Fortify", desc = "All units gain +1 max health this game.", icon = "❤", sourceType = "generic" },
+            { type = "generic", id = "shop_generic_move", name = "March Orders", desc = "All units gain +1 move range this game.", icon = "🏃", sourceType = "generic" },
+            { type = "generic", id = "shop_generic_mana", name = "Mana Shard", desc = "+1 max mana for your commander.", icon = "💎", sourceType = "generic" },
+        }
+        for _, fb in ipairs(fallbacks) do
+            if #pool + #shop.slots < 3 then
+                table.insert(pool, fb)
+            end
+        end
+    end
+
+    -- Pick 3 items (may repeat if pool < 3, but that's fine)
+    for i = 1, 3 do
+        if #pool == 0 then break end
+        local idx = love.math.random(1, #pool)
+        local item = pool[idx]
+        table.insert(shop.slots, {
+            type = item.type,
+            id = item.id,
+            name = item.name,
+            desc = item.desc,
+            icon = item.icon,
+            apply = item.apply,
+            sourceType = item.sourceType,
+            taken = false,
+        })
+    end
+    log.debugf("shop", "Rerolled %d slots from pool of %d", #shop.slots, #pool)
 end
 
 function shop.update(dt)
-    if shop.notificationTimer > 0 then
-        shop.notificationTimer = shop.notificationTimer - dt
-        if shop.notificationTimer <= 0 then
-            shop.notification = nil
-        end
-    end
 end
 
 function shop.draw()
     if not shop.isOpen then return end
+    ensureSlots()
     local w, h = logicalW, logicalH
 
     love.graphics.setColor(0, 0, 0, 0.85)
     love.graphics.rectangle("fill", 0, 0, w, h)
 
-    local panelW, panelH = 600, math.min(h - 80, 520)
+    local panelW, panelH = 540, math.min(h - 80, 460)
     local panelX = w/2 - panelW/2
     local panelY = h/2 - panelH/2
 
@@ -71,20 +150,16 @@ function shop.draw()
     love.graphics.rectangle("line", panelX, panelY, panelW, panelH, 12)
 
     -- Title
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.setFont(love.graphics.newFont(22))
-    love.graphics.printf("SHOP", panelX, panelY + 12, panelW, "center")
+    local mx, my = love.mouse.getPosition()
+    mx = mx / dpiScale; my = my / dpiScale
 
-    -- Gold display
-    love.graphics.setFont(love.graphics.newFont(14))
-    love.graphics.setColor(1, 0.85, 0.2, 1)
-    love.graphics.printf("$" .. shop.gold, panelX + panelW - 120, panelY + 16, 100, "right")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setFont(love.graphics.newFont(20))
+    love.graphics.printf("Shop — Bonus Buffs", panelX, panelY + 12, panelW, "center")
 
     -- Close button
     local closeX = panelX + panelW - 36
     local closeY = panelY + 8
-    local mx, my = love.mouse.getPosition()
-    mx = mx / dpiScale; my = my / dpiScale
     local closeHover = mx >= closeX and mx <= closeX + 28 and my >= closeY and my <= closeY + 28
     love.graphics.setColor(closeHover and 0.8 or 0.4, closeHover and 0.2 or 0.2, closeHover and 0.2 or 0.2, 0.9)
     love.graphics.rectangle("fill", closeX, closeY, 28, 28, 6)
@@ -92,101 +167,97 @@ function shop.draw()
     love.graphics.setFont(love.graphics.newFont(16))
     love.graphics.printf("X", closeX, closeY + 4, 28, "center")
 
-    -- Category tabs
-    local tabY = panelY + 50
-    local tabH = 30
-    local tabStartX = panelX + 10
-    local tabGap = 4
-    local totalTabW = panelW - 20
-    local tabCount = #shop.categories
-    local tabW = math.floor((totalTabW - tabGap * (tabCount - 1)) / tabCount)
+    -- Slot cards
+    local cardW = panelW - 40
+    local cardH = 90
+    local cardGap = 10
+    local cardStartY = panelY + 55
 
-    for i, cat in ipairs(shop.categories) do
-        local tx = tabStartX + (i - 1) * (tabW + tabGap)
-        local isSelected = shop.selectedCategory == i
-        local hover = mx >= tx and mx <= tx + tabW and my >= tabY and my <= tabY + tabH
+    for i = 1, 3 do
+        local cy = cardStartY + (i - 1) * (cardH + cardGap)
+        local slot = shop.slots[i]
 
-        love.graphics.setColor(isSelected and 0.25 or 0.12, isSelected and 0.5 or 0.15, isSelected and 0.3 or 0.2, isSelected and 0.9 or 0.8)
-        love.graphics.rectangle("fill", tx, tabY, tabW, tabH, 4)
-        if isSelected then
-            love.graphics.setColor(0.3, 0.8, 0.3, 0.6)
-            love.graphics.rectangle("line", tx, tabY, tabW, tabH, 4)
-        end
+        local bgColor = slot and slot.taken and {0.08, 0.12, 0.08} or {0.14, 0.16, 0.22}
+        love.graphics.setColor(bgColor[1], bgColor[2], bgColor[3], 0.95)
+        love.graphics.rectangle("fill", panelX + 20, cy, cardW, cardH, 8)
 
-        love.graphics.setColor(isSelected and 1 or 0.7, isSelected and 1 or 0.7, isSelected and 1 or 0.7, isSelected and 1 or 0.7)
-        love.graphics.setFont(love.graphics.newFont(11))
-        love.graphics.printf(cat.name, tx, tabY + 6, tabW, "center")
-    end
+        if slot then
+            -- Icon + name
+            local iconColor
+            if slot.sourceType == "unit" then
+                iconColor = {0.8, 0.8, 0.4}
+            elseif slot.sourceType == "commander" then
+                iconColor = {0.4, 0.8, 1.0}
+            elseif slot.sourceType == "ability" then
+                iconColor = {0.8, 0.5, 1.0}
+            elseif slot.sourceType == "generic" then
+                iconColor = {0.5, 0.9, 0.5}
+            else
+                iconColor = {0.7, 0.7, 0.7}
+            end
 
-    -- Item list
-    local items = shop.getFilteredItems()
-    local listX = panelX + 12
-    local listY = tabY + tabH + 10
-    local listW = panelW - 24
-    local itemH = 56
-    local maxVisible = math.floor((panelY + panelH - 10 - listY) / (itemH + 6))
+            love.graphics.setColor(iconColor[1], iconColor[2], iconColor[3], slot.taken and 0.4 or 1)
+            love.graphics.setFont(love.graphics.newFont(28))
+            love.graphics.print(slot.icon, panelX + 30, cy + 24)
 
-    for i = 1, math.min(#items, maxVisible) do
-        local item = items[i]
-        local ix = listX
-        local iy = listY + (i - 1) * (itemH + 6)
-        local iw = listW
-        local already = shop.purchased[item.id]
-        local hover = not already and mx >= ix and mx <= ix + iw and my >= iy and my <= iy + itemH
-        local buyHover = not already and mx >= ix + iw - 90 and mx <= ix + iw and my >= iy and my <= iy + itemH
+            love.graphics.setColor(slot.taken and 0.4 or 1, slot.taken and 0.4 or 1, slot.taken and 0.4 or 1, slot.taken and 0.5 or 1)
+            love.graphics.setFont(love.graphics.newFont(15))
+            love.graphics.print(slot.name, panelX + 70, cy + 12)
 
-        love.graphics.setColor(already and 0.08 or (hover and 0.2 or 0.12), already and 0.12 or (hover and 0.25 or 0.15), already and 0.08 or (hover and 0.28 or 0.18), 0.9)
-        love.graphics.rectangle("fill", ix, iy, iw, itemH, 6)
-        if hover and not already then
-            love.graphics.setColor(0.3, 0.5, 0.4, 0.3)
-            love.graphics.rectangle("line", ix, iy, iw, itemH, 6)
-        end
-
-        -- Icon
-        love.graphics.setColor(already and 0.4 or 1, already and 0.4 or 1, already and 0.4 or 1, already and 0.4 or 1)
-        love.graphics.setFont(love.graphics.newFont(18))
-        love.graphics.print(item.icon, ix + 8, iy + 14)
-
-        -- Name + desc
-        love.graphics.setFont(love.graphics.newFont(13))
-        love.graphics.setColor(already and 0.4 or 1, already and 0.4 or 1, already and 0.4 or 1, already and 0.5 or 1)
-        love.graphics.print(item.name, ix + 38, iy + 6)
-
-        love.graphics.setFont(love.graphics.newFont(10))
-        love.graphics.setColor(already and 0.3 or 0.6, already and 0.3 or 0.6, already and 0.3 or 0.6, already and 0.4 or 0.7)
-        love.graphics.printf(item.desc, ix + 38, iy + 26, iw - 130, "left")
-
-        -- Price or purchased
-        if already then
-            love.graphics.setColor(0.3, 0.7, 0.3, 0.7)
-            love.graphics.setFont(love.graphics.newFont(12))
-            love.graphics.printf("[x]", ix + iw - 40, iy + 16, 40, "center")
-        else
-            local canBuy = shop.gold >= item.price
-            local btnColor = buyHover and (canBuy and 0.3 or 0.25) or (canBuy and 0.18 or 0.12)
-            love.graphics.setColor(btnColor, canBuy and (buyHover and 0.6 or 0.4) or 0.15, buyHover and (canBuy and 0.25 or 0.15) or (canBuy and 0.15 or 0.1), 0.9)
-            love.graphics.rectangle("fill", ix + iw - 84, iy + 10, 78, itemH - 20, 4)
-            love.graphics.setColor(canBuy and 1 or 0.5, canBuy and 0.85 or 0.4, canBuy and 0.2 or 0.3, canBuy and 1 or 0.6)
+            love.graphics.setColor(slot.taken and 0.3 or 0.6, slot.taken and 0.3 or 0.6, slot.taken and 0.3 or 0.6, slot.taken and 0.4 or 0.7)
             love.graphics.setFont(love.graphics.newFont(11))
-            love.graphics.printf("$" .. item.price, ix + iw - 84, iy + 16, 78, "center")
+            love.graphics.printf(slot.desc, panelX + 70, cy + 34, cardW - 80, "left")
+
+            -- Take / Taken button
+            local btnX = panelX + cardW - 20 - 90
+            local btnY = cy + 24
+            local btnW = 90
+            local btnH = 36
+            local hoverTake = not slot.taken and mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH
+
+            if slot.taken then
+                love.graphics.setColor(0.2, 0.5, 0.2, 0.7)
+                love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 5)
+                love.graphics.setColor(0.3, 0.8, 0.3, 0.7)
+                love.graphics.setFont(love.graphics.newFont(12))
+                love.graphics.printf("Taken", btnX, btnY + 9, btnW, "center")
+            else
+                love.graphics.setColor(hoverTake and 0.25 or 0.15, hoverTake and 0.5 or 0.3, hoverTake and 0.3 or 0.18, 0.9)
+                love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 5)
+                love.graphics.setColor(0.3, 0.9, 0.4, hoverTake and 1 or 0.7)
+                love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 5)
+                love.graphics.setColor(0.3, 0.9, 0.4, hoverTake and 1 or 0.7)
+                love.graphics.setFont(love.graphics.newFont(12))
+                love.graphics.printf("Take", btnX, btnY + 9, btnW, "center")
+            end
+        else
+            -- Empty slot
+            love.graphics.setColor(0.2, 0.2, 0.25, 0.5)
+            love.graphics.rectangle("fill", panelX + 20, cy, cardW, cardH, 8)
+            love.graphics.setColor(0.4, 0.4, 0.5, 0.3)
+            love.graphics.setFont(love.graphics.newFont(11))
+            love.graphics.printf("(empty)", panelX + cardW/2 - 40, cy + 36, 80, "center")
         end
     end
 
-    -- Notification
-    if shop.notification and shop.notificationTimer > 0 then
-        local alpha = math.min(1, shop.notificationTimer * 4)
-        love.graphics.setColor(0.15, 0.5, 0.2, alpha * 0.95)
-        love.graphics.rectangle("fill", panelX + panelW/2 - 140, panelY + panelH - 50, 280, 36, 8)
-        love.graphics.setColor(1, 1, 1, alpha)
-        love.graphics.setFont(love.graphics.newFont(14))
-        love.graphics.printf(shop.notification, panelX + panelW/2 - 140, panelY + panelH - 44, 280, "center")
-    end
+    -- Reroll button
+    local rY = cardStartY + 3 * (cardH + cardGap) + 10
+    local rW = 180
+    local rX = panelX + panelW/2 - rW/2
+    local rHover = mx >= rX and mx <= rX + rW and my >= rY and my <= rY + 36
+    love.graphics.setColor(rHover and 0.3 or 0.18, rHover and 0.2 or 0.12, rHover and 0.4 or 0.25, 0.9)
+    love.graphics.rectangle("fill", rX, rY, rW, 36, 6)
+    love.graphics.setColor(0.6, 0.5, 0.9, rHover and 0.9 or 0.6)
+    love.graphics.rectangle("line", rX, rY, rW, 36, 6)
+    love.graphics.setColor(0.7, 0.6, 1.0, rHover and 1 or 0.7)
+    love.graphics.setFont(love.graphics.newFont(12))
+    love.graphics.printf("Reroll (test)", rX, rY + 10, rW, "center")
 end
 
 function shop.mousepressed(x, y)
     if not shop.isOpen then return false end
     local w, h = logicalW, logicalH
-    local panelW, panelH = 600, math.min(h - 80, 520)
+    local panelW, panelH = 540, math.min(h - 80, 460)
     local panelX = w/2 - panelW/2
     local panelY = h/2 - panelH/2
 
@@ -195,53 +266,88 @@ function shop.mousepressed(x, y)
     local closeY = panelY + 8
     if x >= closeX and x <= closeX + 28 and y >= closeY and y <= closeY + 28 then
         shop.isOpen = false
+        if shop.autoOpened then
+            -- If shop was auto-opened after map completion, close and check progression
+            shop.autoOpened = false
+            if _G.checkGameEnd then _G.checkGameEnd() end
+        end
         return true
     end
 
-    -- Category tabs
-    local tabY = panelY + 50
-    local tabH = 30
-    local tabStartX = panelX + 10
-    local tabGap = 4
-    local tabCount = #shop.categories
-    local tabW = math.floor((panelW - 20 - tabGap * (tabCount - 1)) / tabCount)
+    -- Slot cards: "Take" button
+    local cardW = panelW - 40
+    local cardH = 90
+    local cardGap = 10
+    local cardStartY = panelY + 55
 
-    for i in ipairs(shop.categories) do
-        local tx = tabStartX + (i - 1) * (tabW + tabGap)
-        if x >= tx and x <= tx + tabW and y >= tabY and y <= tabY + tabH then
-            shop.selectedCategory = i
-            return true
+    for i = 1, 3 do
+        local slot = shop.slots[i]
+        if slot and not slot.taken then
+            local cy = cardStartY + (i - 1) * (cardH + cardGap)
+            local btnX = panelX + cardW - 20 - 90
+            local btnY = cy + 24
+            local btnW = 90
+            local btnH = 36
+
+            if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
+                slot.taken = true
+
+                -- Apply effect based on type
+                if slot.type == "upgrade" then
+                    -- Parse "UnitName|choiceId"
+                    local pipePos = slot.id:find("|")
+                    if pipePos then
+                        local unitName = slot.id:sub(1, pipePos - 1)
+                        local choiceId = slot.id:sub(pipePos + 1)
+                        local data = (_G.unitUpgrades or {})[unitName] or { choices = {} }
+                        table.insert(data.choices, choiceId)
+                        _G.unitUpgrades[unitName] = data
+                        log.infof("shop", "Upgrade applied: %s -> %s", unitName, choiceId)
+                    end
+                elseif slot.type == "commander_artifact" then
+                    table.insert(_G.commanderArtifacts, slot.id)
+                    if slot.apply then slot.apply() end
+                    log.infof("shop", "Commander artifact applied: %s", slot.name)
+                elseif slot.type == "artifact" then
+                    table.insert(_G.artifacts, slot.id)
+                    log.infof("shop", "Artifact applied: %s", slot.name)
+                elseif slot.type == "ability" then
+                    if _G.global_abilities then
+                        _G.global_abilities.unlocked[slot.id] = true
+                        log.infof("shop", "Ability unlocked: %s", slot.name)
+                    end
+                elseif slot.type == "generic" then
+                    local g = _G
+                    if slot.id == "shop_generic_armor" then
+                        g.squadArmorBonus = (g.squadArmorBonus or 0) + 1
+                        log.info("shop", "All units take -1 damage this game!")
+                    elseif slot.id == "shop_generic_hp" then
+                        g.squadHpBonus = (g.squadHpBonus or 0) + 1
+                        log.info("shop", "All units gain +1 max health this game!")
+                    elseif slot.id == "shop_generic_move" then
+                        g.squadMoveBonus = (g.squadMoveBonus or 0) + 1
+                        log.info("shop", "All units gain +1 move range this game!")
+                    elseif slot.id == "shop_generic_mana" then
+                        if g.global_abilities then
+                            g.global_abilities.maxMana = (g.global_abilities.maxMana or 3) + 1
+                            g.global_abilities.mana = g.global_abilities.maxMana
+                        end
+                        log.info("shop", "+1 max mana for your commander!")
+                    end
+                end
+                shop.isOpen = false
+                return true
+            end
         end
     end
 
-    -- Items
-    local items = shop.getFilteredItems()
-    local listX = panelX + 12
-    local listY = tabY + tabH + 10
-    local itemH = 56
-    local listW = panelW - 24
-    local maxVisible = math.floor((panelY + panelH - 10 - listY) / (itemH + 6))
-
-    for i = 1, math.min(#items, maxVisible) do
-        local item = items[i]
-        local ix = listX
-        local iy = listY + (i - 1) * (itemH + 6)
-        local iw = listW
-
-        if shop.purchased[item.id] then
-            -- already purchased, skip
-        elseif x >= ix + iw - 84 and x <= ix + iw and y >= iy + 10 and y <= iy + itemH - 10 then
-            if shop.gold >= item.price then
-                shop.gold = shop.gold - item.price
-                shop.purchased[item.id] = true
-                shop.notification = item.name .. " purchased!"
-                shop.notificationTimer = 1.5
-            else
-                shop.notification = "Not enough gold!"
-                shop.notificationTimer = 1.5
-            end
-            return true
-        end
+    -- Reroll button
+    local rY = cardStartY + 3 * (cardH + cardGap) + 10
+    local rW = 180
+    local rX = panelX + panelW/2 - rW/2
+    if x >= rX and x <= rX + rW and y >= rY and y <= rY + 36 then
+        shop.reroll()
+        return true
     end
 
     return true
@@ -251,6 +357,10 @@ function shop.keypressed(key)
     if not shop.isOpen then return false end
     if key == "escape" then
         shop.isOpen = false
+        if shop.autoOpened then
+            shop.autoOpened = false
+            if _G.checkGameEnd then _G.checkGameEnd() end
+        end
         return true
     end
     return false

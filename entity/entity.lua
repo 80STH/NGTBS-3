@@ -142,6 +142,10 @@ function Entity:takeDamage(damage)
     if self.indestructible then
         return false
     end
+    -- Apply squad armor bonus (for playable characters)
+    if self.isPlayable and (_G.squadArmorBonus or 0) > 0 then
+        damage = math.max(0, damage - _G.squadArmorBonus)
+    end
     if self.maxDamagePerHit then
         damage = math.min(damage, self.maxDamagePerHit)
     end

@@ -181,6 +181,9 @@ function restartGame(mapPath)
 
     global_abilities.initWithCommander(selectedCommander)
     global_abilities.reset()
+    _G.squadHpBonus = 0
+    _G.squadMoveBonus = 0
+    _G.squadArmorBonus = 0
     dpiScale = love.window.getDPIScale()
 
     flipTargetActor = nil

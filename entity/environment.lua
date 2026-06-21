@@ -938,6 +938,17 @@ function environment.createSquadUnit(unitDef, q, r)
         attacks
     )
 
+    -- Apply shop buffs: squad HP/Move bonuses
+    local hpBonus = _G.squadHpBonus or 0
+    local moveBonus = _G.squadMoveBonus or 0
+    if hpBonus > 0 then
+        entity.maxHealth = entity.maxHealth + hpBonus
+        entity.health = entity.maxHealth
+    end
+    if moveBonus > 0 then
+        entity.moveRange = entity.moveRange + moveBonus
+    end
+
     -- Apply progression upgrades (choice-based)
     local upgradeData = _G.unitUpgrades and _G.unitUpgrades[unitDef.name] or { choices = {} }
     entity.upgradeLevel = #upgradeData.choices

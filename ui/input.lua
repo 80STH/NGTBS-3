@@ -449,6 +449,12 @@ function input.keypressed(key)
         return
     end
 
+    if key == "p" or key == "P" then
+        _G.shop.isOpen = not _G.shop.isOpen
+        log.debugf("input", "Shop: %s", (_G.shop.isOpen and "OPEN" or "CLOSED"))
+        return
+    end
+
     if global_abilities.handleKey(key, state) then return end
 
     if key == "1" then
