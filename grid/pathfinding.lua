@@ -1,17 +1,17 @@
 -- pathfinding.lua
--- Алгоритм поиска пути на гексагональной сетке (BFS)
+-- Pathfinding algorithm on a hexagonal grid (BFS)
 
 local pathfinding = {}
 
---- Поиск пути методом BFS с ограничением максимальной длины
--- @param startQ number    Начальная координата q
--- @param startR number    Начальная координата r
--- @param targetQ number   Целевая координата q
--- @param targetR number   Целевая координата r
--- @param maxSteps number|nil  Максимальная длина пути (если nil – без ограничения)
--- @param isBlocked function(q, r)  Возвращает true, если клетка непроходима
--- @param hex object       Объект гексагональной сетки (должен иметь методы getNeighbors, isValidHex, опционально isActiveHex)
--- @return table|nil       Массив шагов { {q, r}, ... } или nil, если путь не найден
+--- BFS pathfinding with maximum length limit
+-- @param startQ number    Starting coordinate q
+-- @param startR number    Starting coordinate r
+-- @param targetQ number   Target coordinate q
+-- @param targetR number   Target coordinate r
+-- @param maxSteps number|nil  Maximum path length (if nil – unlimited)
+-- @param isBlocked function(q, r)  Returns true if the cell is impassable
+-- @param hex object       Hex grid object (must have methods getNeighbors, isValidHex, optionally isActiveHex)
+-- @return table|nil       Array of steps { {q, r}, ... } or nil if path not found
 function pathfinding.findPath(startQ, startR, targetQ, targetR, maxSteps, isBlocked, hex)
     if startQ == targetQ and startR == targetR then
         return {}
@@ -24,7 +24,7 @@ function pathfinding.findPath(startQ, startR, targetQ, targetR, maxSteps, isBloc
         local current = table.remove(queue, 1)
         local currentPathLen = #current.path
 
-        -- Если превысили лимит шагов, не расширяем дальше
+        -- If step limit exceeded, don't expand further
         if maxSteps and currentPathLen >= maxSteps then
             goto continue
         end
@@ -33,7 +33,7 @@ function pathfinding.findPath(startQ, startR, targetQ, targetR, maxSteps, isBloc
         for _, nb in ipairs(neighbors) do
             local key = nb.q .. "," .. nb.r
             if not visited[key] then
-                -- Проверка валидности и активности клетки
+                -- Check cell validity and activity
                 local valid = hex:isValidHex(nb.q, nb.r)
                 if valid and hex.isActiveHex then
                     valid = hex:isActiveHex(nb.q, nb.r)

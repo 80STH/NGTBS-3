@@ -8,16 +8,16 @@ function love.conf(t)
     t.window.height = 1280
     t.window.resizable = true
     
-    -- Включаем доступ к файловой системе
-    t.identity = "HexTacticsGame"  -- Создает папку для сохранений
-    
-    -- Модули
+    -- Enable filesystem access
+    t.identity = "HexTacticsGame"  -- Creates save folder
+
+    -- Modules
     t.modules.audio = true
     t.modules.graphics = true
     t.modules.keyboard = true
     t.modules.mouse = true
     t.modules.timer = true
-    t.modules.filesystem = true  -- Обязательно для сохранений
+    t.modules.filesystem = true  -- Required for saves
 
-    t.console = true  -- Включает консоль Windows
+    t.console = true  -- Enables Windows console
 end

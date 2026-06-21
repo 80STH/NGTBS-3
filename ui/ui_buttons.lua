@@ -1,6 +1,6 @@
 -- ui_buttons.lua
--- Вынесенные функции кнопок. Не зависят от других ui.* функций.
--- Принимает ui-таблицу и регистрирует на ней функции.
+-- Extracted button functions. Do not depend on other ui.* functions.
+-- Takes a ui-table and registers functions on it.
 return function(ui)
     local buttonFont = love.graphics.newFont(11)
 

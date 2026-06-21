@@ -1,8 +1,8 @@
 -- main.lua
--- ����� �����. �������������, ����������, ��������������� �����.
--- ��������� ���� �������� � `state` (gamestate).
--- ��������� ������������ renderer-�.
-
+-- Entry point. Initialization, update, input dispatching.
+-- Game state is stored in state (gamestate).
+-- Rendering is delegated to the renderer.
+-- Rendering is delegated to the renderer.
 state = require("core.gamestate").new()
 
 combat = require("combat.combat")
@@ -27,22 +27,22 @@ shop = require("ui.shop")
 require("core.game")
 
 -- �����������: �������� ����� (��� ����� _G.LOG_ENABLED).
--- ���������: ai, combat, effects, entity, env, game, input, objectives,
+-- Logging: enable here (or via _G.LOG_ENABLED).
+-- Categories: ai, combat, effects, entity, env, game, input, objectives,
 --            status, trains, turn, ui, main, map.
-_G.log = require("util.log")
 log.enabled = false
 log.level = "debug"
 
 -- �������� ������ � ���� ����� ���������� ��������� NGTBS_LOG_FILE.
--- ��� ��������� ��������� �������� ���� ��� ����: ����� ����, ���������
--- love, ������ ����. �� ������ �� ������� ������.
-do
+-- Enable file logging via the NGTBS_LOG_FILE environment variable.
+-- This allows checking game loading without a window: set the path, run
+-- love, read the file. Does not affect normal launch.
     local logFile = os.getenv("NGTBS_LOG_FILE")
     if logFile and logFile ~= "" then
         log.enabled = true
         log.file = logFile
         -- ������� ���� ��� ������
-        local f = io.open(logFile, "w")
+        -- clear file on start
         if f then f:close() end
     end
 end
@@ -100,12 +100,12 @@ ARTIFACT_CHOICES = {
 }
 
 -- ������������� �������� -> state (renderer � gamestate-������ ������ �� state).
--- ���������� �������� � gamestate.lua:GameState:syncFromGlobals().
--- ���� ������� �������� � ������ ��� �������, ��������� � state.* ��������.
--- ������������� �������� -> state (renderer � gamestate-������ ������ �� state).
--- ���������� �������� � gamestate.lua:GameState:syncFromGlobals().
--- ���� ������� �������� � ������ ��� �������, ��������� � state.* ��������.
-function syncState()
+-- Synchronization of globals -> state (renderer and gamestate methods read from state).
+-- Implementation is in gamestate.lua:GameState:syncFromGlobals().
+-- The goal of future migration: remove this function, accessing state.* directly.
+-- Synchronization of globals -> state (renderer and gamestate methods read from state).
+-- Implementation is in gamestate.lua:GameState:syncFromGlobals().
+-- The goal of future migration: remove this function, accessing state.* directly.
     state:syncFromGlobals()
 end
 
@@ -284,8 +284,8 @@ function love.load()
     gamePhase = "menu"
 
     -- ������������� ����������� turnState (������ ��������� �� confirmDeploy/
-    -- skipDeploy-���� restartGame, ��� ��������� � ������� ��� autostart).
-    turnState = state.turnState
+    -- Initialize global turnState (previously relied on confirmDeploy/
+    -- skipDeploy block in restartGame, which caused crashes on autostart).
 end
 
 function getDrawCoords(q, r)
@@ -327,7 +327,7 @@ end
 
 function isPositionOccupied(q, r, movingEntity)
     -- ���������� � cell_rules.isOccupied (� ����� � phaseThroughEnemies).
-    return cell_rules.isOccupied(q, r, movingEntity)
+    -- Delegates to cell_rules.isOccupied (with water and phaseThroughEnemies).
 end
 
 -- Returns 3 push direction choices for choosePushDir (Puncher lvl3)
@@ -382,7 +382,7 @@ function love.update(dt)
     end
 
     -- Hold-to-confirm ��� ������ (����� ������)
-    local function updateHoldButton(btn, onTrigger)
+    -- Hold-to-confirm for buttons (common logic)
         if btn.isHeld then
             btn.holdTimer = (btn.holdTimer or 0) + dt
             if btn.holdTimer >= config.HOLD_TIME then

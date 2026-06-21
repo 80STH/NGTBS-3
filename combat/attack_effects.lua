@@ -1,24 +1,24 @@
 -- attack_effects.lua
--- Визуальные эффекты для каждой атаки
+-- Visual effects for each attack
 
 local visual = require("system.visual_effects")
 local hex_utils = require("grid.hex_utils")
 
 local attack_effects = {}
 
--- Вспомогательная: получить координаты центра гекса
+-- Helper: get the hex center coordinates
 local function getHexCenter(entity, hex)
     if not entity then return 0, 0 end
     return hex:hexToPixel(entity.q, entity.r)
 end
 
--- Эффект для Dash (рывок с ударом)
+-- Effect for Dash (lunge with strike)
 function attack_effects.dash(attacker, target, targetQ, targetR, hex)
-    -- Эффект движения от атакующего до целевой клетки
+    -- Movement effect from attacker to target cell
     local fromX, fromY = getHexCenter(attacker, hex)
     local toX, toY = hex:hexToPixel(targetQ, targetR)
     visual.addDashEffect(fromX, fromY, toX, toY)
-    -- Удар по цели
+    -- Hit on target
     if target then
         local x, y = getHexCenter(target, hex)
         visual.addEffect(x, y, "hit", 0.3)
@@ -26,56 +26,56 @@ function attack_effects.dash(attacker, target, targetQ, targetR, hex)
     end
 end
 
--- Эффект для Flip (переворот)
+-- Effect for Flip
 function attack_effects.flip(attacker, target, behindQ, behindR, hex)
     local fromX, fromY = getHexCenter(target, hex)
     local toX, toY = hex:hexToPixel(behindQ, behindR)
-    -- Дуга переворота
+    -- Flip arc
     visual.addArcEffect(fromX, fromY, toX, toY, 0.2, 0.8, 0.2)
-    -- Маленькая вспышка в месте приземления
+    -- Small flash at the landing spot
     visual.addEffect(toX, toY, "hit", 0.2)
 end
 
--- Эффект для Shoot (выстрел с отталкиванием)
+-- Effect for Shoot (shot with knockback)
 function attack_effects.shoot(attacker, target, pushToQ, pushToR, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
     local targetX, targetY = getHexCenter(target, hex)
-    -- Линия выстрела
+    -- Shot line
     visual.addLineEffect(fromX, fromY, targetX, targetY, 0.9, 0.7, 0.2, 3)
-    -- Попадание
+    -- Hit
     visual.addEffect(targetX, targetY, "hit", 0.3)
-    -- Эффект отталкивания (если есть)
+    -- Knockback effect (if any)
     if pushToQ and pushToR then
         local pushX, pushY = hex:hexToPixel(pushToQ, pushToR)
         visual.addPushEffect(targetX, targetY, pushX, pushY, 0.2)
     end
 end
 
--- Эффект для Piercing Shot (пронзающий выстрел)
+-- Effect for Piercing Shot
 function attack_effects.piercingShoot(attacker, firstTarget, secondTarget, firstPushQ, firstPushR, secondPushQ, secondPushR, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
-    -- Линия на всю длину до второй цели
+    -- Line across the full length to the second target
     local lastTarget = secondTarget or firstTarget
     local toX, toY = getHexCenter(lastTarget, hex)
     visual.addLineEffect(fromX, fromY, toX, toY, 0.8, 0.5, 1.0, 4)
-    -- Попадание в первую цель
+    -- Hit on the first target
     if firstTarget then
         local fx, fy = getHexCenter(firstTarget, hex)
         visual.addEffect(fx, fy, "hit", 0.25)
-        -- Искры
+        -- Sparks
         visual.addSpark(fx, fy, 6)
-        -- Эффект отталкивания первой цели
+        -- Knockback effect for the first target
         if firstPushQ and firstPushR then
             local pushX, pushY = hex:hexToPixel(firstPushQ, firstPushR)
             visual.addPushEffect(fx, fy, pushX, pushY, 0.2)
         end
     end
-    -- Попадание во вторую цель (основной урон)
+    -- Hit on the second target (main damage)
     if secondTarget then
         local sx, sy = getHexCenter(secondTarget, hex)
         visual.addEffect(sx, sy, "hit", 0.4)
         visual.addBloodSplat(sx, sy)
-        -- Эффект отталкивания второй цели
+        -- Knockback effect for the second target
         if secondPushQ and secondPushR then
             local pushX, pushY = hex:hexToPixel(secondPushQ, secondPushR)
             visual.addPushEffect(sx, sy, pushX, pushY, 0.2)
@@ -83,7 +83,7 @@ function attack_effects.piercingShoot(attacker, firstTarget, secondTarget, first
     end
 end
 
--- Эффект для Stone Throw (AoePushAttack)
+-- Effect for Stone Throw (AoePushAttack)
 function attack_effects.stoneThrow(centerQ, centerR, pushedTargets, hex)
     local centerX, centerY = hex:hexToPixel(centerQ, centerR)
     if terrainMap and terrainMap[centerQ] and terrainMap[centerQ][centerR] == "water" then
@@ -100,11 +100,11 @@ function attack_effects.stoneThrow(centerQ, centerR, pushedTargets, hex)
     end
 end
 
--- Эффект для Cone Blast (AoeDirectionalAttack)
+-- Effect for Cone Blast (AoeDirectionalAttack)
 function attack_effects.coneBlast(centerQ, centerR, hex)
     local cx, cy = hex:hexToPixel(centerQ, centerR)
     visual.addEffect(cx, cy, "hit", 0.35)
-    -- Расходящиеся линии
+    -- Diverging lines
     for i = 1, 3 do
         local angle = math.rad(30 + i * 40)
         local dx = math.cos(angle) * 40
@@ -113,37 +113,37 @@ function attack_effects.coneBlast(centerQ, centerR, hex)
     end
 end
 
--- Эффект для Magic Bolt (Луч)
+-- Effect for Magic Bolt (Beam)
 function attack_effects.magicBolt(attacker, target, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
     local toX, toY = getHexCenter(target, hex)
     local midX = (fromX + toX) / 2
     local midY = (fromY + toY) / 2
     local ctrlX = midX
-    local ctrlY = midY - 60   -- всегда вверх
+    local ctrlY = midY - 60   -- always upward
     visual.addArcEffect(fromX, fromY, toX, toY, 0.6, 0.2, 1.0, 0.25, ctrlX, ctrlY)
     visual.addEffect(toX, toY, "hit", 0.4)
     visual.addMagicExplosion(toX, toY, 0.8, 0.2, 1.0)
 end
 
--- Эффект для Ghost Bolt (призрачный снаряд)
+-- Effect for Ghost Bolt (ghostly projectile)
 function attack_effects.ghostBolt(attacker, target, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
     local toX, toY = getHexCenter(target, hex)
-    -- Полупрозрачная линия с "призрачным" свечением
+    -- Semi-transparent line with "ghostly" glow
     visual.addLineEffect(fromX, fromY, toX, toY, 0.7, 0.3, 1.0, 2, 0.6)
-    -- Эффект "призрачного" попадания
+    -- "Ghostly" hit effect
     visual.addEffect(toX, toY, "ghost_hit", 0.4)
 end
 
--- Эффект для Bite (укус зомби)
+-- Effect for Bite (zombie bite)
 function attack_effects.bite(attacker, target, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
     local toX, toY = getHexCenter(target, hex)
-    -- Красная вспышка и кровь
+    -- Red flash and blood
     visual.addEffect(toX, toY, "hit", 0.25)
     visual.addBloodSplat(toX, toY)
-    -- Анимация челюстей (линия от атакующего к цели)
+    -- Jaw animation (line from attacker to target)
     visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.2, 0.2, 4, 0.8)
 end
 

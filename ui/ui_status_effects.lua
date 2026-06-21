@@ -1,7 +1,7 @@
 -- ui_status_effects.lua
--- Визуальные эффекты статусов (огонь, кислота, распад) на клетках и юнитах.
--- Не зависят от других ui.* функций (кроме drawCellStatusEffects → drawFireOnHex/AcidOnHex).
--- Принимает ui-таблицу и регистрирует на ней функции.
+-- Visual effects for statuses (fire, acid, decay) on cells and units.
+-- Do not depend on other ui.* functions (except drawCellStatusEffects -> drawFireOnHex/AcidOnHex).
+-- Takes a ui-table and registers functions on it.
 return function(ui)
     function ui.drawFireOnHex(x, y, radius, time)
         local t = time * 5

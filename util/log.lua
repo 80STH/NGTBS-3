@@ -1,25 +1,25 @@
 -- log.lua
--- Централизованное логирование. Заменяет разбросанные print() с уровнями.
--- Использование:
+-- Centralized logging. Replaces scattered print() with levels.
+-- Usage:
 --   local log = require("util.log")
---   log.debug("state", "turn", turnCount)       -- отладочный шум (по умолчанию off)
+--   log.debug("state", "turn", turnCount)       -- debug noise (off by default)
 --   log.info("phase changed:", phase)
 --   log.warn("no dig sites")
 --   log.error("getAtHex called with nil q", q)
 --
--- Включить вывод:  log.enabled = true   (или _G.LOG_ENABLED = true в main.lua)
--- Уровень:         log.level = "info"   ("debug"|"info"|"warn"|"error")
--- Категории:       log.categories.ai = true  — включить только категорию "ai"
+-- Enable output:  log.enabled = true   (or _G.LOG_ENABLED = true in main.lua)
+-- Level:         log.level = "info"   ("debug"|"info"|"warn"|"error")
+-- Categories:       log.categories.ai = true  — enable only the "ai" category
 --
--- Дополнительно: если задан log.file (путь), пишем туда (append).
--- _G.LOG_FILE = "log_run.txt" в main.lua включает запись в файл.
+-- Additionally: if log.file (path) is set, write there (append).
+-- _G.LOG_FILE = "log_run.txt" in main.lua enables file writing.
 
 local log = {}
 
-log.enabled = false            -- global on/off (переопределяется в main.lua)
-log.level = "debug"            -- минимальный уровень
-log.categories = {}            -- пусто = все разрешены; иначе whitelist
-log.file = nil                 -- путь к файлу для дублирования (или nil)
+log.enabled = false            -- global on/off (overridden in main.lua)
+log.level = "debug"            -- minimum level
+log.categories = {}            -- empty = all allowed; otherwise whitelist
+log.file = nil                 -- path to file for duplication (or nil)
 
 local LEVELS = { debug = 1, info = 2, warn = 3, error = 4 }
 
@@ -29,7 +29,7 @@ end
 
 local function categoryOk(cat)
     if cat == nil then return true end
-    if next(log.categories) == nil then return true end   -- whitelist пуст -> все
+    if next(log.categories) == nil then return true end   -- whitelist empty -> all
     return log.categories[cat] == true
 end
 
@@ -64,7 +64,7 @@ function log.info (cat, ...) emit("info",  cat, ...) end
 function log.warn (cat, ...) emit("warn",  cat, ...) end
 function log.error(cat, ...) emit("error", cat, ...) end
 
--- printf-стиль: log.debugf("ai", "%s moves to %d,%d", name, q, r)
+-- printf-style: log.debugf("ai", "%s moves to %d,%d", name, q, r)
 local function formatEmit(tag, cat, fmt, ...)
     if not log.enabled then return end
     if not levelOk(tag) then return end

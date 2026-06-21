@@ -1,5 +1,5 @@
 -- renderer.lua
--- Отвечает за отрисовку игры. Вызывается из love.draw(state).
+-- Responsible for rendering the game. Called from love.draw(state).
 local renderer = {}
 local ui = require("ui.ui")
 local visual = require("system.visual_effects")
@@ -191,7 +191,7 @@ function renderer.draw(state)
         if (entity:isCharacter() and not entity.isPlayable or entity.isTrainAttack) and entity.hasPreparedAttack and entity.health > 0 then
             ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
         end
-        -- Подсветка целевой клетки призыва стержня
+        -- Highlighting of summoning rod target cell
         if entity.isSummoningRod and entity.hasPreparedAttack and entity.summonTargetQ and entity.summonTargetR then
             local sx, sy = getDrawCoords(entity.summonTargetQ, entity.summonTargetR)
             local verts = hex:drawInsetHexagon(sx, sy, hex.radius, 0.92)
@@ -620,7 +620,7 @@ function drawProgressionComplete(w, h)
 end
 
 -- ============================================================
--- ФУНКЦИИ ОТРИСОВКИ (перемещены из main.lua)
+-- RENDERING FUNCTIONS (moved from main.lua)
 -- ============================================================
 
 function drawHexGrid(state, cellOverlays)
@@ -711,7 +711,7 @@ function drawHexGrid(state, cellOverlays)
             end
         end
 
-        -- Направленные сущности: цветовая маркировка граней (зелёный = безопасно, красный = опасно)
+        -- Directional entities: edge color marking (green = safe, red = dangerous)
         local cellEntity = getEntityAtHex(cell.q, cell.r)
         if cellEntity and cellEntity.direction then
             local edgeVerts = hex:drawHexagon(cell.x, drawY + yOffset, hex.radius - 1)

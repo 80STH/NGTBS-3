@@ -243,10 +243,10 @@ elseif e.type == "ground_slam" then
     local alpha = 1 - t
     local sink = 8 * math.sin(t * math.pi)
     local verts = e.hex:drawHexagon(e.x, e.y + sink, e.hex.radius)
-    -- Сжатый тёмный hex
+    -- Compressed dark hex
     love.graphics.setColor(0.3, 0.2, 0.1, alpha * 0.4)
     love.graphics.polygon("fill", verts)
-    -- Пульсирующий контур
+    -- Pulsating outline
     local pulse = 8 * math.sin(t * math.pi)
     local pulseVerts = e.hex:drawHexagon(e.x, e.y, e.hex.radius + pulse)
     love.graphics.setColor(0.9, 0.6, 0.2, alpha * 0.6)
@@ -259,7 +259,7 @@ end
 end
 
 -- ============================================================
--- НОВЫЕ ЭФФЕКТЫ ДЛЯ АТАК
+-- NEW EFFECTS FOR ATTACKS
 -- ============================================================
 
 function visual.addDashEffect(fromX, fromY, toX, toY)
@@ -278,7 +278,7 @@ function visual.addArcEffect(fromX, fromY, toX, toY, r, g, b, duration, ctrlX, c
         toX = toX, toY = toY,
         r = r or 1, g = g or 1, b = b or 1,
         timer = 0, duration = duration or 0.3,
-        ctrlX = ctrlX,   -- опциональная контрольная точка
+        ctrlX = ctrlX,   -- optional control point
         ctrlY = ctrlY
     })
 end
@@ -347,7 +347,7 @@ function visual.addLightning(x, y, duration)
     })
 end
 
--- Добавляем отрисовку в функцию visual.draw() новые блоки
--- (нужно модифицировать существующую visual.draw)
+-- Add drawing of new blocks to the visual.draw() function
+-- (need to modify existing visual.draw)
 
 return visual

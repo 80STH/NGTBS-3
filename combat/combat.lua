@@ -1,5 +1,5 @@
 -- combat.lua
--- Система боя с кубическими координатами (pointy-top, odd-r)
+-- Combat system with cubic coordinates (pointy-top, odd-r)
 local combat = {}
 local visual = require("system.visual_effects")
 local status = require("system.status")
@@ -10,7 +10,7 @@ local sprites = require("util.sprites")
 
 local hex_utils = require("grid.hex_utils")
 -- ============================================================
--- БАЗОВЫЙ КЛАСС АТАКИ
+-- BASE ATTACK CLASS
 -- ============================================================
 combat.Attack = {}
 combat.Attack.__index = combat.Attack
@@ -25,7 +25,7 @@ function combat.Attack.new(name, description, range, damage, effects)
     return self
 end
 
--- Определение направления прямой линии (кубический шаг)
+-- Determine straight-line direction (cube step)
 function combat.Attack:getLineDirection(fromQ, fromR, toQ, toR, hex)
     local ax, ay, az = hex_utils.axialToCube(fromQ, fromR)
     local bx, by, bz = hex_utils.axialToCube(toQ, toR)
@@ -46,7 +46,7 @@ function combat.Attack:getLineDirection(fromQ, fromR, toQ, toR, hex)
     return stepX, stepY, stepZ
 end
 
--- Поиск первой цели на линии
+-- Find first target on line
 function combat.Attack:findFirstTargetOnLine(startQ, startR, stepX, stepY, stepZ, hex, entities)
     local curQ, curR = startQ, startR
     while true do
@@ -58,7 +58,7 @@ function combat.Attack:findFirstTargetOnLine(startQ, startR, stepX, stepY, stepZ
     return nil, nil
 end
 
--- Крайняя активная клетка на линии (исключая стартовую)
+-- Farthest active cell on line (excluding start)
 function combat.getFarthestActiveCellOnLine(startQ, startR, stepX, stepY, stepZ, hex)
     local curQ, curR = startQ, startR
     local lastQ, lastR = nil, nil
@@ -72,7 +72,7 @@ function combat.getFarthestActiveCellOnLine(startQ, startR, stepX, stepY, stepZ,
     return {q = lastQ, r = lastR}
 end
 
--- Поиск первых двух целей на линии
+-- Find first two targets on line
 function combat.Attack:findFirstTwoTargetsOnLine(startQ, startR, stepX, stepY, stepZ, hex, entities)
     local curQ, curR = startQ, startR
     local firstTarget, firstHex, secondTarget, secondHex = nil, nil, nil, nil
@@ -92,7 +92,7 @@ function combat.Attack:findFirstTwoTargetsOnLine(startQ, startR, stepX, stepY, s
     return firstTarget, firstHex, secondTarget, secondHex
 end
 
--- Отталкивание в направлении (с анимацией)
+-- Push in direction (with animation)
 function combat.Attack:pushTargetInDirection(target, fromQ, fromR, stepX, stepY, stepZ, hex, entities, sounds, onComplete)
     local pushQ, pushR = hex_utils.applyCubeStep(fromQ, fromR, stepX, stepY, stepZ)
     self:pushTargetToHex(target, fromQ, fromR, pushQ, pushR, hex, entities, sounds, onComplete)
@@ -104,42 +104,42 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         return
     end
 
-    -- Проверяем занятость клетки
+    -- Check cell occupancy
     local occupant = combat.getEntityAtHex(toQ, toR, entities)
     if occupant and occupant ~= target then
-        -- Склон горы (неразрушимый) — анимация отскока без урона
+        -- Mountain slope (indestructible) — bounce animation without damage
         if occupant.noCollisionDamage then
             combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant, true)
             if onComplete then onComplete(false) end
             return
         end
-        -- Направленная сущность (MountainSlope) — проверка стороны
+        -- Directional entity (MountainSlope) — side check
         if occupant.direction then
             local safe = hex_utils.isPushFromSafeSide(occupant, fromQ, fromR)
             if safe then
-                -- Безопасная сторона: отскок без урона
+                -- Safe side: bounce without damage
                 combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant, true)
             else
-                -- Опасная сторона: отскок с уроном
+                -- Dangerous side: bounce with damage
                 combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant)
             end
             if onComplete then onComplete(false) end
             return
         end
-        -- Глубокая вода — свободный проход, эффект применится после перемещения
+        -- Deep water — free pass, effect applies after movement
         if occupant.isHazard then
             combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
                 if onComplete then onComplete(true) end
             end)
             return
         end
-        -- Столкновение → bounce + урон
+        -- Collision → bounce + damage
         combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant)
         if onComplete then onComplete(false) end
         return
     end
 
-    -- Вылет за край
+    -- Flying off the edge
     if not hex:isActiveHex(toQ, toR) then
         if target:isCharacter() then
             target.health = target.health - 1
@@ -155,7 +155,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         return
     end
 
-    -- Успешное перемещение (без столкновения)
+    -- Successful movement (without collision)
     combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
         if onComplete then onComplete(true) end
     end)
@@ -218,17 +218,17 @@ function combat.Attack:getNeighborsInDirection(centerQ, centerR, dirQ, dirR, hex
 end
 
 -- ============================================================
--- ОБЩИЕ МЕТОДЫ ДЛЯ ПРЕДПРОСМОТРА АТАК
+-- GENERAL METHODS FOR ATTACK PREVIEW
 -- ============================================================
 
--- Какие клетки будут поражены при атаке цели (targetQ, targetR)
--- Возвращает массив {q, r, damage}
+-- Which cells will be affected when attacking target (targetQ, targetR)
+-- Returns array {q, r, damage}
 function combat.Attack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
     return {{q = targetQ, r = targetR, damage = self.damage}}
 end
 
--- Все валидные клетки-цели для этой атаки
--- Возвращает таблицу {["q,r"] = true}
+-- All valid target cells for this attack
+-- Returns table {["q,r"] = true}
 function combat.Attack:getValidTargets(attacker, hex, entities)
     local keys = {}
     for q = 0, hex.gridWidth - 1 do
@@ -245,9 +245,9 @@ function combat.Attack:getValidTargets(attacker, hex, entities)
 end
 
 -- ============================================================
--- ТИПЫ АТАК (с поддержкой предпросмотра отталкивания)
+-- ATTACK TYPES (with push preview support)
 -- ============================================================
--- Замените существующий класс DashAttack на этот
+-- Replace existing DashAttack class with this one
 combat.DashAttack = setmetatable({}, combat.Attack)
 combat.DashAttack.__index = combat.DashAttack
 
@@ -256,7 +256,7 @@ function combat.DashAttack.new()
     return setmetatable(self, combat.DashAttack)
 end
 
--- Возвращает первую цель, её клетку и последнюю свободную клетку перед целью
+-- Returns first target, its cell, and last free cell before target
 function combat.DashAttack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
     local curQ, curR = attacker.q, attacker.r
     local lastFreeQ, lastFreeR = curQ, curR
@@ -266,7 +266,7 @@ function combat.DashAttack:getFirstTargetAndLastFree(attacker, stepX, stepY, ste
     while true do
         local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
         if not hex:isActiveHex(nextQ, nextR) then
-            -- Достигли края, последняя свободная клетка – текущая
+            -- Reached edge, last free cell is current
             break
         end
 
@@ -274,11 +274,11 @@ function combat.DashAttack:getFirstTargetAndLastFree(attacker, stepX, stepY, ste
         if occupant and occupant ~= attacker then
             firstTarget = occupant
             targetHex = {q = nextQ, r = nextR}
-            -- lastFree уже установлена как curQ,curR (клетка перед целью)
+            -- lastFree already set as curQ,curR (cell before target)
             break
         end
 
-        -- Клетка свободна, обновляем последнюю свободную
+        -- Cell is free, update last free
         lastFreeQ, lastFreeR = nextQ, nextR
         curQ, curR = nextQ, nextR
     end
@@ -297,7 +297,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
 
     local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
-    -- Визуальный эффект рывка до клетки цели
+    -- Visual effect of dash to target cell
     local fxEndQ, fxEndR
     if targetHex then
         fxEndQ, fxEndR = targetHex.q, targetHex.r
@@ -308,12 +308,12 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     end
     attack_effects.dash(attacker, firstTarget, fxEndQ, fxEndR, hex)
 
-    -- Наносим урон первой цели
+    -- Deal damage to first target
     if firstTarget then
         self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
     end
 
-    -- Если цели нет — просто двигаемся в targetQ/targetR
+    -- If no target — just move to targetQ/targetR
     if not firstTarget or not targetHex then
         combat.addPushAnimation(attacker, attacker.q, attacker.r, fxEndQ, fxEndR)
         combat.startPushAnimations(hex)
@@ -323,7 +323,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     local targetAlive = firstTarget.health and firstTarget.health > 0
 
     if targetAlive and firstTarget.isPushable then
-        -- Цель жива и отталкиваема: отталкиваем, атакующий встаёт на её место
+        -- Target alive and pushable: push it, attacker takes its place
         local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
         local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
         local isEdge = not hex:isActiveHex(pushQ, pushR)
@@ -337,20 +337,20 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
             combat.startPushAnimations(hex)
         end)
     elseif targetAlive then
-        -- Цель жива, но неотталкиваема: атакующий останавливается перед ней
+        -- Target alive but not pushable: attacker stops before it
         if lastFree then
             combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
             combat.startPushAnimations(hex)
         end
     else
-        -- Цель мертва: атакующий встаёт на её клетку
+        -- Target dead: attacker takes its cell
         combat.addPushAnimation(attacker, attacker.q, attacker.r, targetHex.q, targetHex.r)
         combat.startPushAnimations(hex)
     end
     return true
 end
 
--- 2. ПЕРЕВОРОТ (Flip) – 1 урон, переброс на 3 клетки на выбор
+-- 2. FLIP – 1 damage, toss onto 3 chosen cells
 combat.FlipAttack = setmetatable({}, combat.Attack)
 combat.FlipAttack.__index = combat.FlipAttack
 function combat.FlipAttack.new()
@@ -358,8 +358,8 @@ function combat.FlipAttack.new()
     return setmetatable(self, combat.FlipAttack)
 end
 
--- Возвращает 3 возможные клетки для переброса: за спиной, слева и справа
--- (только свободные и активные)
+-- Returns 3 possible flip cells: behind, left, and right
+-- (only free and active)
 function combat.FlipAttack:getFlipCells(attacker, targetQ, targetR, hex, entities)
     if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) ~= 1 then return {} end
     local targetActor = combat.getEntityAtHex(targetQ, targetR, entities)
@@ -369,11 +369,11 @@ function combat.FlipAttack:getFlipCells(attacker, targetQ, targetR, hex, entitie
     local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
     local tX, tY, tZ = hex_utils.axialToCube(targetQ, targetR)
     local dirX, dirY, dirZ = aX - tX, aY - tY, aZ - tZ
-    -- Три направления: прямо назад, поворот влево, поворот вправо
+    -- Three directions: straight back, turn left, turn right
     local dirs = {
         {dirX, dirY, dirZ},
-        {-dirY, -dirZ, -dirX},  -- поворот влево
-        {-dirZ, -dirX, -dirY},  -- поворот вправо
+        {-dirY, -dirZ, -dirX},  -- turn left
+        {-dirZ, -dirX, -dirY},  -- turn right
     }
     local cells = {}
     for _, d in ipairs(dirs) do
@@ -411,9 +411,9 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     if combat.getEntityAtHex(destQ, destR, entities) then
         return false, "Destination cell is occupied!"
     end
-    -- Наносим 1 урон
+    -- Deal 1 damage
     self:dealDamageToTarget(targetActor, attacker, 1, entities, sounds, nil)
-    -- Перемещение
+    -- Movement
     attack_effects.flip(attacker, targetActor, destQ, destR, hex)
     combat.addPushAnimation(targetActor, targetQ, targetR, destQ, destR)
     combat.startPushAnimations(hex)
@@ -423,13 +423,13 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     return true
 end
 
--- Для обратной совместимости с кодом, вызывающим getPushCell
+-- For backward compatibility with code calling getPushCell
 function combat.FlipAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
     local cells = self:getFlipCells(attacker, targetQ, targetR, hex, entities)
-    return cells[1]  -- первая клетка = прямо за спиной
+    return cells[1]  -- first cell = straight behind
 end
 
--- 3. ВЫСТРЕЛ (Shoot)
+-- 3. SHOOT
 combat.LineShotAttack = setmetatable({}, combat.Attack)
 combat.LineShotAttack.__index = combat.LineShotAttack
 
@@ -476,7 +476,7 @@ function combat.PushAttack.new(range)
     return setmetatable(combat.LineShotAttack.new("Push", "Push the first enemy in line (no damage)", range or 999, 0), combat.PushAttack)
 end
 
--- 4. ПРОНЗАЮЩИЙ ВЫСТРЕЛ (Piercing Shoot)
+-- 4. PIERCING SHOT
 combat.PiercingShootAttack = setmetatable({}, combat.Attack)
 combat.PiercingShootAttack.__index = combat.PiercingShootAttack
 function combat.PiercingShootAttack.new(range)
@@ -523,7 +523,7 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     attacker.hasActedThisTurn = true
     return true
 end
--- Предпросмотр: возвращает список клеток отталкивания для двух целей
+-- Preview: returns push cell list for two targets
 function combat.PiercingShootAttack:getPushCells(attacker, targetQ, targetR, hex, entities)
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return {} end
@@ -564,22 +564,22 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
     if not hex:isActiveHex(targetQ, targetR) then
         return false, "Cannot target outside the active area"
     end
-    -- Проверка прямой линии
+    -- Straight line check
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
 
-    -- Создаём камень в целевой клетке (если свободно)
+    -- Create stone at target cell (if free)
     local centerEntity = combat.getEntityAtHex(targetQ, targetR, entities)
     if centerEntity then
-    -- Наносим урон цели вместо создания камня
+    -- Deal damage to target instead of creating stone
     self:dealDamageToTarget(centerEntity, attacker, 1, entities, sounds, nil)
 elseif terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
-    -- Камень тонет в воде
+    -- Stone sinks in water
     local cx, cy = hex:hexToPixel(targetQ, targetR)
     visual.addEffect(cx, cy, "drown", 0.3)
     log.debugf("combat", "[Stone] Stone sinks in water at (%d,%d)", targetQ, targetR)
 else
-    -- Создаём камень (как было)
+    -- Create stone (as before)
     local stone = Entity.new("Stone", Entity.TYPES.OBSTACLE, targetQ, targetR, 1, false, 0, nil, nil, {})
     stone.isPushable = true
     stone.color = {0.5,0.5,0.5,1}
@@ -587,7 +587,7 @@ else
     log.debugf("combat", "[Stone] A stone appears at (%d,%d)", targetQ, targetR)
 end
 
-    -- Направление от атакующего к цели
+    -- Direction from attacker to target
     local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
     local neighborsInDirection = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
 
@@ -618,7 +618,7 @@ end
     return true
 end
 
--- Предпросмотр для Stone Throw
+-- Preview for Stone Throw
 function combat.AoePushAttack:getPushCells(attacker, targetQ, targetR, hex, entities)
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
     if distance < self.minRange then return {} end
@@ -648,7 +648,7 @@ function combat.AoePushAttack:getPushCells(attacker, targetQ, targetR, hex, enti
 end
 
 
--- 6. AoE ТРИ ЦЕЛИ В НАПРАВЛЕНИИ (Cone Blast)
+-- 6. AoE THREE TARGETS IN DIRECTION (Cone Blast)
 combat.AoeDirectionalAttack = setmetatable({}, combat.Attack)
 combat.AoeDirectionalAttack.__index = combat.AoeDirectionalAttack
 function combat.AoeDirectionalAttack.new()
@@ -666,13 +666,13 @@ function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, en
     if not hex:isActiveHex(targetQ, targetR) then
         return false, "Target cell is not active"
     end
-    -- Обязательная прямая линия
+    -- Mandatory straight line
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
 
     attack_effects.coneBlast(targetQ, targetR, hex)
 
-    -- Все 6 соседей
+    -- All 6 neighbors
     local allNeighbors = hex:getNeighbors(targetQ, targetR)
     for _, nb in ipairs(allNeighbors) do
         if hex:isActiveHex(nb.q, nb.r) then
@@ -698,7 +698,7 @@ function combat.AoeDirectionalAttack:getPushCells(attacker, targetQ, targetR, he
     local neighbors = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
     for _, neighbor in ipairs(neighbors) do
         local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
-        -- Любой персонаж, а не только враг
+        -- Any character, not just enemy
         if target and target:isCharacter() then
             local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
             local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
@@ -714,8 +714,8 @@ function combat.AoeDirectionalAttack:getPushCells(attacker, targetQ, targetR, he
     return cells
 end
 
--- 7. МАГИЧЕСКИЙ СНАРЯД LICH'а (игнорирует препятствия)
--- 7. МАГИЧЕСКИЙ СНАРЯД LICH'а (игнорирует препятствия, не требует прямой линии)
+-- 7. LICH MAGIC BOLT (ignores obstacles)
+-- 7. LICH MAGIC BOLT (ignores obstacles, no straight line needed)
 combat.LichBoltAttack = setmetatable({}, combat.Attack)
 combat.LichBoltAttack.__index = combat.LichBoltAttack
 
@@ -734,7 +734,7 @@ function combat.LichBoltAttack:execute(attacker, targetQ, targetR, hex, entities
         return false, "Target out of range"
     end
 
-    -- Проверка прямой линии
+    -- Straight line check
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then
         return false, "Target not in a straight line!"
@@ -789,7 +789,7 @@ function combat.LichBoltAttack:getTargetCell(attacker, targetQ, targetR, hex, en
     return nil
 end
 
--- 7b. POWER LICH: смертельный снаряд (99 урона) по цели и 3 клеткам впереди
+-- 7b. POWER LICH: lethal bolt (99 damage) on target and 3 cells ahead
 combat.PowerLichBoltAttack = setmetatable({}, combat.Attack)
 combat.PowerLichBoltAttack.__index = combat.PowerLichBoltAttack
 
@@ -803,10 +803,10 @@ function combat.PowerLichBoltAttack:getConeCells(attacker, targetQ, targetR, hex
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return {{q = targetQ, r = targetR}} end
     local cells = {{q = targetQ, r = targetR}}
-    -- Клетка прямо впереди цели
+    -- Cell directly in front of the target
     local q1, r1 = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
     table.insert(cells, {q = q1, r = r1})
-    -- Клетки по бокам (+-60 градусов)
+    -- Cells on the sides (+-60 degrees)
     local sx1, sy1, sz1 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
     local sx2, sy2, sz2 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
     local q2, r2 = hex_utils.applyCubeStep(targetQ, targetR, sx1, sy1, sz1)
@@ -883,7 +883,7 @@ function combat.PowerLichBoltAttack:getAffectedCells(attacker, targetQ, targetR,
     return cells
 end
 
--- 8. GHOST: магический снаряд с неограниченной дальностью, первая цель на линии, урон 2
+-- 8. GHOST: magic projectile with unlimited range, first target on line, damage 2
 combat.GhostBoltAttack = setmetatable({}, combat.Attack)
 combat.GhostBoltAttack.__index = combat.GhostBoltAttack
 
@@ -899,7 +899,7 @@ function combat.GhostBoltAttack:execute(attacker, targetQ, targetR, hex, entitie
     local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     if not firstTarget then return false, "No target in that direction!" end
 
-    -- Наносим урон (не отталкиваем)
+    -- Deal damage (no knockback)
     self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
     attacker.hasActedThisTurn = true
 
@@ -907,7 +907,7 @@ function combat.GhostBoltAttack:execute(attacker, targetQ, targetR, hex, entitie
     return true
 end
 
--- Для предпросмотра
+-- For preview
 function combat.GhostBoltAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return nil end
@@ -918,7 +918,7 @@ function combat.GhostBoltAttack:getTargetCell(attacker, targetQ, targetR, hex, e
     return nil
 end
 
--- 9. ZOMBIE: удар в упор, урон 3
+-- 9. ZOMBIE: point-blank attack, damage 3
 combat.ZombieBiteAttack = setmetatable({}, combat.Attack)
 combat.ZombieBiteAttack.__index = combat.ZombieBiteAttack
 
@@ -962,7 +962,7 @@ function combat.ZombieBiteAttack:getTargetCell(attacker, targetQ, targetR, hex, 
 end
 
 -- ============================================================
--- SUMMON (призыв миньона)
+-- SUMMON (minion summon)
 -- ============================================================
 combat.SummonAttack = setmetatable({}, combat.Attack)
 combat.SummonAttack.__index = combat.SummonAttack
@@ -1008,7 +1008,7 @@ function combat.SummonAttack:getTargetCell(attacker, targetQ, targetR, hex, enti
 end
 
 -- ============================================================
--- DIVIDER (разделение)
+-- DIVIDER (split)
 -- ============================================================
 combat.DividerAttack = setmetatable({}, combat.SummonAttack)
 combat.DividerAttack.__index = combat.DividerAttack
@@ -1054,7 +1054,7 @@ function combat.DividerAttack:execute(attacker, targetQ, targetR, hex, entities,
 end
 
 -- ============================================================
--- SUMMON ENEMY (стержень призывания)
+-- SUMMON ENEMY (summoning rod)
 -- ============================================================
 combat.SummonEnemyAttack = setmetatable({}, combat.Attack)
 combat.SummonEnemyAttack.__index = combat.SummonEnemyAttack
@@ -1070,7 +1070,7 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
     local sq, sr = attacker.summonTargetQ, attacker.summonTargetR
     if not sq or not sr then return false end
 
-    -- Если клетка занята — 2 урона occupant'у
+    -- If cell is occupied — 2 damage to occupant
     local occupant = combat.getEntityAtHex(sq, sr, entities)
     if occupant and occupant.health > 0 then
         local wasDestroyed = occupant:takeDamage(1)
@@ -1083,7 +1083,7 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
         return true
     end
 
-    -- Создаём случайного врага на целевой клетке
+    -- Create a random enemy on the target cell
     if hex:isActiveHex(sq, sr) then
         local env = require("entity.environment")
         local newEnemy = env.createRandomEnemy(sq, sr)
@@ -1363,7 +1363,7 @@ function combat.ElectricHookAttack:execute(attacker, targetQ, targetR, hex, enti
 end
 
 -- ============================================================
--- BASH: рукопашная, 2 урона цели + 2 урона позади атакующего
+-- BASH: melee, 2 damage to target + 2 damage behind the attacker
 -- ============================================================
 combat.BashAttack = setmetatable({}, combat.Attack)
 combat.BashAttack.__index = combat.BashAttack
@@ -1388,7 +1388,7 @@ function combat.BashAttack:execute(attacker, targetQ, targetR, hex, entities, so
 
     self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
 
-    -- Цель позади атакующего: направление от цели к атакующему, затем ещё шаг за атакующего
+    -- Target behind attacker: direction from target to attacker, then one more step past attacker
     local stepX, stepY, stepZ = self:getLineDirection(targetQ, targetR, attacker.q, attacker.r, hex)
     if stepX then
         local behindQ, behindR = hex_utils.applyCubeStep(attacker.q, attacker.r, stepX, stepY, stepZ)
@@ -1421,7 +1421,7 @@ end
 
 function combat.BashAttack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
     local cells = {{q = targetQ, r = targetR, damage = self.damage}}
-    -- Цель позади атакующего
+    -- Target behind attacker
     local stepX, stepY, stepZ = self:getLineDirection(targetQ, targetR, attacker.q, attacker.r, hex)
     if stepX then
         local behindQ, behindR = hex_utils.applyCubeStep(attacker.q, attacker.r, stepX, stepY, stepZ)
@@ -1431,7 +1431,7 @@ function combat.BashAttack:getAffectedCells(attacker, targetQ, targetR, hex, ent
 end
 
 -- ============================================================
--- CLEAVE: рукопашная, 1 урон трём целям впереди
+-- CLEAVE: melee, 1 damage to three targets in front
 -- ============================================================
 combat.CleaveAttack = setmetatable({}, combat.Attack)
 combat.CleaveAttack.__index = combat.CleaveAttack
@@ -1448,7 +1448,7 @@ function combat.CleaveAttack:execute(attacker, targetQ, targetR, hex, entities, 
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not on a straight line" end
 
-    -- Три клетки: центральная цель + две боковые (поворот направления на ±60°)
+    -- Three cells: central target + two side cells (direction rotated +-60)
     local cells = {{q = targetQ, r = targetR}}
     local sx1, sy1, sz1 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
     local sx2, sy2, sz2 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
@@ -1496,7 +1496,7 @@ function combat.CleaveAttack:getAffectedCells(attacker, targetQ, targetR, hex, e
 end
 
 -- ============================================================
--- LUNGE: рукопашная, 2 урона цели + 2 урона цели за ней
+-- LUNGE: melee, 2 damage to target + 2 damage to target behind it
 -- ============================================================
 combat.LungeAttack = setmetatable({}, combat.Attack)
 combat.LungeAttack.__index = combat.LungeAttack
@@ -1521,7 +1521,7 @@ function combat.LungeAttack:execute(attacker, targetQ, targetR, hex, entities, s
 
     self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
 
-    -- Цель за целью: продолжаем линию от атакующего через цель
+    -- Target behind target: continue the line from attacker through target
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if stepX then
         local behindQ, behindR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
@@ -1554,7 +1554,7 @@ end
 
 function combat.LungeAttack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
     local cells = {{q = targetQ, r = targetR, damage = self.damage}}
-    -- Цель позади цели
+    -- Target behind target
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if stepX then
         local behindQ, behindR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
@@ -1564,7 +1564,7 @@ function combat.LungeAttack:getAffectedCells(attacker, targetQ, targetR, hex, en
 end
 
 -- ============================================================
--- HEAVY PUNCH: 2 урона + отталкивание
+-- HEAVY PUNCH: 2 damage + knockback
 -- ============================================================
 combat.HeavyPunchAttack = setmetatable({}, combat.Attack)
 combat.HeavyPunchAttack.__index = combat.HeavyPunchAttack
@@ -1632,7 +1632,7 @@ function combat.HeavyPunchAttack:getPushCell(attacker, targetQ, targetR, hex, en
 end
 
 -- ============================================================
--- EMPOWER PUNCH: 1 урона + отталкивание + double damage next
+-- EMPOWER PUNCH: 1 damage + knockback + double damage next
 -- ============================================================
 combat.EmpowerPunchAttack = setmetatable({}, combat.Attack)
 combat.EmpowerPunchAttack.__index = combat.EmpowerPunchAttack
@@ -1670,7 +1670,7 @@ function combat.EmpowerPunchAttack:execute(attacker, targetQ, targetR, hex, enti
         end
     end
 
-    -- Empower: следующий удар наносит удвоенный урон (одноразово)
+    -- Empower: next attack deals double damage (one-time)
     status.applyToEntity(attacker, "fatal_damage")
 
     attacker.hasActedThisTurn = true
@@ -1700,10 +1700,10 @@ function combat.EmpowerPunchAttack:getPushCell(attacker, targetQ, targetR, hex, 
 end
 
 -- ============================================================
--- AURA: трясина (пассивная, снижает скорость на 2, мин. 1)
+-- AURA: quagmire (passive, reduces speed by 2, min 1)
 -- ============================================================
 
--- Проверяет, находится ли entity в радиусе ауры врага
+-- Checks if entity is within enemy aura radius
 function combat.isInSlowingAura(entity, entities, hex)
     if entity.rootImmune then return false end
     for _, e in ipairs(entities) do
@@ -1718,13 +1718,13 @@ function combat.isInSlowingAura(entity, entities, hex)
 end
 
 -- ============================================================
--- АНИМАЦИОННАЯ ОЧЕРЕДЬ
+-- ANIMATION QUEUE
 -- ============================================================
 pushAnimations = { queue = {}, active = false }
 
 function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
 
-    -- Добавляем эффект ветра от стартовой клетки к конечной
+    -- Add wind effect from start cell to destination cell
     local startX, startY = getDrawCoords(fromQ, fromR)
     local endX, endY = getDrawCoords(toQ, toR)
     visual.addPushEffect(startX, startY, endX, endY, 0.25)
@@ -1734,10 +1734,10 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
         startX = 0, startY = 0, endX = 0, endY = 0, timer = 0, duration = 0.2,
         isMoving = false,
         onComplete = function(pushedObj)
-            -- Проверяем, свободна ли целевая клетка (пропускаем опасные зоны)
+            -- Check if target cell is free (skip hazard zones)
             local occupant = combat.getEntityAtHex(toQ, toR, entities)
             if occupant and occupant ~= pushedObj and occupant.health > 0 and not occupant.isHazard then
-                -- Столкновение: урон толкаемому юниту, недвижимые цели урон не получают
+                -- Collision: damage to pushed unit, immovable targets take no damage
                 if pushedObj.health and pushedObj.health > 0 then
                     pushedObj.health = pushedObj.health - 1
                     log.infof("combat", "%s collides with %s! %s takes 1 damage!", pushedObj.name, occupant.name, pushedObj.name)
@@ -1752,25 +1752,25 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
                 if pushedObj.health <= 0 then
                     pushedObj:startDeath()
                 end
-                -- Не перемещаем объект, остаётся на месте
+                -- Don't move object, stays in place
                 if pushedObj.health <= 0 then
-                    -- Если умер, эффекты клетки не применяем
+                    -- If died, don't apply cell effects
                 else
-                    -- Применяем эффекты клетки (огонь, вода) на исходной позиции
+                    -- Apply cell effects (fire, water) at original position
                     if terrainMap then
                         effects.applyAllCellEffects(pushedObj, fromQ, fromR, terrainMap, entities)
                     end
                 end
             else
-                -- Клетка свободна – выполняем перемещение
+                -- Cell is free – perform movement
                 pushedObj.q = toQ
                 pushedObj.r = toR
-                -- Если сдвинули зомби — снять rooted с его цели
+                -- If zombie was pushed — remove rooted from its target
                 if pushedObj.rootedTarget then
                     status.removeFromEntity(pushedObj.rootedTarget, "rooted")
                     pushedObj.rootedTarget = nil
                 end
-                -- Применяем эффекты клетки после перемещения
+                -- Apply cell effects after movement
                 if pushedObj and terrainMap then
                     local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities)
                     if died then
@@ -1783,7 +1783,7 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
     })
 end
 
--- Анимация перемещения без проверки коллизий (для способностей, где коллизии уже обработаны заранее, напр. Wind Torrent)
+-- Movement animation without collision checks (for abilities where collisions are pre-processed, e.g. Wind Torrent)
 function combat.addDirectPushAnimation(obj, fromQ, fromR, toQ, toR)
     local startX, startY = getDrawCoords(fromQ, fromR)
     local endX, endY = getDrawCoords(toQ, toR)
@@ -1812,10 +1812,10 @@ function combat.startPushAnimations(hex, callback)
     pushAnimations.active = true
     pushAnimations.globalCallback = function()
         if callback then callback() end
-        -- Здесь применить эффекты ко всем объектам, участвовавшим в анимациях
+        -- Here apply effects to all objects that participated in animations
         for _, anim in ipairs(pushAnimations.queue) do
             if anim.obj then
-                -- но очередь уже очищена? Лучше сохранять список перемещённых объектов
+                -- but queue is already cleared? Better to store list of moved objects
             end
         end
     end
@@ -1923,7 +1923,7 @@ function combat.flushPushAnimations()
 end
 
 -- ============================================================
--- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (общие)
+-- HELPER FUNCTIONS (common)
 -- ============================================================
 function combat.getEntityAtHex(q, r, entities)
     for _, e in ipairs(entities) do
@@ -1932,16 +1932,16 @@ function combat.getEntityAtHex(q, r, entities)
     return nil
 end
 
--- combat.lua (заменить существующий метод)
+-- combat.lua (replace existing method)
 function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, sounds, directionIndex)
-    -- Базовый множитель = 1.0
+    -- Base multiplier = 1.0
     local multiplier = 1.0
 
     if target.armor and directionIndex and target.armor[directionIndex+1] then
         multiplier = multiplier * target.armor[directionIndex+1]
     end
 
-    -- Уязвимая точка
+    -- Weak point
     if target.weakPoint ~= nil and directionIndex == target.weakPoint then
         multiplier = multiplier * 2.0
         log.infof("combat", "Critical hit! %s hits %s's weak point!", attacker.name, target.name)
@@ -1957,7 +1957,7 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
         finalDamage = finalDamage + 1
     end
 
-    -- Fatal damage: увеличивает урон до 99 (одноразово, снимается после атаки)
+    -- Fatal damage: increases damage to 99 (one-time, removed after attack)
     if damage > 0 and status.hasEntityStatus(attacker, "fatal_damage") then
         finalDamage = 99
         status.removeFromEntity(attacker, "fatal_damage")
@@ -2017,15 +2017,15 @@ function combat.addShakeAnimation(obj, q, r)
 end
 
 function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, entities, sounds, withEntity, skipDamage)
-    -- Эффект столкновения в целевой клетке (визуальный, без урона)
+    -- Collision effect at target cell (visual, no damage)
     local x, y = getDrawCoords(toQ, toR)
     visual.addEffect(x, y, "collision", 0.3)
     if sounds and sounds.collision then sounds.collision:play() end
 
-    -- Отложенное нанесение урона после анимации
+    -- Delayed damage application after animation
     local function applyDamage()
         if skipDamage then return end
-        -- Направленная сущность: безопасная сторона — без урона
+        -- Directional entity: safe side — no damage
         if withEntity and withEntity.direction then
             local safe = hex_utils.isPushFromSafeSide(withEntity, fromQ, fromR)
             if safe then return end
@@ -2049,7 +2049,7 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
         end
     end
 
-    -- Bounce-анимация (движение на 80% пути и обратно)
+    -- Bounce animation (movement 80% of the way and back)
     local startX, startY = getDrawCoords(fromQ, fromR)
     local endX, endY = getDrawCoords(toQ, toR)
     table.insert(pushAnimations.queue, {
@@ -2063,7 +2063,7 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
         duration = 0.2,
         isMoving = false,
         onComplete = function(pushedObj)
-            -- Урон применяется только после завершения анимации
+            -- Damage is applied only after animation completes
             applyDamage()
             if pushedObj.health <= 0 then
                 pushedObj:startDeath()
@@ -2073,7 +2073,7 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
 end
 
 -- ============================================================
--- ДЕЙСТВИЯ ИГРОКА (move / attack / undo)
+-- PLAYER ACTIONS (move / attack / undo)
 -- ============================================================
 
 function performMove(actor, targetQ, targetR)
@@ -2151,7 +2151,7 @@ function updateActorMovement(actor, dt)
         if t >= 1 then
             actor.q = actor.targetQ
             actor.r = actor.targetR
-            -- Применяем эффекты клетки на каждом шагу пути
+            -- Apply cell effects at each step of the path
             if terrainMap then
                 local died = effects.applyAllCellEffects(actor, actor.q, actor.r, terrainMap, entities)
                 if died then

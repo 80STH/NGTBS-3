@@ -5,13 +5,13 @@ local config = require("core.config")
 local log = require("util.log")
 
 -- ============================================================
--- РЕЕСТР КОНТЕНТА: наборы атак и типы врагов.
--- Раньше было 19 функций get*Attacks() + длинные if/elseif
--- в трёх местах. Теперь — две таблицы.
+-- CONTENT REGISTRY: attack sets and enemy types.
+-- Previously there were 19 get*Attacks() functions + long if/elseif
+-- in three places. Now — two tables.
 -- ============================================================
 
--- Каждый набор — это функция, возвращающая список атак.
--- Фабрикой выступает combat (require внутри, чтобы разорвать цикл combat<->environment).
+-- Each set is a function returning a list of attacks.
+-- Combat acts as the factory (require inside to break the combat<->environment cycle).
 local ATTACK_SETS = {
     warrior = function()
         local c = require("combat.combat")
@@ -149,9 +149,9 @@ local ATTACK_SETS = {
     end,
 }
 
--- Реестр типов врагов: имя -> спецификация.
--- Используется в createEnemyByType. Дополняет ATTACK_SETS
--- данными о health/moveRange/aura/флагах.
+-- Enemy type registry: name -> specification.
+-- Used in createEnemyByType. Supplements ATTACK_SETS
+-- with data about health/moveRange/aura/flags.
 local ENEMY_TYPES = {
     Ghost           = { attackSet = "ghost",       moveRange = 3, flying = true },
     Zombie          = { attackSet = "zombie",      moveRange = 3 },
@@ -221,9 +221,9 @@ local gidToEntity = {
 environment.enemySpriteCache = {}
 
 
-local terrainSpriteCache = {}  -- Кэш для текстур terrain
+local terrainSpriteCache = {}  -- Cache for terrain textures
 
--- Загрузка текстуры terrain из GID
+-- Loading terrain texture from GID
 local function loadTerrainSprite(map, gid, tileWidth, tileHeight)
     if terrainSpriteCache[gid] then
         return terrainSpriteCache[gid]
@@ -233,7 +233,7 @@ local function loadTerrainSprite(map, gid, tileWidth, tileHeight)
     local quad = nil
     
     
-    -- Ищем нужный тайлсет
+    -- Find the needed tileset
     for _, tileset in ipairs(map.tilesets) do
         local firstGid = tileset.firstgid
         local lastGid = firstGid + (tileset.tilecount or 1) - 1
@@ -262,26 +262,26 @@ local function loadTerrainSprite(map, gid, tileWidth, tileHeight)
         return nil
     end
     
-    --  СМЕЩЕНИЯ ПРИ РИСОВАНИИ НА CANVAS
-    local drawOffsetX = 1   -- смещение по X при рисовании на canvas
-    local drawOffsetY = -4   -- смещение по Y при рисовании на canvas
+    --  OFFSETS WHEN DRAWING ON CANVAS
+    local drawOffsetX = 1   -- X offset when drawing on canvas
+    local drawOffsetY = -4   -- Y offset when drawing on canvas
     
     local canvas = love.graphics.newCanvas(tileWidth, tileHeight)
     canvas:setFilter("nearest", "nearest")
     love.graphics.setCanvas(canvas)
     love.graphics.clear(0, 0, 0, 0)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(texture, quad, drawOffsetX, drawOffsetY)  --  смещение здесь
+    love.graphics.draw(texture, quad, drawOffsetX, drawOffsetY)  --  offset here
     love.graphics.setCanvas()
     
     terrainSpriteCache[gid] = canvas
     return canvas
 end
 
--- Кэш для загруженных текстур
+-- Cache for loaded textures
 local spriteCache = {}
 
--- Загрузка текстуры из тайлсета (без использования map:getTile)
+-- Loading texture from tileset (without using map:getTile)
 local function loadTileSprite(map, gid, tileWidth, tileHeight)
     if spriteCache[gid] then
         return spriteCache[gid]
@@ -290,15 +290,15 @@ local function loadTileSprite(map, gid, tileWidth, tileHeight)
     local texture = nil
     local quad = nil
     
-    -- Ищем нужный тайлсет
+    -- Find the needed tileset
     for _, tileset in ipairs(map.tilesets) do
         local firstGid = tileset.firstgid
         local lastGid = firstGid + (tileset.tilecount or 1) - 1
         if gid >= firstGid and gid <= lastGid then
             local localId = gid - firstGid
             
-            -- Получаем текстуру (изображение тайлсета)
-            texture = tileset.image  -- В STI это уже объект love Image
+            -- Get the texture (tileset image)
+            texture = tileset.image  -- In STI this is already a love Image object
             if not texture then
                 texture = tileset.texture
             end
@@ -308,7 +308,7 @@ local function loadTileSprite(map, gid, tileWidth, tileHeight)
                 return nil
             end
             
-            -- Вычисляем координаты тайла в тайлсете
+            -- Calculate tile coordinates in the tileset
             local tw = tileset.tilewidth or tileWidth
             local th = tileset.tileheight or tileHeight
             local cols = tileset.columns or math.floor(tileset.imagewidth / tw)
@@ -326,9 +326,9 @@ local function loadTileSprite(map, gid, tileWidth, tileHeight)
         return nil
     end
     
-    -- Создаём canvas с тайлом
+    -- Create canvas with tile
     local canvas = love.graphics.newCanvas(tileWidth, tileHeight)
-    canvas:setFilter("nearest", "nearest")  -- ← Отключает сглаживание
+    canvas:setFilter("nearest", "nearest")  -- Disables anti-aliasing
     love.graphics.setCanvas(canvas)
     love.graphics.clear(0, 0, 0, 0)
     love.graphics.setColor(1, 1, 1, 1)
@@ -339,7 +339,7 @@ local function loadTileSprite(map, gid, tileWidth, tileHeight)
     return canvas
 end
 
--- Генерация самописных спрайтов для гор и построек
+-- Generation of custom sprites for mountains and buildings
 local function generateCustomSprite(name, w, h)
     local canvas = love.graphics.newCanvas(w, h)
     canvas:setFilter("nearest", "nearest")
@@ -492,7 +492,7 @@ local function generateCustomSprite(name, w, h)
     return canvas
 end
 
--- Создание сущности с текстурой из тайлсета
+-- Creating entity with texture from tileset
 local function createEntityFromGID(map, gid, gridX, gridY)
     local def = gidToEntity[gid]
     if not def then return nil end
@@ -507,12 +507,12 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)
     end
     
-    -- Fallback, если не удалось загрузить спрайт
+    -- Fallback if sprite failed to load
     if not entitySprite then
         local canvas = love.graphics.newCanvas(tileWidth, tileHeight)
         love.graphics.setCanvas(canvas)
         love.graphics.clear(0, 0, 0, 0)
-        -- Цвет для отладки
+        -- Debug color
         if def.isPlayable ~= nil then
             love.graphics.setColor(def.isPlayable and {0.2, 0.6, 0.2, 1} or {0.8, 0.2, 0.2, 1})
         else
@@ -543,7 +543,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
         if def.name == "Ghost" then
             actor.flying = true
         end
-        -- Ауры для врагов
+        -- Auras for enemies
         if def.attacks == "bogshaman" then
             actor.aura = { type = "slow", radius = 1 }
         end
@@ -569,7 +569,7 @@ local function createEntityFromGID(map, gid, gridX, gridY)
     return nil
 end
 
--- environment.lua (фрагмент loadMapFromTiled)
+-- environment.lua (loadMapFromTiled fragment)
 function environment.loadMapFromTiled(filePath)
     log.infof("env", "=== LOADING MAP: %s ===", filePath)
 
@@ -583,7 +583,7 @@ function environment.loadMapFromTiled(filePath)
     local hex_utils = require("grid.hex_utils")
     hex_utils.setOrientation(orientation)
 
-    -- Создаём карту terrain и текстур только для активных клеток шестиугольника
+    -- Create terrain map and textures only for active hex cells
     local terrainMap = {}
     local terrainTextures = {}
     local entities = {}
@@ -598,7 +598,7 @@ function environment.loadMapFromTiled(filePath)
         orientation
     )
 
-    -- Находим слой terrain
+    -- Find terrain layer
     local groundLayer = nil
     for _, layer in ipairs(map.layers) do
         if layer.name == "terrain" and layer.type == "tilelayer" then
@@ -635,7 +635,7 @@ function environment.loadMapFromTiled(filePath)
             if gid and gid > 0 then
                 local gridX = x - 1
                 local gridY = y - 1
-                -- ИЗМЕНЕНО: проверяем, активна ли клетка в шестиугольнике
+                -- CHANGED: check if the cell is active in the hex
                 if tempHex:isActiveHex(gridX, gridY) then
                     local terrainType = gidToTerrain[gid] or "grass"
                     if not terrainMap[gridX] then terrainMap[gridX] = {} end
@@ -676,7 +676,7 @@ function environment.loadMapFromTiled(filePath)
         log.warnf("env", "Unknown terrain GIDs: %s", table.concat(unknownList, ", "))
     end
 
-    -- Загружаем entities только на активных клетках
+    -- Load entities only on active cells
     local objectsLayer = nil
     for _, layer in ipairs(map.layers) do
         if layer.name == "entities" and layer.type == "tilelayer" then
@@ -710,7 +710,7 @@ function environment.loadMapFromTiled(filePath)
                 if gid and gid > 0 then
                     local gridX = x - 1
                     local gridY = y - 1
-                    -- ИЗМЕНЕНО: создаём сущность только на активной клетке
+                    -- CHANGED: create entity only on active cell
                     if tempHex:isActiveHex(gridX, gridY) then
                         local entity = createEntityFromGID(map, gid, gridX, gridY)
                         if entity then
@@ -725,7 +725,7 @@ function environment.loadMapFromTiled(filePath)
         end
     end
 
-    -- Загрузка статусов со слоя "status" (аналогично фильтруем по isActiveHex)
+    -- Loading statuses from "status" layer (similarly filter by isActiveHex)
     local statusLayer = nil
     for _, layer in ipairs(map.layers) do
         if layer.name == "status" and layer.type == "tilelayer" then
@@ -784,7 +784,7 @@ function environment.loadMapFromTiled(filePath)
         end
     end
 
-    -- Сохраняем карту и текстуры для отрисовки
+    -- Save map and textures for rendering
     environment.loadedMap = map
     environment.terrainTextures = terrainTextures
 
@@ -797,20 +797,20 @@ function environment.loadMapFromTiled(filePath)
 end
 
 -- ============================================================
--- API доступа к реестру атак
+-- Attack registry access API
 -- ============================================================
 
--- Возвращает список атак по идентификатору набора ("warrior", "lich", ...).
--- Заменяет 19 старых функций getXxxAttacks().
--- Возвращает пустой список для неизвестного setId.
+-- Returns attack list by set identifier ("warrior", "lich", ...).
+-- Replaces 19 old getXxxAttacks() functions.
+-- Returns empty list for unknown setId.
 function environment.getAttacks(setId)
     local factory = setId and ATTACK_SETS[setId]
     if not factory then return {} end
     return factory()
 end
 
--- Backward-compat: тонкие обёртки для тех, кто зовёт get*Attacks() по имени.
--- (на случай внешних вызовов; в самом проекте уже не используется)
+-- Backward-compat: thin wrappers for those calling get*Attacks() by name.
+-- (for external calls; no longer used in the project itself)
 function environment.getWarriorAttacks()      return environment.getAttacks("warrior") end
 function environment.getPuncherAttacks()      return environment.getAttacks("puncher") end
 function environment.getRogueAttacks()        return environment.getAttacks("rogue") end
@@ -831,8 +831,8 @@ function environment.getLancerAttacks()       return environment.getAttacks("lan
 function environment.getBogShamanAttacks()    return environment.getAttacks("bogshaman") end
 function environment.getSummonedAttacks()     return environment.getAttacks("summoned") end
 
--- Кэш спрайтов: источник истины — модуль sprites (для разрыва цикла combat↔environment).
--- environment.unitSpriteCache оставлен как алиас для обратной совместимости.
+-- Sprite cache: source of truth is the sprites module (to break the combat<->environment cycle).
+-- environment.unitSpriteCache kept as alias for backward compatibility.
 local sprites = require("util.sprites")
 local unitSpriteCache = sprites.raw()
 environment.unitSpriteCache = unitSpriteCache
@@ -966,7 +966,7 @@ function environment.createSquadUnit(unitDef, q, r)
 end
 
 function environment.createEnemyByType(enemyType, q, r)
-    -- Спецификация из реестра; fallback — Zombie.
+    -- Specification from registry; fallback — Zombie.
     local spec = ENEMY_TYPES[enemyType] or ENEMY_TYPES.Zombie
     local name = (ENEMY_TYPES[enemyType] and enemyType) or "Zombie"
     local attacks = environment.getAttacks(spec.attackSet)
@@ -1032,7 +1032,7 @@ function environment.createEnemyByType(enemyType, q, r)
     end
 
     local entity = Entity.new(name, Entity.TYPES.CHARACTER, q, r, maxHealth, false, moveRange, sprite, nil, attacks)
-    -- Флаги из реестра (только те, что заданы явно).
+    -- Flags from registry (only those explicitly set).
     if spec.flying          then entity.flying = true end
     if spec.hovering        then entity.hovering = true end
     if spec.healthCellSize  then entity.healthCellSize = spec.healthCellSize end
@@ -1044,7 +1044,7 @@ function environment.createEnemyByType(enemyType, q, r)
     return entity
 end
 
--- Создать случайного врага (из пула)
+-- Create random enemy (from pool)
 function environment.createRandomEnemy(q, r)
     local types
     if isProgressionRun then

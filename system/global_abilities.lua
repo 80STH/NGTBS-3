@@ -1,8 +1,8 @@
 -- global_abilities.lua
--- Модульная система одноразовых способностей.
--- Каждая способность — независимый объект со своим hasBeenUsed, кнопкой, хоткеем.
--- Все способности доступны одновременно (не mutually exclusive в плане использования,
--- но только одна может быть в режиме выбора цели).
+-- Modular system of one-time abilities.
+-- Each ability is an independent object with its own hasBeenUsed, button, hotkey.
+-- All abilities are available simultaneously (not mutually exclusive in terms of usage,
+-- but only one can be in target selection mode).
 
 local ui = require("ui.ui")
 local combat = require("combat.combat")
@@ -307,7 +307,7 @@ function global_abilities.drawAbilityButton(self, mx, my, state, cfg)
 end
 
 -- ============================================================
--- UNEARTH: все выкопки немедленно срабатывают
+-- UNEARTH: all dig sites trigger immediately
 -- ============================================================
 local UnearthAbility = {}
 UnearthAbility.__index = UnearthAbility
@@ -391,7 +391,7 @@ function UnearthAbility:drawButton(mx, my, state)
 end
 
 -- ============================================================
--- MIND CONTROL: переместить врага на 1 клетку
+-- MIND CONTROL: move an enemy 1 cell
 -- ============================================================
 local MindControlAbility = {}
 MindControlAbility.__index = MindControlAbility
@@ -509,7 +509,7 @@ function MindControlAbility:drawButton(mx, my, state)
 end
 
 -- ============================================================
--- ACCELERATE DECAY: уменьшает макс. ходов до decay на 1
+-- ACCELERATE DECAY: reduces max turns until decay by 1
 -- ============================================================
 local AccelerateDecayAbility = {}
 AccelerateDecayAbility.__index = AccelerateDecayAbility

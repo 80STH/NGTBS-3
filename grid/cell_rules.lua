@@ -1,22 +1,22 @@
 -- cell_rules.lua
--- Единое место для проверок проходимости клеток.
--- Раньше было 5 разбросанных вариантов (isPositionOccupied, isCellPassable,
--- isCellOccupiedForStop в main.lua; isCellPassableForEnemy, ui.isCellReachable
--- в ui.lua) с тонкими различиями. Теперь — один параметризованный API.
+-- Single place for cell passability checks.
+-- Previously there were 5 scattered variants (isPositionOccupied, isCellPassable,
+-- isCellOccupiedForStop in main.lua; isCellPassableForEnemy, ui.isCellReachable
+-- in ui.lua) with subtle differences. Now — one parameterized API.
 --
--- Главные функции:
---   cell_rules.isPassable(q, r, mover, opts)        — можно ли ПРОЙТИ клетку
---   cell_rules.isOccupiedForStop(q, r, mover, opts) — занята ли клетка для ОСТАНОВКИ
+-- Main functions:
+--   cell_rules.isPassable(q, r, mover, opts)        — whether the cell can be PASSED THROUGH
+--   cell_rules.isOccupiedForStop(q, r, mover, opts) — whether cell is occupied for STOPPING
 --
--- opts (необязательные):
---   entities       — список сущностей (по умолчанию _G.entities)
---   terrainMap     — карта тайлов (по умолчанию _G.terrainMap)
---   hex            — объект гексагональной сетки (по умолчанию _G.hex)
---   passableSide   — "ally" | "enemy" | "none" — чья сторона считается проходимой
---                    ("ally" для союзников, "enemy" для врагов; по умолчанию —
---                    сторона mover)
---   allowPhaseThroughEnemies — учитывать ли mover.phaseThroughEnemies (по умолч. true)
---   ignoreWater    — не проверять воду/underwater_mines (для остановки)
+-- opts (optional):
+--   entities       — list of entities (default _G.entities)
+--   terrainMap     — tile map (default _G.terrainMap)
+--   hex            — hex grid object (default _G.hex)
+--   passableSide   — "ally" | "enemy" | "none" — whose side is considered passable
+--                    ("ally" for allies, "enemy" for enemies; default —
+--                    side of mover)
+--   allowPhaseThroughEnemies — whether to consider mover.phaseThroughEnemies (default true)
+--   ignoreWater    — don't check water/underwater_mines (for stopping)
 
 local cell_rules = {}
 
@@ -36,7 +36,7 @@ local function defaultOpts(opts, mover)
     }
 end
 
--- Та же сторона, что и mover?
+-- Same side as mover?
 local function sameSide(e, mover, side)
     if not (e:isCharacter() and mover) then return false end
     if side == "ally" then
@@ -47,7 +47,7 @@ local function sameSide(e, mover, side)
     return false
 end
 
--- Можно ли пройти через клетку (для движения/поиска пути).
+-- Whether the cell can be passed through (for movement/pathfinding).
 function cell_rules.isPassable(q, r, mover, opts)
     local o = defaultOpts(opts, mover)
     local hex = o.hex
@@ -67,7 +67,7 @@ function cell_rules.isPassable(q, r, mover, opts)
         end
     end
 
-    -- Летающие игнорят всё на земле
+    -- Flying ignores everything on the ground
     if mover and mover.flying then
         return true
     end
@@ -75,7 +75,7 @@ function cell_rules.isPassable(q, r, mover, opts)
     for _, e in ipairs(o.entities) do
         if e ~= mover and e.q == q and e.r == r and not e.isHazard then
             if not sameSide(e, mover, o.passableSide) then
-                -- phaseThroughEnemies: можно проходить сквозь врагов (но не союзников)
+                -- phaseThroughEnemies: can pass through enemies (but not allies)
                 if o.allowPhaseThroughEnemies and mover and mover.phaseThroughEnemies
                    and e:isCharacter() and not e.isPlayable then
                     -- skip
@@ -88,7 +88,7 @@ function cell_rules.isPassable(q, r, mover, opts)
     return true
 end
 
--- Занята ли клетка для остановки (без учёта phaseThroughEnemies и воды).
+-- Whether cell is occupied for stopping (ignoring phaseThroughEnemies and water).
 function cell_rules.isOccupiedForStop(q, r, mover, opts)
     local o = defaultOpts(opts, mover)
     local hex = o.hex
@@ -101,8 +101,8 @@ function cell_rules.isOccupiedForStop(q, r, mover, opts)
     return false
 end
 
--- Универсальный "занята ли клетка" (с водой и phaseThroughEnemies).
--- Соответствует старой isPositionOccupied.
+-- Universal "is cell occupied" (with water and phaseThroughEnemies).
+-- Corresponds to old isPositionOccupied.
 function cell_rules.isOccupied(q, r, mover, opts)
     local o = defaultOpts(opts, mover)
     local hex = o.hex

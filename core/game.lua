@@ -1,6 +1,6 @@
 -- game.lua
--- Жизненный цикл игры: рестарт, проверка конца, общие эффекты.
--- Функции — глобальные (используются другими модулями через _G).
+-- Game lifecycle: restart, end check, global effects.
+-- Functions are global (used by other modules via _G).
 
 local turnManager = require("core.turn_manager")
 local objectives = require("system.objectives")
@@ -17,8 +17,8 @@ function restartGame(mapPath)
     selectedMapPath = mapPath
     log.infof("game", "=== RESTARTING GAME: %s ===", mapPath)
 
-    -- Гарантируем чистый turnState при каждом рестарте (раньше для deploy-карт
-    -- он не переинициализировался, что могло тащить состояние из прошлой игры).
+    -- Guarantee a clean turnState on every restart (previously for deploy maps
+    -- it was not re-initialized, which could carry state from the previous game).
     turnState = {
         phase = "enemy_prepare",
         enemyPrepareQueue = {},
@@ -490,10 +490,10 @@ function countPlayableActors()
 end
 
 -- ============================================================
--- ОБЩАЯ ГЕНЕРАЦИЯ СОБЫТИЙ (выкопки, молнии)
+-- GENERAL EVENT GENERATION (dig sites, lightning)
 -- ============================================================
 
--- Находит N случайных пустых (не занятых, не вода) клеток
+-- Finds N random empty (unoccupied, non-water) cells
 function findRandomEmptyCells(count, excludeFn)
     local candidates = {}
     for q = 0, hex.gridWidth - 1 do

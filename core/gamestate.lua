@@ -1,11 +1,11 @@
 -- gamestate.lua
--- Единый контейнер состояния игры.
--- Постепенно заменяет глобальные переменные.
+-- Unified game state container.
+-- Gradually replaces global variables.
 --
--- СТАТУС МИГРАЦИИ: state пока что "снимок" — заполняется syncState() в main.lua
--- каждый кадр из _G. Полный перенос (обращения state.* вместо глобалов) —
--- следующий этап, требует запуска игры для верификации.
--- Чтобы миграция была локальной, все поля сгруппированы по типам ниже.
+-- MIGRATION STATUS: state is currently a "snapshot" — populated by syncState() in main.lua
+-- every frame from _G. Full migration (accessing state.* instead of globals) —
+-- next stage, requires running the game for verification.
+-- To keep the migration localized, all fields are grouped by type below.
 local GameState = {}
 GameState.__index = GameState
 local config = require("core.config")
@@ -15,7 +15,7 @@ function GameState.new()
 
     self.config = config
 
-    -- === Таблицы (передаются по ссылке, syncState обновляет указатель) ===
+    -- === Tables (passed by reference, syncState updates the pointer) ===
     self.entities = {}
     self.hex = nil
     self.terrainMap = {}
@@ -44,7 +44,7 @@ function GameState.new()
     }
     self.undoButton = { isHovered = false }
 
-    -- === Примитивы (syncState копирует значения каждый кадр) ===
+    -- === Primitives (syncState copies values every frame) ===
     self.turnCount = 0
     self.maxTurns = 5
     self.gameActive = true
@@ -60,7 +60,7 @@ function GameState.new()
     self.difficultyModifier = 1
     self.disableEnemySpawn = false
 
-    -- === Ссылки на сущности/клетки (nil или таблица; syncState копирует ссылку) ===
+    -- === Entity/cell references (nil or table; syncState copies the reference) ===
     self.selectedActor = nil
     self.selectedAttack = nil
     self.flipTargetActor = nil
@@ -68,8 +68,8 @@ function GameState.new()
     self.pullHookTargetCell = nil
     self.pushDirTargetCell = nil
 
-    -- === UI/прогрессия (поля, добавленные при ревью; пока не синхронизируются
-    --     через syncState, т.к. renderer читает их из _G напрямую) ===
+    -- === UI/progression (fields added during review; not yet synchronized
+    --     via syncState, because the renderer reads them from _G directly) ===
     self.gamePhase = "menu"
     self.selectedMapPath = nil
     self.selectedSquad = nil
@@ -84,8 +84,8 @@ function GameState.new()
     return self
 end
 
--- Копировать значения из _G в self. Вызывается из main.lua:syncState().
--- Таблицы — по ссылке (указатель обновляется), примитивы — по значению.
+-- Copies values from _G to self. Called from main.lua:syncState().
+-- Tables — by reference (pointer is updated), primitives — by value.
 function GameState:syncFromGlobals()
     self.entities = _G.entities or {}
     self.hex = _G.hex

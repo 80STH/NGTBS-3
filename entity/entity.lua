@@ -1,16 +1,16 @@
 -- entity.lua
--- Единая сущность для актеров и препятствий
+-- Unified entity for actors and obstacles
 
 local Entity = {}
 Entity.__index = Entity
 local status = require("system.status")
 local log = require("util.log")
 
--- Типы сущностей
+-- Entity types
 Entity.TYPES = {
-    CHARACTER = "character",  -- Игровой персонаж
-    OBSTACLE = "obstacle",    -- Препятствие (разрушаемое)
-    BUILDING = "building"     -- Здание (влияет на глобальное здоровье)
+    CHARACTER = "character",  -- Playable character
+    OBSTACLE = "obstacle",    -- Obstacle (destructible)
+    BUILDING = "building"     -- Building (affects global health)
 }
 
 function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, color, attacks)
@@ -27,7 +27,7 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     self.sprite = sprite
     self.color = color or {1, 1, 1, 1}
     
-    -- Анимация
+    -- Animation
     self.isMoving = false
     self.path = {}
     self.currentPathIndex = 0
@@ -36,89 +36,89 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     self.pulse = math.random() * math.pi * 2
     self.pulseSpeed = 5
     
-    -- Атаки (только для персонажей)
+    -- Attacks (only for characters)
     self.attacks = attacks or {}
     self.currentAttackIndex = 1
     
-    -- Флаги
+    -- Flags
     self.hasActedThisTurn = false
-    self.hasMovedThisTurn = false   -- для союзников
+    self.hasMovedThisTurn = false   -- for allies
     self.canMoveAfterAttack = false
     
 
     
-    -- Максимальный урон за один удар (nil = без ограничения)
+    -- Maximum damage per hit (nil = unlimited)
     self.maxDamagePerHit = nil
     
-    -- Может ходить по воде
+    -- Can walk on water
     self.waterWalker = false
     
-    -- Летающий юнит (игнорирует препятствия и воду при поиске пути)
+    -- Flying unit (ignores obstacles and water during pathfinding)
     self.flying = false
-    -- Парящий юнит (не тонет в воде, но учитывает препятствия)
+    -- Hovering unit (doesn't sink in water, but considers obstacles)
     self.hovering = false
-    -- Размер ячейки здоровья (защита от летального урона, nil = нет защиты)
+    -- Health cell size (protection from lethal damage, nil = no protection)
     self.healthCellSize = nil
     
-    -- Неразрушимая сущность (игнорирует весь урон)
+    -- Indestructible entity (ignores all damage)
     self.indestructible = false
     
-    -- Опасная зона (не блокирует движение, но убивает зашедших)
+    -- Hazard zone (doesn't block movement, but kills those who enter)
     self.isHazard = false
     
-    -- Направление сущности (кубический вектор {dx, dy, dz})
+    -- Entity direction (cubic vector {dx, dy, dz})
     self.direction = nil
 
-    --  НЕПОДВИЖНОСТЬ: препятствия и здания не отталкиваются
+    --  IMMOVABILITY: obstacles and buildings cannot be pushed
     self.isPushable = (type == Entity.TYPES.CHARACTER)
 
-    -- Стержень призывания
+    -- Summoning rod
     self.isSummoningRod = false
     self.summonCooldown = 0
     self.summonTargetQ = nil
     self.summonTargetR = nil
     self.summonType = nil
     
-    -- Флаг вагона поезда
+    -- Train car flag
     self.isTrainCar = false
 
-    -- Анимация смерти
+    -- Death animation
     self.isDying = false
     self.deathTimer = 0
-    self.deathDuration = 0.4   -- длительность анимации исчезновения
+    self.deathDuration = 0.4   -- duration of fade-out animation
 
-    -- Уровень улучшения юнита (0 = базовый, 1 = улучшен)
+    -- Unit upgrade level (0 = base, 1 = upgraded)
     self.upgradeLevel = 0
 
-    -- Warrior chain: после Dash можно Flip (и наоборот)
-    self.chainAttack = nil  -- "Dash" или "Flip"
-    -- Rogue redirect: после Shoot можно выстрелить ещё раз
+    -- Warrior chain: after Dash, Flip is possible (and vice versa)
+    self.chainAttack = nil  -- "Dash" or "Flip"
+    -- Rogue redirect: after Shoot, can fire again
     self.redirectPending = nil
     
     return self
 end
 
--- Проверка, является ли сущность персонажем
+-- Check if entity is a character
 function Entity:isCharacter()
     return self.type == Entity.TYPES.CHARACTER
 end
 
--- Проверка, является ли сущность препятствием
+-- Check if entity is an obstacle
 function Entity:isObstacle()
     return self.type == Entity.TYPES.OBSTACLE
 end
 
--- Проверка, является ли сущность зданием
+-- Check if entity is a building
 function Entity:isBuilding()
     return self.type == Entity.TYPES.BUILDING
 end
 
--- Можно ли оттолкнуть сущность
+-- Can the entity be pushed
 function Entity:isPushable()
     return self.isPushable
 end
 
--- Получить текущую атаку
+-- Get current attack
 function Entity:getCurrentAttack()
     if #self.attacks == 0 then
         return nil
@@ -126,7 +126,7 @@ function Entity:getCurrentAttack()
     return self.attacks[self.currentAttackIndex].attack
 end
 
--- Переключить атаку
+-- Switch attack
 function Entity:switchAttack()
     if #self.attacks > 0 and not self.hasActedThisTurn and not self.isMoving then
         self.currentAttackIndex = (self.currentAttackIndex % #self.attacks) + 1
@@ -137,7 +137,7 @@ function Entity:switchAttack()
     return false
 end
 
--- Применить урон
+-- Apply damage
 function Entity:takeDamage(damage)
     if self.indestructible then
         return false
@@ -145,7 +145,7 @@ function Entity:takeDamage(damage)
     if self.maxDamagePerHit then
         damage = math.min(damage, self.maxDamagePerHit)
     end
-    -- Защита ячейкой здоровья: нельзя потерять больше, чем выше порога
+    -- Health cell protection: cannot lose more than above the threshold
     if self.healthCellSize and self.health > self.healthCellSize then
         damage = math.min(damage, self.health - self.healthCellSize)
     end
@@ -160,14 +160,14 @@ function Entity:takeDamage(damage)
     log.debugf("entity", "%s takes %d damage! (%d/%d HP)",
           self.name, actualDamage, math.max(0, self.health), self.maxHealth)
 
-    -- Кислота: любой урон смертелен
+    -- Acid: any damage is lethal
     if actualDamage > 0 and status.hasEntityStatus(self, "acid") then
         self.health = 0
         log.infof("entity", "%s dissolves in acid!", self.name)
         return true
     end
 
-    -- Стержень призывания: любой урон отменяет призыв на 1 ход
+    -- Summoning rod: any damage cancels summon for 1 turn
     if self.isSummoningRod then
         self.summonCooldown = 1
         if self.hasPreparedAttack then
@@ -182,7 +182,7 @@ function Entity:takeDamage(damage)
     return self.health <= 0
 end
 
--- Запуск анимации смерти
+-- Start death animation
 function Entity:startDeath()
     if self.isDying then return end
     self.isDying = true
@@ -200,7 +200,7 @@ function Entity:startDeath()
     end
 end
 
--- Получить строковое представление
+-- Get string representation
 function Entity:getTypeString()
     if self:isCharacter() then
         return self.isPlayable and "ally" or "enemy"

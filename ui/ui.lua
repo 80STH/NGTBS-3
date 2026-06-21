@@ -1,5 +1,5 @@
 -- ui.lua
--- Все функции интерфейса (кнопки, панели, предпросмотр атак, движения и т.д.)
+-- All UI functions (buttons, panels, attack preview, movement, etc.)
 local ui = {}
 local pathfinding = require("grid.pathfinding")
 local combat = require("combat.combat")
@@ -9,10 +9,10 @@ local cell_rules = require("grid.cell_rules")
 require("ui.ui_buttons")(ui)
 require("ui.ui_status_effects")(ui)
 -- ============================================================
--- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПРЕДПРОСМОТРА АТАК
+-- HELPER FUNCTIONS FOR ATTACK PREVIEW
 -- ============================================================
 local hazardTexture = nil
--- Возвращает реальные координаты для отрисовки сущности (с учётом анимаций)
+-- Returns real coordinates for entity rendering (accounting for animations)
 local function getEntityDisplayPosition(entity, hex)
     if not entity then return nil, nil end
     if entity.currentDrawX and entity.currentDrawY then
@@ -37,7 +37,7 @@ function ui.getHazardTexture()
     hazardTexture = canvas
     return hazardTexture
 end
--- Проверка, может ли актор дойти до клетки (с учётом препятствий и длины пути)
+-- Checks whether the actor can reach the cell (considering obstacles and path length)
 function ui.getEffectiveMoveRange(actor, entities, hex)
     if status and status.hasEntityStatus and status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
         return 0
@@ -59,19 +59,19 @@ end
 function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     if not hex:isActiveHex(targetQ, targetR) then return false end
     
-    -- Вода непроходима (кроме летающих/парящих)
+    -- Water is impassable (except for flying/hovering)
     if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
         if not (actor and (actor.flying or actor.hovering)) then
             return false
         end
     end
     
-    -- Клетка не должна быть занята (для остановки)
+    -- The cell must not be occupied (for stopping)
     if isCellOccupiedForStop(targetQ, targetR, actor) then
         return false
     end
     
-    -- Поиск пути с ограничением по дальности и блокировками
+    -- Pathfinding with range limit and blockers
     local effectiveRange = ui.getEffectiveMoveRange(actor, entities, hex)
     local isBlockedFn
     if actor.flying then
@@ -91,14 +91,14 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     local effectiveRange = ui.getEffectiveMoveRange(actor, entities, hex)
     local dist = hex:getDistance(actor.q, actor.r, hoverQ, hoverR)
     if dist > effectiveRange then return end
-    -- Не показываем путь, если клетка занята (союзником или врагом)
+    -- Don't show path if the cell is occupied (by ally or enemy)
     if isCellOccupiedForStop(hoverQ, hoverR, actor) then
         return
     end
     local path = pathfinding.findPath(actor.q, actor.r, hoverQ, hoverR, effectiveRange,
         function(q, r) return not isCellPassable(q, r, actor) end, hex)
     if not path or #path == 0 then return end
-    -- Рисуем линию и силуэт (как было ранее)
+    -- Draw line and silhouette (as before)
     local points = {}
     local startX, startY = getDrawCoords(actor.q, actor.r)
     table.insert(points, {x = startX, y = startY})
@@ -117,7 +117,7 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     if actor.sprite then
         love.graphics.setColor(1, 1, 1, alpha)
         local sw, sh = actor.sprite:getDimensions()
-        local scale = 5.9  -- чуть меньше оригинала
+        local scale = 5.9  -- slightly smaller than original
         love.graphics.draw(actor.sprite, targetX, targetY, 0, scale, scale, sw/2, sh/2)
         love.graphics.setColor(1, 1, 1, 1)
     else
@@ -129,45 +129,45 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     love.graphics.polygon("line", vertices)
     love.graphics.setLineWidth(1)
 end
--- Проверить, получит ли отталкиваемая сущность урон от столкновения
--- возвращает (урон, причина, вторая_сущность)
+-- Check if the pushed entity will receive collision damage
+-- returns (damage, reason, second_entity)
 function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
-    -- Если цель не является персонажем, урон не получает (например, камень)
+    -- If target is not a character, no damage taken (e.g., a rock)
     if not entity:isCharacter() then
         return 0, nil, nil
     end
-    -- Если клетка назначения не активна (вылет за край)
+    -- If destination cell is not active (off-edge)
     if not hex:isActiveHex(toQ, toR) then
         return 1, "edge", nil
     end
-    -- Проверяем, занята ли клетка другой сущностью
+    -- Check if the cell is occupied by another entity
     local occupant = getEntityAtHex(toQ, toR, entities)
     if occupant then
-        -- Склон горы (неразрушимый) — урона нет
+        -- Mountain slope (indestructible) — no damage
         if occupant.noCollisionDamage then
             return 0, nil, nil
         end
-        -- Направленная сущность — проверка стороны
+        -- Directional entity — side check
         if occupant.direction then
             local safe = hex_utils.isPushFromSafeSide(occupant, fromQ, fromR)
             if safe then
                 return 0, nil, nil
             end
         end
-        -- Столкновение с другой сущностью
-        -- Обе получают урон, если обе являются персонажами
+        -- Collision with another entity
+        -- Both take damage if both are characters
         if entity:isCharacter() then
             if occupant:isCharacter() then
                 return 1, "collision_both", occupant
             else
-                -- Неподвижный объект (здание, препятствие) – урон только отталкиваемому
+                -- Immovable object (building, obstacle) – damage only to the pushed entity
                 return 1, "collision_immovable", occupant
             end
         end
     end
     return 0, nil, nil
 end
--- Отрисовка стрелки отталкивания (с отступом от центров)
+-- Draw push arrow (with offset from centers)
 function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, toQ, toR)
     local isLowTerrain = function(q, r) local t = terrainMap and terrainMap[q] and terrainMap[q][r]; return t == "water" or t == "underwater_mines" end
     if fromQ ~= nil and isLowTerrain(fromQ, fromR) then
@@ -189,16 +189,16 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
     local cg = g or 0.8
     local cb = b or 0.2
     local ca = alpha or 0.9
-    -- Тень
+    -- Shadow
     love.graphics.setColor(0, 0, 0, ca * 0.35)
     love.graphics.setLineWidth(lineWidth + 2)
     love.graphics.line(startX + 2, startY + 2, endX + 2, endY + 2)
-    -- Стрелка (линия)
+    -- Arrow (line)
     love.graphics.setColor(cr, cg, cb, ca)
     love.graphics.setLineWidth(lineWidth)
     love.graphics.line(startX, startY, endX, endY)
     love.graphics.setLineWidth(1)
-    -- Треугольный наконечник
+    -- Triangular arrowhead
     local headLen = arrowSize
     local headWidth = headLen * 0.5
     local lx = endX + math.cos(angle + math.pi * 0.85) * headWidth
@@ -212,7 +212,7 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
     love.graphics.setColor(cr, cg, cb, ca)
     love.graphics.polygon("fill", tipX, tipY, lx, ly, rx, ry)
 end
--- Нарисовать значок столкновения
+-- Draw collision icon
 function ui.drawCollisionIcon(x, y, damage, isDouble)
     love.graphics.setColor(0.8, 0, 0, 1)
     love.graphics.circle("fill", x, y, 12)
@@ -222,7 +222,7 @@ function ui.drawCollisionIcon(x, y, damage, isDouble)
     end
 end
 -- ============================================================
--- ОСНОВНЫЕ UI-ФУНКЦИИ, ВЫЗЫВАЕМЫЕ ИЗ MAIN.LUA
+-- MAIN UI FUNCTIONS, CALLED FROM MAIN.LUA
 -- ============================================================
 function ui.drawPreparedAttacks(hex, entities)
     local threatMap = {}
@@ -386,7 +386,7 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
     local keys = {}
     if not attacker or not attack then return keys end
     if attacker.hasActedThisTurn then return keys end
-    -- Предвычисляем общие ключи для новых атак
+    -- Precompute common keys for new attacks
     local genericKeys = attack.getTargetCell and attack:getValidTargets(attacker, hex, entities) or nil
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
@@ -494,11 +494,11 @@ function ui.drawPreparedAttackHealthBars(hex, entities)
         end
     end
 end
--- ГЛАВНАЯ ФУНКЦИЯ ПРЕДПРОСМОТРА АТАКИ (вызывается при наведении мыши)
+-- MAIN ATTACK PREVIEW FUNCTION (called on mouse hover)
 function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR, entities)
     if not attackMode or not attack then return end
     if not attacker or attacker.hasActedThisTurn then return end
-    -- Проверяем, можно ли вообще применить атаку на эту клетку
+    -- Check whether the attack can be applied to this cell at all
     local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
     if distance > attack.range then return end
     if not hex:isActiveHex(hoverQ, hoverR) then return end
@@ -506,9 +506,9 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
         if not stepX then return end
     end
-    -- Анализируем тип атаки и получаем детали предпросмотра
+    -- Analyze attack type and get preview details
     local previewData = nil
-    -- Flip: 1 урон, 3 клетки для переброса
+    -- Flip: 1 damage, 3 cells for flip
     if attack.name == "Flip" then
         local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
         if distance == 1 then
@@ -582,7 +582,7 @@ end
         if stepX then
             local firstTarget, targetHex, lastFree = attack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
             
-            -- Стрелка должна указывать на цель, а не на курсор
+            -- Arrow should point to the target, not the cursor
             local indicatorQ, indicatorR
             if firstTarget and targetHex then
                 indicatorQ, indicatorR = targetHex.q, targetHex.r
@@ -590,7 +590,7 @@ end
                 indicatorQ, indicatorR = hoverQ, hoverR
             end
             
-            -- Рисуем след рывка от атакующего к цели
+            -- Draw dash trail from attacker to target
             local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
             local toX, toY = getDrawCoords(indicatorQ, indicatorR)
             local trailPulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 6)
@@ -602,14 +602,14 @@ end
             love.graphics.line(fromX, fromY, toX, toY)
             love.graphics.setLineWidth(1)
             ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, attacker.q, attacker.r, indicatorQ, indicatorR)
-            -- Маркер цели в точке удара
+            -- Target marker at impact point
             local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
             local alpha = 0.4 + 0.4 * pulse
             love.graphics.setColor(1, 1, 0.4, alpha)
             love.graphics.setLineWidth(2)
             love.graphics.circle("line", toX, toY, hex.radius * 0.35)
             love.graphics.setLineWidth(1)
-            -- Урон по первой цели + возможный урон от отталкивания
+            -- Damage to first target + possible knockback damage
             if firstTarget then
                 local targetX, targetY = getDrawCoords(firstTarget.q, firstTarget.r)
                 local totalDamage = attack.damage or 1
@@ -997,7 +997,7 @@ end
         end
         return
     end
-    -- Shoot: урон + отталкивание + коллизия
+    -- Shoot: damage + knockback + collision
     if attack.name == "Shoot" then
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
         if stepX then
@@ -1040,7 +1040,7 @@ end
         end
         return
     end
-    -- Piercing Shot: две цели, урон + отталкивание
+    -- Piercing Shot: two targets, damage + knockback
     if attack.name == "Piercing Shot" then
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
         if stepX then
@@ -1122,7 +1122,7 @@ end
         end
         return
     end
-    -- Для атак, у которых есть getPushCell (Shoot и др.)
+    -- For attacks that have getPushCell (Shoot etc.)
     if attack.getPushCell then
         local pushCell = attack:getPushCell(attacker, hoverQ, hoverR, hex, entities)
         if pushCell then
@@ -1185,7 +1185,7 @@ end
             end
         end
     end
-    -- Piercing Shot (две цели на линии)
+    -- Piercing Shot (two targets on the line)
     if attack.getPushCells and not previewData and attack.name == "Piercing Shot" then
         local pushCells = attack:getPushCells(attacker, hoverQ, hoverR, hex, entities)
         if pushCells and #pushCells > 0 then
@@ -1230,7 +1230,7 @@ if attack.name == "Stone Throw" then
     if dist < (attack.minRange or 2) or dist > attack.range then return end
     if not hex:isActiveHex(hoverQ, hoverR) then return end
     local dirQ, dirR = hoverQ - attacker.q, hoverR - attacker.r
-    -- Проверка прямой линии
+    -- Straight line check
     local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
     if not stepX then return end
     local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
@@ -1238,7 +1238,7 @@ if attack.name == "Stone Throw" then
     local midX = (fromX + centerX) / 2
     local midY = (fromY + centerY) / 2
     ui.drawDottedArc(fromX, fromY, centerX, centerY, midX, midY - 50, 4, 20, love.timer.getTime())
-    -- Урон, если есть цель
+    -- Damage, if there is a target
     local targetEntity = getEntityAtHex(hoverQ, hoverR, entities)
     if targetEntity and targetEntity.health > 0 then
         if targetEntity:isBuilding() then
@@ -1251,7 +1251,7 @@ if attack.name == "Stone Throw" then
             local nX, nY, nZ = hex_utils.axialToCube(nb.q, nb.r)
             local dirX, dirY, dirZ = nX - cX, nY - cY, nZ - cZ
             local pushQ, pushR = hex_utils.applyCubeStep(nb.q, nb.r, dirX, dirY, dirZ)
-            -- внутри блока Stone Throw
+            -- inside Stone Throw block
 local target = getEntityAtHex(nb.q, nb.r, entities)
 local hasTarget = target and target:isCharacter() and target.health > 0
             local fromX, fromY = getDrawCoords(nb.q, nb.r)
@@ -1282,7 +1282,7 @@ if attack.name == "Cone Blast" then
     local dirQ, dirR = hoverQ - attacker.q, hoverR - attacker.r
     local centerX, centerY = getDrawCoords(hoverQ, hoverR)
     local centerTarget = getEntityAtHex(hoverQ, hoverR, entities)
-    -- Соседи в направлении
+    -- Neighbors in direction
     local allNeighbors = hex:getNeighbors(hoverQ, hoverR)
     for _, nb in ipairs(allNeighbors) do
         if hex:isActiveHex(nb.q, nb.r) then
@@ -1313,7 +1313,7 @@ local hasTarget = target and target:isCharacter() and target.health > 0
     end
     return
 end
-    -- Общий метод: getAffectedCells (для новых атак)
+    -- Generic method: getAffectedCells (for new attacks)
     if attack.getAffectedCells then
         local cells = attack:getAffectedCells(attacker, hoverQ, hoverR, hex, entities)
         for _, c in ipairs(cells) do
@@ -1330,7 +1330,7 @@ end
     if not previewData or #previewData == 0 then
         return
     end
-    -- Собираем здания, которые уже учтены как прямые цели
+    -- Collect buildings already counted as direct targets
     local directBuildingIds = {}
     for _, pd in ipairs(previewData) do
         if pd.target and pd.target:isBuilding() and pd.attackDamage > 0 then
@@ -1376,7 +1376,7 @@ end
                 if target:isBuilding() then
                 end
             end
-            -- Отталкивание
+            -- Knockback
             if pd.pushTo then
                 local toX, toY = getDrawCoords(pd.pushTo.q, pd.pushTo.r)
                 ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, pd.fromCell.q, pd.fromCell.r, pd.pushTo.q, pd.pushTo.r)
@@ -1427,7 +1427,7 @@ function ui.drawMovementRange(hex, actor, entities, terrainMap)
         end
     end
 end
--- Кнопка Undo
+-- Undo button
 function ui.getEffectiveStatuses(entity)
     local statuses = {}
     for _, st in ipairs(status.getEntityStatuses(entity)) do
@@ -1457,7 +1457,7 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
     local font = love.graphics.getFont()
     local pad = 8
     local margin = 10
-    -- Статусы
+    -- Statuses
     local statusDescriptions = {
         fire = { name = "Fire", color = {1, 0.5, 0}, desc = "Burns for 1 damage at end of turn. Extinguished by water." },
         acid = { name = "Acid", color = {0.3, 0.9, 0.3}, desc = "Any damage is instantly lethal." },
@@ -1486,11 +1486,11 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         end
         return lines
     end
-    -- Собираем содержимое
+    -- Collect content
     local lines = {}
-    -- Имя + здоровье
+    -- Name + health
     table.insert(lines, { text = entity.name .. "  " .. entity.health .. "/" .. entity.maxHealth, color = {1,1,1} })
-    -- Дальность передвижения
+    -- Movement range
     local baseMove = entity.moveRange or 0
     local effMove = ui.getEffectiveMoveRange(entity, entities, hex)
     if effMove > baseMove then
@@ -1498,13 +1498,13 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
     else
         table.insert(lines, { text = "Move: " .. baseMove, color = {0.8, 0.8, 0.8} })
     end
-    -- Террейн
+    -- Terrain
     local terrain = "grass"
     if terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] then
         terrain = terrainMap[entity.q][entity.r]
     end
     table.insert(lines, { text = "Terrain: " .. terrain, color = {0.9, 0.9, 0.7} })
-    -- Направленная сущность (MountainSlope и т.п.)
+    -- Directional entity (MountainSlope etc.)
     if entity.direction then
         table.insert(lines, { text = "Directional barrier", color = {0.4, 0.9, 0.4} })
         table.insert(lines, { text = "Green = safe push, Red = damaging", color = {0.8, 0.8, 0.7} })
@@ -1512,7 +1512,7 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
             table.insert(lines, { text = "Takes damage from red side", color = {0.9, 0.5, 0.5} })
         end
     end
-    -- Атака врага
+    -- Enemy attack
     local attackText = nil
     if not entity.isPlayable and entity.attacks and #entity.attacks > 0 then
         attackText = entity.attacks[1]
@@ -1521,11 +1521,11 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         table.insert(lines, { text = attackText.name, color = {0.9, 0.6, 0.3} })
         table.insert(lines, { text = attackText.description, color = {0.8, 0.8, 0.7} })
     end
-    -- Стержень призывания: информация о призыве
+    -- Summoning rod: summon info
     if entity.isSummoningRod and entity.hasPreparedAttack and entity.summonTargetQ and entity.summonType then
         table.insert(lines, { text = string.format("Summon: %s at (%d,%d)", entity.summonType, entity.summonTargetQ, entity.summonTargetR), color = {1, 0.6, 0.2} })
     end
-    -- Подготовленная атака
+    -- Prepared attack
     if entity.hasPreparedAttack and entity.preparePosCube and entity.preparedTargetCube then
         local curX, curY, curZ = hex_utils.axialToCube(entity.q, entity.r)
         local deltaX = curX - entity.preparePosCube.x
@@ -1537,7 +1537,7 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
         table.insert(lines, { text = string.format("Prepares: (%d,%d) -> (%d,%d) for 1 dmg", entity.q, entity.r, targetQ, targetR), color = {1, 0.5, 0} })
     end
-    -- Вычисляем ширину (максимальная строка) + статусы
+    -- Calculate width (max line) + statuses
     local minWidth = 180
     local maxWidth = 320
     local contentWidth = minWidth
@@ -1547,7 +1547,7 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
     end
     contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
     local wrapWidth = contentWidth - pad * 2 - 16
-    -- Вычисляем высоту
+    -- Calculate height
     local topY = pad
     local lineH = 16
     for _, l in ipairs(lines) do
@@ -1564,23 +1564,23 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         end
     end
     local panelHeight = topY + pad
-    -- Позиционирование: правый нижний угол, над кнопкой Enemy Order
+    -- Positioning: bottom-right corner, above Enemy Order button
     local px = math.max(margin, logicalW - contentWidth - margin)
     local py = math.max(margin, logicalH - panelHeight - 50)
-    -- Не налезаем на левые кнопки (x<155)
+    -- Don't overlap left buttons (x<155)
     if px < 155 and px + contentWidth > 10 then
         px = 155 + margin
     end
-    -- Не налезаем на правые кнопки атак (x>logicalW-160, y<250)
+    -- Don't overlap right attack buttons (x>logicalW-160, y<250)
     if py < 250 and px + contentWidth > logicalW - 160 then
         py = math.max(250, py)
     end
-    -- Фон и рамка
+    -- Background and border
     love.graphics.setColor(bgColor)
     love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
     love.graphics.setColor(borderColor)
     love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 8)
-    -- Рисуем содержимое
+    -- Draw content
     local curY = py + pad
     for _, l in ipairs(lines) do
         love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
@@ -1588,7 +1588,7 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         curY = curY + lineH
     end
     if #lines > 0 then curY = curY + 4 end
-    -- Статусы
+    -- Statuses
     if #statuses > 0 then
         love.graphics.setColor(1, 0.8, 0.4, 1)
         love.graphics.print("Status Effects:", px + pad, py + statusY)
@@ -1624,7 +1624,7 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
     local fromR = enemy.preparedFromR or enemy.r
     local fromX, fromY = getDrawCoords(fromQ, fromR)
     if not fromX then return end
-    -- TrainShunt: локомотив показывает направление движения
+    -- TrainShunt: locomotive shows direction of movement
     if attack.name == "TrainShunt" then
         if enemy.preparedTargetOffset then
             local targetQ, targetR = hex_utils.applyCubeDiff(
@@ -1642,19 +1642,19 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
         end
         return
     end
-    -- Ghost Bolt: первая цель на линии
+    -- Ghost Bolt: first target on the line
 if attack.name == "Ghost Bolt" then
     if enemy.attackDirection then
         local step = enemy.attackDirection
         local curQ, curR = enemy.q, enemy.r
         local lastValidQ, lastValidR = curQ, curR
-        -- Идём по линии до неактивной клетки
+        -- Go along the line until an inactive cell
         while true do
             local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
             if not hex:isActiveHex(nextQ, nextR) then
-                break  -- дошли до неактивной клетки (выход за пределы шестиугольника)
+                break  -- reached an inactive cell (out of hexagon bounds)
             end
-            -- Проверяем, есть ли живая цель (первая встреченная)
+            -- Check if there is a living target (first encountered)
             local ent = getEntityAtHex(nextQ, nextR, entities)
             if ent and ent ~= enemy and ent.health > 0 then
                 lastValidQ, lastValidR = nextQ, nextR
@@ -1663,7 +1663,7 @@ if attack.name == "Ghost Bolt" then
             lastValidQ, lastValidR = nextQ, nextR
             curQ, curR = nextQ, nextR
         end
-        -- Если есть хоть одна клетка, не совпадающая с позицией врага
+        -- If there is at least one cell not matching the enemy's position
         if (lastValidQ ~= enemy.q or lastValidR ~= enemy.r) then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(lastValidQ, lastValidR)
@@ -1709,7 +1709,7 @@ end
         end
         return
     end
-    -- Общий метод для атак с getAffectedCells (Bash, Cleave, Lunge и др.)
+    -- Generic method for attacks with getAffectedCells (Bash, Cleave, Lunge, etc.)
     if attack.getAffectedCells and enemy.preparedTargetOffset then
         local targetQ, targetR = hex_utils.applyCubeDiff(
             enemy.q, enemy.r,
@@ -1718,7 +1718,7 @@ end
             enemy.preparedTargetOffset.dz
         )
         if hex:isActiveHex(targetQ, targetR) then
-            -- Показываем линию от врага к цели
+            -- Show line from enemy to target
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
             local pulse = 0.5 + 0.5 * math.sin(time * 8)
@@ -1727,7 +1727,7 @@ end
         end
         return
     end
-    -- Для атак с направлением (Dash, Shoot, Piercing) – используем направление
+    -- For attacks with direction (Dash, Shoot, Piercing) – use direction
     if enemy.attackDirection then
         local step = enemy.attackDirection
         local targetQ, targetR = hex_utils.applyCubeStep(enemy.q, enemy.r, step.dx, step.dy, step.dz)
@@ -1740,7 +1740,7 @@ end
         end
     end
 end
--- Предпросмотр Wind Torrent: рисует стрелки от каждого подвижного объекта к его новому положению
+-- Preview Wind Torrent: draws arrows from each movable object to its new position
 -- ui.lua
 -- ui.lua
 function ui.drawCellTooltip(q, r, terrain, hex)
@@ -1760,7 +1760,7 @@ function ui.drawCellTooltip(q, r, terrain, hex)
         end
     end
     local lightningWarningHere = lightningWarning and lightningTargetQ == q and lightningTargetR == r
-    -- Собираем строки контента
+    -- Collect content strings
     local content = {}
     table.insert(content, { text = "Terrain: " .. terrain, color = {1,1,1} })
     if #statuses > 0 then
@@ -1777,7 +1777,7 @@ function ui.drawCellTooltip(q, r, terrain, hex)
         table.insert(content, { text = "! Lightning target !", color = {1, 0.9, 0.2} })
     end
     if #content == 0 then return end
-    -- Ширина
+    -- Width
     local minWidth = 160
     local maxWidth = 280
     local contentWidth = minWidth
@@ -1786,9 +1786,9 @@ function ui.drawCellTooltip(q, r, terrain, hex)
         if w > contentWidth then contentWidth = w end
     end
     contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
-    -- Высота
+    -- Height
     local panelHeight = pad + #content * 16 + pad
-    -- Позиционирование: правый нижний угол
+    -- Positioning: bottom right corner
     local px = math.max(margin, logicalW - contentWidth - margin)
     local py = math.max(margin, logicalH - panelHeight - 50)
     if px < 155 and px + contentWidth > 10 then
@@ -1829,7 +1829,7 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
             return false
         end
     end
-    -- Клетка не должна быть занята (союзником или врагом)
+    -- Cell must not be occupied (by ally or enemy)
     for _, e in ipairs(entities) do
         if e ~= enemy and e.q == targetQ and e.r == targetR then
             return false
@@ -1847,8 +1847,8 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
     return path ~= nil and #path > 0
 end
 function isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
-    -- Делегирует в cell_rules.isPassable с passableSide = "enemy".
-    -- Враги могут проходить сквозь других врагов, но не сквозь союзников/препятствия.
+    -- Delegates to cell_rules.isPassable with passableSide = "enemy".
+    -- Enemies can pass through other enemies, but not through allies/obstacles.
     return cell_rules.isPassable(q, r, enemy, {
         entities = entities, terrainMap = terrainMap, hex = hex,
         passableSide = "enemy",
@@ -1866,7 +1866,7 @@ function ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
     local riseY = fromY + dy * 0.66 - 35
     local pulse = 0.6 + 0.4 * math.sin(time * 6)
     local alpha = 0.6 + 0.4 * pulse
-    -- ===== 1. Стрелка от Лича к точке заныривания =====
+    -- ===== 1. Arrow from Lich to dive point =====
     local function drawArrow(ax, ay, bx, by, a)
         local angle = math.atan2(by - ay, bx - ax)
         love.graphics.setLineWidth(4)
@@ -1883,12 +1883,12 @@ function ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
             by + math.sin(rightAngle) * arrowSize)
     end
     drawArrow(fromX, fromY, diveX, diveY, alpha)
-    -- ===== 2. Эффект "заныривания" (земля разрывается) =====
+    -- ===== 2. "Dive" effect (ground tears apart) =====
     love.graphics.setColor(0.5, 0.2, 0.8, alpha * 0.9)
     love.graphics.circle("fill", diveX, diveY, 14)
     love.graphics.setColor(0.9, 0.4, 1, alpha)
     love.graphics.circle("line", diveX, diveY, 18)
-    -- Искры
+    -- Sparks
     for i = 1, 5 do
         local angleOff = time * 12 + i
         local offX = math.cos(angleOff) * 12 * pulse
@@ -1896,7 +1896,7 @@ function ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
         love.graphics.setColor(1, 0.5, 1, alpha)
         love.graphics.circle("fill", diveX + offX, diveY + offY, 3)
     end
-    -- ===== 3. Подземный путь (волнообразные точки) =====
+    -- ===== 3. Underground path (wave-like dots) =====
     local numDots = 10
     for i = 1, numDots do
         local t = i / numDots
@@ -1908,9 +1908,9 @@ function ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
         love.graphics.setColor(0.8, 0.3, 1, alpha * 0.5)
         love.graphics.circle("line", px, py, dotSize + 2)
     end
-    -- ===== 4. Стрелка от точки выныривания к цели =====
+    -- ===== 4. Arrow from emergence point to target =====
     drawArrow(riseX, riseY, toX, toY, alpha)
-    -- ===== 5. Эффект "выныривания" (всплеск магии) =====
+    -- ===== 5. "Emergence" effect (magic surge) =====
     love.graphics.setColor(0.8, 0.3, 1, alpha * 0.9)
     love.graphics.circle("fill", riseX, riseY, 14)
     love.graphics.setColor(1, 0.6, 1, alpha)
@@ -1924,23 +1924,23 @@ function ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
     end
     love.graphics.setLineWidth(1)
 end
--- ui.lua, функция drawDigSites
+-- ui.lua, function drawDigSites
 function ui.drawDigSites(hex, digSites)
     local time = love.timer.getTime()
     for _, site in ipairs(digSites) do
         local x, y = getDrawCoords(site.q, site.r)
         local radius = hex.radius
-        -- Тень ямы
+        -- Pit shadow
         love.graphics.setColor(0.2, 0.1, 0.05, 0.9)
         love.graphics.circle("fill", x, y, radius * 0.45)
-        -- Внутренность ямы (темно-коричневая)
+        -- Pit interior (dark brown)
         love.graphics.setColor(0.4, 0.2, 0.1, 0.9)
         love.graphics.circle("fill", x, y, radius * 0.4)
-        -- Пульсирующая земля по краям
+        -- Pulsing earth along edges
         local pulse = 0.5 + 0.5 * math.sin(time * 5)
         love.graphics.setColor(0.7, 0.4, 0.1, 0.7 + pulse * 0.3)
         love.graphics.circle("line", x, y, radius * 0.42)
-        -- "Земляные" точки вокруг
+        -- "Earth" dots around
         for i = 1, 6 do
             local angle = (i / 6) * math.pi * 2 + time * 3
             local dx = math.cos(angle) * radius * 0.5
@@ -1948,17 +1948,17 @@ function ui.drawDigSites(hex, digSites)
             love.graphics.setColor(0.5, 0.3, 0.1, 0.8)
             love.graphics.circle("fill", x + dx, y + dy, 3)
         end
-        -- Таймер (количество ходов до спавна) если >1
+        -- Timer (number of turns until spawn) if >1
         if site.timer > 1 then
             love.graphics.setColor(1, 1, 1, 1)
             love.graphics.print(tostring(site.timer), x + 10, y - 14)
         end
-        -- Отображение возраста (для дебага)
+        -- Age display (for debug)
         -- love.graphics.print(site.age, x + 15, y + 5)
     end
 end
 -- ============================================================
--- Функция рисования пунктирной прямой (с тенью)
+-- Function for drawing dotted line (with shadow)
 -- ============================================================
 function ui.drawDottedLine(x1, y1, x2, y2, dotRadius, step, time)
     local dx = x2 - x1
@@ -1976,10 +1976,10 @@ function ui.drawDottedLine(x1, y1, x2, y2, dotRadius, step, time)
         local pulse = 0.6 + 0.4 * math.sin(time * 8 + i)
         local r = dotRadius * (0.7 + 0.3 * pulse)
         local alpha = 0.85 * pulse
-        -- Тень
+        -- Shadow
         love.graphics.setColor(0, 0, 0, 0.5 * alpha)
         love.graphics.circle("fill", px + 2, py + 2, r)
-        -- Основная точка
+        -- Main dot
         love.graphics.setColor(0.7, 0.3, 1, alpha)
         love.graphics.circle("fill", px, py, r)
         love.graphics.setColor(1, 0.8, 1, 0.9)
@@ -1993,7 +1993,7 @@ function ui.drawDottedArc(x1, y1, x2, y2, cx, cy, dotRadius, step, time)
         local y = mt*mt * y1 + 2*mt*t * cy + t*t * y2
         return x, y
     end
-    -- Приблизительная длина дуги (грубая оценка)
+    -- Approximate arc length (rough estimate)
     local mid1x, mid1y = bezier(0.5)
     local len = math.sqrt((x2-x1)^2 + (y2-y1)^2) + math.sqrt((mid1x-cx)^2 + (mid1y-cy)^2)*0.5
     local numDots = math.max(5, math.floor(len / step))
@@ -2004,10 +2004,10 @@ function ui.drawDottedArc(x1, y1, x2, y2, cx, cy, dotRadius, step, time)
         local pulse = 0.6 + 0.4 * math.sin(time * 8 + i)
         local r = dotRadius * (0.7 + 0.3 * pulse)
         local alpha = 0.85 * pulse
-        -- Тень
+        -- Shadow
         love.graphics.setColor(0, 0, 0, 0.5 * alpha)
         love.graphics.circle("fill", px + 2, py + 2, r)
-        -- Основная точка
+        -- Main dot
         love.graphics.setColor(0.7, 0.2, 1, alpha)
         love.graphics.circle("fill", px, py, r)
         love.graphics.setColor(1, 0.5, 1, alpha * 0.9)
@@ -2029,7 +2029,7 @@ function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
 end
 -- ======================================================
 -- ============================================================
--- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ УПРАВЛЕНИЯ ВЫБОРОМ
+-- AUXILIARY SELECTION MANAGEMENT FUNCTIONS
 -- ============================================================
 function updateAttackButtons(actor)
     attackButtons = {}
@@ -2087,7 +2087,7 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
         if not stepX then return end
     end
-    -- Специфичные ветки для существующих атак (обратная совместимость)
+    -- Specific branches for existing attacks (backwards compatibility)
     if attack.name == "Flip" then
         if distance == 1 then
             local target = getEntityAtHex(hoverQ, hoverR, entities)
@@ -2189,7 +2189,7 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
         end
         return
     end
-    -- Общий метод: getAffectedCells (для новых атак)
+    -- Generic method: getAffectedCells (for new attacks)
     if attack.getAffectedCells then
         local cells = attack:getAffectedCells(attacker, hoverQ, hoverR, hex, entities)
         for _, c in ipairs(cells) do

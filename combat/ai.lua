@@ -1,6 +1,6 @@
 -- ai.lua
--- ИИ: враги двигаются к цели, затем подготавливают удар
--- Исправлено: дальнобойные атаки (Lich, Ghost) и Bite работают корректно
+-- AI: enemies move toward the target, then prepare an attack
+-- Fixed: ranged attacks (Lich, Ghost) and Bite work correctly
 
 local ai = {}
 local pathfinding = require("grid.pathfinding")
@@ -10,7 +10,7 @@ local attack_effects = require("combat.attack_effects")
 local status = require("system.status")
 local log = require("util.log")
 
--- Проверка, лежит ли цель на одной из шести прямых от источника (включая любую дистанцию)
+-- Check if the target lies on one of six straight lines from the source (including any distance)
 local function isOnStraightLine(fromQ, fromR, toQ, toR, hex)
     local fx, fy, fz = hex_utils.axialToCube(fromQ, fromR)
     local tx, ty, tz = hex_utils.axialToCube(toQ, toR)
@@ -41,23 +41,23 @@ local function debugPrint(...)
     log.debug("ai", ...)
 end
 
--- Требует ли атака прямой линии (для Bite и Magic Bolt – нет)
+-- Whether the attack requires a straight line (for Bite and Magic Bolt — no)
 local function attackRequiresLine(attack)
     return true
 end
 
--- Должна ли атака поражать первую цель на линии (Ghost, Dash, Shoot, Piercing)
+-- Whether the attack should hit the first target on the line (Ghost, Dash, Shoot, Piercing)
 local function attackHitsFirstTarget(attack)
     return attack.name == "Ghost Bolt" or attack.name == "Dash" or attack.name == "Shoot" or attack.name == "Piercing Shot"
 end
 
--- Получить текущую атаку врага (первую)
+-- Get the current enemy attack (the first one)
 local function getEnemyAttack(enemy)
     if not enemy.attacks or #enemy.attacks == 0 then return nil end
     return enemy.attacks[1].attack
 end
 
--- Получить все атакуемые цели (игроки + постройки)
+-- Get all attackable targets (players + buildings)
 function ai.getAttackableTargets(entities)
     local targets = {}
     for _, e in ipairs(entities) do
@@ -70,7 +70,7 @@ function ai.getAttackableTargets(entities)
     return targets
 end
 
--- Проверка, может ли враг подготовить атаку прямо сейчас
+-- Check if the enemy can prepare an attack right now
 function ai.canPrepareAttack(enemy, entities)
     local attack = getEnemyAttack(enemy)
     if not attack then return false end
@@ -98,7 +98,7 @@ function ai.canPrepareAttack(enemy, entities)
     return false
 end
 
--- Получить лучшую цель для врага с учётом распределения
+-- Get the best target for an enemy considering distribution
 function ai.getBestTargetForEnemy(enemy, entities, hex, selectedTargets)
     selectedTargets = selectedTargets or {}
     local attack = getEnemyAttack(enemy)
@@ -151,7 +151,7 @@ function ai.getBestTargetForEnemy(enemy, entities, hex, selectedTargets)
     return bestTarget, bestScore
 end
 
--- Подготовить атаку для врага (без движения)
+-- Prepare attack for enemy (without movement)
 function ai.prepareAttackForEnemy(enemy, entities, hex, selectedTargets)
     if not enemy:isCharacter() or enemy.isPlayable or enemy.health <= 0 then return false end
     if not ai.canPrepareAttack(enemy, entities) then return false end
@@ -202,7 +202,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
     local attack = enemy.preparedAttack
     if not attack then return false end
 
-    -- Стержень призывания: вызываем execute напрямую
+    -- Summoning rod: call execute directly
     if enemy.isSummoningRod then
         if attack and attack.execute then
             attack:execute(enemy, nil, nil, hex, entities, sounds)
@@ -215,11 +215,11 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
     end
 
     local target = nil
-    local targetQ, targetR = nil, nil  -- целевая клетка (всегда будет определена)
+    local targetQ, targetR = nil, nil  -- target cell (will always be determined)
 
-    -- ===== 1. Определяем целевую клетку и, возможно, цель =====
+    -- ===== 1. Determine the target cell and, possibly, the target =====
     if attackHitsFirstTarget(attack) then
-        -- Ghost Bolt, Shoot, Dash, Piercing – идут по линии до первой цели или до конца
+        -- Ghost Bolt, Shoot, Dash, Piercing – follow the line to the first target or to the edge
         local dir = enemy.attackDirection
         if dir then
             local curQ, curR = enemy.q, enemy.r
@@ -237,12 +237,12 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
                 curQ, curR = nextQ, nextR
             end
             if not target then
-                -- Цели нет – берём последнюю пройденную клетку (конец линии или край)
+                -- No target — take the last traversed cell (end of line or edge)
                 targetQ, targetR = lastValidQ, lastValidR
             end
         end
     else
-        -- Bite и Magic Bolt: используем сохранённое смещение
+        -- Bite and Magic Bolt: use the saved offset
         if enemy.preparedTargetOffset then
             targetQ, targetR = hex_utils.applyCubeDiff(
                 enemy.q, enemy.r,
@@ -250,7 +250,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
                 enemy.preparedTargetOffset.dy,
                 enemy.preparedTargetOffset.dz
             )
-            -- Проверяем, есть ли там живая цель
+            -- Check if there is a living target there
             local e = combat.getEntityAtHex(targetQ, targetR, entities)
             if e and e.health > 0 and e ~= enemy then
                 if attack.name == "Magic Bolt" or attack.name == "Power Bolt" then
@@ -266,7 +266,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         end
     end
 
-    -- ===== 2. ВСЕГДА рисуем анимацию (даже если цели нет) =====
+    -- ===== 2. ALWAYS draw the animation (even if there is no target) =====
     if attack.name == "Ghost Bolt" then
         if target then
             attack_effects.ghostBolt(enemy, target, hex)
@@ -300,7 +300,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
             attack_effects.magicBolt(enemy, target, hex)
         end
     elseif attack.name == "Dash" then
-        -- Для рывка можно нарисовать линию до целевой клетки (если есть)
+        -- For dash, a line can be drawn to the target cell (if present)
         if targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
@@ -324,7 +324,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
             local tx, ty = getDrawCoords(target.q, target.r)
             visual.addLineEffect(getDrawCoords(enemy.q, enemy.r), tx, ty, 0.9, 0.5, 0.2, 4, 0.6)
             visual.addEffect(tx, ty, "hit", 0.3)
-            -- Доп. цель для Bash (позади атакующего) и Lunge (позади цели)
+            -- Extra target for Bash (behind attacker) and Lunge (behind target)
             local extraQ, extraR, extraTarget = nil, nil, nil
             if attack.name == "Bash" then
                 local stepX, stepY, stepZ = attack:getLineDirection(target.q, target.r, enemy.q, enemy.r, hex)
@@ -345,7 +345,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
                     visual.addEffect(ex, ey, "hit", 0.3)
                 end
             end
-            -- Отложим доп. цель для нанесения урона
+            -- Defer the extra target for dealing damage
             enemy._extraAttackTarget = extraTarget
         end
     elseif attack.name == "Cleave" then
@@ -354,7 +354,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
             local toX, toY = getDrawCoords(targetQ, targetR)
             visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.5, 0.2, 3, 0.6)
         end
-        -- Две боковые цели (основная цель уже будет поражена)
+        -- Two side targets (the main target will already be hit)
         local frontTargets = {}
         local stepX, stepY, stepZ = attack:getLineDirection(enemy.q, enemy.r, targetQ, targetR, hex)
         if stepX then
@@ -375,7 +375,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         enemy._cleaveTargets = frontTargets
     end
 
-    -- ===== 3. PowerLichBoltAttack использует собственный execute =====
+    -- ===== 3. PowerLichBoltAttack uses its own execute =====
     if attack.name == "Power Bolt" then
         if target or (targetQ and targetR) then
             attack:execute(enemy, targetQ, targetR, hex, entities, sounds)
@@ -393,7 +393,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
                    enemy.name, targetQ or 0, targetR or 0))
     end
 
-    -- Доп. урон для Bash/Lunge (вторая цель)
+    -- Extra damage for Bash/Lunge (second target)
     if enemy._extraAttackTarget and enemy._extraAttackTarget.health > 0 then
         local extra = enemy._extraAttackTarget
         local wasDestroyed = extra:takeDamage(attack.damage)
@@ -405,7 +405,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         enemy._extraAttackTarget = nil
     end
 
-    -- Множественный урон для Cleave
+    -- Multiple damage for Cleave
     if enemy._cleaveTargets then
         for _, ct in ipairs(enemy._cleaveTargets) do
             if ct.health > 0 then
@@ -419,7 +419,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         enemy._cleaveTargets = nil
     end
 
-    -- ===== 4. Сбрасываем состояние атаки =====
+    -- ===== 4. Reset attack state =====
     if enemy.rootedTarget then
         status.removeFromEntity(enemy.rootedTarget, "rooted")
         enemy.rootedTarget = nil
@@ -430,7 +430,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
     enemy.preparedAttack = nil
     return true
 end
--- Расстояние до ближайшей цели
+-- Distance to the nearest target
 function ai.getDistanceToNearestTarget(enemy, entities, hex)
     local best = math.huge
     local targets = ai.getAttackableTargets(entities)
@@ -441,7 +441,7 @@ function ai.getDistanceToNearestTarget(enemy, entities, hex)
     return best
 end
 
--- Найти первую цель на линии (для предпросмотра, но используется в canPrepareAttack)
+-- Find the first target on the line (for preview, but used in canPrepareAttack)
 function findFirstTargetInDirection(startQ, startR, dx, dy, dz, hex, entities)
     local curQ, curR = startQ, startR
     while true do
@@ -456,7 +456,7 @@ function findFirstTargetInDirection(startQ, startR, dx, dy, dz, hex, entities)
     return nil, nil, nil
 end
 
--- Движение + подготовка (основной метод для фазы подготовки врагов)
+-- Movement + preparation (main method for the enemy preparation phase)
 function ai.moveAndPrepare(enemy, entities, hex)
     if not enemy:isCharacter() or enemy.isPlayable or enemy.health <= 0 then
         return "failed"
@@ -465,13 +465,13 @@ function ai.moveAndPrepare(enemy, entities, hex)
         return "moving"
     end
 
-    -- Стержень призывания: не двигается, выбирает случайную пустую клетку
+    -- Summoning rod: does not move, picks a random empty cell
     if enemy.isSummoningRod then
         if enemy.summonCooldown and enemy.summonCooldown > 0 then
             enemy.summonCooldown = enemy.summonCooldown - 1
             return "failed"
         end
-        -- Собираем свободные клетки в радиусе 1 от стержня
+        -- Collect free cells within radius 1 of the rod
         local freeCells = {}
         local neighbors = hex:getNeighbors(enemy.q, enemy.r)
         for _, nb in ipairs(neighbors) do
@@ -507,13 +507,13 @@ function ai.moveAndPrepare(enemy, entities, hex)
         return "failed"
     end
 
-    -- Если уже может атаковать – сразу готовим
+    -- If already able to attack — prepare immediately
     if ai.canPrepareAttack(enemy, entities) then
         ai.prepareAttackForEnemy(enemy, entities, hex, {})
         return "prepared"
     end
 
-    -- Находим ближайшую цель
+    -- Find the nearest target
     local nearestTarget = nil
     local nearestDist = math.huge
     local targets = ai.getAttackableTargets(entities)
@@ -531,7 +531,7 @@ function ai.moveAndPrepare(enemy, entities, hex)
         return "failed"
     end
 
-    -- Пытаемся сделать шаг к цели
+    -- Try to take a step toward the target
     local success = ai.performMoveTowards(enemy, nearestTarget, entities, hex)
     if success then
         return "moving"
@@ -662,7 +662,7 @@ end
 
 function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
     if enemy.isMoving then return false end
-    -- Конечная клетка: занята любой сущностью (кроме isHazard)
+    -- Destination cell: occupied by any entity (except isHazard)
     for _, e in ipairs(entities) do
         if e ~= enemy and e.q == targetQ and e.r == targetR and not e.isHazard then
             return false
@@ -691,8 +691,8 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
 end
 
 function ai.isPositionOccupied(q, r, movingEntity, entities, hex)
-    -- Делегирует в cell_rules.isOccupied. У врагов нет phaseThroughEnemies,
-    -- поэтому отключаем эту проверку — поведение эквивалентно старой версии.
+    -- Delegates to cell_rules.isOccupied. Enemies don't have phaseThroughEnemies,
+    -- so we disable this check — behavior is equivalent to the old version.
     return require("grid.cell_rules").isOccupied(q, r, movingEntity, {
         entities = entities, hex = hex,
         allowPhaseThroughEnemies = false,
@@ -728,7 +728,7 @@ function ai.updateEnemyMovement(enemy, dt, hex)
                 if enemy.currentPathIndex <= #enemy.path then
                     ai.startEnemyMove(enemy, hex)
                 else
-                    -- Применяем эффекты клетки назначения
+                    -- Apply destination cell effects
                     if terrainMap then
                         local died = effects.applyAllCellEffects(enemy, enemy.q, enemy.r, terrainMap, entities)
                         if died then
@@ -755,7 +755,7 @@ function ai.getLivingEnemies(entities)
 end
 
 function isCellDangerousForEntity(q, r, entity)
-    -- Underwater mines — смертельно, никогда туда не ходить
+    -- Underwater mines — lethal, never go there
     if terrainMap and terrainMap[q] and terrainMap[q][r] == "underwater_mines" then
         return true
     end
@@ -776,7 +776,7 @@ function isCellDangerousForEntity(q, r, entity)
     return false
 end
 
--- Проверка, находится ли клетка на линии атаки другого врага (пониженный приоритет)
+-- Check if a cell lies on another enemy's attack line (lower priority)
 function isCellOnEnemyAttackLine(q, r, movingEnemy, entities, hex)
     for _, other in ipairs(entities) do
         if other ~= movingEnemy and other:isCharacter() and not other.isPlayable and other.health > 0 then
@@ -819,7 +819,7 @@ function isCellOnEnemyAttackLine(q, r, movingEnemy, entities, hex)
     return false
 end
 
--- Подготовка всех врагов с распределением целей
+-- Prepare all enemies with target distribution
 function ai.prepareAllEnemiesWithTargetDistribution(entities, hex)
     local enemies = ai.getLivingEnemies(entities)
     local selectedTargets = {}

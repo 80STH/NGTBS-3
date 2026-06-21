@@ -1,5 +1,5 @@
 -- input.lua
--- Обработка ввода (мышь, клавиатура). Использует глобалы, как и остальные модули.
+-- Input processing (mouse, keyboard). Uses globals, like other modules.
 local input = {}
 local global_abilities = require("system.global_abilities")
 local hex_utils = require("grid.hex_utils")

@@ -1,6 +1,6 @@
 -- turn_manager.lua
--- Машина состояний для фаз хода (enemy_prepare / player / enemy_attack).
--- Использует глобалы (entities, hex, turnState, sounds, terrainMap).
+-- State machine for turn phases (enemy_prepare / player / enemy_attack).
+-- Uses globals (entities, hex, turnState, sounds, terrainMap).
 
 local turnManager = {}
 local log = require("util.log")

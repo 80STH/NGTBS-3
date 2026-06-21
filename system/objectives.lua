@@ -168,7 +168,7 @@ local killLeaderDef = {
     name = "Destroy the Leader",
     desc = "Find and eliminate the enemy leader!",
     onGenerate = function(entities, hex)
-        -- Power Lich уже размещён в game.lua — просто помечаем
+        -- Power Lich already placed in game.lua — just mark it
         for _, e in ipairs(entities) do
             if e:isCharacter() and not e.isPlayable and e.name == "PowerLich" then
                 e.isLeader = true
@@ -432,7 +432,7 @@ function objectives.generate(entities, hex)
     activePrimaryObjective = nil
     objectiveStates = {}
 
-    -- kill_leader ВСЕГДА на map4, независимо от режима
+    -- kill_leader ALWAYS on map4, regardless of mode
     local isMap4 = _G.selectedMapPath and _G.selectedMapPath:match("map4")
     if isMap4 then
         activePrimaryObjective = killLeaderDef
@@ -481,8 +481,8 @@ function objectives.generate(entities, hex)
         local def = shuffled[i]
         local skip = false
 
-        -- kill_leader эксклюзивно для map4 в прогрессии
-        -- kill_leader уже первичный на map4 — исключаем из пула
+        -- kill_leader exclusively for map4 in progression
+        -- kill_leader already primary on map4 — exclude from pool
         if not skip and def.id == "kill_leader" then
             skip = true
         end
@@ -600,7 +600,7 @@ function objectives.update(entities)
         if activePrimaryObjective.check then
             activePrimaryObjective.check(entities, objectiveStates)
         end
-        -- kill_leader (Power Lich босс) — завершение/поражение
+        -- kill_leader (Power Lich boss) — completion/defeat
         if activePrimaryObjective.id == "kill_leader" then
             local state = objectiveStates["kill_leader"]
             if state == "failed" then
