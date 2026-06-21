@@ -324,6 +324,7 @@ end
 
 function isPositionOccupied(q, r, movingEntity)
     -- Delegates to cell_rules.isOccupied (with water and phaseThroughEnemies).
+    return cell_rules.isOccupied(q, r, movingEntity)
 end
 
 -- Returns 3 push direction choices for choosePushDir (Puncher lvl3)

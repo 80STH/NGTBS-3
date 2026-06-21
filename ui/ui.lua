@@ -65,6 +65,10 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
             return false
         end
     end
+    -- Underwater mines are always impassable (even flying)
+    if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "underwater_mines" then
+        return false
+    end
     
     -- The cell must not be occupied (for stopping)
     if isCellOccupiedForStop(targetQ, targetR, actor) then
@@ -1828,6 +1832,9 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
         if not (enemy and (enemy.flying or enemy.hovering)) then
             return false
         end
+    end
+    if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "underwater_mines" then
+        return false
     end
     -- Cell must not be occupied (by ally or enemy)
     for _, e in ipairs(entities) do

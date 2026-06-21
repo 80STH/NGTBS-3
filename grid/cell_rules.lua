@@ -108,10 +108,16 @@ function cell_rules.isOccupied(q, r, mover, opts)
     local hex = o.hex
     if not hex or not hex:isActiveHex(q, r) then return true end
 
-    if o.terrainMap and o.terrainMap[q] and o.terrainMap[q][r] == "water" then
-        if mover and (mover.waterWalker or mover.flying or mover.hovering) then
-            -- ok
-        else
+    if o.terrainMap and o.terrainMap[q] and o.terrainMap[q][r] then
+        local terrain = o.terrainMap[q][r]
+        if terrain == "water" then
+            if mover and (mover.waterWalker or mover.flying or mover.hovering) then
+                -- ok
+            else
+                return true
+            end
+        end
+        if terrain == "underwater_mines" then
             return true
         end
     end
