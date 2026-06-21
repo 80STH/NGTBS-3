@@ -4,12 +4,12 @@
 -- Все способности доступны одновременно (не mutually exclusive в плане использования,
 -- но только одна может быть в режиме выбора цели).
 
-local ui = require("ui")
-local combat = require("combat")
-local hex_utils = require("hex_utils")
-local status = require("status")
-local environment = require("environment")
-local log = require("log")
+local ui = require("ui.ui")
+local combat = require("combat.combat")
+local hex_utils = require("grid.hex_utils")
+local status = require("system.status")
+local environment = require("entity.environment")
+local log = require("util.log")
 
 local global_abilities = {}
 

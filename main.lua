@@ -1,47 +1,47 @@
-﻿-- main.lua
--- Точка входа. Инициализация, обновление, диспетчеризация ввода.
--- Состояние игры хранится в `state` (gamestate).
--- Отрисовка делегирована renderer-у.
+-- main.lua
+-- ����� �����. �������������, ����������, ��������������� �����.
+-- ��������� ���� �������� � `state` (gamestate).
+-- ��������� ������������ renderer-�.
 
-state = require("gamestate").new()
+state = require("core.gamestate").new()
 
-combat = require("combat")
-ai = require("ai")
-require("hexgrid")
-environment = require("environment")
-status = require("status")
-ui = require("ui")
-pathfinding = require("pathfinding")
-effects = require("effects")
-visual = require("visual_effects")
-config = require("config")
-local hex_utils = require("hex_utils")
-local renderer = require("renderer")
-local input = require("input")
-local turnManager = require("turn_manager")
-local cell_rules = require("cell_rules")
-menu = require("menu")
-local objectives = require("objectives")
-global_abilities = require("global_abilities")
-shop = require("shop")
-require("game")
+combat = require("combat.combat")
+ai = require("combat.ai")
+require("grid.hexgrid")
+environment = require("entity.environment")
+status = require("system.status")
+ui = require("ui.ui")
+pathfinding = require("grid.pathfinding")
+effects = require("system.effects")
+visual = require("system.visual_effects")
+config = require("core.config")
+local hex_utils = require("grid.hex_utils")
+local renderer = require("ui.renderer")
+local input = require("ui.input")
+local turnManager = require("core.turn_manager")
+local cell_rules = require("grid.cell_rules")
+menu = require("ui.menu")
+local objectives = require("system.objectives")
+global_abilities = require("system.global_abilities")
+shop = require("ui.shop")
+require("core.game")
 
--- Логирование: включить здесь (или через _G.LOG_ENABLED).
--- Категории: ai, combat, effects, entity, env, game, input, objectives,
+-- �����������: �������� ����� (��� ����� _G.LOG_ENABLED).
+-- ���������: ai, combat, effects, entity, env, game, input, objectives,
 --            status, trains, turn, ui, main, map.
-_G.log = require("log")
+_G.log = require("util.log")
 log.enabled = false
 log.level = "debug"
 
--- Включить запись в файл через переменную окружения NGTBS_LOG_FILE.
--- Это позволяет проверить загрузку игры без окна: задаём путь, запускаем
--- love, читаем файл. Не влияет на обычный запуск.
+-- �������� ������ � ���� ����� ���������� ��������� NGTBS_LOG_FILE.
+-- ��� ��������� ��������� �������� ���� ��� ����: ����� ����, ���������
+-- love, ������ ����. �� ������ �� ������� ������.
 do
     local logFile = os.getenv("NGTBS_LOG_FILE")
     if logFile and logFile ~= "" then
         log.enabled = true
         log.file = logFile
-        -- очищаем файл при старте
+        -- ������� ���� ��� ������
         local f = io.open(logFile, "w")
         if f then f:close() end
     end
@@ -69,7 +69,7 @@ showAbilityMenu = false
 abilityMenu = nil
 progressionOverlay = nil
 mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua", "maps/map4.lua"}
-unitUpgrades = {}  -- "Warrior" → { choices = {"dashToFlipChain"} }
+unitUpgrades = {}  -- "Warrior" > { choices = {"dashToFlipChain"} }
 artifacts = {}  -- list of unlocked artifact IDs
 placedAllies = {}
 deploySelectedIdx = nil
@@ -77,8 +77,8 @@ allyPanelButtons = {}
 
 UPGRADE_CHOICES = {
     Warrior = {
-        { id = "dashToFlipChain", name = "Dash→Flip", desc = "After Dash, can Flip the same target" },
-        { id = "flipToDashChain", name = "Flip→Dash", desc = "After Flip, can Dash the same target" },
+        { id = "dashToFlipChain", name = "Dash>Flip", desc = "After Dash, can Flip the same target" },
+        { id = "flipToDashChain", name = "Flip>Dash", desc = "After Flip, can Dash the same target" },
     },
     Puncher = {
         { id = "empowerAtStart", name = "Empowered Start", desc = "Start each map empowered" },
@@ -99,12 +99,12 @@ ARTIFACT_CHOICES = {
     { id = "phaseThroughEnemies", name = "Ghost Cloak", desc = "All units phase through enemies" },
 }
 
--- Синхронизация глобалов -> state (renderer и gamestate-методы читают из state).
--- Реализация вынесена в gamestate.lua:GameState:syncFromGlobals().
--- Цель будущей миграции — убрать эту функцию, обращаясь к state.* напрямую.
--- Синхронизация глобалов -> state (renderer и gamestate-методы читают из state).
--- Реализация вынесена в gamestate.lua:GameState:syncFromGlobals().
--- Цель будущей миграции — убрать эту функцию, обращаясь к state.* напрямую.
+-- ������������� �������� -> state (renderer � gamestate-������ ������ �� state).
+-- ���������� �������� � gamestate.lua:GameState:syncFromGlobals().
+-- ���� ������� �������� � ������ ��� �������, ��������� � state.* ��������.
+-- ������������� �������� -> state (renderer � gamestate-������ ������ �� state).
+-- ���������� �������� � gamestate.lua:GameState:syncFromGlobals().
+-- ���� ������� �������� � ������ ��� �������, ��������� � state.* ��������.
 function syncState()
     state:syncFromGlobals()
 end
@@ -283,8 +283,8 @@ function love.load()
     showEnemyOrder = false
     gamePhase = "menu"
 
-    -- Инициализация глобального turnState (раньше полагался на confirmDeploy/
-    -- skipDeploy-блок restartGame, что приводило к падению при autostart).
+    -- ������������� ����������� turnState (������ ��������� �� confirmDeploy/
+    -- skipDeploy-���� restartGame, ��� ��������� � ������� ��� autostart).
     turnState = state.turnState
 end
 
@@ -326,16 +326,16 @@ function love.mousereleased(x, y, button)
 end
 
 function isPositionOccupied(q, r, movingEntity)
-    -- Делегирует в cell_rules.isOccupied (с водой и phaseThroughEnemies).
+    -- ���������� � cell_rules.isOccupied (� ����� � phaseThroughEnemies).
     return cell_rules.isOccupied(q, r, movingEntity)
 end
 
 -- Returns 3 push direction choices for choosePushDir (Puncher lvl3)
--- Uses cube coordinate rotation (±60°)
+-- Uses cube coordinate rotation (�60�)
 function getPushDirChoices(stepX, stepY, stepZ)
-    -- Rotate +60° clockwise: (x,y,z) → (-z, -x, -y)
+    -- Rotate +60� clockwise: (x,y,z) > (-z, -x, -y)
     local cw = {x = -stepZ, y = -stepX, z = -stepY}
-    -- Rotate -60° counter-clockwise: (x,y,z) → (-y, -z, -x)
+    -- Rotate -60� counter-clockwise: (x,y,z) > (-y, -z, -x)
     local ccw = {x = -stepY, y = -stepZ, z = -stepX}
     return {ccw, {x = stepX, y = stepY, z = stepZ}, cw}
 end
@@ -381,7 +381,7 @@ function love.update(dt)
         decayMessageTimer = decayMessageTimer - dt
     end
 
-    -- Hold-to-confirm для кнопок (общая логика)
+    -- Hold-to-confirm ��� ������ (����� ������)
     local function updateHoldButton(btn, onTrigger)
         if btn.isHeld then
             btn.holdTimer = (btn.holdTimer or 0) + dt
@@ -512,7 +512,7 @@ function getEnemyAttackOrder(entities, turnState)
                 table.insert(queue, e)
             end
         end
-        local trains_mod = require("trains")
+        local trains_mod = require("system.trains")
         local trainGroups = trains_mod.getTrainGroups()
         for _, group in pairs(trainGroups) do
             if group.active and group.cars and #group.cars > 0 then

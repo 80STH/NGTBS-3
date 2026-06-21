@@ -1,9 +1,9 @@
 -- input.lua
 -- Обработка ввода (мышь, клавиатура). Использует глобалы, как и остальные модули.
 local input = {}
-local global_abilities = require("global_abilities")
-local hex_utils = require("hex_utils")
-local log = require("log")
+local global_abilities = require("system.global_abilities")
+local hex_utils = require("grid.hex_utils")
+local log = require("util.log")
 
 function input.mousepressed(x, y, button)
     if button ~= 1 then return end
@@ -23,8 +23,6 @@ function input.mousepressed(x, y, button)
             restartGame()
             return
         end
-
-    if turnState and turnState.phase ~= "player" then return end
 
     local tq, tr = hex:pixelToHex(x, y)
     if not hex or not hex:isValidHex(tq, tr) then return end
@@ -362,7 +360,8 @@ end
     end
 
     if selectedActor and not selectedActor.isMoving then
-        local canMove = (not selectedActor.hasActedThisTurn or selectedActor.canMoveAfterAttack) and (not selectedActor.hasMovedThisTurn or selectedActor.canMoveAfterAttack)
+        local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(selectedActor, "rooted") and not selectedActor.rootImmune
+        local canMove = not isRooted and (not selectedActor.hasActedThisTurn or selectedActor.canMoveAfterAttack) and (not selectedActor.hasMovedThisTurn or selectedActor.canMoveAfterAttack)
         if canMove then
             performMove(selectedActor, tq, tr)
             hex.selectedQ, hex.selectedR = selectedActor.q, selectedActor.r

@@ -3,12 +3,12 @@
 -- Исправлено: дальнобойные атаки (Lich, Ghost) и Bite работают корректно
 
 local ai = {}
-local pathfinding = require("pathfinding")
-local hex_utils = require("hex_utils")
-local visual = require("visual_effects")
-local attack_effects = require("attack_effects")
-local status = require("status")
-local log = require("log")
+local pathfinding = require("grid.pathfinding")
+local hex_utils = require("grid.hex_utils")
+local visual = require("system.visual_effects")
+local attack_effects = require("combat.attack_effects")
+local status = require("system.status")
+local log = require("util.log")
 
 -- Проверка, лежит ли цель на одной из шести прямых от источника (включая любую дистанцию)
 local function isOnStraightLine(fromQ, fromR, toQ, toR, hex)
@@ -645,6 +645,9 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
 end
 
 function ai.getEffectiveMoveRange(enemy, hex, entities)
+    if status.hasEntityStatus(enemy, "rooted") and not enemy.rootImmune then
+        return 0
+    end
     local base = enemy.moveRange + (status.hasEntityStatus(enemy, "empowered") and 1 or 0)
     if status.isWounded and status.isWounded(enemy) then
         base = base - 1
@@ -690,7 +693,7 @@ end
 function ai.isPositionOccupied(q, r, movingEntity, entities, hex)
     -- Делегирует в cell_rules.isOccupied. У врагов нет phaseThroughEnemies,
     -- поэтому отключаем эту проверку — поведение эквивалентно старой версии.
-    return require("cell_rules").isOccupied(q, r, movingEntity, {
+    return require("grid.cell_rules").isOccupied(q, r, movingEntity, {
         entities = entities, hex = hex,
         allowPhaseThroughEnemies = false,
     })

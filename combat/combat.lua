@@ -1,14 +1,14 @@
 -- combat.lua
 -- Система боя с кубическими координатами (pointy-top, odd-r)
 local combat = {}
-local visual = require("visual_effects")
-local status = require("status")
-local Entity = require("entity")
-local attack_effects = require("attack_effects")
-local log = require("log")
-local sprites = require("sprites")
+local visual = require("system.visual_effects")
+local status = require("system.status")
+local Entity = require("entity.entity")
+local attack_effects = require("combat.attack_effects")
+local log = require("util.log")
+local sprites = require("util.sprites")
 
-local hex_utils = require("hex_utils")
+local hex_utils = require("grid.hex_utils")
 -- ============================================================
 -- БАЗОВЫЙ КЛАСС АТАКИ
 -- ============================================================
@@ -1085,7 +1085,7 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
 
     -- Создаём случайного врага на целевой клетке
     if hex:isActiveHex(sq, sr) then
-        local env = require("environment")
+        local env = require("entity.environment")
         local newEnemy = env.createRandomEnemy(sq, sr)
         table.insert(entities, newEnemy)
         local fx, fy = getDrawCoords(sq, sr)

@@ -1,13 +1,13 @@
 -- renderer.lua
 -- Отвечает за отрисовку игры. Вызывается из love.draw(state).
 local renderer = {}
-local ui = require("ui")
-local visual = require("visual_effects")
-local status = require("status")
-local combat = require("combat")
-local hex_utils = require("hex_utils")
-local global_abilities = require("global_abilities")
-local objectives = require("objectives")
+local ui = require("ui.ui")
+local visual = require("system.visual_effects")
+local status = require("system.status")
+local combat = require("combat.combat")
+local hex_utils = require("grid.hex_utils")
+local global_abilities = require("system.global_abilities")
+local objectives = require("system.objectives")
 
 function renderer.draw(state)
     if not state or not state.hex then return end
@@ -210,7 +210,8 @@ function renderer.draw(state)
     if not state.attackMode then
         local sel = state.selectedActor
         if sel and not sel.isMoving and state.turnState.phase == "player" then
-            local canShowMove = (not sel.hasActedThisTurn or sel.canMoveAfterAttack) and (not sel.hasMovedThisTurn or sel.canMoveAfterAttack)
+            local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(sel, "rooted") and not sel.rootImmune
+            local canShowMove = not isRooted and (not sel.hasActedThisTurn or sel.canMoveAfterAttack) and (not sel.hasMovedThisTurn or sel.canMoveAfterAttack)
             if canShowMove then
                 ui.drawMovementRange(hex, sel, state.entities, state.terrainMap)
                 if hex.hoverQ >= 0 and hex.hoverR >= 0 then
@@ -800,7 +801,12 @@ function drawActionIndicator(entity, x, y)
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.print("\xE2\x9C\x93", x + 11, y - 20)
     elseif entity.isPlayable and not entity.hasMovedThisTurn then
-        love.graphics.setColor(0.2, 0.9, 0.2, 0.9)
+        local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(entity, "rooted") and not entity.rootImmune
+        if isRooted then
+            love.graphics.setColor(0.6, 0.8, 0.2, 0.9)
+        else
+            love.graphics.setColor(0.2, 0.9, 0.2, 0.9)
+        end
         love.graphics.circle("fill", x + 15, y - 15, 8)
     elseif entity.isPlayable and entity.hasMovedThisTurn then
         love.graphics.setColor(1, 0.7, 0, 0.9)

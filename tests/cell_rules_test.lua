@@ -2,7 +2,7 @@
 -- Тесты для параметризованной проходимости.
 -- Использует моки для hex/terrainMap/entities — без зависимости от love.
 
-local cell_rules = require("cell_rules")
+local cell_rules = require("grid.cell_rules")
 
 -- Мок гексагональной сетки: активны клетки в квадрате 0..4.
 local function makeHexMock()

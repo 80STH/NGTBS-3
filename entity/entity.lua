@@ -3,8 +3,8 @@
 
 local Entity = {}
 Entity.__index = Entity
-local status = require("status")
-local log = require("log")
+local status = require("system.status")
+local log = require("util.log")
 
 -- Типы сущностей
 Entity.TYPES = {

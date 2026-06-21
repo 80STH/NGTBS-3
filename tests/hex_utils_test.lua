@@ -1,6 +1,6 @@
 -- tests/hex_utils_test.lua
 -- Тесты для чистых функций кубических координат.
-local hex_utils = require("hex_utils")
+local hex_utils = require("grid.hex_utils")
 
 local function approxEq(a, b, eps)
     eps = eps or 1e-9

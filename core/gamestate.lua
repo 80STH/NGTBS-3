@@ -8,7 +8,7 @@
 -- Чтобы миграция была локальной, все поля сгруппированы по типам ниже.
 local GameState = {}
 GameState.__index = GameState
-local config = require("config")
+local config = require("core.config")
 
 function GameState.new()
     local self = setmetatable({}, GameState)

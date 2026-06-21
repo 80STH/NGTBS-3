@@ -1,5 +1,5 @@
 local HexGrid = {}
-local hex_utils = require("hex_utils")
+local hex_utils = require("grid.hex_utils")
 
 function HexGrid.new(radius, gridWidth, gridHeight, activeRadius, centerQ, centerR, orientation)
     local self = setmetatable({}, {__index = HexGrid})

@@ -2,11 +2,11 @@
 -- Жизненный цикл игры: рестарт, проверка конца, общие эффекты.
 -- Функции — глобальные (используются другими модулями через _G).
 
-local turnManager = require("turn_manager")
-local objectives = require("objectives")
-local trains = require("trains")
-local Entity = require("entity")
-local log = require("log")
+local turnManager = require("core.turn_manager")
+local objectives = require("system.objectives")
+local trains = require("system.trains")
+local Entity = require("entity.entity")
+local log = require("util.log")
 
 function endTurn()
     turnManager.endPlayerTurn()
@@ -34,7 +34,7 @@ function restartGame(mapPath)
     terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation = environment.loadMapFromTiled(mapPath)
     orientation = orientation or "pointy"
 
-    hex = require("hexgrid").new(
+    hex = require("grid.hexgrid").new(
         config.HEX_RADIUS,
         width, height,
         config.ACTIVE_RADIUS,
@@ -213,7 +213,7 @@ function restartGame(mapPath)
             if e.name == "Tunnel" then hasTunnels = true; break end
         end
         if not hasTunnels then
-            local envMod = require("environment")
+            local envMod = require("entity.environment")
             local loadedMap = envMod.loadedMap
             local tileW = (loadedMap and loadedMap.tilewidth) or 14
             local tileH = (loadedMap and loadedMap.tileheight) or 12
@@ -456,7 +456,7 @@ function updateDeathAnimations(dt)
             e.deathTimer = e.deathTimer + dt
             if e.deathTimer >= e.deathDuration then
                 if e.isTrainCar then
-                    local trains_mod = require("trains")
+                    local trains_mod = require("system.trains")
                     local group = trains_mod.getCarGroup(e)
                     if group then
                         group.active = false

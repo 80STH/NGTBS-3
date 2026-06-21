@@ -1,10 +1,10 @@
 -- trains.lua
 -- Train system: locomotives move forward along railway between tunnels
 
-local Entity = require("entity")
-local hex_utils = require("hex_utils")
-local log = require("log")
-local env = require("environment")
+local Entity = require("entity.entity")
+local hex_utils = require("grid.hex_utils")
+local log = require("util.log")
+local env = require("entity.environment")
 local trains = {}
 
 local trainGroups = {}

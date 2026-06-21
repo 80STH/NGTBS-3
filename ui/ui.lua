@@ -1,13 +1,13 @@
 -- ui.lua
 -- Все функции интерфейса (кнопки, панели, предпросмотр атак, движения и т.д.)
 local ui = {}
-local pathfinding = require("pathfinding")
-local combat = require("combat")
-local visual = require("visual_effects")
-local hex_utils = require("hex_utils")
-local cell_rules = require("cell_rules")
-require("ui_buttons")(ui)
-require("ui_status_effects")(ui)
+local pathfinding = require("grid.pathfinding")
+local combat = require("combat.combat")
+local visual = require("system.visual_effects")
+local hex_utils = require("grid.hex_utils")
+local cell_rules = require("grid.cell_rules")
+require("ui.ui_buttons")(ui)
+require("ui.ui_status_effects")(ui)
 -- ============================================================
 -- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПРЕДПРОСМОТРА АТАК
 -- ============================================================
@@ -39,6 +39,9 @@ function ui.getHazardTexture()
 end
 -- Проверка, может ли актор дойти до клетки (с учётом препятствий и длины пути)
 function ui.getEffectiveMoveRange(actor, entities, hex)
+    if status and status.hasEntityStatus and status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
+        return 0
+    end
     local base = actor.moveRange or 0
     if status and status.hasEntityStatus and status.hasEntityStatus(actor, "empowered") then
         base = base + 1
@@ -290,7 +293,7 @@ end
 function ui.getPreparedAttackTarget(enemy, entities, hex)
     if not enemy then return nil end
     if enemy.isTrainAttack then
-        local trains = require("trains")
+        local trains = require("system.trains")
         local group = trains.getCarGroup(enemy)
         if not group or not group.active then return nil end
         local newIdx = group.currentIdx + 1
@@ -2248,7 +2251,12 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
             love.graphics.setColor(0.5, 0.5, 0.5, 1)
             love.graphics.print("✗", indX, indY - 2)
         elseif not ally.hasMovedThisTurn then
-            love.graphics.setColor(0.3, 1, 0.3, 1)
+            local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(ally, "rooted") and not ally.rootImmune
+            if isRooted then
+                love.graphics.setColor(0.6, 0.8, 0.2, 1)
+            else
+                love.graphics.setColor(0.3, 1, 0.3, 1)
+            end
             love.graphics.circle("fill", indX + 3, indY + 5, 4)
         else
             love.graphics.setColor(1, 0.9, 0.3, 1)

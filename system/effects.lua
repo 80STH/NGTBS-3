@@ -1,8 +1,8 @@
 -- effects.lua
 -- Централизованная обработка эффектов окружения (вода, огонь, кислота)
 local effects = {}
-local status = require("status")
-local log = require("log")
+local status = require("system.status")
+local log = require("util.log")
 
 -- Применить ВСЕ эффекты клетки к сущности (статусы + утопление)
 -- Возвращает: true, если сущность погибла (анимация запущена)

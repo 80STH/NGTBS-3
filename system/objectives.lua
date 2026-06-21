@@ -1,7 +1,7 @@
-local Entity = require("entity")
-local log = require("log")
-local status = require("status")
-local env = require("environment")
+local Entity = require("entity.entity")
+local log = require("util.log")
+local status = require("system.status")
+local env = require("entity.environment")
 
 local objectives = {}
 
@@ -287,7 +287,7 @@ local function definePool()
             check = function(entities, state)
                 if _G.poisonousResolved then return end
                 local target = nil
-                local status_mod = require("status")
+                local status_mod = require("system.status")
                 for _, e in ipairs(entities) do
                     if e.health and e.health > 0 and e.name:match("Poisonous") then
                         target = e

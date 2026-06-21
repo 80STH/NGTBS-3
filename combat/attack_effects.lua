@@ -1,8 +1,8 @@
 -- attack_effects.lua
 -- Визуальные эффекты для каждой атаки
 
-local visual = require("visual_effects")
-local hex_utils = require("hex_utils")
+local visual = require("system.visual_effects")
+local hex_utils = require("grid.hex_utils")
 
 local attack_effects = {}
 

@@ -1,8 +1,8 @@
 -- environment.lua
-local Entity = require("entity")
+local Entity = require("entity.entity")
 local sti = require("libraries.sti")
-local config = require("config")
-local log = require("log")
+local config = require("core.config")
+local log = require("util.log")
 
 -- ============================================================
 -- РЕЕСТР КОНТЕНТА: наборы атак и типы врагов.
@@ -14,106 +14,106 @@ local log = require("log")
 -- Фабрикой выступает combat (require внутри, чтобы разорвать цикл combat<->environment).
 local ATTACK_SETS = {
     warrior = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.DashAttack.new(), name = "Dash", description = "Charge and push" },
             { attack = c.FlipAttack.new(), name = "Flip", description = "Flip enemy behind" },
         }
     end,
     puncher = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Melee attack, 1 damage, pushes target away. Lethal if empowered" },
             { attack = c.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack damage. Deals 1 damage if empowered" },
         }
     end,
     rogue = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
             { attack = c.PiercingShootAttack.new(), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
         }
     end,
     ghost = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, 2 damage" },
         }
     end,
     zombie = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
         }
     end,
     lich = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any target cell, ignores obstacles" },
         }
     end,
     powerlich = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.PowerLichBoltAttack.new(), name = "Power Bolt", description = "Lethal bolt hitting target and 3 cells in front" },
         }
     end,
     summoner = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.SummonAttack.new(), name = "Summon", description = "Summon a minion at target cell (min 2)" },
         }
     end,
     summoned = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.PushAttack.new(5), name = "Shoot", description = "Push first enemy in line (no damage)" },
         }
     end,
     divider = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.DividerAttack.new(), name = "Split", description = "Split into two Divided units" },
         }
     end,
     brute = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
         }
     end,
     dervish = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.CleaveAttack.new(), name = "Cleave", description = "Melee 1 dmg to 3 targets in front" },
         }
     end,
     raider = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
         }
     end,
     crusher = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
         }
     end,
     lancer = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
         }
     end,
     bogshaman = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
         }
     end,
     summoningrod = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.SummonEnemyAttack.new(), name = "Summon", description = "Summon a random enemy" },
         }
@@ -122,7 +122,7 @@ local ATTACK_SETS = {
         return {}
     end,
     all = function()
-        local c = require("combat")
+        local c = require("combat.combat")
         return {
             { attack = c.DashAttack.new(), name = "Dash", description = "Charge and push" },
             { attack = c.FlipAttack.new(), name = "Flip", description = "Flip enemy behind" },
@@ -580,7 +580,7 @@ function environment.loadMapFromTiled(filePath)
     local width, height = map.width, map.height
 
     local orientation = (map.staggeraxis == "x") and "flat" or "pointy"
-    local hex_utils = require("hex_utils")
+    local hex_utils = require("grid.hex_utils")
     hex_utils.setOrientation(orientation)
 
     -- Создаём карту terrain и текстур только для активных клеток шестиугольника
@@ -589,7 +589,7 @@ function environment.loadMapFromTiled(filePath)
     local entities = {}
     local walkable = {}
 
-    local tempHex = require("hexgrid").new(
+    local tempHex = require("grid.hexgrid").new(
         config.HEX_RADIUS,
         width, height,
         config.ACTIVE_RADIUS,
@@ -833,7 +833,7 @@ function environment.getSummonedAttacks()     return environment.getAttacks("sum
 
 -- Кэш спрайтов: источник истины — модуль sprites (для разрыва цикла combat↔environment).
 -- environment.unitSpriteCache оставлен как алиас для обратной совместимости.
-local sprites = require("sprites")
+local sprites = require("util.sprites")
 local unitSpriteCache = sprites.raw()
 environment.unitSpriteCache = unitSpriteCache
 

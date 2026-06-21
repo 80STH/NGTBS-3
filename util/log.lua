@@ -1,7 +1,7 @@
 -- log.lua
 -- Централизованное логирование. Заменяет разбросанные print() с уровнями.
 -- Использование:
---   local log = require("log")
+--   local log = require("util.log")
 --   log.debug("state", "turn", turnCount)       -- отладочный шум (по умолчанию off)
 --   log.info("phase changed:", phase)
 --   log.warn("no dig sites")

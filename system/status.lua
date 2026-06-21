@@ -1,7 +1,7 @@
 -- status.lua
 -- Управление статусами на гексах и на сущностях
 local status = {}
-local log = require("log")
+local log = require("util.log")
 
 -- Таблицы хранения статусов
 status.hexStatuses = {}      -- key "q,r" -> список статусов

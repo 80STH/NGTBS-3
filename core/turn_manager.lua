@@ -3,7 +3,7 @@
 -- Использует глобалы (entities, hex, turnState, sounds, terrainMap).
 
 local turnManager = {}
-local log = require("log")
+local log = require("util.log")
 
 function turnManager.startGame()
     processDigSites()
@@ -46,7 +46,7 @@ function turnManager.endPlayerTurn()
     end
 
     -- Prepare train attacks for this turn
-    local trains_mod = require("trains")
+    local trains_mod = require("system.trains")
     trains_mod.prepareTrainAttacks(entities, hex)
 
     -- Queue enemy attacks
@@ -114,7 +114,7 @@ end
 function updateAttackPhase(dt)
     -- If a train shunt animation is in progress, update it
     if turnState.trainShuntInProgress then
-        local trains_mod = require("trains")
+        local trains_mod = require("system.trains")
         trains_mod.updateMovement(dt)
         if not trains_mod.isAnyAnimating() then
             turnState.trainShuntInProgress = false
@@ -142,7 +142,7 @@ function updateAttackPhase(dt)
         local enemy = table.remove(turnState.enemyAttackQueue, 1)
         if enemy and enemy.health > 0 then
             if enemy.isTrainAttack then
-                local trains_mod = require("trains")
+                local trains_mod = require("system.trains")
                 turnState.trainShuntInProgress = true
                 turnState.currentTrainLoco = enemy
                 trains_mod.executeTrainShunt(enemy, entities, hex, function()

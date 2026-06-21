@@ -1,5 +1,5 @@
 local menu = {}
-local shop = require("shop")
+local shop = require("ui.shop")
 
 local function loadMapList()
     local items = love.filesystem.getDirectoryItems("maps")
