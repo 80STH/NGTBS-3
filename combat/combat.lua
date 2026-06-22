@@ -59,14 +59,17 @@ function combat.Attack:findFirstTargetOnLine(startQ, startR, stepX, stepY, stepZ
 end
 
 -- Farthest active cell on line (excluding start)
-function combat.getFarthestActiveCellOnLine(startQ, startR, stepX, stepY, stepZ, hex)
+function combat.getFarthestActiveCellOnLine(startQ, startR, stepX, stepY, stepZ, hex, maxSteps)
     local curQ, curR = startQ, startR
     local lastQ, lastR = nil, nil
+    local steps = 0
     while true do
+        if maxSteps and steps >= maxSteps then break end
         local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
         if not hex:isActiveHex(nextQ, nextR) then break end
         lastQ, lastR = nextQ, nextR
         curQ, curR = nextQ, nextR
+        steps = steps + 1
     end
     if lastQ == nil or (lastQ == startQ and lastR == startR) then return nil end
     return {q = lastQ, r = lastR}
@@ -1584,9 +1587,10 @@ function combat.HeavyPunchAttack:execute(attacker, targetQ, targetR, hex, entiti
     local target = combat.getEntityAtHex(targetQ, targetR, entities)
     if not target or target.health <= 0 then return false, "No valid target at that hex" end
 
-    if status.hasEntityStatus(attacker, "empowered") then
+    if status.hasEntityStatus(attacker, "punch_charged") then
         target.health = 0
         target:startDeath()
+        status.removeFromEntity(attacker, "punch_charged")
         log.infof("combat", "%s lands a lethal Heavy Punch on %s!", attacker.name, target.name)
     else
         self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
@@ -1652,9 +1656,10 @@ function combat.EmpowerPunchAttack:execute(attacker, targetQ, targetR, hex, enti
     local target = combat.getEntityAtHex(targetQ, targetR, entities)
     if not target or target.health <= 0 then return false, "No valid target at that hex" end
 
-    local empowered = status.hasEntityStatus(attacker, "empowered")
-    if empowered then
-        self:dealDamageToTarget(target, attacker, 1, entities, sounds, nil)
+    local punchCharged = status.hasEntityStatus(attacker, "punch_charged")
+    if punchCharged then
+        target:takeDamage(1)
+        status.removeFromEntity(attacker, "punch_charged")
     end
 
     if target.health > 0 then
@@ -1672,8 +1677,8 @@ function combat.EmpowerPunchAttack:execute(attacker, targetQ, targetR, hex, enti
         end
     end
 
-    -- Empower: next attack deals double damage (one-time)
-    status.applyToEntity(attacker, "fatal_damage")
+    -- Charges the next Heavy Punch (lethal) or Empower Punch (+1 damage)
+    status.applyToEntity(attacker, "punch_charged")
 
     attacker.hasActedThisTurn = true
     return true
@@ -2118,7 +2123,6 @@ function performMove(actor, targetQ, targetR)
         log.debug("combat", "No valid path")
         return false
     end
-    addToHistory(actor, actor.q, actor.r, targetQ, targetR)
     actor.hasMovedThisTurn = true
     actor.path = path
     actor.currentPathIndex = 1
@@ -2172,6 +2176,7 @@ function updateActorMovement(actor, dt)
             else
                 actor.path = {}
                 actor.currentPathIndex = 0
+                undo.snapshot()
                 if actor.canMoveAfterAttack then
                     actor.canMoveAfterAttack = false
                     actor.hasActedThisTurn = true
@@ -2215,6 +2220,7 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
     log.debug("combat", "Attack result:", success, message)
 
     if success then
+        undo.snapshot()
         local endTurn = true
 
         -- Warrior chain: directional (Dash→Flip or Flip→Dash)
@@ -2248,7 +2254,6 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
 
         if endTurn then
             attacker.hasActedThisTurn = true
-            actionHistory = {}
             log.debugf("combat", "%s attacked and ended turn.", attacker.name)
             attackMode = false
             selectedAttack = nil
@@ -2261,95 +2266,6 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
         log.warnf("combat", "Attack failed: %s", (message or "unknown"))
     end
     return success, message
-end
-
-function undoLastAction()
-    if #actionHistory == 0 then
-        log.info("combat", "No moves to undo!")
-        return false
-    end
-
-    local action = actionHistory[#actionHistory]
-    local actor = action.actor
-
-    if not actor then
-        table.remove(actionHistory)
-        return undoLastAction()
-    end
-
-    if actor.isMoving then
-        log.info("combat", "Cannot undo while moving")
-        return false
-    end
-
-    actor.q = action.fromQ
-    actor.r = action.fromR
-    actor.hasActedThisTurn = false
-    actor.hasMovedThisTurn = false
-    actor.isMoving = false
-    actor.path = {}
-    actor.currentPathIndex = 0
-
-    if action.healthBefore ~= nil then
-        actor.health = action.healthBefore
-    end
-    if action.statusesBefore then
-        status.setEntityStatuses(actor, action.statusesBefore)
-    end
-
-    -- Restore hex statuses at the destination (e.g. acid consumed on step)
-    if action.destHexStatuses then
-        for st, _ in pairs(action.destHexStatuses) do
-            if not status.hasAtHex(action.toQ, action.toR, st) then
-                status.applyToHex(action.toQ, action.toR, st)
-            end
-        end
-    end
-
-    if actor.health > 0 then
-        local found = false
-        for _, e in ipairs(entities) do
-            if e == actor then
-                found = true
-                break
-            end
-        end
-        if not found then
-            table.insert(entities, actor)
-            log.infof("combat", "%s was resurrected by undo!", actor.name)
-        end
-    end
-
-    selectedActor = actor
-    hex.selectedQ = actor.q
-    hex.selectedR = actor.r
-    updateAttackButtons(actor)
-    attackMode = false
-    selectedAttack = nil
-
-    table.remove(actionHistory)
-
-    sounds.play("undo")
-    log.debugf("combat", "Undone move for %s. History size: %d", actor.name, #actionHistory)
-    return true
-end
-
-function addToHistory(actor, fromQ, fromR, toQ, toR)
-    if not actor.isPlayable then return end
-    local destHexStatuses = {}
-    for _, st in ipairs(status.getAtHex(toQ, toR) or {}) do
-        destHexStatuses[st] = true
-    end
-    table.insert(actionHistory, {
-        actor = actor,
-        fromQ = fromQ, fromR = fromR,
-        toQ = toQ, toR = toR,
-        type = "move",
-        healthBefore = actor.health,
-        statusesBefore = status.copyEntityStatuses(actor),
-        destHexStatuses = destHexStatuses,
-    })
-    log.debugf("combat", "Move recorded. History size: %d", #actionHistory)
 end
 
 return combat

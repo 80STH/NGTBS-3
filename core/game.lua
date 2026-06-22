@@ -193,7 +193,7 @@ function restartGame(mapPath)
     attackMode = false
     selectedAttack = nil
     attackButtons = {}
-    actionHistory = {}
+    undo.clear()
     pushAnimations = { queue = {}, active = false }
     visual.effects = {}
     decayMessageTimer = 0

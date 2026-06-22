@@ -4,6 +4,7 @@
 -- Rendering is delegated to the renderer.
 state = require("core.gamestate").new()
 
+undo = require("system.undo")
 combat = require("combat.combat")
 ai = require("combat.ai")
 require("grid.hexgrid")
@@ -277,6 +278,10 @@ function love.load()
         text = "End Turn", isHovered = false,
         holdTimer = 0, isHeld = false,
     }
+    undoButton = {
+        x = 10, y = 0, width = 120, height = 30,
+        isHeld = false, holdTimer = 0,
+    }
 
     sounds = require("system.sounds")
     sounds.init()
@@ -394,6 +399,7 @@ function love.update(dt)
     end
     updateHoldButton(endTurnButton, endTurn)
     updateHoldButton(restartButton, restartGame)
+    updateHoldButton(undoButton, function() undo.undoAll(); sounds.play("undo") end)
 
     if testViewActive then
         testViewOffsetY = math.sin(love.timer.getTime() * 1.5) * 60

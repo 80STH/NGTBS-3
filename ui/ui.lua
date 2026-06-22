@@ -2190,7 +2190,10 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
             if firstTarget and targetHex then
                 table.insert(out, {q = targetHex.q, r = targetHex.r})
             else
-                local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+                -- Show the farthest reachable cell on the line, capped by attack range
+                local maxDist = attack.range or math.huge
+                if maxDist == math.huge then maxDist = nil end
+                local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, maxDist)
                 if endCell then
                     table.insert(out, {q = endCell.q, r = endCell.r})
                 end

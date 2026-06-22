@@ -283,7 +283,7 @@ function renderer.draw(state)
     mx = mx / state.dpiScale
     my = my / state.dpiScale
 
-    ui.drawUndoButton(state.actionHistory, state.maxUndoCount, state.selectedActor)
+    ui.drawUndoButton(undo.history, state.maxUndoCount, state.selectedActor)
     ui.drawEndTurnButton(state.turnState, state.entities)
     ui.drawRestartButton(state.restartButton, state.turnState)
     global_abilities.drawButtons(mx, my, state)

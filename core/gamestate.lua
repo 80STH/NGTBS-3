@@ -31,7 +31,6 @@ function GameState.new()
     }
     self.attackButtons = {}
     self.sounds = {}
-    self.actionHistory = {}
     self.pushAnimations = { queue = {}, active = false }
     self.restartButton = {
         x = 10, y = 295, width = 120, height = 30,
@@ -105,7 +104,7 @@ function GameState:syncFromGlobals()
     self.pullHookTargetCell = _G.pullHookTargetCell
     self.attackButtons = _G.attackButtons or {}
     self.sounds = _G.sounds or {}
-    self.actionHistory = _G.actionHistory or {}
+    self.actionHistory = (_G.undo and _G.undo.history) or {}
     self.maxUndoCount = _G.maxUndoCount or 0
     self.restartButton = _G.restartButton or self.restartButton
     self.endTurnButton = _G.endTurnButton or self.endTurnButton

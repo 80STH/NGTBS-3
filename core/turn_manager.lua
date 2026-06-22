@@ -172,7 +172,8 @@ function processNextEnemyPrepare()
                 end
             end
         end
-        actionHistory = {}
+        undo.clear()
+        undo.snapshot()
         global_abilities.abilityUsedThisTurn = false
         selectLightningTarget()
         log.info("turn", "=== PLAYER TURN ===")

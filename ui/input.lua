@@ -114,9 +114,9 @@ end
 
     local bottomY = logicalH - 65
     if x >= 10 and x <= 130 and y >= bottomY and y <= bottomY + 30 then
-        if #actionHistory > 0 then
-            sounds.play("ui_click")
-            undoLastAction()
+        if #undo.history > 1 then
+            undoButton.isHeld = true
+            undoButton.holdTimer = 0
         else
             sounds.play("cant")
             log.info("input", "No actions to undo!")
@@ -417,7 +417,10 @@ function input.keypressed(key)
     end
 
     if key == "u" or key == "U" then
-        if turnState.phase == "player" and #actionHistory > 0 then undoLastAction() end
+        if turnState.phase == "player" and #undo.history > 1 then
+            undoButton.isHeld = true
+            undoButton.holdTimer = 0
+        end
         return
     end
 
@@ -522,6 +525,16 @@ function input.mousereleased(x, y, button)
         restartButton.isHeld = false
         restartButton.holdTimer = 0
     end
+    if undoButton.isHeld then
+        local wasHeld = undoButton.holdTimer >= (config.HOLD_TIME or 0.7)
+        undoButton.isHeld = false
+        undoButton.holdTimer = 0
+        if not wasHeld and #undo.history > 1 then
+            log.info("input", "MOUSE undo triggered")
+            undo.undoLast()
+            sounds.play("undo")
+        end
+    end
 end
 
 function input.keyreleased(key)
@@ -529,6 +542,18 @@ function input.keyreleased(key)
         if restartButton.isHeld then
             restartButton.isHeld = false
             restartButton.holdTimer = 0
+        end
+    end
+    if key == "u" or key == "U" then
+        if undoButton.isHeld then
+            local wasHeld = undoButton.holdTimer >= (config.HOLD_TIME or 0.7)
+            undoButton.isHeld = false
+            undoButton.holdTimer = 0
+            if not wasHeld and #undo.history > 1 then
+                log.info("input", "KEYBOARD undo triggered")
+                undo.undoLast()
+                sounds.play("undo")
+            end
         end
     end
 end

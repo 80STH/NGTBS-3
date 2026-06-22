@@ -5,7 +5,7 @@ return function(ui)
     local buttonFont = love.graphics.newFont(11)
 
     function ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
-        local canUndo = #actionHistory > 0
+        local canUndo = #undo.history > 1
         local btnY = logicalH - 65
         love.graphics.setColor(canUndo and 0.2 or 0.5, 0.2, 0.8, 0.8)
             love.graphics.rectangle("fill", 10, btnY, 120, 30, 5)
