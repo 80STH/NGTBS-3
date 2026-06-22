@@ -175,7 +175,7 @@ end
     end
 
     -- Ally panel buttons
-    if turnState.phase == "player" then
+    if turnState.phase == "player" and not (selectedActor and selectedActor.isMoving) then
         for _, btn in ipairs(allyPanelButtons) do
             if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
                 selectedActor = btn.entity
@@ -489,7 +489,7 @@ function input.keypressed(key)
     end
 
     if key == "tab" then
-        if turnState.phase == "player" then
+        if turnState.phase == "player" and (not selectedActor or not selectedActor.isMoving) then
             local actors = {}
             for _, e in ipairs(entities) do
                 if e.isPlayable and e.health > 0 then

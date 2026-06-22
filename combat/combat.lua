@@ -2143,6 +2143,7 @@ function startNextMove(actor)
         actor.isMoving = false
         actor.path = {}
         actor.currentPathIndex = 0
+        undo.snapshot()
         if selectedActor == actor then
             hex.selectedQ = actor.q
             hex.selectedR = actor.r
@@ -2152,6 +2153,7 @@ end
 
 function updateActorMovement(actor, dt)
     if not actor.isPlayable then return end
+    if actor.isDying then return end
     if actor.isMoving then
         actor.timer = actor.timer + dt
         local t = actor.timer / actor.speed
@@ -2167,6 +2169,13 @@ function updateActorMovement(actor, dt)
                     visual.addEffect(x, y, "drown")
                     undo.snapshot()
                     checkGameEnd()
+                    actor.isMoving = false
+                    actor.path = {}
+                    actor.currentPathIndex = 0
+                    if selectedActor == actor then
+                        hex.selectedQ = actor.q
+                        hex.selectedR = actor.r
+                    end
                     return
                 end
             end

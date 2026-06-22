@@ -127,7 +127,7 @@ function global_abilities.handleButtonClick(x, y, state)
         if ab then
             local ix, iy, iw, ih = getAbilityItemRect(i)
             if x >= ix and x <= ix + iw and y >= iy and y <= iy + ih then
-                if state.turnState.phase == "player" and not ab.hasBeenUsed then
+            if state.turnState.phase == "player" and not ab.hasBeenUsed and not (state.selectedActor and state.selectedActor.isMoving) then
                     if ab.name == "Unearth" and not ab:hasDigSites(state) then
                         log.info("abilities", "Unearth: No dig sites on the map!")
                         return true
@@ -188,7 +188,7 @@ function global_abilities.handleKey(key, state)
                 log.infof("abilities", "%s is not unlocked yet!", ab.name)
                 return true
             end
-            if state.turnState.phase == "player" and not ab.hasBeenUsed then
+            if state.turnState.phase == "player" and not ab.hasBeenUsed and not (state.selectedActor and state.selectedActor.isMoving) then
                 if ab.name == "Unearth" and not ab:hasDigSites(state) then
                     log.info("abilities", "Unearth: No dig sites on the map!")
                     return true
