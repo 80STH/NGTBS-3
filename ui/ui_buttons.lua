@@ -118,26 +118,41 @@ return function(ui)
         if not selectedActor or selectedActor.hasActedThisTurn then return end
         if #attackButtons == 0 then return end
 
+        local panelX = logicalW - 155
+        local btnStartY = 100
+        local btnW = 145
+        local btnH = 28
+        local btnGap = 32
+
+        -- Chain indicator
+        if selectedActor.chainAttack then
+            love.graphics.setColor(1, 0.8, 0.2, 1)
+            love.graphics.print("Chain: " .. selectedActor.chainAttack, panelX, btnStartY - 16)
+        end
+
+        -- Description above buttons
+        local descY = btnStartY - (selectedActor.chainAttack and 32 or 16)
+        local hasDesc = false
+        for _, btn in ipairs(attackButtons) do
+            if selectedAttack == btn.attack and attackMode then
+                hasDesc = true
+                love.graphics.setColor(1, 1, 0.5, 0.9)
+                love.graphics.print(btn.desc, panelX, descY)
+                break
+            end
+        end
+
         for i, btn in ipairs(attackButtons) do
-            btn.x = logicalW - 155
-            btn.y = 100 + (i - 1) * 32
-            btn.width = 145
-            btn.height = 28
+            btn.x = panelX
+            btn.y = btnStartY + (i - 1) * btnGap
+            btn.width = btnW
+            btn.height = btnH
             local isSelected = (selectedAttack == btn.attack and attackMode)
             love.graphics.setColor(isSelected and 0.9 or 0.3, 0.7, 0.3, 0.8)
             love.graphics.rectangle("fill", btn.x, btn.y, btn.width, btn.height, 5)
             love.graphics.setColor(1, 1, 1, 1)
             local prefix = i .. "."
             love.graphics.print(prefix .. " " .. btn.name .. (isSelected and " ✓" or ""), btn.x + 5, btn.y + 8)
-            if isSelected then
-                love.graphics.setColor(1, 1, 0.5, 0.9)
-                love.graphics.print(btn.desc, btn.x + 5, btn.y - 18)
-            end
-        end
-        -- Show chain indicator
-        if selectedActor.chainAttack then
-            love.graphics.setColor(1, 0.8, 0.2, 1)
-            love.graphics.print("Chain: " .. selectedActor.chainAttack, logicalW - 155, 100 - 16)
         end
     end
 

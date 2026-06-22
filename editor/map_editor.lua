@@ -1,0 +1,826 @@
+-- map_editor.lua
+-- In-game hex map editor with three layers: terrain, entity, status
+-- Placement zone: regular hexagon with radius 5
+
+local editor = {}
+
+local hexgrid = require("grid.hexgrid")
+local hex_utils = require("grid.hex_utils")
+local config = require("core.config")
+local log = require("util.log")
+
+-- Editor grid: 11x11, center at (5,5), active radius 5
+local EDITOR_GRID_SIZE = 11
+local EDITOR_RADIUS = 4
+local EDITOR_CENTER = 5
+
+-- Layer definitions
+editor.LAYER_TERRAIN = 1
+editor.LAYER_ENTITY = 2
+editor.LAYER_STATUS = 3
+editor.layerNames = { "Terrain", "Entity", "Status" }
+
+-- Terrain palette: { id, display name }
+editor.terrainPalette = {
+    { id = "grass",            name = "Grass" },
+    { id = "dirt",             name = "Dirt" },
+    { id = "sand",             name = "Sand" },
+    { id = "stone",            name = "Stone" },
+    { id = "snow",             name = "Snow" },
+    { id = "swamp",            name = "Swamp" },
+    { id = "lava",             name = "Lava" },
+    { id = "water",            name = "Water" },
+    { id = "underwater_mines", name = "Mines" },
+    { id = "railway",          name = "Railway" },
+    { id = "emptiness",        name = "Empty" },
+}
+
+-- Entity palette: { id, display name, type, color hint }
+editor.entityPalette = {
+    { id = "Warrior",         name = "Warrior",   etype = "ally",    color = {0.2, 0.8, 0.2} },
+    { id = "Puncher",         name = "Puncher",   etype = "ally",    color = {0.2, 0.8, 0.2} },
+    { id = "Rogue",           name = "Rogue",     etype = "ally",    color = {0.2, 0.8, 0.2} },
+    { id = "Summoner",        name = "Summoner",  etype = "ally",    color = {0.2, 0.8, 0.2} },
+    { id = "Divider",         name = "Divider",   etype = "ally",    color = {0.2, 0.8, 0.2} },
+    { id = "Ghost",           name = "Ghost",     etype = "enemy",   color = {0.8, 0.2, 0.8} },
+    { id = "Zombie",          name = "Zombie",    etype = "enemy",   color = {0.8, 0.2, 0.2} },
+    { id = "PoisonousZombie", name = "P.Zombie",  etype = "enemy",   color = {0.8, 0.2, 0.2} },
+    { id = "Lich",            name = "Lich",      etype = "enemy",   color = {0.6, 0.2, 0.8} },
+    { id = "Brute",           name = "Brute",     etype = "enemy",   color = {0.8, 0.2, 0.2} },
+    { id = "Lancer",          name = "Lancer",    etype = "enemy",   color = {0.8, 0.2, 0.2} },
+    { id = "BogShaman",       name = "BogShaman", etype = "enemy",   color = {0.5, 0.3, 0.6} },
+    { id = "Raider",          name = "Raider",    etype = "enemy",   color = {0.8, 0.2, 0.2} },
+    { id = "Dervish",         name = "Dervish",   etype = "enemy",   color = {0.8, 0.2, 0.2} },
+    { id = "Crusher",         name = "Crusher",   etype = "enemy",   color = {0.8, 0.2, 0.2} },
+    { id = "SummoningRod",    name = "Rod",       etype = "enemy",   color = {0.7, 0.5, 0.2} },
+    { id = "SuperMountain",   name = "Mt.Indes.", etype = "obstacle", color = {0.5, 0.5, 0.5} },
+    { id = "WeakMountain",    name = "Mt.Weak",   etype = "obstacle", color = {0.6, 0.6, 0.4} },
+    { id = "SmallBuilding",   name = "Bldg S",    etype = "building", color = {0.4, 0.4, 0.7} },
+    { id = "BigBuilding",     name = "Bldg L",    etype = "building", color = {0.3, 0.3, 0.8} },
+    { id = "Tower",           name = "Tower",     etype = "building", color = {0.5, 0.5, 0.9} },
+    { id = "Caravan",         name = "Caravan",   etype = "building", color = {0.6, 0.5, 0.3} },
+    { id = "Blockpost",       name = "Blockpost", etype = "building", color = {0.4, 0.4, 0.6} },
+}
+
+-- Status palette
+editor.statusPalette = {
+    { id = "fire",  name = "Fire",  color = {1, 0.5, 0} },
+    { id = "acid",  name = "Acid",  color = {0.3, 0.9, 0.3} },
+}
+
+-- Editor state
+editor.active = false
+editor.hex = nil
+editor.currentLayer = editor.LAYER_TERRAIN
+editor.selectedTerrain = "grass"
+editor.selectedEntity = "Warrior"
+editor.selectedStatus = "fire"
+editor.eraser = false
+
+-- Map data (simple string-based tables)
+editor.terrainData = {}   -- terrainData["q,r"] = terrainId
+editor.entityData = {}    -- entityData["q,r"] = entityId
+editor.statusData = {}    -- statusData["q,r"] = { statusId, ... }
+
+-- UI state
+editor.paletteScroll = 0
+editor.isDragging = false
+editor.lastPainted = nil
+editor.fileName = "custom_map"
+editor.message = nil
+editor.messageTimer = 0
+
+-- Undo/redo stacks
+editor.undoStack = {}
+editor.redoStack = {}
+editor.maxUndo = 50
+
+-- ============================================================
+-- INIT / CLEANUP
+-- ============================================================
+
+function editor.init()
+    hex_utils.setOrientation("flat")
+    editor.hex = hexgrid.new(
+        config.HEX_RADIUS,
+        EDITOR_GRID_SIZE, EDITOR_GRID_SIZE,
+        EDITOR_RADIUS,
+        EDITOR_CENTER, EDITOR_CENTER,
+        "flat"
+    )
+    editor.hex:centerOnScreen(love.graphics.getWidth() / (editor.dpiScale or 1), love.graphics.getHeight() / (editor.dpiScale or 1))
+    -- Shift grid left to make room for palette
+    editor.hex.offsetX = editor.hex.offsetX - 100
+
+    editor.terrainData = {}
+    editor.entityData = {}
+    editor.statusData = {}
+    editor.currentLayer = editor.LAYER_TERRAIN
+    editor.selectedTerrain = "grass"
+    editor.selectedEntity = "Warrior"
+    editor.selectedStatus = "fire"
+    editor.eraser = false
+    editor.message = nil
+    editor.messageTimer = 0
+    editor.fileName = "custom_map"
+    editor.active = true
+
+    -- Fill all active cells with grass by default
+    for q = 0, EDITOR_GRID_SIZE - 1 do
+        for r = 0, EDITOR_GRID_SIZE - 1 do
+            if editor.hex:isActiveHex(q, r) then
+                editor.terrainData[q .. "," .. r] = "grass"
+            end
+        end
+    end
+
+    log.info("editor", "Map editor initialized")
+end
+
+function editor.cleanup()
+    editor.active = false
+    editor.hex = nil
+    editor.terrainData = {}
+    editor.entityData = {}
+    editor.statusData = {}
+    editor.undoStack = {}
+    editor.redoStack = {}
+    log.info("editor", "Map editor cleaned up")
+end
+
+-- ============================================================
+-- UNDO / REDO
+-- ============================================================
+
+local function deepCopyMap(t, e, s)
+    local tc, ec, sc = {}, {}, {}
+    for k, v in pairs(t) do tc[k] = v end
+    for k, v in pairs(e) do ec[k] = v end
+    for k, v in pairs(s) do
+        if type(v) == "table" then
+            local copy = {}
+            for _, item in ipairs(v) do table.insert(copy, item) end
+            sc[k] = copy
+        else
+            sc[k] = v
+        end
+    end
+    return tc, ec, sc
+end
+
+function editor.pushUndo()
+    local t, e, s = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData)
+    table.insert(editor.undoStack, { terrain = t, entities = e, statuses = s })
+    if #editor.undoStack > editor.maxUndo then
+        table.remove(editor.undoStack, 1)
+    end
+    editor.redoStack = {}
+end
+
+function editor.undo()
+    if #editor.undoStack == 0 then
+        editor.message = "Nothing to undo"
+        editor.messageTimer = 1.5
+        return
+    end
+    -- Save current state to redo
+    local t, e, s = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData)
+    table.insert(editor.redoStack, { terrain = t, entities = e, statuses = s })
+    -- Restore
+    local snap = table.remove(editor.undoStack)
+    editor.terrainData = snap.terrain
+    editor.entityData = snap.entities
+    editor.statusData = snap.statuses
+end
+
+function editor.redo()
+    if #editor.redoStack == 0 then
+        editor.message = "Nothing to redo"
+        editor.messageTimer = 1.5
+        return
+    end
+    -- Save current state to undo
+    local t, e, s = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData)
+    table.insert(editor.undoStack, { terrain = t, entities = e, statuses = s })
+    -- Restore
+    local snap = table.remove(editor.redoStack)
+    editor.terrainData = snap.terrain
+    editor.entityData = snap.entities
+    editor.statusData = snap.statuses
+end
+
+-- ============================================================
+-- LOAD NATIVE MAP INTO EDITOR
+-- ============================================================
+
+function editor.loadMap(data)
+    editor.terrainData = {}
+    editor.entityData = {}
+    editor.statusData = {}
+
+    if data.terrain then
+        for key, val in pairs(data.terrain) do
+            editor.terrainData[key] = val
+        end
+    end
+    if data.entities then
+        for key, val in pairs(data.entities) do
+            editor.entityData[key] = val
+        end
+    end
+    if data.statuses then
+        for key, val in pairs(data.statuses) do
+            editor.statusData[key] = val
+        end
+    end
+
+    editor.message = "Map loaded!"
+    editor.messageTimer = 2
+    log.info("editor", "Map loaded into editor")
+end
+
+-- ============================================================
+-- SAVE / LOAD
+-- ============================================================
+
+function editor.getMapData()
+    local data = {
+        version = 1,
+        format = "native",
+        width = EDITOR_GRID_SIZE,
+        height = EDITOR_GRID_SIZE,
+        activeRadius = EDITOR_RADIUS,
+        centerQ = EDITOR_CENTER,
+        centerR = EDITOR_CENTER,
+        orientation = "flat",
+        terrain = {},
+        entities = {},
+        statuses = {},
+    }
+    for key, val in pairs(editor.terrainData) do
+        data.terrain[key] = val
+    end
+    for key, val in pairs(editor.entityData) do
+        data.entities[key] = val
+    end
+    for key, val in pairs(editor.statusData) do
+        data.statuses[key] = val
+    end
+    return data
+end
+
+function editor.saveMap()
+    local data = editor.getMapData()
+    local lines = {}
+    table.insert(lines, "return {")
+    table.insert(lines, string.format("  version = %d,", data.version))
+    table.insert(lines, string.format('  format = "native",'))
+    table.insert(lines, string.format("  width = %d,", data.width))
+    table.insert(lines, string.format("  height = %d,", data.height))
+    table.insert(lines, string.format("  activeRadius = %d,", data.activeRadius))
+    table.insert(lines, string.format("  centerQ = %d,", data.centerQ))
+    table.insert(lines, string.format("  centerR = %d,", data.centerR))
+    table.insert(lines, string.format('  orientation = "flat",'))
+
+    -- Terrain
+    table.insert(lines, "  terrain = {")
+    for key, val in pairs(data.terrain) do
+        table.insert(lines, string.format('    ["%s"] = "%s",', key, val))
+    end
+    table.insert(lines, "  },")
+
+    -- Entities
+    table.insert(lines, "  entities = {")
+    for key, val in pairs(data.entities) do
+        table.insert(lines, string.format('    ["%s"] = "%s",', key, val))
+    end
+    table.insert(lines, "  },")
+
+    -- Statuses
+    table.insert(lines, "  statuses = {")
+    for key, val in pairs(data.statuses) do
+        if type(val) == "table" then
+            local items = {}
+            for _, s in ipairs(val) do
+                table.insert(items, '"' .. s .. '"')
+            end
+            table.insert(lines, string.format('    ["%s"] = {%s},', key, table.concat(items, ", ")))
+        end
+    end
+    table.insert(lines, "  },")
+
+    table.insert(lines, "}")
+
+    local content = table.concat(lines, "\n")
+    local safeName = editor.fileName:gsub("[^%w_%-]", "_")
+    local path = "maps/" .. safeName .. ".lua"
+    love.filesystem.write(path, content)
+    editor.message = "Saved: " .. path
+    editor.messageTimer = 3
+    log.infof("editor", "Map saved to %s", path)
+end
+
+-- ============================================================
+-- PAINT HELPERS
+-- ============================================================
+
+local function key(q, r)
+    return q .. "," .. r
+end
+
+function editor.paintCell(q, r)
+    if not editor.hex:isActiveHex(q, r) then return end
+    local k = key(q, r)
+
+    if editor.currentLayer == editor.LAYER_TERRAIN then
+        if editor.eraser then
+            editor.terrainData[k] = "grass"
+        else
+            editor.terrainData[k] = editor.selectedTerrain
+        end
+    elseif editor.currentLayer == editor.LAYER_ENTITY then
+        if editor.eraser then
+            editor.entityData[k] = nil
+        else
+            editor.entityData[k] = editor.selectedEntity
+        end
+    elseif editor.currentLayer == editor.LAYER_STATUS then
+        if editor.eraser then
+            editor.statusData[k] = nil
+        else
+            local existing = editor.statusData[k] or {}
+            local found = false
+            for _, s in ipairs(existing) do
+                if s == editor.selectedStatus then found = true; break end
+            end
+            if not found then
+                table.insert(existing, editor.selectedStatus)
+                editor.statusData[k] = existing
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- INPUT
+-- ============================================================
+
+-- Palette layout constants
+local PAL_X = 0
+local PAL_W = 0
+local PAL_BTN_H = 28
+local PAL_TILE_SIZE = 44
+local PAL_TILE_GAP = 4
+local PAL_COLS = 3
+
+function editor.getPaletteRect()
+    local lw = love.graphics.getWidth() / (editor.dpiScale or 1)
+    local lh = love.graphics.getHeight() / (editor.dpiScale or 1)
+    PAL_W = 200
+    PAL_X = lw - PAL_W
+    return PAL_X, 0, PAL_W, lh
+end
+
+function editor.getLayerTabRects()
+    local px, py, pw, _ = editor.getPaletteRect()
+    local tabW = math.floor(pw / 3)
+    local tabH = 30
+    local rects = {}
+    for i = 1, 3 do
+        rects[i] = { x = px + (i - 1) * tabW, y = py, w = tabW, h = tabH }
+    end
+    return rects
+end
+
+function editor.getTileItems()
+    if editor.currentLayer == editor.LAYER_TERRAIN then
+        return editor.terrainPalette
+    elseif editor.currentLayer == editor.LAYER_ENTITY then
+        return editor.entityPalette
+    else
+        return editor.statusPalette
+    end
+end
+
+function editor.getSelectedItem()
+    if editor.currentLayer == editor.LAYER_TERRAIN then
+        return editor.selectedTerrain
+    elseif editor.currentLayer == editor.LAYER_ENTITY then
+        return editor.selectedEntity
+    else
+        return editor.selectedStatus
+    end
+end
+
+function editor.getButtonRects()
+    local px, _, pw, _ = editor.getPaletteRect()
+    local lh = love.graphics.getHeight() / (editor.dpiScale or 1)
+    local btnW = pw - 20
+    local btnH = 30
+    local btnX = px + 10
+    local baseY = lh - 160
+    return {
+        save   = { x = btnX, y = baseY,        w = btnW, h = btnH },
+        load   = { x = btnX, y = baseY + 36,    w = btnW, h = btnH },
+        eraser = { x = btnX, y = baseY + 72,    w = btnW, h = btnH },
+        back   = { x = btnX, y = baseY + 108,   w = btnW, h = btnH },
+    }
+end
+
+function editor.mousepressed(x, y, button)
+    if button ~= 1 then return end
+    local px, py, pw, ph = editor.getPaletteRect()
+
+    -- Check palette area
+    if x >= px then
+        -- Layer tabs
+        local tabs = editor.getLayerTabRects()
+        for i, tab in ipairs(tabs) do
+            if x >= tab.x and x <= tab.x + tab.w and y >= tab.y and y <= tab.y + tab.h then
+                editor.currentLayer = i
+                editor.eraser = false
+                return
+            end
+        end
+
+        -- Tile items
+        local items = editor.getTileItems()
+        local tileStartY = 40
+        for idx, item in ipairs(items) do
+            local col = (idx - 1) % PAL_COLS
+            local row = math.floor((idx - 1) / PAL_COLS)
+            local ix = px + 10 + col * (PAL_TILE_SIZE + PAL_TILE_GAP)
+            local iy = tileStartY + row * (PAL_TILE_SIZE + PAL_TILE_GAP)
+            if x >= ix and x <= ix + PAL_TILE_SIZE and y >= iy and y <= iy + PAL_TILE_SIZE then
+                if editor.currentLayer == editor.LAYER_TERRAIN then
+                    editor.selectedTerrain = item.id
+                elseif editor.currentLayer == editor.LAYER_ENTITY then
+                    editor.selectedEntity = item.id
+                else
+                    editor.selectedStatus = item.id
+                end
+                editor.eraser = false
+                return
+            end
+        end
+
+        -- Buttons
+        local btns = editor.getButtonRects()
+        if x >= btns.save.x and x <= btns.save.x + btns.save.w and y >= btns.save.y and y <= btns.save.y + btns.save.h then
+            editor.saveMap()
+            return
+        end
+        if x >= btns.load.x and x <= btns.load.x + btns.load.w and y >= btns.load.y and y <= btns.load.y + btns.load.h then
+            editor.loadMapFromFile()
+            return
+        end
+        if x >= btns.eraser.x and x <= btns.eraser.x + btns.eraser.w and y >= btns.eraser.y and y <= btns.eraser.y + btns.eraser.h then
+            editor.eraser = not editor.eraser
+            return
+        end
+        if x >= btns.back.x and x <= btns.back.x + btns.back.w and y >= btns.back.y and y <= btns.back.y + btns.back.h then
+            editor.cleanup()
+            gamePhase = "menu"
+            return
+        end
+
+        return -- clicked in palette but not on anything specific
+    end
+
+    -- Click on hex grid
+    if not editor.hex then return end
+    local hq, hr = editor.hex:pixelToHex(x, y)
+    if editor.hex:isActiveHex(hq, hr) then
+        editor.pushUndo()
+        editor.paintCell(hq, hr)
+        editor.isDragging = true
+        editor.lastPainted = hq .. "," .. hr
+    end
+end
+
+function editor.mousereleased(x, y, button)
+    if button == 1 then
+        editor.isDragging = false
+        editor.lastPainted = nil
+    end
+end
+
+function editor.mousemoved(x, y)
+    if not editor.isDragging then return end
+    if not editor.hex then return end
+    if x >= editor.getPaletteRect() then return end
+
+    local hq, hr = editor.hex:pixelToHex(x, y)
+    if editor.hex:isActiveHex(hq, hr) then
+        local k = hq .. "," .. hr
+        if k ~= editor.lastPainted then
+            editor.paintCell(hq, hr)
+            editor.lastPainted = k
+        end
+    end
+end
+
+function editor.keypressed(key)
+    local ctrl = love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl")
+    if ctrl then
+        if key == "z" then
+            editor.undo()
+        elseif key == "y" then
+            editor.redo()
+        elseif key == "s" then
+            editor.saveMap()
+        elseif key == "l" then
+            editor.loadMapFromFile()
+        elseif key == "n" then
+            editor.pushUndo()
+            editor.terrainData = {}
+            editor.entityData = {}
+            editor.statusData = {}
+            for q = 0, EDITOR_GRID_SIZE - 1 do
+                for r = 0, EDITOR_GRID_SIZE - 1 do
+                    if editor.hex and editor.hex:isActiveHex(q, r) then
+                        editor.terrainData[q .. "," .. r] = "grass"
+                    end
+                end
+            end
+            editor.fileName = "custom_map"
+            editor.message = "New map created"
+            editor.messageTimer = 2
+        end
+        return
+    end
+
+    if key == "1" then editor.currentLayer = editor.LAYER_TERRAIN
+    elseif key == "2" then editor.currentLayer = editor.LAYER_ENTITY
+    elseif key == "3" then editor.currentLayer = editor.LAYER_STATUS
+    elseif key == "e" then editor.eraser = not editor.eraser
+    elseif key == "escape" then
+        editor.cleanup()
+        gamePhase = "menu"
+    end
+end
+
+function editor.loadMapFromFile()
+    -- Scan maps/ for native format maps
+    local items = love.filesystem.getDirectoryItems("maps")
+    local nativeMaps = {}
+    for _, file in ipairs(items) do
+        if file:match("%.lua$") then
+            local path = "maps/" .. file
+            local ok, data = pcall(love.filesystem.load(path))
+            if ok and data then
+                local ok2, result = pcall(data)
+                if ok2 and result and result.format == "native" then
+                    table.insert(nativeMaps, { name = file:gsub("%.lua$", ""), path = path, data = result })
+                end
+            end
+        end
+    end
+
+    if #nativeMaps == 0 then
+        editor.message = "No native maps found in maps/"
+        editor.messageTimer = 3
+        return
+    end
+
+    -- Cycle to next map after current fileName
+    local currentIdx = 0
+    for i, m in ipairs(nativeMaps) do
+        if m.name == editor.fileName then currentIdx = i; break end
+    end
+    local nextIdx = (currentIdx % #nativeMaps) + 1
+    local chosen = nativeMaps[nextIdx]
+
+    editor.fileName = chosen.name
+    editor.loadMap(chosen.data)
+end
+
+-- ============================================================
+-- RENDERING
+-- ============================================================
+
+local terrainColors = {
+    grass            = {0.35, 0.65, 0.2},
+    dirt             = {0.65, 0.45, 0.25},
+    sand             = {0.9, 0.85, 0.6},
+    stone            = {0.55, 0.55, 0.55},
+    emptiness        = {0.15, 0.15, 0.15},
+    lava             = {0.95, 0.45, 0.1},
+    snow             = {0.9, 0.95, 1},
+    swamp            = {0.45, 0.65, 0.35},
+    water            = {0.2, 0.5, 0.85},
+    underwater_mines = {0.08, 0.25, 0.45},
+    railway          = {0.35, 0.3, 0.25},
+}
+
+function editor.draw()
+    if not editor.hex then return end
+
+    local lw = love.graphics.getWidth() / (editor.dpiScale or 1)
+    local lh = love.graphics.getHeight() / (editor.dpiScale or 1)
+    local px, py, pw, ph = editor.getPaletteRect()
+
+    -- Draw hex grid
+    for q = 0, EDITOR_GRID_SIZE - 1 do
+        for r = 0, EDITOR_GRID_SIZE - 1 do
+            if editor.hex:isActiveHex(q, r) then
+                local x, y = getDrawCoordsEditor(editor.hex, q, r)
+                local k = q .. "," .. r
+
+                -- Terrain fill
+                local terrain = editor.terrainData[k] or "grass"
+                local col = terrainColors[terrain] or {0.3, 0.3, 0.3}
+                local verts = editor.hex:drawHexagon(x, y, editor.hex.radius - 2)
+                love.graphics.setColor(col[1], col[2], col[3], 1)
+                love.graphics.polygon("fill", verts)
+                love.graphics.setColor(0, 0, 0, 0.4)
+                love.graphics.setLineWidth(1)
+                love.graphics.polygon("line", verts)
+
+                -- Entity indicator
+                local entityId = editor.entityData[k]
+                if entityId then
+                    local entCol = {0.8, 0.8, 0.8}
+                    for _, ep in ipairs(editor.entityPalette) do
+                        if ep.id == entityId then entCol = ep.color; break end
+                    end
+                    love.graphics.setColor(entCol[1], entCol[2], entCol[3], 0.9)
+                    love.graphics.circle("fill", x, y, editor.hex.radius * 0.35)
+                    love.graphics.setColor(1, 1, 1, 1)
+                    love.graphics.setLineWidth(2)
+                    love.graphics.circle("line", x, y, editor.hex.radius * 0.35)
+                    -- Letter
+                    local letter = entityId:sub(1, 1)
+                    local font = love.graphics.getFont()
+                    local tw = font:getWidth(letter)
+                    love.graphics.setColor(1, 1, 1, 1)
+                    love.graphics.print(letter, x - tw / 2, y - 7)
+                end
+
+                -- Status indicator
+                local statuses = editor.statusData[k]
+                if statuses and #statuses > 0 then
+                    for si, st in ipairs(statuses) do
+                        local stCol = {1, 1, 1}
+                        for _, sp in ipairs(editor.statusPalette) do
+                            if sp.id == st then stCol = sp.color; break end
+                        end
+                        local ox = (si - 1) * 10 - (#statuses - 1) * 5
+                        love.graphics.setColor(stCol[1], stCol[2], stCol[3], 0.85)
+                        love.graphics.circle("fill", x + ox, y + editor.hex.radius * 0.4, 4)
+                    end
+                end
+
+                -- Hover highlight
+                if editor.hex.hoverQ == q and editor.hex.hoverR == r then
+                    love.graphics.setColor(1, 1, 1, 0.3)
+                    local hverts = editor.hex:drawHexagon(x, y, editor.hex.radius - 2)
+                    love.graphics.polygon("fill", hverts)
+                end
+            end
+        end
+    end
+
+    -- Draw coordinate labels
+    local font = love.graphics.getFont()
+    for q = 0, EDITOR_GRID_SIZE - 1 do
+        for r = 0, EDITOR_GRID_SIZE - 1 do
+            if editor.hex:isActiveHex(q, r) then
+                local x, y = getDrawCoordsEditor(editor.hex, q, r)
+                love.graphics.setColor(1, 1, 1, 0.4)
+                love.graphics.print(q .. "," .. r, x - 12, y + editor.hex.radius * 0.5)
+            end
+        end
+    end
+
+    -- ===== PALETTE PANEL =====
+    love.graphics.setColor(0.12, 0.12, 0.18, 0.95)
+    love.graphics.rectangle("fill", px, py, pw, ph)
+    love.graphics.setColor(0.4, 0.4, 0.5, 1)
+    love.graphics.setLineWidth(2)
+    love.graphics.line(px, py, px, py + ph)
+
+    -- Layer tabs
+    local tabs = editor.getLayerTabRects()
+    for i, tab in ipairs(tabs) do
+        local isActive = (editor.currentLayer == i)
+        love.graphics.setColor(isActive and 0.3 or 0.2, isActive and 0.5 or 0.2, isActive and 0.7 or 0.25, 1)
+        love.graphics.rectangle("fill", tab.x, tab.y, tab.w, tab.h)
+        love.graphics.setColor(1, 1, 1, 1)
+        local label = editor.layerNames[i]
+        local lw2 = font:getWidth(label)
+        love.graphics.print(label, tab.x + tab.w / 2 - lw2 / 2, tab.y + 8)
+    end
+
+    -- Tile palette
+    local items = editor.getTileItems()
+    local selected = editor.getSelectedItem()
+    local tileStartY = 40
+    for idx, item in ipairs(items) do
+        local col = (idx - 1) % PAL_COLS
+        local row = math.floor((idx - 1) / PAL_COLS)
+        local ix = px + 10 + col * (PAL_TILE_SIZE + PAL_TILE_GAP)
+        local iy = tileStartY + row * (PAL_TILE_SIZE + PAL_TILE_GAP)
+        local isSelected = (item.id == selected) and not editor.eraser
+
+        -- Background
+        local bgCol
+        if editor.currentLayer == editor.LAYER_TERRAIN then
+            bgCol = terrainColors[item.id] or {0.3, 0.3, 0.3}
+        elseif editor.currentLayer == editor.LAYER_ENTITY then
+            bgCol = item.color or {0.5, 0.5, 0.5}
+        else
+            bgCol = item.color or {0.5, 0.5, 0.5}
+        end
+
+        love.graphics.setColor(bgCol[1], bgCol[2], bgCol[3], isSelected and 1 or 0.6)
+        love.graphics.rectangle("fill", ix, iy, PAL_TILE_SIZE, PAL_TILE_SIZE, 4)
+
+        if isSelected then
+            love.graphics.setColor(1, 1, 0.2, 1)
+            love.graphics.setLineWidth(2)
+            love.graphics.rectangle("line", ix, iy, PAL_TILE_SIZE, PAL_TILE_SIZE, 4)
+        else
+            love.graphics.setColor(0.3, 0.3, 0.3, 1)
+            love.graphics.setLineWidth(1)
+            love.graphics.rectangle("line", ix, iy, PAL_TILE_SIZE, PAL_TILE_SIZE, 4)
+        end
+
+        -- Label
+        love.graphics.setColor(1, 1, 1, 1)
+        local name = item.name
+        local nw = font:getWidth(name)
+        if nw > PAL_TILE_SIZE - 4 then
+            name = name:sub(1, 5) .. ".."
+            nw = font:getWidth(name)
+        end
+        love.graphics.print(name, ix + PAL_TILE_SIZE / 2 - nw / 2, iy + PAL_TILE_SIZE - 14)
+    end
+
+    -- Buttons
+    local btns = editor.getButtonRects()
+    local function drawBtn(rect, label, highlight)
+        love.graphics.setColor(highlight and 0.4 or 0.25, highlight and 0.6 or 0.35, highlight and 0.4 or 0.25, 0.9)
+        love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 4)
+        love.graphics.setColor(1, 1, 1, 1)
+        local tw = font:getWidth(label)
+        love.graphics.print(label, rect.x + rect.w / 2 - tw / 2, rect.y + 8)
+    end
+    drawBtn(btns.save, "Save [Ctrl+S]", false)
+    drawBtn(btns.load, "Load", false)
+    drawBtn(btns.eraser, editor.eraser and "[ERASER ON]" or "Eraser [E]", editor.eraser)
+    drawBtn(btns.back, "Back [Esc]", false)
+
+    -- File name input area
+    local nameY = btns.save.y - 40
+    love.graphics.setColor(0.15, 0.15, 0.2, 1)
+    love.graphics.rectangle("fill", px + 10, nameY, pw - 20, 24, 3)
+    love.graphics.setColor(0.5, 0.5, 0.6, 1)
+    love.graphics.rectangle("line", px + 10, nameY, pw - 20, 24, 3)
+    love.graphics.setColor(0.8, 0.8, 0.8, 1)
+    love.graphics.print("Name: " .. editor.fileName, px + 14, nameY + 6)
+
+    -- Current tool info
+    local toolY = nameY - 30
+    love.graphics.setColor(1, 1, 0.6, 1)
+    local toolText = "Layer: " .. editor.layerNames[editor.currentLayer]
+    if editor.eraser then
+        toolText = toolText .. " | ERASER"
+    else
+        toolText = toolText .. " | " .. (selected or "-")
+    end
+    love.graphics.print(toolText, px + 10, toolY)
+
+    -- Message
+    if editor.message and editor.messageTimer > 0 then
+        love.graphics.setColor(1, 1, 0.2, math.min(1, editor.messageTimer))
+        local mw = font:getWidth(editor.message)
+        love.graphics.print(editor.message, lw / 2 - mw / 2, 10)
+    end
+end
+
+function editor.update(dt)
+    if editor.messageTimer > 0 then
+        editor.messageTimer = editor.messageTimer - dt
+    end
+    -- Update hover
+    if editor.hex then
+        local mx, my = love.mouse.getPosition()
+        local dpiScale = editor.dpiScale or 1
+        mx = mx / dpiScale
+        my = my / dpiScale
+        local hq, hr = editor.hex:pixelToHex(mx, my)
+        if editor.hex:isActiveHex(hq, hr) then
+            editor.hex.hoverQ, editor.hex.hoverR = hq, hr
+        else
+            editor.hex.hoverQ, editor.hex.hoverR = -1, -1
+        end
+    end
+end
+
+-- Helper: get draw coords using editor hex grid
+function getDrawCoordsEditor(hex, q, r)
+    return hex:hexToPixel(q, r)
+end
+
+return editor

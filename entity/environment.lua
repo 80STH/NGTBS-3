@@ -797,6 +797,161 @@ function environment.loadMapFromTiled(filePath)
 end
 
 -- ============================================================
+-- Native map loader (for in-game editor maps)
+-- ============================================================
+
+-- Build name -> entity def lookup
+local nameToEntityDef = {}
+for gid, def in pairs(gidToEntity) do
+    if not nameToEntityDef[def.name] then
+        nameToEntityDef[def.name] = def
+    end
+end
+
+function environment.loadNativeMap(data)
+    log.infof("env", "=== LOADING NATIVE MAP ===")
+
+    local width = data.width or 11
+    local height = data.height or 11
+    local activeRadius = data.activeRadius or 5
+    local centerQ = data.centerQ or 5
+    local centerR = data.centerR or 5
+    local orientation = data.orientation or "flat"
+
+    local hex_utils = require("grid.hex_utils")
+    hex_utils.setOrientation(orientation)
+
+    local terrainMap = {}
+    local entities = {}
+
+    local tempHex = require("grid.hexgrid").new(
+        config.HEX_RADIUS,
+        width, height,
+        activeRadius,
+        centerQ, centerR,
+        orientation
+    )
+
+    -- Load terrain
+    if data.terrain then
+        for key, terrainType in pairs(data.terrain) do
+            local q, r = key:match("^(%d+),(%d+)$")
+            if q and r then
+                q, r = tonumber(q), tonumber(r)
+                if tempHex:isActiveHex(q, r) then
+                    if not terrainMap[q] then terrainMap[q] = {} end
+                    terrainMap[q][r] = terrainType
+                end
+            end
+        end
+    end
+
+    -- Load entities
+    if data.entities then
+        for key, entityName in pairs(data.entities) do
+            local q, r = key:match("^(%d+),(%d+)$")
+            if q and r then
+                q, r = tonumber(q), tonumber(r)
+                if tempHex:isActiveHex(q, r) then
+                    local def = nameToEntityDef[entityName]
+                    if def then
+                        local entity = nil
+                        if def.type == "character" then
+                            local attacks = environment.getAttacks(def.attacks)
+                            entity = Entity.new(
+                                def.name, Entity.TYPES.CHARACTER, q, r,
+                                def.maxHealth, def.isPlayable, def.moveRange,
+                                nil, nil, attacks
+                            )
+                            if def.name == "SummoningRod" then
+                                entity.isSummoningRod = true
+                                entity.isPushable = false
+                                entity.moveRange = 0
+                            end
+                            if def.name == "Ghost" then
+                                entity.flying = true
+                            end
+                            if def.attacks == "bogshaman" then
+                                entity.aura = { type = "slow", radius = 1 }
+                            end
+                        elseif def.type == "obstacle" then
+                            local health = def.health or 999
+                            entity = Entity.new(def.name, Entity.TYPES.OBSTACLE, q, r, health, false, 0, nil, nil, {})
+                            if def.maxDamagePerHit then entity.maxDamagePerHit = def.maxDamagePerHit end
+                            if def.indestructible then entity.indestructible = true end
+                            if def.noCollisionDamage then entity.noCollisionDamage = true end
+                            if def.isHazard then entity.isHazard = true end
+                            if def.direction then entity.direction = def.direction end
+                        elseif def.type == "building" then
+                            entity = Entity.new(def.name, Entity.TYPES.BUILDING, q, r, def.health, false, (def.moveRange or 0), nil, nil, {})
+                            if def.waterWalker then entity.waterWalker = true end
+                            if def.isObjective then entity.isObjective = true end
+                        end
+
+                        if entity then
+                            -- Generate a simple colored sprite for the entity
+                            local spriteSize = 16
+                            local canvas = love.graphics.newCanvas(spriteSize, spriteSize)
+                            love.graphics.setCanvas(canvas)
+                            love.graphics.clear(0, 0, 0, 0)
+                            if def.isPlayable ~= nil then
+                                love.graphics.setColor(def.isPlayable and {0.2, 0.6, 0.2, 1} or {0.8, 0.2, 0.2, 1})
+                            else
+                                love.graphics.setColor(0.5, 0.5, 0.5, 1)
+                            end
+                            love.graphics.circle("fill", spriteSize / 2, spriteSize / 2, spriteSize / 2 - 1)
+                            love.graphics.setCanvas()
+                            entity.sprite = canvas
+
+                            table.insert(entities, entity)
+                            log.debugf("env", "Created %s at (%d,%d)", entity.name, q, r)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Load hex statuses
+    local hexStatuses = {}
+    if data.statuses then
+        for key, val in pairs(data.statuses) do
+            local q, r = key:match("^(%d+),(%d+)$")
+            if q and r then
+                q, r = tonumber(q), tonumber(r)
+                if tempHex:isActiveHex(q, r) then
+                    if type(val) == "table" then
+                        hexStatuses[key] = val
+                    elseif type(val) == "string" then
+                        hexStatuses[key] = { val }
+                    end
+                end
+            end
+        end
+    end
+
+    -- Separate playable characters for deployment phase
+    local deployableAllies = {}
+    local gameEntities = {}
+    for _, entity in ipairs(entities) do
+        if entity.isPlayable and entity:isCharacter() then
+            table.insert(deployableAllies, entity)
+        else
+            table.insert(gameEntities, entity)
+        end
+    end
+
+    -- No terrain textures for native maps (procedural rendering)
+    environment.loadedMap = nil
+    environment.terrainTextures = nil
+
+    log.infof("env", "Native map loaded: %dx%d, radius=%d", width, height, activeRadius)
+    log.infof("env", "Entities: %d, Allies: %d", #gameEntities, #deployableAllies)
+
+    return terrainMap, gameEntities, width, height, hexStatuses, {}, deployableAllies, orientation
+end
+
+-- ============================================================
 -- Attack registry access API
 -- ============================================================
 

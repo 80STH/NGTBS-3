@@ -723,6 +723,7 @@ function ai.startEnemyMove(enemy, hex)
 end
 
 function ai.updateEnemyMovement(enemy, dt, hex)
+    if enemy.isPlayable then return end
     if enemy.isMoving then
         enemy.timer = enemy.timer + dt
         local t = enemy.timer / enemy.speed

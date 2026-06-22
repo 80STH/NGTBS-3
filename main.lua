@@ -24,6 +24,7 @@ menu = require("ui.menu")
 local objectives = require("system.objectives")
 global_abilities = require("system.global_abilities")
 shop = require("ui.shop")
+map_editor = require("editor.map_editor")
 require("core.game")
 
 -- Logging: enable here (or via _G.LOG_ENABLED).
@@ -321,13 +322,25 @@ function love.mousepressed(x, y, button)
     end
     if gamePhase == "menu" then
         menu.mousepressed(lx, ly)
+    elseif gamePhase == "editor" then
+        map_editor.mousepressed(lx, ly, button)
     else
         input.mousepressed(lx, ly, button)
     end
 end
 
 function love.mousereleased(x, y, button)
-    input.mousereleased(x / dpiScale, y / dpiScale, button)
+    if gamePhase == "editor" then
+        map_editor.mousereleased(x / dpiScale, y / dpiScale, button)
+    else
+        input.mousereleased(x / dpiScale, y / dpiScale, button)
+    end
+end
+
+function love.mousemoved(x, y)
+    if gamePhase == "editor" then
+        map_editor.mousemoved(x / dpiScale, y / dpiScale)
+    end
 end
 
 function isPositionOccupied(q, r, movingEntity)
@@ -356,6 +369,11 @@ end
 
 function love.update(dt)
     shop.update(dt)
+    if gamePhase == "editor" then
+        map_editor.dpiScale = dpiScale
+        map_editor.update(dt)
+        return
+    end
     if gamePhase == "deploy" then
         local mx, my = love.mouse.getPosition()
         mx = mx / dpiScale
@@ -491,7 +509,10 @@ function love.resize(w, h)
     dpiScale = love.window.getDPIScale()
     logicalW = w / dpiScale
     logicalH = h / dpiScale
-    if hex then
+    if gamePhase == "editor" and map_editor.hex then
+        map_editor.hex:centerOnScreen(logicalW, logicalH)
+        map_editor.hex.offsetX = map_editor.hex.offsetX - 100
+    elseif hex then
         hex:centerOnScreen(logicalW, logicalH)
     end
 end
@@ -507,6 +528,8 @@ function love.draw()
 
     if gamePhase == "menu" then
         menu.draw()
+    elseif gamePhase == "editor" then
+        map_editor.draw()
     elseif gamePhase == "deploy" then
         syncState()
         renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
@@ -574,6 +597,8 @@ function love.keypressed(key)
     end
     if gamePhase == "menu" then
         menu.keypressed(key)
+    elseif gamePhase == "editor" then
+        map_editor.keypressed(key)
     else
         input.keypressed(key)
     end

@@ -219,9 +219,20 @@ function menu.draw()
     love.graphics.setFont(love.graphics.newFont(13))
     love.graphics.printf("Shop", bx + 10, shopY + bh/2 - 8, bw - 20, "center")
 
+    -- Editor button
+    local editorY = shopY + bh + 16
+    local editorHover = mx >= bx and mx <= bx + bw and my >= editorY and my <= editorY + bh
+    love.graphics.setColor(editorHover and 0.3 or 0.15, editorHover and 0.4 or 0.25, editorHover and 0.6 or 0.35, 0.9)
+    love.graphics.rectangle("fill", bx, editorY, bw, bh, 8)
+    love.graphics.setColor(0.3, 0.5, 0.8, editorHover and 0.8 or 0.4)
+    love.graphics.rectangle("line", bx, editorY, bw, bh, 8)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setFont(love.graphics.newFont(13))
+    love.graphics.printf("Map Editor", bx + 10, editorY + bh/2 - 8, bw - 20, "center")
+
     love.graphics.setFont(love.graphics.newFont(12))
     love.graphics.setColor(0.5, 0.5, 0.5, 1)
-    love.graphics.printf("Click a map to start  |  Hold R to restart", 0, shopY + bh + 12, w, "center")
+    love.graphics.printf("Click a map to start  |  Hold R to restart", 0, editorY + bh + 12, w, "center")
 end
 
 function menu.mousepressed(x, y)
@@ -304,6 +315,15 @@ function menu.mousepressed(x, y)
     local shopY = ptY + bh + 16
     if x >= bx and x <= bx + bw and y >= shopY and y <= shopY + bh then
         shop.isOpen = true
+        return true
+    end
+
+    -- Editor button
+    local editorY = shopY + bh + 16
+    if x >= bx and x <= bx + bw and y >= editorY and y <= editorY + bh then
+        gamePhase = "editor"
+        map_editor.dpiScale = dpiScale or 1
+        map_editor.init()
         return true
     end
 

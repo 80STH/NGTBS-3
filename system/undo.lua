@@ -11,10 +11,23 @@ undo.history = {}
 -- Take a full battlefield snapshot (call before any action)
 function undo.snapshot()
     local status = _G.status
+    local ga = _G.global_abilities
+    local abilityStates = {}
+    if ga then
+        for name, ab in pairs(ga.registry) do
+            abilityStates[name] = ab.hasBeenUsed
+        end
+    end
+
     local snap = {
         entities = {},
         hexStatuses = {},
         selectedActor = _G.selectedActor,
+        chaos = _G.chaos or 0,
+        abilityMana = ga and ga.mana or 0,
+        abilityUsedThisTurn = ga and ga.abilityUsedThisTurn or false,
+        activeAbilityName = ga and ga.activeAbility and ga.activeAbility.name or nil,
+        abilityStates = abilityStates,
         actionHistoryCount = #undo.history,
     }
     -- Save every entity's state
@@ -134,8 +147,7 @@ function undo.restore(snap)
         end
     end
 
-    -- Restore selected actor
-    _G.selectedActor = snap.selectedActor
+    -- Keep current selected actor, just update its highlight position
     if _G.selectedActor then
         _G.hex.selectedQ = _G.selectedActor.q
         _G.hex.selectedR = _G.selectedActor.r
@@ -143,6 +155,22 @@ function undo.restore(snap)
     end
     _G.attackMode = false
     _G.selectedAttack = nil
+    _G.chaos = snap.chaos or 0
+
+    -- Restore ability state
+    local ga = _G.global_abilities
+    if ga and snap.abilityStates then
+        ga.mana = snap.abilityMana or 0
+        ga.abilityUsedThisTurn = snap.abilityUsedThisTurn or false
+        for name, ab in pairs(ga.registry) do
+            ab.hasBeenUsed = snap.abilityStates[name] or false
+        end
+        if snap.activeAbilityName and ga.registry[snap.activeAbilityName] then
+            ga.activeAbility = ga.registry[snap.activeAbilityName]
+        else
+            ga.activeAbility = nil
+        end
+    end
 
     log.debugf("undo", "Snapshot restored. History size: %d", #undo.history)
     return true

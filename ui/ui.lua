@@ -1854,10 +1854,12 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
     if enemy.flying then
         isBlockedFn = function(q, r) return not hex:isActiveHex(q, r) end
     else
-        isBlockedFn = function(q, r) return not isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex) end
+        isBlockedFn = function(q, r) return cell_rules.isOccupied(q, r, enemy, { entities = entities, hex = hex, allowPhaseThroughEnemies = false }) end
         isOccupiedFn = function(q, r)
-            local e = getEntityAtHex(q, r)
-            return e and e ~= enemy and not e.isHazard
+            for _, e in ipairs(entities) do
+                if e ~= enemy and e.q == q and e.r == r and not e.isHazard then return true end
+            end
+            return false
         end
     end
     local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effectiveRange,
@@ -2054,7 +2056,7 @@ function updateAttackButtons(actor)
     if not actor or not actor.attacks or #actor.attacks == 0 then
         return
     end
-    local startX = logicalW - 160
+    local startX = logicalW - 155
     local startY = 100
     local idx = 0
     for i, attackInfo in ipairs(actor.attacks) do
@@ -2065,9 +2067,9 @@ function updateAttackButtons(actor)
             idx = idx + 1
             local btn = {
                 x = startX,
-                y = startY + (idx-1) * 35,
-                width = 150,
-                height = 30,
+                y = startY + (idx-1) * 32,
+                width = 145,
+                height = 28,
                 attack = attackInfo.attack,
                 name = attackInfo.name,
                 desc = attackInfo.description

@@ -31,15 +31,29 @@ function restartGame(mapPath)
 
     local hexStatuses
     local deployableAllies
-    terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation = environment.loadMapFromTiled(mapPath)
+
+    -- Detect native map format vs Tiled
+    local mapData = love.filesystem.load(mapPath)()
+    local mapActiveRadius, mapCenterQ, mapCenterR
+    if mapData and mapData.format == "native" then
+        terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation = environment.loadNativeMap(mapData)
+        mapActiveRadius = mapData.activeRadius or config.ACTIVE_RADIUS
+        mapCenterQ = mapData.centerQ or math.floor(width / 2)
+        mapCenterR = mapData.centerR or math.floor(height / 2)
+    else
+        terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation = environment.loadMapFromTiled(mapPath)
+        mapActiveRadius = config.ACTIVE_RADIUS
+        mapCenterQ = config.CENTER_Q
+        mapCenterR = config.CENTER_R
+    end
     orientation = orientation or "pointy"
 
     hex = require("grid.hexgrid").new(
         config.HEX_RADIUS,
         width, height,
-        config.ACTIVE_RADIUS,
-        config.CENTER_Q,
-        config.CENTER_R,
+        mapActiveRadius,
+        mapCenterQ,
+        mapCenterR,
         orientation
     )
     hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
