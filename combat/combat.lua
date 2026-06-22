@@ -2153,7 +2153,19 @@ end
 
 function updateActorMovement(actor, dt)
     if not actor.isPlayable then return end
-    if actor.isDying then return end
+    if actor.isDying then
+        if actor.isMoving then
+            actor.isMoving = false
+            actor.path = {}
+            actor.currentPathIndex = 0
+            if selectedActor == actor then
+                hex.selectedQ = actor.q
+                hex.selectedR = actor.r
+            end
+            undo.snapshot()
+        end
+        return
+    end
     if actor.isMoving then
         actor.timer = actor.timer + dt
         local t = actor.timer / actor.speed
