@@ -2165,6 +2165,7 @@ function updateActorMovement(actor, dt)
                 if died then
                     local x, y = hex:hexToPixel(actor.q, actor.r)
                     visual.addEffect(x, y, "drown")
+                    undo.snapshot()
                     checkGameEnd()
                     return
                 end
