@@ -154,12 +154,14 @@ function undo.undoLast()
         log.infof("undo", "undoLast: only %d snapshot(s), nothing to undo", #undo.history)
         return false
     end
+    -- Save reference to the snapshot before the last action (state before last action)
+    -- BEFORE modifying undo.history, to avoid any timing/length issues
+    local targetSnap = undo.history[#undo.history - 1]
     -- Remove current snapshot (state after last action)
     table.remove(undo.history)
-    -- Restore to the now-last snapshot (state before last action)
-    local snap = undo.history[#undo.history]
+    -- Restore to the state before the last action
     log.infof("undo", "undoLast: restoring snapshot %d/%d", #undo.history, #undo.history)
-    return undo.restore(snap)
+    return undo.restore(targetSnap)
 end
 
 -- Undo all actions (restore to start of turn)

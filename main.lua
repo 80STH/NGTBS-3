@@ -30,7 +30,7 @@ require("core.game")
 -- Categories: ai, combat, effects, entity, env, game, input, objectives,
 --            status, trains, turn, ui, main, map.
 _G.log = require("util.log")
-log.enabled = false
+log.enabled = true
 log.level = "debug"
 
 -- Enable file logging via the NGTBS_LOG_FILE environment variable.
@@ -399,7 +399,7 @@ function love.update(dt)
     end
     updateHoldButton(endTurnButton, endTurn)
     updateHoldButton(restartButton, restartGame)
-    updateHoldButton(undoButton, function() undo.undoAll(); sounds.play("undo") end)
+    updateHoldButton(undoButton, function() end)
 
     if testViewActive then
         testViewOffsetY = math.sin(love.timer.getTime() * 1.5) * 60

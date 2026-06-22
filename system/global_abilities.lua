@@ -10,6 +10,7 @@ local hex_utils = require("grid.hex_utils")
 local status = require("system.status")
 local environment = require("entity.environment")
 local log = require("util.log")
+local undo = require("system.undo")
 
 local global_abilities = {}
 
@@ -383,8 +384,8 @@ function UnearthAbility:onActivate(state)
     end
     global_abilities.spendAbility(self)
     global_abilities.spendAbility(self)
+    undo.snapshot()
     sounds.play("unearth")
-    state.
     global_abilities.activeAbility = nil
     log.infof("abilities", "Unearth: %d enemies emerged!", spawned)
     if _G.checkGameEnd then _G.checkGameEnd() end
@@ -509,7 +510,7 @@ function MindControlAbility:onClickHex(q, r, hex, state)
         self.target.r = r
         global_abilities.spendAbility(self)
         global_abilities.spendAbility(self)
-        state.
+        undo.snapshot()
         log.infof("abilities", "%s moved by mind control!", tostring(self.target.name))
         restoreSelectedActor()
         global_abilities.activeAbility = nil
@@ -566,7 +567,7 @@ function AccelerateDecayAbility:onActivate(state)
     end
     global_abilities.spendAbility(self)
     global_abilities.spendAbility(self)
-    state.
+    undo.snapshot()
     global_abilities.activeAbility = nil
 end
 
@@ -650,7 +651,7 @@ function HealAbility:onClickHex(q, r, hex, state)
     end
     global_abilities.spendAbility(self)
     global_abilities.spendAbility(self)
-    state.
+    undo.snapshot()
     log.infof("abilities", "%s fully healed and all negative effects removed!", tostring(target.name))
     restoreSelectedActor()
     global_abilities.activeAbility = nil
@@ -784,7 +785,7 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
 
         global_abilities.spendAbility(self)
         global_abilities.spendAbility(self)
-        state.
+        undo.snapshot()
         log.infof("abilities", "%s cleansed and shifted to (%d,%d)!", tostring(self.target.name), q, r)
         restoreSelectedActor()
         global_abilities.activeAbility = nil
@@ -888,8 +889,8 @@ function WindTorrent:onClickHex(q, r, hex, state)
 
     self:executeGlobalWithAnimation(direction, hex, state.entities, state.sounds, state.terrainMap, function(success, message)
         if success then
-            state.
-            log.info("abilities", "Wind Torrent used! History cleared.")
+            undo.snapshot()
+            log.info("abilities", "Wind Torrent used!")
         else
             log.warnf("abilities", "Wind Torrent failed: %s", (message or "unknown error"))
         end

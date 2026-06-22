@@ -5,6 +5,13 @@ local global_abilities = require("system.global_abilities")
 local hex_utils = require("grid.hex_utils")
 local log = require("util.log")
 
+-- Guard to prevent undo from being triggered twice by both mouse and keyboard
+-- release handlers in the same event cycle
+local undoTriggeredThisCycle = false
+-- Tracks whether the current undo hold was initiated by keyboard (U key) vs mouse
+-- Prevents mousereleased from stealing a keyboard-initiated undo on an unrelated click
+local undoHeldByKeyboard = false
+
 function input.mousepressed(x, y, button)
     if button ~= 1 then return end
 
@@ -117,9 +124,10 @@ end
         if #undo.history > 1 then
             undoButton.isHeld = true
             undoButton.holdTimer = 0
+            undoTriggeredThisCycle = false
+            undoHeldByKeyboard = false
         else
             sounds.play("cant")
-            log.info("input", "No actions to undo!")
         end
         return
     end
@@ -420,6 +428,8 @@ function input.keypressed(key)
         if turnState.phase == "player" and #undo.history > 1 then
             undoButton.isHeld = true
             undoButton.holdTimer = 0
+            undoTriggeredThisCycle = false
+            undoHeldByKeyboard = true
         end
         return
     end
@@ -525,12 +535,14 @@ function input.mousereleased(x, y, button)
         restartButton.isHeld = false
         restartButton.holdTimer = 0
     end
-    if undoButton.isHeld then
+    if undoButton.isHeld and not undoTriggeredThisCycle and not undoHeldByKeyboard then
         local wasHeld = undoButton.holdTimer >= (config.HOLD_TIME or 0.7)
         undoButton.isHeld = false
         undoButton.holdTimer = 0
+        undoHeldByKeyboard = false
         if not wasHeld and #undo.history > 1 then
             log.info("input", "MOUSE undo triggered")
+            undoTriggeredThisCycle = true
             undo.undoLast()
             sounds.play("undo")
         end
@@ -545,12 +557,14 @@ function input.keyreleased(key)
         end
     end
     if key == "u" or key == "U" then
-        if undoButton.isHeld then
+        if undoButton.isHeld and not undoTriggeredThisCycle and undoHeldByKeyboard then
             local wasHeld = undoButton.holdTimer >= (config.HOLD_TIME or 0.7)
             undoButton.isHeld = false
             undoButton.holdTimer = 0
+            undoHeldByKeyboard = false
             if not wasHeld and #undo.history > 1 then
                 log.info("input", "KEYBOARD undo triggered")
+                undoTriggeredThisCycle = true
                 undo.undoLast()
                 sounds.play("undo")
             end
