@@ -8,6 +8,147 @@ local hexgrid = require("grid.hexgrid")
 local hex_utils = require("grid.hex_utils")
 local config = require("core.config")
 local log = require("util.log")
+local sprites = require("util.sprites")
+
+-- Entity name → GID mapping (same as environment.lua)
+local entityNameToGid = {
+    Warrior = 34, Puncher = 30, Rogue = 31,
+    Summoner = 40, Divider = 45, Summoned = 42, Divided = 44,
+    Ghost = 26, Zombie = 25, PoisonousZombie = 21, Lich = 27,
+    Brute = 60, Lancer = 62, BogShaman = 80, Raider = 23,
+    Dervish = 28, Crusher = 66, SummoningRod = 83,
+    SuperMountain = 11, WeakMountain = 6,
+    MountainSlope = 9, SuperMountainSlope = 16,
+    SmallBuilding = 12, BigBuilding = 7, Tower = 29,
+    Caravan = 48, Blockpost = 77,
+    MountainHouse = 84, SmallMountainHouse = 85,
+}
+
+-- Custom sprite generation for buildings/obstacles (same as environment.lua)
+local function generateCustomSprite(name, w, h)
+    local canvas = love.graphics.newCanvas(w, h)
+    canvas:setFilter("nearest", "nearest")
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear(0, 0, 0, 0)
+
+    if name == "SuperMountain" then
+        love.graphics.setColor(0.45, 0.4, 0.35)
+        love.graphics.polygon("fill", 0, h, w/2, 0, w, h)
+        love.graphics.setColor(0.55, 0.5, 0.45)
+        love.graphics.polygon("fill", 0, h, w/2, 0, w/2, h)
+        love.graphics.setColor(0.95, 0.95, 1)
+        love.graphics.polygon("fill", w/2-2, 0, w/2+2, 0, w/2+1, 3, w/2-2, 3)
+        love.graphics.polygon("fill", w/2-1, 1, w/2+1, 1, w/2, 3)
+        love.graphics.setColor(0.3, 0.25, 0.2)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+    elseif name == "WeakMountain" then
+        love.graphics.setColor(0.5, 0.45, 0.35)
+        love.graphics.polygon("fill", 0, h, w/2, 0, w, h)
+        love.graphics.setColor(0.6, 0.55, 0.45)
+        love.graphics.polygon("fill", 0, h, w/2, 0, w/2, h)
+        love.graphics.setColor(0.35, 0.3, 0.25)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+    elseif name == "SuperMountainSlope" then
+        love.graphics.setColor(0.45, 0.42, 0.38)
+        love.graphics.polygon("fill", 0, h, w*0.55, 0, w, h)
+        love.graphics.setColor(0.55, 0.52, 0.48)
+        love.graphics.polygon("fill", 0, h, w*0.55, 0, w*0.55, h)
+        love.graphics.setColor(0.95, 0.95, 1)
+        love.graphics.polygon("fill", w*0.55-1, 0, w*0.55+1, 0, w*0.55, 2)
+        love.graphics.setColor(0.3, 0.25, 0.2)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+    elseif name == "SmallBuilding" then
+        love.graphics.setColor(0.7, 0.55, 0.35)
+        love.graphics.rectangle("fill", 1, 4, w-2, h-4)
+        love.graphics.setColor(0.6, 0.25, 0.15)
+        love.graphics.polygon("fill", 0, 4, w/2, 1, w, 4)
+        love.graphics.setColor(0.4, 0.25, 0.15)
+        love.graphics.rectangle("fill", w/2-2, h-4, 4, 4)
+        love.graphics.setColor(0.85, 0.9, 1)
+        love.graphics.rectangle("fill", 2, 6, 3, 3)
+    elseif name == "BigBuilding" then
+        love.graphics.setColor(0.5, 0.55, 0.6)
+        love.graphics.rectangle("fill", 0, 2, w, h-2)
+        love.graphics.setColor(0.4, 0.45, 0.5)
+        love.graphics.rectangle("fill", 0, 0, w, 3)
+        love.graphics.setColor(0.8, 0.85, 1)
+        for row = 0, 1 do
+            for col = 0, 2 do
+                love.graphics.rectangle("fill", 2 + col * 4, 5 + row * 5, 2, 3)
+            end
+        end
+    elseif name == "Tower" then
+        love.graphics.setColor(0.55, 0.5, 0.45)
+        love.graphics.rectangle("fill", w/4, 2, w/2, h-2)
+        love.graphics.setColor(0.45, 0.4, 0.35)
+        love.graphics.rectangle("fill", w/4-1, 2, w/2+2, 3)
+        love.graphics.setColor(0.6, 0.55, 0.5)
+        love.graphics.rectangle("fill", w/4-2, 0, w/2+4, 3)
+        love.graphics.setColor(0.8, 0.75, 0.65)
+        love.graphics.polygon("fill", w/4, h-4, w/2, h-1, w*3/4, h-4)
+        love.graphics.setColor(1, 0.7, 0.3)
+        love.graphics.circle("fill", w/2, h/2, 2)
+    elseif name == "Caravan" then
+        love.graphics.setColor(0.5, 0.3, 0.15)
+        love.graphics.rectangle("fill", 1, 3, w-2, h-5)
+        love.graphics.setColor(0.6, 0.4, 0.2)
+        love.graphics.rectangle("fill", 2, 2, w-4, 2)
+        love.graphics.setColor(0.8, 0.7, 0.5)
+        love.graphics.rectangle("fill", 3, 4, 4, 4)
+        love.graphics.setColor(0.3, 0.2, 0.1)
+        love.graphics.circle("fill", 3, h-1, 1)
+        love.graphics.circle("fill", w-3, h-1, 1)
+    elseif name == "Blockpost" then
+        love.graphics.setColor(0.45, 0.45, 0.55)
+        love.graphics.rectangle("fill", 1, 2, w-2, h-2)
+        love.graphics.setColor(0.55, 0.55, 0.65)
+        love.graphics.rectangle("fill", 2, 3, w-4, h-5)
+        love.graphics.setColor(0.8, 0.75, 0.3)
+        love.graphics.circle("fill", w/2, h/2, 2)
+    elseif name == "MountainHouse" then
+        love.graphics.setColor(0.65, 0.5, 0.35)
+        love.graphics.rectangle("fill", 1, 4, w-2, h-4)
+        love.graphics.setColor(0.55, 0.35, 0.2)
+        love.graphics.polygon("fill", 0, 4, w/2, 0, w, 4)
+        love.graphics.setColor(0.85, 0.8, 0.7)
+        love.graphics.rectangle("fill", 3, 6, 3, 3)
+        love.graphics.rectangle("fill", w-6, 6, 3, 3)
+    elseif name == "SmallMountainHouse" then
+        love.graphics.setColor(0.6, 0.45, 0.3)
+        love.graphics.rectangle("fill", 2, 5, w-4, h-5)
+        love.graphics.setColor(0.5, 0.3, 0.2)
+        love.graphics.polygon("fill", 1, 5, w/2, 1, w-1, 5)
+        love.graphics.setColor(0.85, 0.8, 0.7)
+        love.graphics.rectangle("fill", 4, 7, 2, 2)
+    end
+
+    love.graphics.setCanvas()
+    return canvas
+end
+
+-- Build sprite lookup: entity name → sprite image
+local editorSpriteCache = {}
+
+local function buildEditorSpriteCache()
+    editorSpriteCache = {}
+    local spriteCache = sprites.raw()
+    for name, gid in pairs(entityNameToGid) do
+        if spriteCache[gid] then
+            editorSpriteCache[name] = spriteCache[gid]
+        end
+    end
+    -- Generate custom sprites for buildings/obstacles
+    for _, entry in ipairs(editor.entityPalette) do
+        if not editorSpriteCache[entry.id] then
+            if entry.etype == "building" or entry.etype == "obstacle" then
+                local canvas = generateCustomSprite(entry.id, 12, 12)
+                if canvas then
+                    editorSpriteCache[entry.id] = canvas
+                end
+            end
+        end
+    end
+end
 
 -- Editor grid: 11x11, center at (5,5), active radius 5
 local EDITOR_GRID_SIZE = 11
@@ -53,8 +194,9 @@ editor.entityPalette = {
     { id = "Dervish",         name = "Dervish",   etype = "enemy",   color = {0.8, 0.2, 0.2} },
     { id = "Crusher",         name = "Crusher",   etype = "enemy",   color = {0.8, 0.2, 0.2} },
     { id = "SummoningRod",    name = "Rod",       etype = "enemy",   color = {0.7, 0.5, 0.2} },
-    { id = "SuperMountain",   name = "Mt.Indes.", etype = "obstacle", color = {0.5, 0.5, 0.5} },
-    { id = "WeakMountain",    name = "Mt.Weak",   etype = "obstacle", color = {0.6, 0.6, 0.4} },
+    { id = "SuperMountain",      name = "Mt.Indes.",    etype = "obstacle", color = {0.5, 0.5, 0.5} },
+    { id = "SuperMountainSlope", name = "Mt.Slope",     etype = "obstacle", color = {0.55, 0.5, 0.45} },
+    { id = "WeakMountain",       name = "Mt.Weak",      etype = "obstacle", color = {0.6, 0.6, 0.4} },
     { id = "SmallBuilding",   name = "Bldg S",    etype = "building", color = {0.4, 0.4, 0.7} },
     { id = "BigBuilding",     name = "Bldg L",    etype = "building", color = {0.3, 0.3, 0.8} },
     { id = "Tower",           name = "Tower",     etype = "building", color = {0.5, 0.5, 0.9} },
@@ -148,6 +290,8 @@ function editor.init()
     editor.objectivePrimary = nil
     editor.objectiveSecondaries = {}
     editor.active = true
+
+    buildEditorSpriteCache()
 
     -- Fill all active cells with grass by default
     for q = 0, EDITOR_GRID_SIZE - 1 do
@@ -781,21 +925,28 @@ function editor.draw()
                 -- Entity indicator
                 local entityId = editor.entityData[k]
                 if entityId then
-                    local entCol = {0.8, 0.8, 0.8}
-                    for _, ep in ipairs(editor.entityPalette) do
-                        if ep.id == entityId then entCol = ep.color; break end
+                    local sprite = editorSpriteCache[entityId]
+                    if sprite then
+                        local sw, sh = sprite:getDimensions()
+                        local scale = editor.hex.radius * 0.055
+                        love.graphics.setColor(1, 1, 1, 0.95)
+                        love.graphics.draw(sprite, x, y, 0, scale, scale, sw/2, sh/2)
+                    else
+                        local entCol = {0.8, 0.8, 0.8}
+                        for _, ep in ipairs(editor.entityPalette) do
+                            if ep.id == entityId then entCol = ep.color; break end
+                        end
+                        love.graphics.setColor(entCol[1], entCol[2], entCol[3], 0.9)
+                        love.graphics.circle("fill", x, y, editor.hex.radius * 0.35)
+                        love.graphics.setColor(1, 1, 1, 1)
+                        love.graphics.setLineWidth(2)
+                        love.graphics.circle("line", x, y, editor.hex.radius * 0.35)
+                        local letter = entityId:sub(1, 1)
+                        local font = love.graphics.getFont()
+                        local tw = font:getWidth(letter)
+                        love.graphics.setColor(1, 1, 1, 1)
+                        love.graphics.print(letter, x - tw / 2, y - 7)
                     end
-                    love.graphics.setColor(entCol[1], entCol[2], entCol[3], 0.9)
-                    love.graphics.circle("fill", x, y, editor.hex.radius * 0.35)
-                    love.graphics.setColor(1, 1, 1, 1)
-                    love.graphics.setLineWidth(2)
-                    love.graphics.circle("line", x, y, editor.hex.radius * 0.35)
-                    -- Letter
-                    local letter = entityId:sub(1, 1)
-                    local font = love.graphics.getFont()
-                    local tw = font:getWidth(letter)
-                    love.graphics.setColor(1, 1, 1, 1)
-                    love.graphics.print(letter, x - tw / 2, y - 7)
                 end
 
                 -- Status indicator
@@ -876,6 +1027,17 @@ function editor.draw()
 
         love.graphics.setColor(bgCol[1], bgCol[2], bgCol[3], isSelected and 1 or 0.6)
         love.graphics.rectangle("fill", ix, iy, PAL_TILE_SIZE, PAL_TILE_SIZE, 4)
+
+        -- Draw sprite in palette tile
+        if editor.currentLayer == editor.LAYER_ENTITY then
+            local sprite = editorSpriteCache[item.id]
+            if sprite then
+                local sw, sh = sprite:getDimensions()
+                local scale = PAL_TILE_SIZE * 0.035
+                love.graphics.setColor(1, 1, 1, 0.95)
+                love.graphics.draw(sprite, ix + PAL_TILE_SIZE/2, iy + PAL_TILE_SIZE/2 - 4, 0, scale, scale, sw/2, sh/2)
+            end
+        end
 
         if isSelected then
             love.graphics.setColor(1, 1, 0.2, 1)

@@ -117,6 +117,27 @@ local ATTACK_SETS = {
             { attack = c.SummonEnemyAttack.new(), name = "Summon", description = "Summon a random enemy" },
         }
     end,
+    vortex = function()
+        local c = require("combat.combat")
+        return {
+            { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shift an enemy right or left and deal 1 damage" },
+            { attack = c.WideVortexAttack.new(), name = "Wide Vortex", description = "Shift 3 enemies in front right or left" },
+        }
+    end,
+    hooks = function()
+        local c = require("combat.combat")
+        return {
+            { attack = c.PullHookAttack.new(), name = "Pull Hook", description = "Hook a target and pull it towards you" },
+            { attack = c.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning that damages everyone on the line" },
+        }
+    end,
+    area = function()
+        local c = require("combat.combat")
+        return {
+            { attack = c.AoePushAttack.new(), name = "Stone Throw", description = "Throw stone at adjacent cell, push enemies in cone" },
+            { attack = c.AoeDirectionalAttack.new(), name = "Cone Blast", description = "Push 3 front enemies away from attacker" },
+        }
+    end,
     none = function()
         return {}
     end,
@@ -128,8 +149,8 @@ local ATTACK_SETS = {
             { attack = c.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
             { attack = c.PushAttack.new(5), name = "Push", description = "Push first enemy in line (no damage)" },
             { attack = c.PiercingShootAttack.new(), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
-            { attack = c.AoePushAttack.new(), name = "Stone Throw", description = "Throw a stone that pushes enemies around" },
-            { attack = c.AoeDirectionalAttack.new(), name = "Shockwave", description = "Pushes all 6 surrounding enemies away from the center" },
+            { attack = c.AoePushAttack.new(), name = "Stone Throw", description = "Throw stone at adjacent cell, push enemies in cone" },
+            { attack = c.AoeDirectionalAttack.new(), name = "Cone Blast", description = "Push 3 front enemies away from attacker" },
             { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any target cell, ignores obstacles" },
             { attack = c.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, 2 damage" },
             { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
@@ -184,6 +205,7 @@ local gidToEntity = {
     [11] = { type = "obstacle",  name = "SuperMountain", indestructible = true },
     [9]  = { type = "obstacle",  name = "MountainSlope", health = 2, maxDamagePerHit = 1, direction = {dx = 1, dy = 0, dz = -1} },
     [15] = { type = "obstacle",  name = "MountainSlope", indestructible = true, noCollisionDamage = true },
+    [16] = { type = "obstacle",  name = "SuperMountainSlope", health = 999, noCollisionDamage = true },
     -- [17] removed: DeepWater is now terrain "underwater_mines"
     [12] = { type = "building",  name = "SmallBuilding", health = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2 },
@@ -395,6 +417,16 @@ local function generateCustomSprite(name, w, h)
         love.graphics.setColor(0.65, 0.6, 0.55)
         love.graphics.polygon("fill", 0, h, w*0.6, h*0.2, w*0.6, h)
         love.graphics.setColor(0.4, 0.35, 0.3)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+
+    elseif name == "SuperMountainSlope" then
+        love.graphics.setColor(0.45, 0.42, 0.38)
+        love.graphics.polygon("fill", 0, h, w*0.55, 0, w, h)
+        love.graphics.setColor(0.55, 0.52, 0.48)
+        love.graphics.polygon("fill", 0, h, w*0.55, 0, w*0.55, h)
+        love.graphics.setColor(0.95, 0.95, 1)
+        love.graphics.polygon("fill", w*0.55-1, 0, w*0.55+1, 0, w*0.55, 2)
+        love.graphics.setColor(0.3, 0.25, 0.2)
         love.graphics.rectangle("fill", 0, h-2, w, 2)
     end
 

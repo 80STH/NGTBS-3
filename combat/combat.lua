@@ -300,14 +300,36 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
 
     local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
-    -- Visual effect of dash to target cell
-    local fxEndQ, fxEndR
-    if targetHex then
-        fxEndQ, fxEndR = targetHex.q, targetHex.r
+    -- Determine where the attacker will land (cell before target, in cube coords)
+    local moveQ, moveR
+    local shouldMove = false
+    if firstTarget and targetHex then
+        local tx, ty, tz = hex_utils.axialToCube(targetHex.q, targetHex.r)
+        local bx, by, bz = tx - stepX, ty - stepY, tz - stepZ
+        local bq, br = hex_utils.cubeToAxial(bx, by, bz)
+        -- Only move if the cell before target is different from attacker's position
+        if bq ~= attacker.q or br ~= attacker.r then
+            moveQ, moveR = bq, br
+            shouldMove = true
+        end
     elseif lastFree then
-        fxEndQ, fxEndR = lastFree.q, lastFree.r
+        if lastFree.q ~= attacker.q or lastFree.r ~= attacker.r then
+            moveQ, moveR = lastFree.q, lastFree.r
+            shouldMove = true
+        end
     else
-        fxEndQ, fxEndR = targetQ, targetR
+        if targetQ ~= attacker.q or targetR ~= attacker.r then
+            moveQ, moveR = targetQ, targetR
+            shouldMove = true
+        end
+    end
+
+    -- Visual effect
+    local fxEndQ, fxEndR = attacker.q, attacker.r
+    if firstTarget and targetHex then
+        fxEndQ, fxEndR = targetHex.q, targetHex.r
+    elseif shouldMove then
+        fxEndQ, fxEndR = moveQ, moveR
     end
     attack_effects.dash(attacker, firstTarget, fxEndQ, fxEndR, hex)
 
@@ -316,17 +338,8 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
         self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
     end
 
-    -- If no target — just move to targetQ/targetR
-    if not firstTarget or not targetHex then
-        combat.addPushAnimation(attacker, attacker.q, attacker.r, fxEndQ, fxEndR)
-        combat.startPushAnimations(hex)
-        return true
-    end
-
-    local targetAlive = firstTarget.health and firstTarget.health > 0
-
-    if targetAlive and firstTarget.isPushable then
-        -- Target alive and pushable: push it, attacker takes its place
+    -- If target exists and is pushable, push it
+    if firstTarget and targetHex and firstTarget.isPushable and firstTarget.health and firstTarget.health > 0 then
         local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
         local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
         local isEdge = not hex:isActiveHex(pushQ, pushR)
@@ -335,21 +348,15 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
         else
             combat.addPushAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR)
         end
-        combat.startPushAnimations(hex, function()
-            combat.addPushAnimation(attacker, attacker.q, attacker.r, targetHex.q, targetHex.r)
-            combat.startPushAnimations(hex)
-        end)
-    elseif targetAlive then
-        -- Target alive but not pushable: attacker stops before it
-        if lastFree then
-            combat.addPushAnimation(attacker, attacker.q, attacker.r, lastFree.q, lastFree.r)
-            combat.startPushAnimations(hex)
-        end
-    else
-        -- Target dead: attacker takes its cell
-        combat.addPushAnimation(attacker, attacker.q, attacker.r, targetHex.q, targetHex.r)
-        combat.startPushAnimations(hex)
     end
+
+    -- Move attacker (only if there's a cell to move to)
+    if shouldMove then
+        combat.addPushAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
+    end
+
+    combat.startPushAnimations(hex)
+    attacker.hasActedThisTurn = true
     return true
 end
 
@@ -554,41 +561,32 @@ combat.AoePushAttack = setmetatable({}, combat.Attack)
 combat.AoePushAttack.__index = combat.AoePushAttack
 
 function combat.AoePushAttack.new()
-    local self = combat.Attack.new("Stone Throw", "Throw a stone that pushes three enemies in a cone", math.huge, 0, {})
-    self.minRange = 2
+    local self = combat.Attack.new("Stone Throw", "Throw a stone at adjacent cell, pushing enemies in a cone", 1, 0, {})
     return setmetatable(self, combat.AoePushAttack)
 end
 
 function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    if distance < self.minRange then
-        return false, "Target too close! (minimum 2)"
+    if distance ~= 1 then
+        return false, "Target must be adjacent!"
     end
     if not hex:isActiveHex(targetQ, targetR) then
         return false, "Cannot target outside the active area"
     end
-    -- Straight line check
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then return false, "Not a straight line!" end
 
     -- Create stone at target cell (if free)
     local centerEntity = combat.getEntityAtHex(targetQ, targetR, entities)
     if centerEntity then
-    -- Deal damage to target instead of creating stone
-    self:dealDamageToTarget(centerEntity, attacker, 1, entities, sounds, nil)
-elseif terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
-    -- Stone sinks in water
-    local cx, cy = hex:hexToPixel(targetQ, targetR)
-    visual.addEffect(cx, cy, "drown", 0.3)
-    log.debugf("combat", "[Stone] Stone sinks in water at (%d,%d)", targetQ, targetR)
-else
-    -- Create stone (as before)
-    local stone = Entity.new("Stone", Entity.TYPES.OBSTACLE, targetQ, targetR, 1, false, 0, nil, nil, {})
-    stone.isPushable = true
-    stone.color = {0.5,0.5,0.5,1}
-    table.insert(entities, stone)
-    log.debugf("combat", "[Stone] A stone appears at (%d,%d)", targetQ, targetR)
-end
+        self:dealDamageToTarget(centerEntity, attacker, 1, entities, sounds, nil)
+    elseif terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
+        local cx, cy = hex:hexToPixel(targetQ, targetR)
+        visual.addEffect(cx, cy, "drown", 0.3)
+    else
+        local stone = Entity.new("Stone", Entity.TYPES.OBSTACLE, targetQ, targetR, 1, false, 0, nil, nil, {})
+        stone.isPushable = true
+        stone.color = {0.5,0.5,0.5,1}
+        table.insert(entities, stone)
+    end
 
     -- Direction from attacker to target
     local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
@@ -624,11 +622,8 @@ end
 -- Preview for Stone Throw
 function combat.AoePushAttack:getPushCells(attacker, targetQ, targetR, hex, entities)
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    if distance < self.minRange then return {} end
+    if distance ~= 1 then return {} end
     if not hex:isActiveHex(targetQ, targetR) then return {} end
-
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then return {} end
 
     local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
     local neighbors = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
@@ -651,40 +646,37 @@ function combat.AoePushAttack:getPushCells(attacker, targetQ, targetR, hex, enti
 end
 
 
--- 6. AoE THREE TARGETS IN DIRECTION (Cone Blast)
+-- 6. AoE DIRECTIONAL (Cone Blast) — pushes 3 front neighbors of attacker
 combat.AoeDirectionalAttack = setmetatable({}, combat.Attack)
 combat.AoeDirectionalAttack.__index = combat.AoeDirectionalAttack
 function combat.AoeDirectionalAttack.new()
-    local self = combat.Attack.new("Cone Blast", "Pushes all 6 surrounding enemies away from the center", math.huge, 0, {})
-    self.minRange = 2
+    local self = combat.Attack.new("Cone Blast", "Pushes 3 front enemies away from the attacker", 1, 0, {})
     return setmetatable(self, combat.AoeDirectionalAttack)
 end
 
 function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
-    if distance < self.minRange then
-        return false, "Target too close! (minimum 2)"
+    if distance ~= 1 then
+        return false, "Target must be adjacent! (select direction)"
     end
-
     if not hex:isActiveHex(targetQ, targetR) then
         return false, "Target cell is not active"
     end
-    -- Mandatory straight line
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-    if not stepX then return false, "Not a straight line!" end
 
-    attack_effects.coneBlast(targetQ, targetR, hex)
+    attack_effects.coneBlast(attacker.q, attacker.r, hex)
     sounds.play("cone_blast")
 
-    -- All 6 neighbors
-    local allNeighbors = hex:getNeighbors(targetQ, targetR)
-    for _, nb in ipairs(allNeighbors) do
+    -- Direction from attacker to clicked cell
+    local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
+    local neighborsInDirection = self:getNeighborsInDirection(attacker.q, attacker.r, dirQ, dirR, hex)
+
+    for _, nb in ipairs(neighborsInDirection) do
         if hex:isActiveHex(nb.q, nb.r) then
             local target = combat.getEntityAtHex(nb.q, nb.r, entities)
             if target and target:isCharacter() and target.health > 0 then
-                local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
+                local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
                 local nX, nY, nZ = hex_utils.axialToCube(nb.q, nb.r)
-                local dX, dY, dZ = nX - cX, nY - cY, nZ - cZ
+                local dX, dY, dZ = nX - aX, nY - aY, nZ - aZ
                 local pushQ, pushR = hex_utils.applyCubeStep(nb.q, nb.r, dX, dY, dZ)
                 self:pushTargetToHex(target, nb.q, nb.r, pushQ, pushR, hex, entities, sounds)
             end
@@ -697,16 +689,18 @@ function combat.AoeDirectionalAttack:execute(attacker, targetQ, targetR, hex, en
 end
 
 function combat.AoeDirectionalAttack:getPushCells(attacker, targetQ, targetR, hex, entities)
-    local cells = {}
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return {} end
+
     local dirQ, dirR = targetQ - attacker.q, targetR - attacker.r
-    local neighbors = self:getNeighborsInDirection(targetQ, targetR, dirQ, dirR, hex)
+    local neighbors = self:getNeighborsInDirection(attacker.q, attacker.r, dirQ, dirR, hex)
+    local cells = {}
     for _, neighbor in ipairs(neighbors) do
         local target = combat.getEntityAtHex(neighbor.q, neighbor.r, entities)
-        -- Any character, not just enemy
         if target and target:isCharacter() then
-            local cX, cY, cZ = hex_utils.axialToCube(targetQ, targetR)
+            local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
             local nX, nY, nZ = hex_utils.axialToCube(neighbor.q, neighbor.r)
-            local dX, dY, dZ = nX - cX, nY - cY, nZ - cZ
+            local dX, dY, dZ = nX - aX, nY - aY, nZ - aZ
             local pushQ, pushR = hex_utils.applyCubeStep(neighbor.q, neighbor.r, dX, dY, dZ)
             table.insert(cells, {
                 target = target,
