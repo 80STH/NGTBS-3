@@ -265,7 +265,6 @@ function love.load()
     dpiScale = love.window.getDPIScale()
     logicalW = love.graphics.getWidth() / dpiScale
     logicalH = love.graphics.getHeight() / dpiScale
-    sti = require 'libraries/sti'
     maxTurns = 5
     environment.loadUnitSprites()
 

@@ -1,6 +1,5 @@
 -- environment.lua
 local Entity = require("entity.entity")
-local sti = require("libraries.sti")
 local config = require("core.config")
 local log = require("util.log")
 
@@ -207,67 +206,6 @@ local gidToEntity = {
 }
 
 environment.enemySpriteCache = {}
-
--- Cache for loaded textures
-local spriteCache = {}
-
--- Loading texture from tileset (without using map:getTile)
-local function loadTileSprite(map, gid, tileWidth, tileHeight)
-    if spriteCache[gid] then
-        return spriteCache[gid]
-    end
-    
-    local texture = nil
-    local quad = nil
-    
-    -- Find the needed tileset
-    for _, tileset in ipairs(map.tilesets) do
-        local firstGid = tileset.firstgid
-        local lastGid = firstGid + (tileset.tilecount or 1) - 1
-        if gid >= firstGid and gid <= lastGid then
-            local localId = gid - firstGid
-            
-            -- Get the texture (tileset image)
-            texture = tileset.image  -- In STI this is already a love Image object
-            if not texture then
-                texture = tileset.texture
-            end
-            
-            if not texture then
-                log.warnf("env", "Warning: No texture for tileset with firstgid %s", firstGid)
-                return nil
-            end
-            
-            -- Calculate tile coordinates in the tileset
-            local tw = tileset.tilewidth or tileWidth
-            local th = tileset.tileheight or tileHeight
-            local cols = tileset.columns or math.floor(tileset.imagewidth / tw)
-            local row = math.floor(localId / cols)
-            local col = localId % cols
-            
-            quad = love.graphics.newQuad(col * tw, row * th, tw, th, 
-                                         tileset.imagewidth, tileset.imageheight)
-            break
-        end
-    end
-    
-    if not texture or not quad then
-        log.warnf("env", "Warning: Could not extract tile for GID %s", gid)
-        return nil
-    end
-    
-    -- Create canvas with tile
-    local canvas = love.graphics.newCanvas(tileWidth, tileHeight)
-    canvas:setFilter("nearest", "nearest")  -- Disables anti-aliasing
-    love.graphics.setCanvas(canvas)
-    love.graphics.clear(0, 0, 0, 0)
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(texture, quad, 0, 0)
-    love.graphics.setCanvas()
-    
-    spriteCache[gid] = canvas
-    return canvas
-end
 
 -- Generation of custom sprites for mountains and buildings
 local function generateCustomSprite(name, w, h)
@@ -668,74 +606,35 @@ local unitSpriteCache = sprites.raw()
 environment.unitSpriteCache = unitSpriteCache
 
 function environment.loadUnitSprites()
-    local workaroundPath = "maps/units_workaround.lua"
-    local info = love.filesystem.getInfo(workaroundPath)
-    if not info then
-        log.info("env", "No units_workaround.lua found, squad units will use fallback colors")
+    local imgPath = "maps/entities.png"
+    local imgInfo = love.filesystem.getInfo(imgPath)
+    if not imgInfo then
+        log.info("env", "No entities.png found, squad units will use fallback colors")
         return
     end
-    local map = sti(workaroundPath)
-    local tileWidth = map.tilewidth or 16
-    local tileHeight = map.tileheight or 16
+    local img = love.graphics.newImage(imgPath)
+    local tw, th = 16, 16
+    local cols = 9
+    local tileCount = 72
+    local firstGid = 21
 
-    local entitiesTileset = nil
-    for _, ts in ipairs(map.tilesets) do
-        if ts.name == "entities" then
-            entitiesTileset = ts
-            break
-        end
-    end
-
-    if entitiesTileset then
-        local firstGid = entitiesTileset.firstgid
-        local lastGid = firstGid + (entitiesTileset.tilecount or 1) - 1
-        log.debug("env", "=== All entity GIDs from workaround ===")
-        for gid = firstGid, lastGid do
-            local sprite = loadTileSprite(map, gid, tileWidth, tileHeight)
-            local def = gidToEntity[gid]
-            local name = def and def.name or "nil"
-            local info = def and string.format("type=%s hp=%s", def.type, def.maxHealth or def.health or "?") or ""
-            if sprite then
-                sprites.set(gid, sprite)
-                log.debugf("env", "  [OK]   GID %3d -> %-20s %s", gid, name, info)
-            else
-                log.warnf("env", "  [FAIL] GID %3d -> %-20s (no sprite)", gid, name, info)
-            end
-        end
-    end
-
-    log.debug("env", "=== Tile positions on workaround map ===")
-    for _, layer in ipairs(map.layers) do
-        if layer.type == "tilelayer" then
-            local data = layer.data
-            log.debugf("env", "  Layer '%s' (%d x %d):", layer.name, layer.width, layer.height)
-            for y = 1, layer.height do
-                for x = 1, layer.width do
-                    local gid = nil
-                    if type(data) == "table" then
-                        if data[y] then
-                            if type(data[y]) == "table" then
-                                if data[y][x] then
-                                    if type(data[y][x]) == "table" and data[y][x].gid then
-                                        gid = data[y][x].gid
-                                    elseif type(data[y][x]) == "number" then
-                                        gid = data[y][x]
-                                    end
-                                end
-                            elseif type(data[y]) == "number" then
-                                local idx = (y - 1) * layer.width + x
-                                gid = data[idx]
-                            end
-                        end
-                    end
-                    if gid and gid > 0 then
-                        local def = gidToEntity[gid]
-                        local name = def and def.name or (gid < 21 and "terrain" or "entity")
-                        log.debugf("env", "    (%d,%d) -> GID %d (%s)", x-1, y-1, gid, name)
-                    end
-                end
-            end
-        end
+    log.debug("env", "=== Loading entity sprites from entities.png ===")
+    for i = 0, tileCount - 1 do
+        local gid = firstGid + i
+        local col = i % cols
+        local row = math.floor(i / cols)
+        local quad = love.graphics.newQuad(col * tw, row * th, tw, th, img:getWidth(), img:getHeight())
+        local canvas = love.graphics.newCanvas(tw, th)
+        canvas:setFilter("nearest", "nearest")
+        love.graphics.setCanvas(canvas)
+        love.graphics.clear(0, 0, 0, 0)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(img, quad, 0, 0)
+        love.graphics.setCanvas()
+        sprites.set(gid, canvas)
+        local def = gidToEntity[gid]
+        local name = def and def.name or "nil"
+        log.debugf("env", "  [OK]   GID %3d -> %-20s", gid, name)
     end
 end
 
