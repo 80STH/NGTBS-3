@@ -57,12 +57,12 @@ local function getEnemyAttack(enemy)
     return enemy.attacks[1].attack
 end
 
--- Get all attackable targets (players + buildings)
+-- Get all attackable targets (players + buildings, excluding ruins)
 function ai.getAttackableTargets(entities)
     local targets = {}
     for _, e in ipairs(entities) do
         if (e:isCharacter() and e.isPlayable and e.health > 0) or
-           (e:isBuilding() and e.health > 0) then
+           (e:isBuilding() and e.health > 0 and e.name ~= "DestroyedTunnel" and e.name ~= "RuinedMountainHouse") then
             local priority = e.isPlayable and 10 or 8
             table.insert(targets, {entity = e, type = e.isPlayable and "player" or "building", priority = priority, health = e.health})
         end

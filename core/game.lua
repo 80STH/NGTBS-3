@@ -32,20 +32,13 @@ function restartGame(mapPath)
     local hexStatuses
     local deployableAllies
 
-    -- Detect native map format vs Tiled
+    -- Load native format map
     local mapData = love.filesystem.load(mapPath)()
     local mapActiveRadius, mapCenterQ, mapCenterR
-    if mapData and mapData.format == "native" then
-        terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation = environment.loadNativeMap(mapData)
-        mapActiveRadius = mapData.activeRadius or config.ACTIVE_RADIUS
-        mapCenterQ = mapData.centerQ or math.floor(width / 2)
-        mapCenterR = mapData.centerR or math.floor(height / 2)
-    else
-        terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation = environment.loadMapFromTiled(mapPath)
-        mapActiveRadius = config.ACTIVE_RADIUS
-        mapCenterQ = config.CENTER_Q
-        mapCenterR = config.CENTER_R
-    end
+    terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation = environment.loadNativeMap(mapData)
+    mapActiveRadius = mapData and mapData.activeRadius or config.ACTIVE_RADIUS
+    mapCenterQ = mapData and mapData.centerQ or math.floor(width / 2)
+    mapCenterR = mapData and mapData.centerR or math.floor(height / 2)
     orientation = orientation or "pointy"
 
     hex = require("grid.hexgrid").new(
@@ -256,7 +249,7 @@ function restartGame(mapPath)
 
     trains.init(entities, terrainMap, hex)
     objectives.reset()
-    objectives.generate(entities, hex)
+    objectives.generate(entities, hex, mapData and mapData.objectives)
     objectives.update(entities)
 
     if skipDeploy then
@@ -486,10 +479,14 @@ function updateDeathAnimations(dt)
                     end
                 end
                 if e.name == "Tunnel" or e.name == "OccupiedTunnel" then
-                    local dtunnel = Entity.new("DestroyedTunnel", Entity.TYPES.BUILDING, e.q, e.r, 1, false, 0, nil, nil, {})
-                    dtunnel.indestructible = true
+                    local dtunnel = Entity.new("DestroyedTunnel", Entity.TYPES.BUILDING, e.q, e.r, 999, false, 0, nil, nil, {})
                     dtunnel.sprite = environment.generateBuildingSprite("DestroyedTunnel", hex.tileWidth, hex.tileHeight)
                     table.insert(entities, dtunnel)
+                end
+                if e.name == "MountainHouse" or e.name == "SmallMountainHouse" then
+                    local ruined = Entity.new("RuinedMountainHouse", Entity.TYPES.BUILDING, e.q, e.r, 999, false, 0, nil, nil, {})
+                    ruined.sprite = environment.generateBuildingSprite("RuinedMountainHouse", hex.tileWidth, hex.tileHeight)
+                    table.insert(entities, ruined)
                 end
                 table.remove(entities, i)
             end

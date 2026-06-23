@@ -430,15 +430,30 @@ local function shuffle(t)
     return t
 end
 
-function objectives.generate(entities, hex)
+function objectives.generate(entities, hex, forcedObjectives)
     definePool()
     activeObjectives = {}
     activePrimaryObjective = nil
     objectiveStates = {}
 
-    -- kill_leader ALWAYS on map4, regardless of mode
+    -- Primary selection: forced > map4 auto > content-based auto
     local isMap4 = _G.selectedMapPath and _G.selectedMapPath:match("map4")
-    if isMap4 then
+    if forcedObjectives and forcedObjectives.primary then
+        if forcedObjectives.primary == "kill_leader" then
+            activePrimaryObjective = killLeaderDef
+        else
+            activePrimaryObjective = primaryObjectiveDefs[forcedObjectives.primary]
+        end
+        if activePrimaryObjective then
+            objectiveStates[activePrimaryObjective.id] = "pending"
+            if activePrimaryObjective.onGenerate then
+                activePrimaryObjective.onGenerate(entities, hex)
+            end
+            log.infof("objectives", "Primary objective '%s' set from map config", activePrimaryObjective.id)
+        else
+            activePrimaryObjective = nil
+        end
+    elseif isMap4 then
         activePrimaryObjective = killLeaderDef
         objectiveStates[killLeaderDef.id] = "pending"
         if killLeaderDef.onGenerate then
@@ -446,7 +461,6 @@ function objectives.generate(entities, hex)
         end
         log.info("objectives", "kill_leader set as primary objective on map4")
     else
-        -- Choose primary: railway if map has train cars, otherwise caravans
         local primaryId = hasTrainCars(entities) and "protect_railway" or "protect_caravans"
         activePrimaryObjective = primaryObjectiveDefs[primaryId]
         objectiveStates[activePrimaryObjective.id] = "pending"
@@ -455,90 +469,114 @@ function objectives.generate(entities, hex)
         end
     end
 
-    -- Pick 2 secondary objectives from pool
-    local shuffled = shuffle(objectivePool)
+    -- Secondary selection: forced from map config > auto pool
     local count = 0
     local maxObj = 2
 
-    -- Force-include the secondary linked to the primary
-    local forcedId = activePrimaryObjective.forceSecondary
-    if forcedId then
-        for i = #shuffled, 1, -1 do
-            if shuffled[i].id == forcedId then
-                local def = table.remove(shuffled, i)
+    if forcedObjectives and forcedObjectives.secondaries and #forcedObjectives.secondaries > 0 then
+        for _, secId in ipairs(forcedObjectives.secondaries) do
+            if count >= maxObj then break end
+            local def = nil
+            if secId == "kill_leader" then
+                def = killLeaderDef
+            else
+                for _, poolDef in ipairs(objectivePool) do
+                    if poolDef.id == secId then
+                        def = poolDef
+                        break
+                    end
+                end
+            end
+            if def then
                 table.insert(activeObjectives, def)
                 objectiveStates[def.id] = "pending"
                 if def.onGenerate then
                     def.onGenerate(entities, hex)
                 end
                 count = count + 1
-                break
+                log.debugf("objectives", "Forced secondary objective '%s' from map config", def.id)
             end
         end
-    end
+    else
+        -- Auto-pick from pool
+        local shuffled = shuffle(objectivePool)
 
-    -- Mark incompatible secondaries based on primary
-    local primaryIncompatible = activePrimaryObjective.incompatibleWithSecondary or {}
-
-    for i = 1, #shuffled do
-        if count >= maxObj then break end
-        local def = shuffled[i]
-        local skip = false
-
-        -- kill_leader exclusively for map4 in progression
-        -- kill_leader already primary on map4 — exclude from pool
-        if not skip and def.id == "kill_leader" then
-            skip = true
+        -- Force-include the secondary linked to the primary
+        local forcedId = activePrimaryObjective and activePrimaryObjective.forceSecondary
+        if forcedId then
+            for i = #shuffled, 1, -1 do
+                if shuffled[i].id == forcedId then
+                    local def = table.remove(shuffled, i)
+                    table.insert(activeObjectives, def)
+                    objectiveStates[def.id] = "pending"
+                    if def.onGenerate then
+                        def.onGenerate(entities, hex)
+                    end
+                    count = count + 1
+                    break
+                end
+            end
         end
 
-        -- Check incompatibility with primary objective
-        if not skip and activePrimaryObjective then
-            if def.incompatibleWithPrimary then
-                log.debugf("objectives", "Skipping '%s' due to incompatibility with primary objective '%s'", def.id, activePrimaryObjective.id)
+        -- Mark incompatible secondaries based on primary
+        local primaryIncompatible = activePrimaryObjective and activePrimaryObjective.incompatibleWithSecondary or {}
+
+        for i = 1, #shuffled do
+            if count >= maxObj then break end
+            local def = shuffled[i]
+            local skip = false
+
+            if not skip and def.id == "kill_leader" then
                 skip = true
-            elseif primaryIncompatible then
-                for _, pid in ipairs(primaryIncompatible) do
-                    if pid == def.id then
-                        log.debugf("objectives", "Skipping '%s' due to incompatibility with primary '%s'", def.id, activePrimaryObjective.id)
-                        skip = true
-                        break
-                    end
-                end
             end
-        end
 
-        -- Check conflict with already selected secondaries
-        if not skip then
-            for _, existing in ipairs(activeObjectives) do
-                if existing.incompatible then
-                    for _, id in ipairs(existing.incompatible) do
-                        if id == def.id then
+            if not skip and activePrimaryObjective then
+                if def.incompatibleWithPrimary then
+                    log.debugf("objectives", "Skipping '%s' due to incompatibility with primary objective '%s'", def.id, activePrimaryObjective.id)
+                    skip = true
+                elseif primaryIncompatible then
+                    for _, pid in ipairs(primaryIncompatible) do
+                        if pid == def.id then
+                            log.debugf("objectives", "Skipping '%s' due to incompatibility with primary '%s'", def.id, activePrimaryObjective.id)
                             skip = true
                             break
                         end
                     end
                 end
-                if not skip and def.incompatible then
-                    for _, id in ipairs(def.incompatible) do
-                        if id == existing.id then
-                            skip = true
-                            break
+            end
+
+            if not skip then
+                for _, existing in ipairs(activeObjectives) do
+                    if existing.incompatible then
+                        for _, id in ipairs(existing.incompatible) do
+                            if id == def.id then
+                                skip = true
+                                break
+                            end
                         end
                     end
+                    if not skip and def.incompatible then
+                        for _, id in ipairs(def.incompatible) do
+                            if id == existing.id then
+                                skip = true
+                                break
+                            end
+                        end
+                    end
+                    if skip then break end
                 end
-                if skip then break end
             end
-        end
 
-        if skip then
-            log.debugf("objectives", "Skipping '%s' due to conflict with selected objectives", def.id)
-        else
-            table.insert(activeObjectives, def)
-            objectiveStates[def.id] = "pending"
-            if def.onGenerate then
-                def.onGenerate(entities, hex)
+            if skip then
+                log.debugf("objectives", "Skipping '%s' due to conflict with selected objectives", def.id)
+            else
+                table.insert(activeObjectives, def)
+                objectiveStates[def.id] = "pending"
+                if def.onGenerate then
+                    def.onGenerate(entities, hex)
+                end
+                count = count + 1
             end
-            count = count + 1
         end
     end
 

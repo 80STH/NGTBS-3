@@ -60,6 +60,8 @@ editor.entityPalette = {
     { id = "Tower",           name = "Tower",     etype = "building", color = {0.5, 0.5, 0.9} },
     { id = "Caravan",         name = "Caravan",   etype = "building", color = {0.6, 0.5, 0.3} },
     { id = "Blockpost",       name = "Blockpost", etype = "building", color = {0.4, 0.4, 0.6} },
+    { id = "MountainHouse",      name = "Mt.House",    etype = "building", color = {0.5, 0.4, 0.3} },
+    { id = "SmallMountainHouse", name = "Mt.House Sm", etype = "building", color = {0.55, 0.45, 0.35} },
 }
 
 -- Status palette
@@ -95,6 +97,26 @@ editor.undoStack = {}
 editor.redoStack = {}
 editor.maxUndo = 50
 
+-- Objective configuration
+editor.objectivePrimary = nil
+editor.objectiveSecondaries = {}
+
+editor.primaryObjectiveOptions = {
+    { id = nil, name = "Auto" },
+    { id = "protect_caravans", name = "Caravans" },
+    { id = "protect_railway", name = "Railway" },
+    { id = "kill_leader", name = "Kill Leader" },
+}
+editor.secondaryObjectiveOptions = {
+    { id = nil, name = "None" },
+    { id = "protect_blockpost", name = "Blockpost" },
+    { id = "protect_tower", name = "Tower" },
+    { id = "kill_poisonous_with_decay", name = "Poison+Decay" },
+    { id = "slaughter", name = "Slaughter" },
+    { id = "block_dig", name = "Block Dig" },
+    { id = "kill_leader", name = "Kill Leader" },
+}
+
 -- ============================================================
 -- INIT / CLEANUP
 -- ============================================================
@@ -123,6 +145,8 @@ function editor.init()
     editor.message = nil
     editor.messageTimer = 0
     editor.fileName = "custom_map"
+    editor.objectivePrimary = nil
+    editor.objectiveSecondaries = {}
     editor.active = true
 
     -- Fill all active cells with grass by default
@@ -234,6 +258,17 @@ function editor.loadMap(data)
         end
     end
 
+    editor.objectivePrimary = nil
+    editor.objectiveSecondaries = {}
+    if data.objectives then
+        editor.objectivePrimary = data.objectives.primary or nil
+        if data.objectives.secondaries then
+            for _, id in ipairs(data.objectives.secondaries) do
+                table.insert(editor.objectiveSecondaries, id)
+            end
+        end
+    end
+
     editor.message = "Map loaded!"
     editor.messageTimer = 2
     log.info("editor", "Map loaded into editor")
@@ -266,6 +301,18 @@ function editor.getMapData()
     for key, val in pairs(editor.statusData) do
         data.statuses[key] = val
     end
+
+    data.objectives = {}
+    if editor.objectivePrimary then
+        data.objectives.primary = editor.objectivePrimary
+    end
+    if #editor.objectiveSecondaries > 0 then
+        data.objectives.secondaries = {}
+        for _, id in ipairs(editor.objectiveSecondaries) do
+            table.insert(data.objectives.secondaries, id)
+        end
+    end
+
     return data
 end
 
@@ -309,13 +356,42 @@ function editor.saveMap()
     end
     table.insert(lines, "  },")
 
+    -- Objectives
+    local hasPrimary = data.objectives and data.objectives.primary
+    local hasSecondaries = data.objectives and data.objectives.secondaries and #data.objectives.secondaries > 0
+    if hasPrimary or hasSecondaries then
+        table.insert(lines, "  objectives = {")
+        if hasPrimary then
+            table.insert(lines, string.format('    primary = "%s",', data.objectives.primary))
+        end
+        if hasSecondaries then
+            table.insert(lines, "    secondaries = {")
+            for _, id in ipairs(data.objectives.secondaries) do
+                table.insert(lines, string.format('      "%s",', id))
+            end
+            table.insert(lines, "    },")
+        end
+        table.insert(lines, "  },")
+    end
+
     table.insert(lines, "}")
 
     local content = table.concat(lines, "\n")
     local safeName = editor.fileName:gsub("[^%w_%-]", "_")
-    local path = "maps/" .. safeName .. ".lua"
-    love.filesystem.write(path, content)
-    editor.message = "Saved: " .. path
+    local sourceDir = love.filesystem.getSource()
+    sourceDir = sourceDir:gsub("/", "\\")
+    if sourceDir:match("^%a:") then
+        sourceDir = sourceDir:sub(1,1):upper() .. sourceDir:sub(2)
+    end
+    local path = sourceDir .. "\\maps\\" .. safeName .. ".lua"
+    local f, err = io.open(path, "w")
+    if f then
+        f:write(content)
+        f:close()
+        editor.message = "Saved: maps/" .. safeName .. ".lua"
+    else
+        editor.message = "Save failed: " .. (err or "unknown error")
+    end
     editor.messageTimer = 3
     log.infof("editor", "Map saved to %s", path)
 end
@@ -464,8 +540,73 @@ function editor.mousepressed(x, y, button)
             end
         end
 
-        -- Buttons
+        -- Objectives cycling
         local btns = editor.getButtonRects()
+        local nameY = btns.save.y - 40
+        local toolY = nameY - 30
+        local objY = toolY - 55
+        local font = love.graphics.getFont()
+
+        local function hitY(row)
+            return objY + 15 + row * 15
+        end
+
+        -- Primary
+        local priName = "Auto"
+        local priIdx = 1
+        for i, opt in ipairs(editor.primaryObjectiveOptions) do
+            if opt.id == editor.objectivePrimary then priIdx = i; priName = opt.name; break end
+        end
+        local priText = "Pri: [" .. priName .. "]"
+        if y >= hitY(0) and y <= hitY(0) + 14 and x >= px + 10 and x <= px + 10 + font:getWidth(priText) then
+            local nextIdx = (priIdx % #editor.primaryObjectiveOptions) + 1
+            editor.objectivePrimary = editor.primaryObjectiveOptions[nextIdx].id
+            return
+        end
+
+        -- Sec1
+        local sec1Id = editor.objectiveSecondaries[1]
+        local sec1Idx = 1
+        for i, opt in ipairs(editor.secondaryObjectiveOptions) do
+            if opt.id == sec1Id then sec1Idx = i; break end
+        end
+        local sec1Name = editor.secondaryObjectiveOptions[sec1Idx].name
+        local sec1Text = "Sec1: [" .. sec1Name .. "]"
+        if y >= hitY(1) and y <= hitY(1) + 14 and x >= px + 10 and x <= px + 10 + font:getWidth(sec1Text) then
+            local nextIdx = (sec1Idx % #editor.secondaryObjectiveOptions) + 1
+            local newId = editor.secondaryObjectiveOptions[nextIdx].id
+            if newId then
+                editor.objectiveSecondaries[1] = newId
+            else
+                editor.objectiveSecondaries[1] = nil
+                if editor.objectiveSecondaries[2] then
+                    editor.objectiveSecondaries[1] = editor.objectiveSecondaries[2]
+                    editor.objectiveSecondaries[2] = nil
+                end
+            end
+            return
+        end
+
+        -- Sec2
+        local sec2Id = editor.objectiveSecondaries[2]
+        local sec2Idx = 1
+        for i, opt in ipairs(editor.secondaryObjectiveOptions) do
+            if opt.id == sec2Id then sec2Idx = i; break end
+        end
+        local sec2Name = editor.secondaryObjectiveOptions[sec2Idx].name
+        local sec2Text = "Sec2: [" .. sec2Name .. "]"
+        if y >= hitY(2) and y <= hitY(2) + 14 and x >= px + 10 and x <= px + 10 + font:getWidth(sec2Text) then
+            local nextIdx = (sec2Idx % #editor.secondaryObjectiveOptions) + 1
+            local newId = editor.secondaryObjectiveOptions[nextIdx].id
+            if newId then
+                editor.objectiveSecondaries[2] = newId
+            else
+                editor.objectiveSecondaries[2] = nil
+            end
+            return
+        end
+
+        -- Buttons
         if x >= btns.save.x and x <= btns.save.x + btns.save.w and y >= btns.save.y and y <= btns.save.y + btns.save.h then
             editor.saveMap()
             return
@@ -757,8 +898,32 @@ function editor.draw()
         love.graphics.print(name, ix + PAL_TILE_SIZE / 2 - nw / 2, iy + PAL_TILE_SIZE - 14)
     end
 
-    -- Buttons
+    -- Objectives section
     local btns = editor.getButtonRects()
+    local nameY = btns.save.y - 40
+    local toolY = nameY - 30
+    local objY = toolY - 55
+
+    local function optionName(options, id)
+        for _, opt in ipairs(options) do
+            if opt.id == id then return opt.name end
+        end
+        return "Auto"
+    end
+
+    love.graphics.setColor(0.5, 0.5, 0.7, 1)
+    love.graphics.print("Objectives:", px + 10, objY)
+
+    local priName = optionName(editor.primaryObjectiveOptions, editor.objectivePrimary)
+    love.graphics.setColor(0.8, 0.8, 1, 1)
+    love.graphics.print("Pri: [" .. priName .. "]", px + 10, objY + 15)
+
+    local sec1Name = optionName(editor.secondaryObjectiveOptions, editor.objectiveSecondaries[1])
+    local sec2Name = optionName(editor.secondaryObjectiveOptions, editor.objectiveSecondaries[2])
+    love.graphics.print("Sec1: [" .. sec1Name .. "]", px + 10, objY + 30)
+    love.graphics.print("Sec2: [" .. sec2Name .. "]", px + 10, objY + 45)
+
+    -- Buttons
     local function drawBtn(rect, label, highlight)
         love.graphics.setColor(highlight and 0.4 or 0.25, highlight and 0.6 or 0.35, highlight and 0.4 or 0.25, 0.9)
         love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 4)

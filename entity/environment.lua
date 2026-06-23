@@ -169,20 +169,6 @@ local ENEMY_TYPES = {
 
 local environment = {}
 
-local gidToTerrain = {
-    [3]  = "grass",
-    [2]  = "dirt",
-    [1]  = "sand",
-    [4]  = "stone",
-    [5]  = "emptiness",
-    [6]  = "lava",
-    [7]  = "snow",
-    [8]  = "swamp",
-    [14] = "water",
-    [17] = "underwater_mines",
-    [13] = "railway",
-}
-
 local gidToEntity = {
     [34] = { type = "character", name = "Warrior", isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "warrior" },
     [30] = { type = "character", name = "Puncher",  isPlayable = true,  maxHealth = 2, moveRange = 4, attacks = "puncher" },
@@ -216,67 +202,11 @@ local gidToEntity = {
     [77] = { type = "building",  name = "Blockpost", health = 2 },
     [67] = { type = "building",  name = "Tunnel",    health = 2, isObjective = true },
     [74] = { type = "building",  name = "TrainCar",  health = 1, moveRange = 1 },
+    [84] = { type = "building",  name = "MountainHouse", health = 2 },
+    [85] = { type = "building",  name = "SmallMountainHouse", health = 1 },
 }
 
 environment.enemySpriteCache = {}
-
-
-local terrainSpriteCache = {}  -- Cache for terrain textures
-
--- Loading terrain texture from GID
-local function loadTerrainSprite(map, gid, tileWidth, tileHeight)
-    if terrainSpriteCache[gid] then
-        return terrainSpriteCache[gid]
-    end
-    
-    local texture = nil
-    local quad = nil
-    
-    
-    -- Find the needed tileset
-    for _, tileset in ipairs(map.tilesets) do
-        local firstGid = tileset.firstgid
-        local lastGid = firstGid + (tileset.tilecount or 1) - 1
-        if gid >= firstGid and gid <= lastGid then
-            local localId = gid - firstGid
-            
-            texture = tileset.image or tileset.texture
-            if not texture then
-                log.warnf("env", "Warning: No texture for tileset with firstgid %s", firstGid)
-                return nil
-            end
-            
-            local tw = tileset.tilewidth or tileWidth
-            local th = tileset.tileheight or tileHeight
-            local cols = tileset.columns or math.floor(tileset.imagewidth / tw)
-            local row = math.floor(localId / cols)
-            local col = localId % cols
-            
-            quad = love.graphics.newQuad(col * tw, row * th, tw, th, 
-                                         tileset.imagewidth, tileset.imageheight)
-            break
-        end
-    end
-    
-    if not texture or not quad then
-        return nil
-    end
-    
-    --  OFFSETS WHEN DRAWING ON CANVAS
-    local drawOffsetX = 1   -- X offset when drawing on canvas
-    local drawOffsetY = -4   -- Y offset when drawing on canvas
-    
-    local canvas = love.graphics.newCanvas(tileWidth, tileHeight)
-    canvas:setFilter("nearest", "nearest")
-    love.graphics.setCanvas(canvas)
-    love.graphics.clear(0, 0, 0, 0)
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(texture, quad, drawOffsetX, drawOffsetY)  --  offset here
-    love.graphics.setCanvas()
-    
-    terrainSpriteCache[gid] = canvas
-    return canvas
-end
 
 -- Cache for loaded textures
 local spriteCache = {}
@@ -454,6 +384,48 @@ local function generateCustomSprite(name, w, h)
         love.graphics.setColor(0.4, 0.35, 0.3)
         love.graphics.rectangle("fill", w/3-2, h/2-2, 2, 3)
 
+    elseif name == "MountainHouse" then
+        love.graphics.setColor(0.5, 0.45, 0.35)
+        love.graphics.polygon("fill", 0, h, w/2, h*0.25, w, h)
+        love.graphics.setColor(0.6, 0.55, 0.45)
+        love.graphics.polygon("fill", 0, h, w/2, h*0.25, w/2, h)
+        love.graphics.setColor(0.7, 0.5, 0.3)
+        love.graphics.rectangle("fill", w/2-4, h*0.25-2, 8, h*0.55)
+        love.graphics.setColor(0.6, 0.25, 0.15)
+        love.graphics.polygon("fill", w/2-5, h*0.25-2, w/2, h*0.25-7, w/2+5, h*0.25-2)
+        love.graphics.setColor(0.85, 0.9, 1)
+        love.graphics.rectangle("fill", w/2-1, h*0.45, 2, 4)
+        love.graphics.setColor(0.35, 0.3, 0.25)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+
+    elseif name == "SmallMountainHouse" then
+        love.graphics.setColor(0.55, 0.5, 0.4)
+        love.graphics.polygon("fill", 0, h, w/2, h*0.3, w, h)
+        love.graphics.setColor(0.65, 0.6, 0.5)
+        love.graphics.polygon("fill", 0, h, w/2, h*0.3, w/2, h)
+        love.graphics.setColor(0.75, 0.55, 0.35)
+        love.graphics.rectangle("fill", w/2-3, h*0.3-1, 6, h*0.4)
+        love.graphics.setColor(0.6, 0.25, 0.15)
+        love.graphics.polygon("fill", w/2-4, h*0.3-1, w/2, h*0.3-5, w/2+4, h*0.3-1)
+        love.graphics.setColor(0.85, 0.9, 1)
+        love.graphics.rectangle("fill", w/2-1, h*0.45, 2, 3)
+        love.graphics.setColor(0.35, 0.3, 0.25)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+
+    elseif name == "RuinedMountainHouse" then
+        love.graphics.setColor(0.35, 0.3, 0.25)
+        love.graphics.polygon("fill", 0, h, w/2, h*0.25, w, h)
+        love.graphics.setColor(0.4, 0.35, 0.3)
+        love.graphics.polygon("fill", 0, h, w/2, h*0.25, w/2, h)
+        love.graphics.setColor(0.5, 0.35, 0.2)
+        love.graphics.rectangle("fill", w/2-3, h*0.25, 2, h*0.35)
+        love.graphics.rectangle("fill", w/2+1, h*0.25, 2, h*0.25)
+        love.graphics.setColor(0.3, 0.25, 0.2)
+        love.graphics.rectangle("fill", w/2-4, h*0.65, 3, 2)
+        love.graphics.rectangle("fill", w/2+1, h*0.55, 2, 2)
+        love.graphics.setColor(0.35, 0.3, 0.25)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+
     elseif name == "Locomotive" then
         love.graphics.setColor(0.3, 0.15, 0.1)
         love.graphics.rectangle("fill", 1, 1, w-2, h-4)
@@ -493,309 +465,6 @@ local function generateCustomSprite(name, w, h)
 end
 
 -- Creating entity with texture from tileset
-local function createEntityFromGID(map, gid, gridX, gridY)
-    local def = gidToEntity[gid]
-    if not def then return nil end
-
-    local tileWidth = map.tilewidth or 32
-    local tileHeight = map.tileheight or 32
-    local entitySprite
-
-        if def.name == "SuperMountain" or def.name == "WeakMountain" or def.name == "SmallBuilding" or def.name == "BigBuilding" or def.name == "Tower" or def.name == "MountainSlope" or def.name == "Caravan" or def.name == "Blockpost" or def.name == "Tunnel" or def.name == "TrainCar" or def.name == "Locomotive" or def.name == "OccupiedTunnel" or def.name == "DestroyedTunnel" then
-        entitySprite = generateCustomSprite(def.name, tileWidth, tileHeight)
-    else
-        entitySprite = loadTileSprite(map, gid, tileWidth, tileHeight)
-    end
-    
-    -- Fallback if sprite failed to load
-    if not entitySprite then
-        local canvas = love.graphics.newCanvas(tileWidth, tileHeight)
-        love.graphics.setCanvas(canvas)
-        love.graphics.clear(0, 0, 0, 0)
-        -- Debug color
-        if def.isPlayable ~= nil then
-            love.graphics.setColor(def.isPlayable and {0.2, 0.6, 0.2, 1} or {0.8, 0.2, 0.2, 1})
-        else
-            love.graphics.setColor(0.5, 0.5, 0.5, 1)
-        end
-        love.graphics.circle("fill", tileWidth/2, tileHeight/2, tileWidth/2 - 2)
-        love.graphics.setCanvas()
-        entitySprite = canvas
-    end
-
-    if def.type == "character" then
-        local attacks = environment.getAttacks(def.attacks)
-
-        local actor = Entity.new(
-            def.name, Entity.TYPES.CHARACTER, gridX, gridY,
-            def.maxHealth, def.isPlayable, def.moveRange,
-            nil, nil, attacks
-        )
-        actor.sprite = entitySprite
-        if not def.isPlayable then
-            environment.enemySpriteCache[def.name] = entitySprite
-        end
-        if def.name == "SummoningRod" then
-            actor.isSummoningRod = true
-            actor.isPushable = false
-            actor.moveRange = 0
-        end
-        if def.name == "Ghost" then
-            actor.flying = true
-        end
-        -- Auras for enemies
-        if def.attacks == "bogshaman" then
-            actor.aura = { type = "slow", radius = 1 }
-        end
-        return actor
-
-    elseif def.type == "obstacle" then
-        local health = def.health or 999
-        local obstacle = Entity.new(def.name, Entity.TYPES.OBSTACLE, gridX, gridY, health, false, 0, nil, nil, {})
-        obstacle.sprite = entitySprite
-        if def.maxDamagePerHit then obstacle.maxDamagePerHit = def.maxDamagePerHit end
-        if def.indestructible then obstacle.indestructible = true end
-        if def.noCollisionDamage then obstacle.noCollisionDamage = true end
-        if def.isHazard then obstacle.isHazard = true end
-        if def.direction then obstacle.direction = def.direction end
-        return obstacle
-    elseif def.type == "building" then
-        local building = Entity.new(def.name, Entity.TYPES.BUILDING, gridX, gridY, def.health, false, (def.moveRange or 0), nil, nil, {})
-        if def.waterWalker then building.waterWalker = true end
-        if def.isObjective then building.isObjective = true end
-        building.sprite = entitySprite
-        return building
-    end
-    return nil
-end
-
--- environment.lua (loadMapFromTiled fragment)
-function environment.loadMapFromTiled(filePath)
-    log.infof("env", "=== LOADING MAP: %s ===", filePath)
-
-    local file = love.filesystem.getInfo(filePath)
-    if not file then error("File not found: " .. filePath) end
-
-    local map = sti(filePath)
-    local width, height = map.width, map.height
-
-    local orientation = (map.staggeraxis == "x") and "flat" or "pointy"
-    local hex_utils = require("grid.hex_utils")
-    hex_utils.setOrientation(orientation)
-
-    -- Create terrain map and textures only for active hex cells
-    local terrainMap = {}
-    local terrainTextures = {}
-    local entities = {}
-    local walkable = {}
-
-    local tempHex = require("grid.hexgrid").new(
-        config.HEX_RADIUS,
-        width, height,
-        config.ACTIVE_RADIUS,
-        config.CENTER_Q,
-        config.CENTER_R,
-        orientation
-    )
-
-    -- Find terrain layer
-    local groundLayer = nil
-    for _, layer in ipairs(map.layers) do
-        if layer.name == "terrain" and layer.type == "tilelayer" then
-            groundLayer = layer
-            break
-        end
-    end
-    if not groundLayer then error("'terrain' layer not found!") end
-
-    local rawData = groundLayer.data
-    local terrainTypesFound = {}
-    local unknownTerrainGids = {}
-
-    for y = 1, height do
-        for x = 1, width do
-            local gid = nil
-            if type(rawData) == "table" then
-                if rawData[y] then
-                    if type(rawData[y]) == "table" then
-                        if rawData[y][x] then
-                            if type(rawData[y][x]) == "table" and rawData[y][x].gid then
-                                gid = rawData[y][x].gid
-                            elseif type(rawData[y][x]) == "number" then
-                                gid = rawData[y][x]
-                            end
-                        end
-                    elseif type(rawData[y]) == "number" then
-                        local idx = (y-1) * width + x
-                        gid = rawData[idx]
-                    end
-                end
-            end
-            
-            if gid and gid > 0 then
-                local gridX = x - 1
-                local gridY = y - 1
-                -- CHANGED: check if the cell is active in the hex
-                if tempHex:isActiveHex(gridX, gridY) then
-                    local terrainType = gidToTerrain[gid] or "grass"
-                    if not terrainMap[gridX] then terrainMap[gridX] = {} end
-                    if not terrainTextures[gridX] then terrainTextures[gridX] = {} end
-                    
-                    terrainMap[gridX][gridY] = terrainType
-                    
-                    local tileWidth = map.tilewidth or 32
-                    local tileHeight = map.tileheight or 32
-                    local texture = loadTerrainSprite(map, gid, tileWidth, tileHeight)
-                    terrainTextures[gridX][gridY] = texture
-                end
-            end
-            if gid and gid > 0 then
-                local tt = gidToTerrain[gid]
-                if tt then
-                    terrainTypesFound[tt] = true
-                else
-                    unknownTerrainGids[gid] = true
-                end
-            end
-        end
-    end
-
-    local typesList = {}
-    for t, _ in pairs(terrainTypesFound) do
-        table.insert(typesList, t)
-    end
-    table.sort(typesList)
-    log.debugf("env", "Terrain types found: %s", table.concat(typesList, ", "))
-
-    local unknownList = {}
-    for gid, _ in pairs(unknownTerrainGids) do
-        table.insert(unknownList, tostring(gid))
-    end
-    table.sort(unknownList, function(a, b) return tonumber(a) < tonumber(b) end)
-    if #unknownList > 0 then
-        log.warnf("env", "Unknown terrain GIDs: %s", table.concat(unknownList, ", "))
-    end
-
-    -- Load entities only on active cells
-    local objectsLayer = nil
-    for _, layer in ipairs(map.layers) do
-        if layer.name == "entities" and layer.type == "tilelayer" then
-            objectsLayer = layer
-            break
-        end
-    end
-    
-    if objectsLayer then
-        local objData = objectsLayer.data
-        for y = 1, height do
-            for x = 1, width do
-                local gid = nil
-                if type(objData) == "table" then
-                    if objData[y] then
-                        if type(objData[y]) == "table" then
-                            if objData[y][x] then
-                                if type(objData[y][x]) == "table" and objData[y][x].gid then
-                                    gid = objData[y][x].gid
-                                elseif type(objData[y][x]) == "number" then
-                                    gid = objData[y][x]
-                                end
-                            end
-                        elseif type(objData[y]) == "number" then
-                            local idx = (y-1) * width + x
-                            gid = objData[idx]
-                        end
-                    end
-                end
-                
-                if gid and gid > 0 then
-                    local gridX = x - 1
-                    local gridY = y - 1
-                    -- CHANGED: create entity only on active cell
-                    if tempHex:isActiveHex(gridX, gridY) then
-                        local entity = createEntityFromGID(map, gid, gridX, gridY)
-                        if entity then
-                            table.insert(entities, entity)
-                            log.debugf("env", "Created %s at grid(%d,%d)", entity.name, gridX, gridY)
-                        elseif not gidToEntity[gid] then
-                            log.warnf("env", "Warning: Unknown entity GID %d at grid(%d,%d)", gid, gridX, gridY)
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- Loading statuses from "status" layer (similarly filter by isActiveHex)
-    local statusLayer = nil
-    for _, layer in ipairs(map.layers) do
-        if layer.name == "status" and layer.type == "tilelayer" then
-            statusLayer = layer
-            break
-        end
-    end
-
-    local hexStatuses = {}
-    if statusLayer then
-        local statusData = statusLayer.data
-        for y = 1, height do
-            for x = 1, width do
-                local gid = nil
-                if type(statusData) == "table" then
-                    if statusData[y] then
-                        if type(statusData[y]) == "table" then
-                            if statusData[y][x] then
-                                if type(statusData[y][x]) == "table" and statusData[y][x].gid then
-                                    gid = statusData[y][x].gid
-                                elseif type(statusData[y][x]) == "number" then
-                                    gid = statusData[y][x]
-                                end
-                            end
-                        elseif type(statusData[y]) == "number" then
-                            local idx = (y-1) * width + x
-                            gid = statusData[idx]
-                        end
-                    end
-                end
-                if gid and gid > 0 then
-                    local gridX = x - 1
-                    local gridY = y - 1
-                    if tempHex:isActiveHex(gridX, gridY) then
-                        local statusType = status.gidToStatus[gid]
-                        if statusType then
-                            local key = gridX .. "," .. gridY
-                            if not hexStatuses[key] then hexStatuses[key] = {} end
-                            table.insert(hexStatuses[key], statusType)
-                            log.debugf("env", "Status %s at (%d,%d)", statusType, gridX, gridY)
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- Separate playable characters for deployment phase
-    local deployableAllies = {}
-    local gameEntities = {}
-    for _, entity in ipairs(entities) do
-        if entity.isPlayable and entity:isCharacter() then
-            table.insert(deployableAllies, entity)
-        else
-            table.insert(gameEntities, entity)
-        end
-    end
-
-    -- Save map and textures for rendering
-    environment.loadedMap = map
-    environment.terrainTextures = terrainTextures
-
-    log.info("env", "--- LOADING COMPLETE ---")
-    log.infof("env", "Active terrain cells: %d", (function() local count = 0 for _,row in pairs(terrainMap) do for _ in pairs(row) do count = count + 1 end end return count end)())
-    log.infof("env", "Entities loaded: %d", #gameEntities)
-    log.infof("env", "Allies for deploy: %d", #deployableAllies)
-
-    return terrainMap, gameEntities, width, height, hexStatuses, walkable, deployableAllies, orientation
-end
-
 -- ============================================================
 -- Native map loader (for in-game editor maps)
 -- ============================================================
@@ -889,18 +558,24 @@ function environment.loadNativeMap(data)
                         end
 
                         if entity then
-                            -- Generate a simple colored sprite for the entity
+                            -- Generate sprite: custom for buildings/obstacles, colored circle for characters
                             local spriteSize = 16
-                            local canvas = love.graphics.newCanvas(spriteSize, spriteSize)
-                            love.graphics.setCanvas(canvas)
-                            love.graphics.clear(0, 0, 0, 0)
-                            if def.isPlayable ~= nil then
-                                love.graphics.setColor(def.isPlayable and {0.2, 0.6, 0.2, 1} or {0.8, 0.2, 0.2, 1})
-                            else
-                                love.graphics.setColor(0.5, 0.5, 0.5, 1)
+                            local canvas = nil
+                            if def.type == "building" or def.type == "obstacle" then
+                                canvas = generateCustomSprite(def.name, 12, 12)
                             end
-                            love.graphics.circle("fill", spriteSize / 2, spriteSize / 2, spriteSize / 2 - 1)
-                            love.graphics.setCanvas()
+                            if not canvas then
+                                canvas = love.graphics.newCanvas(spriteSize, spriteSize)
+                                love.graphics.setCanvas(canvas)
+                                love.graphics.clear(0, 0, 0, 0)
+                                if def.isPlayable ~= nil then
+                                    love.graphics.setColor(def.isPlayable and {0.2, 0.6, 0.2, 1} or {0.8, 0.2, 0.2, 1})
+                                else
+                                    love.graphics.setColor(0.5, 0.5, 0.5, 1)
+                                end
+                                love.graphics.circle("fill", spriteSize / 2, spriteSize / 2, spriteSize / 2 - 1)
+                                love.graphics.setCanvas()
+                            end
                             entity.sprite = canvas
 
                             table.insert(entities, entity)
