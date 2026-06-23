@@ -1919,14 +1919,34 @@ function combat.updatePushAnimations(dt, hex)
 end
 
 function combat.flushPushAnimations()
-    for _, anim in ipairs(pushAnimations.queue) do
-        if anim.obj then
-            anim.obj.q = anim.toQ
-            anim.obj.r = anim.toR
+    for i = 1, 2 do
+        for _, anim in ipairs(pushAnimations.queue) do
+            if anim.obj and anim.toQ and anim.toR then
+                if not anim.bounceBack then
+                    anim.obj.q = anim.toQ
+                    anim.obj.r = anim.toR
+                end
+                anim.obj.currentDrawX = nil
+                anim.obj.currentDrawY = nil
+            end
         end
+        local callbacks = {}
+        for _, anim in ipairs(pushAnimations.queue) do
+            if anim.onComplete then
+                table.insert(callbacks, { fn = anim.onComplete, obj = anim.obj })
+            end
+        end
+        pushAnimations.queue = {}
+        pushAnimations.active = false
+        pushAnimations.globalCallback = nil
+        for _, cb in ipairs(callbacks) do
+            cb.fn(cb.obj)
+        end
+        if #pushAnimations.queue == 0 then break end
     end
     pushAnimations.queue = {}
     pushAnimations.active = false
+    pushAnimations.globalCallback = nil
 end
 
 -- ============================================================
@@ -2242,6 +2262,9 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
     log.debug("combat", "Attack result:", success, message)
 
     if success then
+        if pushAnimations.active then
+            combat.flushPushAnimations()
+        end
         undo.snapshot()
         local endTurn = true
 

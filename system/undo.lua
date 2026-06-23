@@ -80,12 +80,21 @@ function undo.restore(snap)
     local status = _G.status
     local entities = _G.entities
 
+    -- Cancel any pending push animations so they don't overwrite restored positions
+    if pushAnimations then
+        pushAnimations.queue = {}
+        pushAnimations.active = false
+        pushAnimations.globalCallback = nil
+    end
+
     -- Restore entity data
     local existingRefs = {}
     for _, es in ipairs(snap.entities) do
         if es.ref then
             es.ref.q = es.q
             es.ref.r = es.r
+            es.ref.currentDrawX = nil
+            es.ref.currentDrawY = nil
             es.ref.health = es.health
             es.ref.maxHealth = es.maxHealth
             es.ref.hasActedThisTurn = es.hasActedThisTurn
