@@ -866,8 +866,8 @@ function drawEntity(entity, state)
         end
         love.graphics.draw(entity.sprite, x, drawY, 0, finalScale, finalScale, sw/2, sh/2)
 
-        -- Cracks on damaged buildings (not 999 HP ones)
-        if entity:isBuilding() and entity.health > 0 and entity.health < entity.maxHealth and entity.maxHealth < 999 then
+        -- Cracks on damaged buildings (not indestructible ones)
+        if entity:isBuilding() and entity.health > 0 and entity.health < entity.maxHealth and not entity.indestructible then
             local crackAlpha = 0.7 * alpha
             love.graphics.setColor(0.15, 0.1, 0.05, crackAlpha)
             love.graphics.setLineWidth(2)
@@ -885,7 +885,7 @@ function drawEntity(entity, state)
         love.graphics.setColor(entity.color or {1, 1, 1, 1})
         love.graphics.circle("fill", x, y, 14)
         -- Cracks on damaged buildings (fallback, no sprite)
-        if entity:isBuilding() and entity.health > 0 and entity.health < entity.maxHealth and entity.maxHealth < 999 then
+        if entity:isBuilding() and entity.health > 0 and entity.health < entity.maxHealth and not entity.indestructible then
             love.graphics.setColor(0.15, 0.1, 0.05, 0.7 * alpha)
             love.graphics.setLineWidth(2)
             love.graphics.line(x - 4, y - 8, x + 2, y, x - 3, y + 6)

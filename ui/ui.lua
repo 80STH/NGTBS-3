@@ -293,7 +293,7 @@ function ui.getEffectIcon(entity, attackDmg, collisionDmg, attacker, directionIn
     local totalDmg = (attackDmg or 0) + (collisionDmg or 0)
     if totalDmg <= 0 then return nil end
     if entity:isBuilding() then
-        if entity.maxHealth >= 999 then return nil end
+        if entity.indestructible then return nil end
         if totalDmg >= entity.health then return "building_destruction" end
         if totalDmg >= 2 then return "heavy_building_damage" end
         return "building_damage"
@@ -1815,7 +1815,7 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
     if entity.direction then
         table.insert(lines, { text = "Directional barrier", color = {0.4, 0.9, 0.4} })
         table.insert(lines, { text = "Green = safe push, Red = damaging", color = {0.8, 0.8, 0.7} })
-        if entity.health and entity.health < 999 then
+        if entity.health and not entity.indestructible then
             table.insert(lines, { text = "Takes damage from red side", color = {0.9, 0.5, 0.5} })
         end
     end

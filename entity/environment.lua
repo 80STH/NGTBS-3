@@ -205,7 +205,7 @@ local gidToEntity = {
     [11] = { type = "obstacle",  name = "SuperMountain", indestructible = true },
     [9]  = { type = "obstacle",  name = "MountainSlope", health = 2, maxDamagePerHit = 1, direction = {dx = 1, dy = 0, dz = -1} },
     [15] = { type = "obstacle",  name = "MountainSlope", indestructible = true, noCollisionDamage = true },
-    [16] = { type = "obstacle",  name = "SuperMountainSlope", health = 999, noCollisionDamage = true },
+    [16] = { type = "obstacle",  name = "SuperMountainSlope", indestructible = true, noCollisionDamage = true },
     -- [17] removed: DeepWater is now terrain "underwater_mines"
     [12] = { type = "building",  name = "SmallBuilding", health = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2 },
@@ -514,7 +514,7 @@ function environment.loadNativeMap(data)
                                 entity.aura = { type = "slow", radius = 1 }
                             end
                         elseif def.type == "obstacle" then
-                            local health = def.health or 999
+                            local health = def.health or 1
                             entity = Entity.new(def.name, Entity.TYPES.OBSTACLE, q, r, health, false, 0, nil, nil, {})
                             if def.maxDamagePerHit then entity.maxDamagePerHit = def.maxDamagePerHit end
                             if def.indestructible then entity.indestructible = true end
