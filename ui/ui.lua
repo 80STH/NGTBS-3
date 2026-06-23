@@ -6,6 +6,8 @@ local combat = require("combat.combat")
 local visual = require("system.visual_effects")
 local hex_utils = require("grid.hex_utils")
 local cell_rules = require("grid.cell_rules")
+local fonts = require("util.fonts")
+local trains = require("system.trains")
 require("ui.ui_buttons")(ui)
 require("ui.ui_status_effects")(ui)
 -- ============================================================
@@ -303,7 +305,6 @@ end
 function ui.getPreparedAttackTarget(enemy, entities, hex)
     if not enemy then return nil end
     if enemy.isTrainAttack then
-        local trains = require("system.trains")
         local group = trains.getCarGroup(enemy)
         if not group or not group.active then return nil end
         local newIdx = group.currentIdx + 1
@@ -1424,17 +1425,27 @@ end
 function ui.drawMovementRange(hex, actor, entities, terrainMap)
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then return end
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return end
-    for q = 0, hex.gridWidth - 1 do
-        for r = 0, hex.gridHeight - 1 do
-            if hex:isActiveHex(q, r) and ui.isCellReachable(actor, q, r, entities, terrainMap, hex) then
-                local x, y = getDrawCoords(q, r)
-                local vertices = hex:drawInsetHexagon(x, y, hex.radius, 0.92)
-                love.graphics.setColor(0.2, 0.8, 0.2, 0.2)
-                love.graphics.polygon("fill", vertices)
-                love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
-                love.graphics.polygon("line", vertices)
+
+    -- Cache: recompute only when actor/position changes
+    local cacheKey = actor.q .. "," .. actor.r .. "," .. tostring(actor)
+    if ui._moveRangeCacheKey ~= cacheKey then
+        ui._moveRangeCacheKey = cacheKey
+        local reachable = {}
+        for _, ac in ipairs(hex._activeCells) do
+            if ui.isCellReachable(actor, ac.q, ac.r, entities, terrainMap, hex) then
+                reachable[#reachable + 1] = {q = ac.q, r = ac.r}
             end
         end
+        ui._moveRangeCache = reachable
+    end
+
+    for _, cell in ipairs(ui._moveRangeCache) do
+        local x, y = getDrawCoords(cell.q, cell.r)
+        local vertices = hex:drawInsetHexagon(x, y, hex.radius, 0.92)
+        love.graphics.setColor(0.2, 0.8, 0.2, 0.2)
+        love.graphics.polygon("fill", vertices)
+        love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
+        love.graphics.polygon("line", vertices)
     end
 end
 -- Undo button
@@ -2301,7 +2312,7 @@ function ui.drawChaosBar(mx, my)
     local totalW = (cellW + gap) * chaosMaxVal + pad * 2
 
     -- Label
-    if not smallFont then smallFont = love.graphics.newFont(12) end
+    if not smallFont then smallFont = fonts.get(12) end
     love.graphics.setFont(smallFont)
     love.graphics.setColor(0.9, 0.6, 0.8, 1)
     love.graphics.print("Chaos", barX, barY)
@@ -2382,7 +2393,7 @@ function ui.drawLeaderHPBar(mx, my)
     local pad = 4
     local cellCount = 2
 
-    if not smallFont then smallFont = love.graphics.newFont(12) end
+    if not smallFont then smallFont = fonts.get(12) end
     love.graphics.setFont(smallFont)
 
     -- Label

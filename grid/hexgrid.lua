@@ -1,6 +1,29 @@
 local HexGrid = {}
 local hex_utils = require("grid.hex_utils")
 
+-- Pre-computed direction tables (module-level constants)
+local FLAT_DIRS_EVEN = {
+    {q=1, r=0}, {q=1, r=-1}, {q=0, r=-1},
+    {q=-1, r=-1}, {q=-1, r=0}, {q=0, r=1},
+}
+local FLAT_DIRS_ODD = {
+    {q=1, r=1}, {q=1, r=0}, {q=0, r=-1},
+    {q=-1, r=0}, {q=-1, r=1}, {q=0, r=1},
+}
+local POINTY_DIRS_ODD = {
+    {q=1, r=0}, {q=-1, r=0},
+    {q=0, r=1}, {q=1, r=1},
+    {q=0, r=-1}, {q=1, r=-1},
+}
+local POINTY_DIRS_EVEN = {
+    {q=1, r=0}, {q=-1, r=0},
+    {q=0, r=1}, {q=-1, r=1},
+    {q=0, r=-1}, {q=-1, r=-1},
+}
+
+-- Reusable vertex buffer (avoids allocation per hex draw)
+local vertBuf = {}
+
 function HexGrid.new(radius, gridWidth, gridHeight, activeRadius, centerQ, centerR, orientation)
     local self = setmetatable({}, {__index = HexGrid})
     self.radius = radius
@@ -29,6 +52,25 @@ function HexGrid.new(radius, gridWidth, gridHeight, activeRadius, centerQ, cente
     self.hoverR = -1
     self.selectedQ = -1
     self.selectedR = -1
+
+    -- Cache center cube coords (#6)
+    local cx, cy, cz = hex_utils.axialToCube(self.centerQ, self.centerR)
+    self._centerCubeX = cx
+    self._centerCubeY = cy
+    self._centerCubeZ = cz
+
+    -- Pre-compute sorted active cells (#7)
+    self._sortedCells = nil
+
+    -- Pre-compute list of active cell coordinates
+    self._activeCells = {}
+    for row = 0, self.gridHeight - 1 do
+        for col = 0, self.gridWidth - 1 do
+            if self:isActiveHex(col, row) then
+                self._activeCells[#self._activeCells + 1] = {q = col, r = row}
+            end
+        end
+    end
 
     return self
 end
@@ -104,36 +146,15 @@ end
 function HexGrid:getNeighbors(q, r)
     local directions
     if self.orientation == "flat" then
-        if q % 2 == 0 then
-            directions = {
-                {q=1, r=0}, {q=1, r=-1}, {q=0, r=-1},
-                {q=-1, r=-1}, {q=-1, r=0}, {q=0, r=1},
-            }
-        else
-            directions = {
-                {q=1, r=1}, {q=1, r=0}, {q=0, r=-1},
-                {q=-1, r=0}, {q=-1, r=1}, {q=0, r=1},
-            }
-        end
+        directions = (q % 2 == 0) and FLAT_DIRS_EVEN or FLAT_DIRS_ODD
     else
-        if r % 2 == 1 then
-            directions = {
-                {q=1, r=0}, {q=-1, r=0},
-                {q=0, r=1}, {q=1, r=1},
-                {q=0, r=-1}, {q=1, r=-1},
-            }
-        else
-            directions = {
-                {q=1, r=0}, {q=-1, r=0},
-                {q=0, r=1}, {q=-1, r=1},
-                {q=0, r=-1}, {q=-1, r=-1},
-            }
-        end
+        directions = (r % 2 == 1) and POINTY_DIRS_ODD or POINTY_DIRS_EVEN
     end
 
     local neighbors = {}
-    for _, dir in ipairs(directions) do
-        neighbors[#neighbors+1] = {q = q + dir.q, r = r + dir.r}
+    for i = 1, 6 do
+        local dir = directions[i]
+        neighbors[i] = {q = q + dir.q, r = r + dir.r}
     end
     return neighbors
 end
@@ -144,9 +165,8 @@ end
 
 function HexGrid:isActiveHex(q, r)
     if not self:isValidHex(q, r) then return false end
-    local cx, cy, cz = hex_utils.axialToCube(self.centerQ, self.centerR)
     local x, y, z = hex_utils.axialToCube(q, r)
-    local dist = (math.abs(x - cx) + math.abs(y - cy) + math.abs(z - cz)) / 2
+    local dist = (math.abs(x - self._centerCubeX) + math.abs(y - self._centerCubeY) + math.abs(z - self._centerCubeZ)) / 2
     return dist <= self.activeRadius
 end
 
@@ -155,33 +175,47 @@ function HexGrid:getDistance(q1, r1, q2, r2)
 end
 
 function HexGrid:drawHexagon(x, y, radius)
-    local vertices = {}
     local rot = self.rotation or 0
     local angleOffset = (self.orientation == "flat") and 0 or 30
     for i = 0, 5 do
         local angle = math.rad(60 * i + angleOffset) + rot
-        local vx = x + math.cos(angle) * radius
-        local vy = y + math.sin(angle) * radius
-        table.insert(vertices, vx)
-        table.insert(vertices, vy)
+        vertBuf[i*2+1] = x + math.cos(angle) * radius
+        vertBuf[i*2+2] = y + math.sin(angle) * radius
     end
-    return vertices
+    return vertBuf
 end
 
 function HexGrid:drawInsetHexagon(x, y, radius, scale)
     scale = scale or 0.92
     local r = radius * scale
-    local vertices = {}
     local rot = self.rotation or 0
     local angleOffset = (self.orientation == "flat") and 0 or 30
     for i = 0, 5 do
         local angle = math.rad(60 * i + angleOffset) + rot
-        local vx = x + math.cos(angle) * r
-        local vy = y + math.sin(angle) * r
-        table.insert(vertices, vx)
-        table.insert(vertices, vy)
+        vertBuf[i*2+1] = x + math.cos(angle) * r
+        vertBuf[i*2+2] = y + math.sin(angle) * r
     end
-    return vertices
+    return vertBuf
+end
+
+function HexGrid:getSortedCells(terrainMap, waterYOffset)
+    if self._sortedCells then return self._sortedCells end
+    local cells = {}
+    for _, ac in ipairs(self._activeCells) do
+        local col, row = ac.q, ac.r
+        local terrainType = terrainMap and terrainMap[col] and terrainMap[col][row] or "grass"
+        local cellX, cellY = self:hexToPixel(col, row)
+        local yOffset = (terrainType == "water" or terrainType == "underwater_mines") and waterYOffset or 0
+        local depth = cellY + yOffset
+        cells[#cells + 1] = { q = col, r = row, x = cellX, y = cellY, terrain = terrainType, depth = depth }
+    end
+    table.sort(cells, function(a, b) return a.depth < b.depth end)
+    self._sortedCells = cells
+    return cells
+end
+
+function HexGrid:invalidateSortedCells()
+    self._sortedCells = nil
 end
 
 function HexGrid:centerOnScreen(screenWidth, screenHeight)

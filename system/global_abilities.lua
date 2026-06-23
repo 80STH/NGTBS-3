@@ -11,6 +11,7 @@ local status = require("system.status")
 local environment = require("entity.environment")
 local log = require("util.log")
 local undo = require("system.undo")
+local fonts = require("util.fonts")
 
 local global_abilities = {}
 
@@ -246,7 +247,7 @@ end
 
 function global_abilities.drawButtons(mx, my, state)
     local h = getDropdownHeader()
-    local buttonFont = love.graphics.newFont(11)
+    local buttonFont = fonts.get(11)
 
     -- Header
     local isHover = mx and my and mx >= h.x and mx <= h.x + h.w and my >= h.y and my <= h.y + h.h
@@ -289,7 +290,7 @@ function global_abilities.drawAbilityButton(self, mx, my, state, cfg)
     local enoughMana = global_abilities.mana >= self.manaCost
     local available = (state.turnState.phase == "player" and not self.hasBeenUsed and not global_abilities.abilityUsedThisTurn and enoughMana)
     local x, y, w, h = self.button.x, self.button.y, self.button.width, self.button.height
-    local buttonFont = love.graphics.newFont(11)
+    local buttonFont = fonts.get(11)
     local logicalW = love.graphics.getWidth()
 
     local cr, cg, cb = cfg.color[1], cfg.color[2], cfg.color[3]

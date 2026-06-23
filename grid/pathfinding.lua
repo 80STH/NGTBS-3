@@ -1,30 +1,17 @@
--- pathfinding.lua
--- Pathfinding algorithm on a hexagonal grid (BFS with occupancy penalty)
-
 local pathfinding = {}
 
---- BFS pathfinding with maximum length limit and occupancy avoidance
--- @param startQ number    Starting coordinate q
--- @param startR number    Starting coordinate r
--- @param targetQ number   Target coordinate q
--- @param targetR number   Target coordinate r
--- @param maxSteps number|nil  Maximum path length (if nil – unlimited)
--- @param isBlocked function(q, r)  Returns true if the cell is impassable
--- @param hex object       Hex grid object (must have methods getNeighbors, isValidHex, optionally isActiveHex)
--- @param isOccupied function(q, r)|nil  Returns true if the cell is occupied by a passable unit (paths through occupied cells are deprioritized)
--- @return table|nil       Array of steps { {q, r}, ... } or nil if path not found
+local function key(q, r) return q .. "," .. r end
+
 function pathfinding.findPath(startQ, startR, targetQ, targetR, maxSteps, isBlocked, hex, isOccupied)
     if startQ == targetQ and startR == targetR then
         return {}
     end
 
-    -- Priority queue: lower cost = higher priority. Occupied cells add penalty.
     local OCCUPIED_PENALTY = 100
-    local queue = {{q = startQ, r = startR, path = {}, cost = 0, occupiedCount = 0}}
-    local visited = { [startQ .. "," .. startR] = 0 }
+    local queue = {{q = startQ, r = startR, cost = 0, occupiedCount = 0, parent = nil}}
+    local visited = { [key(startQ, startR)] = 0 }
 
     while #queue > 0 do
-        -- Find lowest-cost item (simple linear scan for small queues)
         local bestIdx = 1
         local bestCost = queue[1].cost
         for i = 2, #queue do
@@ -33,40 +20,50 @@ function pathfinding.findPath(startQ, startR, targetQ, targetR, maxSteps, isBloc
                 bestIdx = i
             end
         end
-        local current = table.remove(queue, bestIdx)
-        local currentPathLen = #current.path
+        local current = queue[bestIdx]
+        queue[bestIdx] = queue[#queue]
+        queue[#queue] = nil
 
-        -- If step limit exceeded, skip expansion (occupied cells don't count against limit)
-        if maxSteps and currentPathLen >= maxSteps then
+        local pathLen = 0
+        local node = current
+        while node.parent do
+            pathLen = pathLen + 1
+            node = node.parent
+        end
+
+        if maxSteps and pathLen >= maxSteps then
             goto continue
         end
 
         local neighbors = hex:getNeighbors(current.q, current.r)
         for _, nb in ipairs(neighbors) do
-            local key = nb.q .. "," .. nb.r
-            local isBlockedCell = isBlocked(nb.q, nb.r)
-            if not isBlockedCell then
+            local nbKey = key(nb.q, nb.r)
+            if not isBlocked(nb.q, nb.r) then
                 local cellOccupied = isOccupied and isOccupied(nb.q, nb.r)
                 local newOccupiedCount = current.occupiedCount + (cellOccupied and 1 or 0)
-                local newCost = currentPathLen + 1 + newOccupiedCount * OCCUPIED_PENALTY
-                local prevCost = visited[key]
+                local newCost = pathLen + 1 + newOccupiedCount * OCCUPIED_PENALTY
+                local prevCost = visited[nbKey]
                 if not prevCost or newCost < prevCost then
-                    -- Check cell validity and activity
                     local valid = hex:isValidHex(nb.q, nb.r)
                     if valid and hex.isActiveHex then
                         valid = hex:isActiveHex(nb.q, nb.r)
                     end
                     if valid then
-                        visited[key] = newCost
-                        local newPath = {}
-                        for _, step in ipairs(current.path) do
-                            table.insert(newPath, step)
-                        end
-                        table.insert(newPath, {q = nb.q, r = nb.r})
+                        visited[nbKey] = newCost
                         if nb.q == targetQ and nb.r == targetR then
-                            return newPath
+                            local result = {{q = nb.q, r = nb.r}}
+                            local p = current
+                            while p.parent do
+                                table.insert(result, {q = p.q, r = p.r})
+                                p = p.parent
+                            end
+                            local len = #result
+                            for i = 1, math.floor(len / 2) do
+                                result[i], result[len - i + 1] = result[len - i + 1], result[i]
+                            end
+                            return result
                         end
-                        table.insert(queue, {q = nb.q, r = nb.r, path = newPath, cost = newCost, occupiedCount = newOccupiedCount})
+                        queue[#queue + 1] = {q = nb.q, r = nb.r, cost = newCost, occupiedCount = newOccupiedCount, parent = current}
                     end
                 end
             end

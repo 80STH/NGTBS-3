@@ -3,6 +3,7 @@
 -- Reroll button for testing, no gold/categories
 
 local shop = {}
+local fonts = require("util.fonts")
 local log = require("util.log")
 
 shop.isOpen = false
@@ -154,7 +155,7 @@ function shop.draw()
     mx = mx / dpiScale; my = my / dpiScale
 
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.setFont(love.graphics.newFont(20))
+    love.graphics.setFont(fonts.get(20))
     love.graphics.printf("Shop — Bonus Buffs", panelX, panelY + 12, panelW, "center")
 
     -- Close button
@@ -164,7 +165,7 @@ function shop.draw()
     love.graphics.setColor(closeHover and 0.8 or 0.4, closeHover and 0.2 or 0.2, closeHover and 0.2 or 0.2, 0.9)
     love.graphics.rectangle("fill", closeX, closeY, 28, 28, 6)
     love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.setFont(love.graphics.newFont(16))
+    love.graphics.setFont(fonts.get(16))
     love.graphics.printf("X", closeX, closeY + 4, 28, "center")
 
     -- Slot cards
@@ -197,15 +198,15 @@ function shop.draw()
             end
 
             love.graphics.setColor(iconColor[1], iconColor[2], iconColor[3], slot.taken and 0.4 or 1)
-            love.graphics.setFont(love.graphics.newFont(28))
+            love.graphics.setFont(fonts.get(28))
             love.graphics.print(slot.icon, panelX + 30, cy + 24)
 
             love.graphics.setColor(slot.taken and 0.4 or 1, slot.taken and 0.4 or 1, slot.taken and 0.4 or 1, slot.taken and 0.5 or 1)
-            love.graphics.setFont(love.graphics.newFont(15))
+            love.graphics.setFont(fonts.get(15))
             love.graphics.print(slot.name, panelX + 70, cy + 12)
 
             love.graphics.setColor(slot.taken and 0.3 or 0.6, slot.taken and 0.3 or 0.6, slot.taken and 0.3 or 0.6, slot.taken and 0.4 or 0.7)
-            love.graphics.setFont(love.graphics.newFont(11))
+            love.graphics.setFont(fonts.get(11))
             love.graphics.printf(slot.desc, panelX + 70, cy + 34, cardW - 80, "left")
 
             -- Take / Taken button
@@ -219,7 +220,7 @@ function shop.draw()
                 love.graphics.setColor(0.2, 0.5, 0.2, 0.7)
                 love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 5)
                 love.graphics.setColor(0.3, 0.8, 0.3, 0.7)
-                love.graphics.setFont(love.graphics.newFont(12))
+                love.graphics.setFont(fonts.get(12))
                 love.graphics.printf("Taken", btnX, btnY + 9, btnW, "center")
             else
                 love.graphics.setColor(hoverTake and 0.25 or 0.15, hoverTake and 0.5 or 0.3, hoverTake and 0.3 or 0.18, 0.9)
@@ -227,7 +228,7 @@ function shop.draw()
                 love.graphics.setColor(0.3, 0.9, 0.4, hoverTake and 1 or 0.7)
                 love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 5)
                 love.graphics.setColor(0.3, 0.9, 0.4, hoverTake and 1 or 0.7)
-                love.graphics.setFont(love.graphics.newFont(12))
+                love.graphics.setFont(fonts.get(12))
                 love.graphics.printf("Take", btnX, btnY + 9, btnW, "center")
             end
         else
@@ -235,7 +236,7 @@ function shop.draw()
             love.graphics.setColor(0.2, 0.2, 0.25, 0.5)
             love.graphics.rectangle("fill", panelX + 20, cy, cardW, cardH, 8)
             love.graphics.setColor(0.4, 0.4, 0.5, 0.3)
-            love.graphics.setFont(love.graphics.newFont(11))
+            love.graphics.setFont(fonts.get(11))
             love.graphics.printf("(empty)", panelX + cardW/2 - 40, cy + 36, 80, "center")
         end
     end
@@ -250,7 +251,7 @@ function shop.draw()
     love.graphics.setColor(0.6, 0.5, 0.9, rHover and 0.9 or 0.6)
     love.graphics.rectangle("line", rX, rY, rW, 36, 6)
     love.graphics.setColor(0.7, 0.6, 1.0, rHover and 1 or 0.7)
-    love.graphics.setFont(love.graphics.newFont(12))
+    love.graphics.setFont(fonts.get(12))
     love.graphics.printf("Reroll (test)", rX, rY + 10, rW, "center")
 end
 

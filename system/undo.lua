@@ -182,6 +182,7 @@ function undo.restore(snap)
     end
 
     log.debugf("undo", "Snapshot restored. History size: %d", #undo.history)
+    if _G.rebuildEntityIndex then _G.rebuildEntityIndex() end
     return true
 end
 

@@ -25,11 +25,18 @@ function visual.addPushEffect(fromX, fromY, toX, toY, duration)
 end
 
 function visual.update(dt)
-    for i = #visual.effects, 1, -1 do
-        local e = visual.effects[i]
+    local effects = visual.effects
+    local n = #effects
+    local i = 1
+    while i <= n do
+        local e = effects[i]
         e.timer = e.timer + dt
         if e.timer >= e.duration then
-            table.remove(visual.effects, i)
+            effects[i] = effects[n]
+            effects[n] = nil
+            n = n - 1
+        else
+            i = i + 1
         end
     end
 end

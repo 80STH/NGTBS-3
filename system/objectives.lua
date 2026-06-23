@@ -2,6 +2,7 @@ local Entity = require("entity.entity")
 local log = require("util.log")
 local status = require("system.status")
 local env = require("entity.environment")
+local fonts = require("util.fonts")
 
 local objectives = {}
 
@@ -108,23 +109,20 @@ local function findEmptyCells(entities, hex, qMin)
     qMin = qMin or 0
     local candidates = {}
     local candidatesBias = {}
-    for q = 0, hex.gridWidth - 1 do
-        for r = 0, hex.gridHeight - 1 do
-            if hex:isActiveHex(q, r) then
-                local occupied = false
-                for _, e in ipairs(entities) do
-                    if e.q == q and e.r == r then occupied = true; break end
-                end
-                if not occupied then
-                    local terrain = _G.terrainMap and _G.terrainMap[q] and _G.terrainMap[q][r] or "grass"
-                    if terrain ~= "water" and terrain ~= "underwater_mines" then
-                        if not status.hasNegativeHexStatus(q, r) then
-                            if q >= qMin then
-                                table.insert(candidatesBias, {q = q, r = r})
-                            else
-                                table.insert(candidates, {q = q, r = r})
-                            end
-                        end
+    for _, ac in ipairs(hex._activeCells) do
+        local q, r = ac.q, ac.r
+        local occupied = false
+        for _, e in ipairs(entities) do
+            if e.q == q and e.r == r then occupied = true; break end
+        end
+        if not occupied then
+            local terrain = _G.terrainMap and _G.terrainMap[q] and _G.terrainMap[q][r] or "grass"
+            if terrain ~= "water" and terrain ~= "underwater_mines" then
+                if not status.hasNegativeHexStatus(q, r) then
+                    if q >= qMin then
+                        table.insert(candidatesBias, {q = q, r = r})
+                    else
+                        table.insert(candidates, {q = q, r = r})
                     end
                 end
             end
@@ -688,7 +686,7 @@ function objectives.checkOnVictory(entities)
 end
 
 function objectives.draw()
-    if not smallFont then smallFont = love.graphics.newFont(12) end
+    if not smallFont then smallFont = fonts.get(12) end
     local x = 10
     local y = 1070
     local w = 200

@@ -9,6 +9,7 @@ local log = require("util.log")
 local sprites = require("util.sprites")
 
 local hex_utils = require("grid.hex_utils")
+local env = require("entity.environment")
 -- ============================================================
 -- BASE ATTACK CLASS
 -- ============================================================
@@ -1083,7 +1084,6 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
 
     -- Create a random enemy on the target cell
     if hex:isActiveHex(sq, sr) then
-        local env = require("entity.environment")
         local newEnemy = env.createRandomEnemy(sq, sr)
         table.insert(entities, newEnemy)
         local fx, fy = getDrawCoords(sq, sr)
@@ -1244,6 +1244,8 @@ function combat.PullHookAttack:getLineTarget(attacker, targetQ, targetR, hex, en
     if not stepX then return nil end
     local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     if firstTarget and targetHex then
+        local dist = hex:getDistance(attacker.q, attacker.r, targetHex.q, targetHex.r)
+        if dist < 2 then return nil end
         return {q = targetHex.q, r = targetHex.r, entity = firstTarget}
     end
     return nil
@@ -1847,8 +1849,10 @@ end
 function combat.updatePushAnimations(dt, hex)
     if not pushAnimations.active or #pushAnimations.queue == 0 then return end
     local allDone = true
-    for i = #pushAnimations.queue, 1, -1 do
-        local anim = pushAnimations.queue[i]
+    local queue = pushAnimations.queue
+    local i = 1
+    while i <= #queue do
+        local anim = queue[i]
         if anim and anim.isMoving then
             anim.timer = anim.timer + dt
             local t = math.min(1, anim.timer / anim.duration)
@@ -1897,9 +1901,11 @@ function combat.updatePushAnimations(dt, hex)
                     anim.obj.currentDrawY = nil
                 end
                 if anim.onComplete then anim.onComplete(anim.obj) end
-                table.remove(pushAnimations.queue, i)
+                queue[i] = queue[#queue]
+                queue[#queue] = nil
             else
                 allDone = false
+                i = i + 1
             end
         end
     end

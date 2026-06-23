@@ -382,6 +382,7 @@ function confirmDeploy()
     updateAttackButtons(selectedActor)
     maxUndoCount = countPlayableActors()
     gameActive = true
+    if rebuildEntityIndex then rebuildEntityIndex() end
 
     turnManager.startGame()
     gamePhase = "playing"

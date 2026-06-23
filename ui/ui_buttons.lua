@@ -2,7 +2,8 @@
 -- Extracted button functions. Do not depend on other ui.* functions.
 -- Takes a ui-table and registers functions on it.
 return function(ui)
-    local buttonFont = love.graphics.newFont(11)
+    local fonts = require("util.fonts")
+    local buttonFont = fonts.get(11)
 
     function ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
         local canUndo = #undo.history > 1

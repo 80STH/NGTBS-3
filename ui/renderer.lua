@@ -8,6 +8,7 @@ local combat = require("combat.combat")
 local hex_utils = require("grid.hex_utils")
 local global_abilities = require("system.global_abilities")
 local objectives = require("system.objectives")
+local fonts = require("util.fonts")
 
 function renderer.draw(state)
     if not state or not state.hex then return end
@@ -371,12 +372,12 @@ function renderer.draw(state)
             love.graphics.rectangle("fill", 0, 0, width, height)
 
             love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.setFont(love.graphics.newFont(48))
+            love.graphics.setFont(fonts.get(48))
             if state.win then
                 love.graphics.printf("VICTORY!", 0, height/2 - 100, width, "center")
                 local total = objectives.getTotalCount()
                 local completed = objectives.getCompletedCount()
-                love.graphics.setFont(love.graphics.newFont(18))
+                love.graphics.setFont(fonts.get(18))
                 love.graphics.setColor(0.8, 0.8, 0.8, 1)
                 love.graphics.printf("Objectives: " .. completed .. " / " .. total .. " completed", 0, height/2 - 50, width, "center")
             elseif state.loss then
@@ -386,7 +387,7 @@ function renderer.draw(state)
             local btnW, btnH = 200, 50
             local btnX = width/2 - btnW/2
             local btnY = height/2 + 20
-            love.graphics.setFont(love.graphics.newFont(24))
+            love.graphics.setFont(fonts.get(24))
             love.graphics.setColor(0.2, 0.2, 0.6, 0.9)
             love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 8)
             love.graphics.setColor(1, 1, 1, 1)
@@ -418,9 +419,9 @@ function drawAbilityMenu(w, h)
     -- Title
     local mapTitle = "MAP " .. currentMapIndex .. " COMPLETE"
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.setFont(love.graphics.newFont(22))
+    love.graphics.setFont(fonts.get(22))
     love.graphics.printf(mapTitle, menuX, menuY + 15, menuW, "center")
-    love.graphics.setFont(love.graphics.newFont(14))
+    love.graphics.setFont(fonts.get(14))
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
 
     if abilityMenu.mode == "upgrade" then
@@ -428,7 +429,7 @@ function drawAbilityMenu(w, h)
             love.graphics.printf("Choose upgrade or artifact:", menuX, menuY + 50, menuW, "center")
         else
             love.graphics.setColor(0.6, 0.9, 0.6, 1)
-            love.graphics.setFont(love.graphics.newFont(13))
+            love.graphics.setFont(fonts.get(13))
             if abilityMenu.selectedItem.type == "unit" then
                 love.graphics.printf("Choose upgrade for " .. abilityMenu.selectedItem.name .. ":", menuX, menuY + 50, menuW, "center")
             else
@@ -457,19 +458,19 @@ function drawAbilityMenu(w, h)
                 love.graphics.rectangle("line", ix, iy, iw, itemH, 6)
 
                 love.graphics.setColor(1, 1, 1, 0.8)
-                love.graphics.setFont(love.graphics.newFont(14))
+                love.graphics.setFont(fonts.get(14))
                 if entry.type == "unit" then
                     love.graphics.print("  ⚔ " .. entry.name, ix + 10, iy + 18)
                 elseif entry.type == "commander_artifact" then
                     love.graphics.setColor(0.4, 0.8, 1.0, 0.9)
                     love.graphics.print("  ★ " .. entry.name, ix + 10, iy + 8)
-                    love.graphics.setFont(love.graphics.newFont(11))
+                    love.graphics.setFont(fonts.get(11))
                     love.graphics.setColor(0.5, 0.7, 0.9, 0.7)
                     love.graphics.printf(entry.desc, ix + 10, iy + 30, iw - 20, "left")
                 else
                     love.graphics.setColor(0.8, 0.8, 0.4, 0.9)
                     love.graphics.print("  ◆ " .. entry.name, ix + 10, iy + 8)
-                    love.graphics.setFont(love.graphics.newFont(11))
+                    love.graphics.setFont(fonts.get(11))
                     love.graphics.setColor(0.7, 0.7, 0.5, 0.7)
                     love.graphics.printf(entry.desc, ix + 10, iy + 30, iw - 20, "left")
                 end
@@ -498,10 +499,10 @@ function drawAbilityMenu(w, h)
                     love.graphics.rectangle("line", ix, iy, iw, choiceH, 6)
 
                     love.graphics.setColor(1, 1, 1, isSelected and 1 or 0.8)
-                    love.graphics.setFont(love.graphics.newFont(14))
+                    love.graphics.setFont(fonts.get(14))
                     love.graphics.print((isSelected and "✓ " or "  ") .. choice.name, ix + 10, iy + 6)
 
-                    love.graphics.setFont(love.graphics.newFont(11))
+                    love.graphics.setFont(fonts.get(11))
                     love.graphics.setColor(0.7, 0.7, 0.7, isSelected and 1 or 0.6)
                     love.graphics.printf(choice.desc, ix + 10, iy + 26, iw - 20, "left")
                 end
@@ -512,7 +513,7 @@ function drawAbilityMenu(w, h)
                 love.graphics.setColor(backHover and 0.35 or 0.25, backHover and 0.35 or 0.25, backHover and 0.5 or 0.35, 0.9)
                 love.graphics.rectangle("fill", menuX + 20, backBtnY, 100, 30, 4)
                 love.graphics.setColor(0.8, 0.8, 0.8, 1)
-                love.graphics.setFont(love.graphics.newFont(12))
+                love.graphics.setFont(fonts.get(12))
                 love.graphics.printf("← Back", menuX + 20, backBtnY + 6, 100, "center")
             end
 
@@ -529,7 +530,7 @@ function drawAbilityMenu(w, h)
                 love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 8)
 
                 love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.setFont(love.graphics.newFont(16))
+                love.graphics.setFont(fonts.get(16))
                 love.graphics.printf("CONFIRM", btnX, btnY + 10, btnW, "center")
             end
         end
@@ -537,13 +538,13 @@ function drawAbilityMenu(w, h)
     end
 
     -- Original ability mode
-    love.graphics.setFont(love.graphics.newFont(14))
+    love.graphics.setFont(fonts.get(14))
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
     love.graphics.printf("Choose " .. abilityMenu.maxSelect .. " ability to unlock:", menuX, menuY + 50, menuW, "center")
 
     -- Selection count
     love.graphics.setColor(0.6, 0.9, 0.6, 1)
-    love.graphics.setFont(love.graphics.newFont(13))
+    love.graphics.setFont(fonts.get(13))
     love.graphics.printf("(" .. #abilityMenu.selected .. "/" .. abilityMenu.maxSelect .. " selected)", menuX, menuY + 70, menuW, "center")
 
     -- Ability items
@@ -574,7 +575,7 @@ function drawAbilityMenu(w, h)
         love.graphics.rectangle("line", ix, iy, iw, itemH, 6)
 
         love.graphics.setColor(1, 1, 1, isSelected and 1 or 0.7)
-        love.graphics.setFont(love.graphics.newFont(13))
+        love.graphics.setFont(fonts.get(13))
         love.graphics.print((isSelected and "✓ " or "  ") .. name, ix + 10, iy + 10)
     end
 
@@ -591,7 +592,7 @@ function drawAbilityMenu(w, h)
         love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 8)
 
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.setFont(love.graphics.newFont(16))
+        love.graphics.setFont(fonts.get(16))
         love.graphics.printf("CONFIRM", btnX, btnY + 10, btnW, "center")
     end
 end
@@ -601,9 +602,9 @@ function drawProgressionComplete(w, h)
     love.graphics.rectangle("fill", 0, 0, w, h)
 
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.setFont(love.graphics.newFont(26))
+    love.graphics.setFont(fonts.get(26))
     love.graphics.printf("PROGRESSION TEST", 0, h/2 - 90, w, "center")
-    love.graphics.setFont(love.graphics.newFont(32))
+    love.graphics.setFont(fonts.get(32))
     love.graphics.setColor(0.4, 1, 0.4, 1)
     love.graphics.printf("COMPLETE!", 0, h/2 - 40, w, "center")
 
@@ -616,7 +617,7 @@ function drawProgressionComplete(w, h)
     local btnY = h/2 + 50
     local btnHover = mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH
 
-    love.graphics.setFont(love.graphics.newFont(16))
+    love.graphics.setFont(fonts.get(16))
     love.graphics.setColor(btnHover and 0.4 or 0.2, btnHover and 0.25 or 0.15, btnHover and 0.2 or 0.1, 0.9)
     love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 8)
     love.graphics.setColor(0.6, 0.4, 0.2, btnHover and 0.8 or 0.4)
@@ -636,25 +637,21 @@ function drawHexGrid(state, cellOverlays)
     local gridH = hex.gridHeight
     if not gridW or not gridH then return end
 
+    local baseCells = hex:getSortedCells(state.terrainMap, state.config.WATER_Y_OFFSET)
+
+    -- Build frame-specific cells (add testView offset)
     local cells = {}
-    for row = 0, gridH - 1 do
-        for col = 0, gridW - 1 do
-            if hex:isActiveHex(col, row) then
-                local terrainType = state.terrainMap and state.terrainMap[col] and state.terrainMap[col][row] or "grass"
-                local cellX, cellY = hex:hexToPixel(col, row)
-                local yOffset = (terrainType == "water" or terrainType == "underwater_mines") and state.config.WATER_Y_OFFSET or 0
-                -- Test view: shift center cell up/down
-                local testY = 0
-                if testViewActive and col == hex.centerQ and row == hex.centerR then
-                    testY = testViewOffsetY
-                end
-                local depth = cellY + yOffset + testY
-                table.insert(cells, { q = col, r = row, x = cellX, y = cellY, terrain = terrainType, depth = depth, testY = testY })
-            end
+    for i, bc in ipairs(baseCells) do
+        local testY = 0
+        if testViewActive and bc.q == hex.centerQ and bc.r == hex.centerR then
+            testY = testViewOffsetY
         end
+        cells[i] = { q = bc.q, r = bc.r, x = bc.x, y = bc.y, terrain = bc.terrain, depth = bc.depth + testY, testY = testY }
     end
 
-    table.sort(cells, function(a, b) return a.depth < b.depth end)
+    if testViewActive then
+        table.sort(cells, function(a, b) return a.depth < b.depth end)
+    end
 
     for _, cell in ipairs(cells) do
         local drawY = cell.y + (cell.testY or 0)
@@ -862,9 +859,31 @@ function drawEntity(entity, state)
         end
         love.graphics.draw(entity.sprite, x, drawY, 0, finalScale, finalScale, sw/2, sh/2)
 
+        -- Cracks on damaged buildings (not 999 HP ones)
+        if entity:isBuilding() and entity.health > 0 and entity.health < entity.maxHealth and entity.maxHealth < 999 then
+            local crackAlpha = 0.7 * alpha
+            love.graphics.setColor(0.15, 0.1, 0.05, crackAlpha)
+            love.graphics.setLineWidth(2)
+            local cr = 12 * scale
+            -- Main crack
+            love.graphics.line(x - cr*0.3, drawY - cr*0.6, x + cr*0.1, drawY - cr*0.1, x - cr*0.2, drawY + cr*0.4)
+            -- Branch
+            if entity.health <= math.floor(entity.maxHealth / 2) then
+                love.graphics.line(x + cr*0.1, drawY - cr*0.1, x + cr*0.5, drawY + cr*0.2)
+            end
+            love.graphics.setLineWidth(1)
+        end
+
     else
         love.graphics.setColor(entity.color or {1, 1, 1, 1})
         love.graphics.circle("fill", x, y, 14)
+        -- Cracks on damaged buildings (fallback, no sprite)
+        if entity:isBuilding() and entity.health > 0 and entity.health < entity.maxHealth and entity.maxHealth < 999 then
+            love.graphics.setColor(0.15, 0.1, 0.05, 0.7 * alpha)
+            love.graphics.setLineWidth(2)
+            love.graphics.line(x - 4, y - 8, x + 2, y, x - 3, y + 6)
+            love.graphics.setLineWidth(1)
+        end
     end
 
     if entity.isDying then
@@ -981,7 +1000,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
 
     local infoY = panelY + panelH + 8
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
-    love.graphics.setFont(love.graphics.newFont(11))
+    love.graphics.setFont(fonts.get(11))
     love.graphics.print("Click green cells to place", panelX + 8, infoY)
     love.graphics.print("Click placed unit to select", panelX + 8, infoY + 16)
     love.graphics.print("Click two units to swap", panelX + 8, infoY + 32)
@@ -1009,7 +1028,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
     end
     love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 4)
     love.graphics.setColor(canConfirm and 1 or 0.5, 1, canConfirm and 1 or 0.5, canConfirm and 1 or 0.4)
-    love.graphics.setFont(love.graphics.newFont(12))
+    love.graphics.setFont(fonts.get(12))
     love.graphics.printf("Confirm Deployment" .. (canConfirm and "" or " (" .. #unplacedAllies .. " left)"), btnX, btnY + 6, btnW, "center")
 
     state.deployConfirmBtn = canConfirm and {x = btnX, y = btnY, w = btnW, h = btnH} or nil

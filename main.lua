@@ -26,6 +26,8 @@ global_abilities = require("system.global_abilities")
 shop = require("ui.shop")
 map_editor = require("editor.map_editor")
 require("core.game")
+local commanders = require("system.commanders")
+local trains_mod = require("system.trains")
 
 -- Logging: enable here (or via _G.LOG_ENABLED).
 -- Categories: ai, combat, effects, entity, env, game, input, objectives,
@@ -67,6 +69,7 @@ squadArmorBonus = 0
 disableEnemySpawn = false
 chaos = 0
 chaosMax = 5
+entityAt = {}
 unplacedAllies = {}
 isProgressionRun = false
 currentMapIndex = 1
@@ -357,13 +360,18 @@ function getPushDirChoices(stepX, stepY, stepZ)
     return {ccw, {x = stepX, y = stepY, z = stepZ}, cw}
 end
 
-function getEntityAtHex(q, r)
+function rebuildEntityIndex()
+    entityAt = {}
     for _, e in ipairs(entities) do
-        if e.q == q and e.r == r then
-            return e
+        if e.q and e.r then
+            entityAt[e.q .. "," .. e.r] = e
         end
     end
-    return nil
+    if ui then ui._moveRangeCacheKey = nil end
+end
+
+function getEntityAtHex(q, r)
+    return entityAt[q .. "," .. r]
 end
 
 function love.update(dt)
@@ -399,6 +407,7 @@ function love.update(dt)
     end
 
     combat.updatePushAnimations(dt, hex)
+    rebuildEntityIndex()
     if decayMessageTimer > 0 then
         decayMessageTimer = decayMessageTimer - dt
     end
@@ -454,7 +463,6 @@ function love.update(dt)
             end
             -- Commander exclusive artifacts
             if selectedCommander then
-                local commanders = require("system.commanders")
                 local cmd = commanders.get(selectedCommander)
                 if cmd and cmd.exclusiveArtifacts then
                     for _, cart in ipairs(cmd.exclusiveArtifacts) do
@@ -560,7 +568,6 @@ function getEnemyAttackOrder(entities, turnState)
                 table.insert(queue, e)
             end
         end
-        local trains_mod = require("system.trains")
         local trainGroups = trains_mod.getTrainGroups()
         for _, group in pairs(trainGroups) do
             if group.active and group.cars and #group.cars > 0 then

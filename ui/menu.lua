@@ -1,6 +1,7 @@
 local menu = {}
 local shop = require("ui.shop")
 local commanders = require("system.commanders")
+local fonts = require("util.fonts")
 
 local function loadMapList()
     local items = love.filesystem.getDirectoryItems("maps")
@@ -105,21 +106,21 @@ local function computeLayout(w, h)
     l.cmdNames = cmdNames
 
     local y = 10
-    local titleFont = love.graphics.newFont(math.max(14, math.floor(h * 0.025)))
+    local titleFont = fonts.get(math.max(14, math.floor(h * 0.025)))
     l.titleFont = titleFont
     l.titleY = y
     y = y + titleFont:getHeight() + 14
 
     -- Commanders (horizontal row of compact cards)
-    local cardFont = love.graphics.newFont(12)
-    local tinyFont = love.graphics.newFont(10)
+    local cardFont = fonts.get(12)
+    local tinyFont = fonts.get(10)
     l.cardFont = cardFont
     l.tinyFont = tinyFont
 
     l.cmdLabelY = y
     y = y + 18
     local cmdCardW = math.floor((contentW - (#cmdNames - 1) * 6) / #cmdNames)
-    local cmdCardH = 56
+    local cmdCardH = 40
     l.cmdCards = {}
     for i, name in ipairs(cmdNames) do
         l.cmdCards[i] = {
@@ -136,7 +137,7 @@ local function computeLayout(w, h)
     l.squadLabelY = y
     y = y + 18
     local squadCardW = math.floor((contentW - (#squads - 1) * 6) / #squads)
-    local squadCardH = 56
+    local squadCardH = 40
     l.squadCards = {}
     for i, squad in ipairs(squads) do
         l.squadCards[i] = {
@@ -149,7 +150,7 @@ local function computeLayout(w, h)
     y = y + squadCardH + 14
 
     -- Maps
-    local smallFont = love.graphics.newFont(11)
+    local smallFont = fonts.get(11)
     l.smallFont = smallFont
     l.mapLabelY = y
     y = y + 18
@@ -169,8 +170,8 @@ local function computeLayout(w, h)
     y = y + 6
 
     -- Bottom buttons (2×2 grid)
-    local btnH = 40
-    local btnGap = 8
+    local btnH = 50
+    local btnGap = 10
     local btnColW = math.floor((contentW - btnGap) / 2)
     l.btns = {}
     local btnDefs = {
@@ -255,8 +256,6 @@ function menu.draw()
         love.graphics.setColor(0.6, 0.6, 0.6, 0.7)
         love.graphics.setFont(l.tinyFont)
         love.graphics.printf(table.concat(cmd.startAbilities, ", "), card.x + 6, card.y + 19, card.w - 12, "center")
-        love.graphics.setColor(0.5, 0.5, 0.5, 0.6)
-        love.graphics.printf(cmd.desc, card.x + 6, card.y + 32, card.w - 12, "center")
     end
 
     -- Squad label
@@ -294,12 +293,6 @@ function menu.draw()
         love.graphics.setColor(0.7, 0.7, 0.7, 0.7)
         love.graphics.setFont(l.tinyFont)
         love.graphics.printf(unitNames, card.x + 6, card.y + 19, card.w - 12, "center")
-
-        local attackNames = getSquadAttackNames(i)
-        if #attackNames > 0 then
-            love.graphics.setColor(0.5, 0.5, 0.6, 0.5)
-            love.graphics.printf(table.concat(attackNames, ", "), card.x + 6, card.y + 32, card.w - 12, "center")
-        end
     end
 
     -- Map label
