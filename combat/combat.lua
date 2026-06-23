@@ -461,10 +461,10 @@ function combat.LineShotAttack:execute(attacker, targetQ, targetR, hex, entities
         pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
     end
     attack_effects.shoot(attacker, firstTarget, pushQ, pushR, hex)
+    self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
     if self.damage > 0 then
         self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
     end
-    self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
     combat.startPushAnimations(hex)
     attacker.hasActedThisTurn = true
     return true
@@ -512,13 +512,9 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
         secondPushQ, secondPushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
     end
     attack_effects.piercingShoot(attacker, firstTarget, secondTarget, firstPushQ, firstPushR, secondPushQ, secondPushR, hex)
-    if secondTarget then
-        self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil)
-    end
     if secondTarget and secondTarget.isPushable ~= false and secondHex then
         local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
         self:pushTargetToHex(secondTarget, secondHex.q, secondHex.r, pushQ, pushR, hex, entities, sounds)
-        -- Only update position immediately if target cell was free (no occupant, not edge)
         local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
         if hex:isActiveHex(pushQ, pushR) and not occupant then
             secondTarget.q = pushQ
@@ -526,6 +522,9 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
             secondTarget.currentDrawX = nil
             secondTarget.currentDrawY = nil
         end
+    end
+    if secondTarget then
+        self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil)
     end
     if firstTarget.isPushable ~= false then
         self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, entities, sounds)
@@ -1148,8 +1147,7 @@ function combat.VortexStrikeAttack:execute(attacker, targetQ, targetR, hex, enti
     if not destCell then return false, "No shift destination selected" end
     self._vortexDestCell = nil
     if not hex:isActiveHex(destCell.q, destCell.r) then return false, "Destination cell not active" end
-    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds)
-    if target.health > 0 and target.isPushable ~= false then
+    if target.isPushable ~= false then
         local occupant = combat.getEntityAtHex(destCell.q, destCell.r, entities)
         if occupant then
             combat.addCollisionBounceAnimation(target, targetQ, targetR, destCell.q, destCell.r, hex, entities, sounds, occupant)
@@ -1158,6 +1156,7 @@ function combat.VortexStrikeAttack:execute(attacker, targetQ, targetR, hex, enti
         end
         combat.startPushAnimations(hex)
     end
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds)
     attacker.hasActedThisTurn = true
     return true
 end
@@ -1589,10 +1588,7 @@ function combat.HeavyPunchAttack:execute(attacker, targetQ, targetR, hex, entiti
         status.removeFromEntity(attacker, "punch_charged")
         log.infof("combat", "%s lands a lethal Heavy Punch on %s!", attacker.name, target.name)
     else
-        self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
-    end
-
-    if target.health > 0 then
+        -- Push first, then damage
         local stepX, stepY, stepZ
         if self._pushDirOverride then
             stepX, stepY, stepZ = self._pushDirOverride.x, self._pushDirOverride.y, self._pushDirOverride.z
@@ -1605,6 +1601,7 @@ function combat.HeavyPunchAttack:execute(attacker, targetQ, targetR, hex, entiti
             self:pushTargetToHex(target, targetQ, targetR, pushQ, pushR, hex, entities, sounds)
             combat.startPushAnimations(hex)
         end
+        self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
     end
 
     attacker.hasActedThisTurn = true
@@ -1658,19 +1655,21 @@ function combat.EmpowerPunchAttack:execute(attacker, targetQ, targetR, hex, enti
         status.removeFromEntity(attacker, "punch_charged")
     end
 
-    if target.health > 0 then
-        local stepX, stepY, stepZ
-        if self._pushDirOverride then
-            stepX, stepY, stepZ = self._pushDirOverride.x, self._pushDirOverride.y, self._pushDirOverride.z
-            self._pushDirOverride = nil
-        else
-            stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
-        end
-        if stepX then
-            local pushQ, pushR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
-            self:pushTargetToHex(target, targetQ, targetR, pushQ, pushR, hex, entities, sounds)
-            combat.startPushAnimations(hex)
-        end
+    -- Push first, then damage
+    local stepX, stepY, stepZ
+    if self._pushDirOverride then
+        stepX, stepY, stepZ = self._pushDirOverride.x, self._pushDirOverride.y, self._pushDirOverride.z
+        self._pushDirOverride = nil
+    else
+        stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    end
+    if stepX then
+        local pushQ, pushR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+        self:pushTargetToHex(target, targetQ, targetR, pushQ, pushR, hex, entities, sounds)
+        combat.startPushAnimations(hex)
+    end
+    if punchCharged then
+        self:dealDamageToTarget(target, attacker, 1, entities, sounds, nil)
     end
 
     -- Charges the next Heavy Punch (lethal) or Empower Punch (+1 damage)

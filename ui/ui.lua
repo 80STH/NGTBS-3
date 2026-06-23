@@ -224,14 +224,205 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
     love.graphics.setColor(cr, cg, cb, ca)
     love.graphics.polygon("fill", tipX, tipY, lx, ly, rx, ry)
 end
--- Draw collision icon
+-- Draw collision icon (replaced by icon_cache system)
 function ui.drawCollisionIcon(x, y, damage, isDouble)
-    love.graphics.setColor(0.8, 0, 0, 1)
-    love.graphics.circle("fill", x, y, 12)
-    love.graphics.setColor(1, 1, 1, 1)
-    if damage and damage > 0 then
-        love.graphics.print(tostring(damage), x + 8, y - 6)
+end
+
+local icon_cache = require("ui.icon_cache")
+
+function ui.getEffectIcon(entity, damage)
+    if not entity or not entity.health or entity.health <= 0 or not damage or damage <= 0 then
+        return nil
     end
+    if entity:isBuilding() then
+        if entity.maxHealth >= 999 then return nil end
+        if damage >= entity.health then return "building_destruction" end
+        if damage >= 2 then return "heavy_building_damage" end
+        return "building_damage"
+    end
+    if damage >= entity.health then return "fatal_wound" end
+    if damage >= 2 then return "heavy_wound" end
+    return "wound"
+end
+
+function ui.drawPreviewIcons(hex, icons)
+    if not icons then return end
+    for _, ic in ipairs(icons) do
+        icon_cache.draw(ic.icon, ic.x, ic.y, 0.95)
+    end
+end
+
+function ui.collectPreviewIcons(hex, attacker, attack, hoverQ, hoverR, entities)
+    if not attack or not attacker then return nil end
+    local icons = {}
+    local entityDmg = {}  -- key → {entity, totalDmg}
+    local collisionIcons = {}  -- {x, y, icon}
+
+    local function addDamage(q, r, dmg)
+        if dmg <= 0 then return end
+        local key = q .. "," .. r
+        local e = getEntityAtHex(q, r, entities)
+        if e and e.health > 0 then
+            if not entityDmg[key] then entityDmg[key] = { entity = e, dmg = 0 } end
+            entityDmg[key].dmg = entityDmg[key].dmg + dmg
+        end
+    end
+
+    local function addCollisionIcon(fromQ, fromR, toQ, toR, iconName)
+        if not iconName then return end
+        local x1, y1 = getDrawCoords(fromQ, fromR)
+        local x2, y2 = getDrawCoords(toQ, toR)
+        collisionIcons[#collisionIcons + 1] = { x = (x1 + x2) / 2, y = (y1 + y2) / 2, icon = iconName }
+    end
+
+    if attack.getAffectedCells then
+        local cells = attack:getAffectedCells(attacker, hoverQ, hoverR, hex, entities)
+        for _, c in ipairs(cells) do
+            addDamage(c.q, c.r, c.damage or 1)
+        end
+    end
+
+    if attack.name == "Dash" then
+        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+        if stepX then
+            local firstTarget, targetHex = attack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+            if firstTarget and targetHex then
+                addDamage(targetHex.q, targetHex.r, attack.damage)
+                if firstTarget.isPushable and firstTarget.health > 0 then
+                    local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+                    local occ = getEntityAtHex(pushQ, pushR, entities)
+                    if occ and occ ~= attacker and occ.health > 0 then
+                        addDamage(pushQ, pushR, 1)
+                        addCollisionIcon(targetHex.q, targetHex.r, pushQ, pushR, "collision_damage")
+                    elseif not hex:isActiveHex(pushQ, pushR) then
+                        addCollisionIcon(targetHex.q, targetHex.r, pushQ, pushR, "collision_no_damage")
+                    end
+                end
+            end
+        end
+    elseif attack.name == "Shoot" or attack.name == "Push" or attack.name == "Piercing Shot" then
+        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+        if stepX then
+            local firstTarget, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+            if firstTarget and targetHex then
+                addDamage(targetHex.q, targetHex.r, attack.damage)
+                if firstTarget.isPushable and firstTarget.health > 0 then
+                    local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+                    local occ = getEntityAtHex(pushQ, pushR, entities)
+                    if occ and occ ~= attacker and occ.health > 0 then
+                        addDamage(pushQ, pushR, 1)
+                        addCollisionIcon(targetHex.q, targetHex.r, pushQ, pushR, "collision_damage")
+                    elseif not hex:isActiveHex(pushQ, pushR) then
+                        addCollisionIcon(targetHex.q, targetHex.r, pushQ, pushR, "collision_no_damage")
+                    end
+                end
+            end
+            if attack.name == "Piercing Shot" then
+                local _, _, secondTarget, secondHex = attack:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+                if secondTarget and secondHex then
+                    addDamage(secondHex.q, secondHex.r, 1)
+                    if secondTarget.isPushable and secondTarget.health > 0 then
+                        local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
+                        local occ = getEntityAtHex(pushQ, pushR, entities)
+                        if occ and occ ~= attacker and occ.health > 0 then
+                            addDamage(pushQ, pushR, 1)
+                            addCollisionIcon(secondHex.q, secondHex.r, pushQ, pushR, "collision_damage")
+                        elseif not hex:isActiveHex(pushQ, pushR) then
+                            addCollisionIcon(secondHex.q, secondHex.r, pushQ, pushR, "collision_no_damage")
+                        end
+                    end
+                end
+            end
+        end
+    elseif attack.name == "Vortex Strike" or attack.name == "Wide Vortex" then
+        local target = getEntityAtHex(hoverQ, hoverR, entities)
+        if target and target.health > 0 and target:isCharacter() and not target.isPlayable then
+            addDamage(hoverQ, hoverR, attack.damage)
+        end
+    elseif attack.name == "Ghost Bolt" then
+        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+        if stepX then
+            local firstTarget, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+            if firstTarget and targetHex then
+                addDamage(targetHex.q, targetHex.r, attack.damage)
+            end
+        end
+    elseif attack.name == "Bite" then
+        local target = getEntityAtHex(hoverQ, hoverR, entities)
+        if target and target.health > 0 then
+            addDamage(hoverQ, hoverR, attack.damage)
+        end
+    elseif attack.name == "Magic Bolt" then
+        local target = getEntityAtHex(hoverQ, hoverR, entities)
+        if target and target.health > 0 then
+            addDamage(hoverQ, hoverR, attack.damage)
+        end
+    elseif attack.name == "Cone Blast" then
+        local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+        if distance == 1 then
+            local dirQ, dirR = hoverQ - attacker.q, hoverR - attacker.r
+            local neighborsInDir = attack:getNeighborsInDirection(attacker.q, attacker.r, dirQ, dirR, hex)
+            for _, nb in ipairs(neighborsInDir) do
+                local e = getEntityAtHex(nb.q, nb.r, entities)
+                if e and e:isCharacter() and e.health > 0 then
+                    local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
+                    local nX, nY, nZ = hex_utils.axialToCube(nb.q, nb.r)
+                    local dX, dY, dZ = nX - aX, nY - aY, nZ - aZ
+                    local pushQ, pushR = hex_utils.applyCubeStep(nb.q, nb.r, dX, dY, dZ)
+                    local occ = getEntityAtHex(pushQ, pushR, entities)
+                    if occ and occ ~= attacker and occ.health > 0 then
+                        addDamage(pushQ, pushR, 1)
+                        addCollisionIcon(nb.q, nb.r, pushQ, pushR, "collision_damage")
+                    elseif not hex:isActiveHex(pushQ, pushR) then
+                        addCollisionIcon(nb.q, nb.r, pushQ, pushR, "collision_no_damage")
+                    end
+                end
+            end
+        end
+    elseif attack.name == "Stone Throw" then
+        local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+        if distance == 1 then
+            local target = getEntityAtHex(hoverQ, hoverR, entities)
+            if target and target.health > 0 then
+                addDamage(hoverQ, hoverR, attack.damage)
+            end
+            local dirQ, dirR = hoverQ - attacker.q, hoverR - attacker.r
+            local neighborsInDir = attack:getNeighborsInDirection(hoverQ, hoverR, dirQ, dirR, hex)
+            for _, nb in ipairs(neighborsInDir) do
+                local e = getEntityAtHex(nb.q, nb.r, entities)
+                if e and e:isCharacter() and e.health > 0 then
+                    local cX, cY, cZ = hex_utils.axialToCube(hoverQ, hoverR)
+                    local nX, nY, nZ = hex_utils.axialToCube(nb.q, nb.r)
+                    local dX, dY, dZ = nX - cX, nY - cY, nZ - cZ
+                    local pushQ, pushR = hex_utils.applyCubeStep(nb.q, nb.r, dX, dY, dZ)
+                    local occ = getEntityAtHex(pushQ, pushR, entities)
+                    if occ and occ ~= e and occ.health > 0 then
+                        addDamage(pushQ, pushR, 1)
+                        addCollisionIcon(nb.q, nb.r, pushQ, pushR, "collision_damage")
+                    elseif not hex:isActiveHex(pushQ, pushR) then
+                        addCollisionIcon(nb.q, nb.r, pushQ, pushR, "collision_no_damage")
+                    end
+                end
+            end
+        end
+    end
+
+    -- Build final icon list: damage icons on entity cells + collision icons on edges
+    for key, info in pairs(entityDmg) do
+        local e = info.entity
+        local q, r = key:match("^(%-?%d+),(%-?%d+)$")
+        q, r = tonumber(q), tonumber(r)
+        local iconName = ui.getEffectIcon(e, info.dmg)
+        if iconName then
+            local x, y = getDrawCoords(q, r)
+            icons[#icons + 1] = { q = q, r = r, icon = iconName, x = x, y = y }
+        end
+    end
+    for _, ci in ipairs(collisionIcons) do
+        icons[#icons + 1] = ci
+    end
+
+    return icons
 end
 -- ============================================================
 -- MAIN UI FUNCTIONS, CALLED FROM MAIN.LUA

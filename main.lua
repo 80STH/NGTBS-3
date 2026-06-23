@@ -270,6 +270,8 @@ function love.load()
     logicalH = love.graphics.getHeight() / dpiScale
     maxTurns = 5
     environment.loadUnitSprites()
+    local icon_cache = require("ui.icon_cache")
+    icon_cache.loadAll()
 
     restartButton = {
         x = 270, y = 0, width = 110, height = 30,
