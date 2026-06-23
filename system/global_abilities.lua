@@ -820,7 +820,6 @@ function WindTorrent.new()
         name = "Wind Torrent",
         key = "w",
         manaCost = 3,
-        manaCost = 3,
         button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
     }
