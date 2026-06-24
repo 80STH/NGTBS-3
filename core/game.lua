@@ -619,7 +619,7 @@ function processDigSites()
             local spots = findRandomEmptyCells(needed, function(q, r)
                 return status.hasDigSite(q, r) or status.hasNegativeHexStatus(q, r)
             end, 4)
-            local digTypes = isProgressionRun and { "Ghost", "Zombie", "Lich" } or { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }
+            local digTypes = { "Ghost", "Zombie", "Lich" }
             for _, spot in ipairs(spots) do
                 local spawnType = digTypes[love.math.random(1, #digTypes)]
                 status.setDigSite(spot.q, spot.r, 1, spawnType)

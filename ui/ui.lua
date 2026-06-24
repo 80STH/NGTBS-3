@@ -288,10 +288,10 @@ function ui.willKillByCollision(target, collisionDamage)
     return damage >= target.health
 end
 
-function ui.getEffectIcon(entity, attackDmg, collisionDmg, attacker, directionIndex, dist)
+function ui.getEffectIcon(entity, attackDmg, collisionDmg, attacker, directionIndex, dist, isPushed)
     if not entity or not entity.health or entity.health <= 0 then return nil end
     local totalDmg = (attackDmg or 0) + (collisionDmg or 0)
-    if totalDmg <= 0 then return nil end
+    if totalDmg <= 0 and not isPushed then return nil end
     if entity:isBuilding() then
         if entity.indestructible then return nil end
         if totalDmg >= entity.health then return "building_destruction" end
@@ -307,7 +307,7 @@ function ui.getEffectIcon(entity, attackDmg, collisionDmg, attacker, directionIn
         if remainingHP <= 0 then
             killed = true
         else
-            killed = ui.willKillByCollision(entity, collisionDmg)
+            killed = collisionDmg >= remainingHP or ui.willKillByCollision(entity, collisionDmg)
         end
     end
     if killed then return "fatal_wound" end
@@ -329,16 +329,23 @@ function ui.collectPreviewIcons(hex, attacker, attack, hoverQ, hoverR, entities)
     local collisionIcons = {}  -- {x, y, icon}
 
     local function addDamage(q, r, dmg, isCollision)
-        if dmg <= 0 then return end
         local key = q .. "," .. r
         local e = getEntityAtHex(q, r, entities)
         if e and e.health > 0 then
-            if not entityDmg[key] then entityDmg[key] = { entity = e, attackDmg = 0, collisionDmg = 0 } end
+            if not entityDmg[key] then entityDmg[key] = { entity = e, attackDmg = 0, collisionDmg = 0, isPushed = false } end
             if isCollision then
-                entityDmg[key].collisionDmg = entityDmg[key].collisionDmg + dmg
+                entityDmg[key].collisionDmg = entityDmg[key].collisionDmg + math.max(dmg, 0)
             else
-                entityDmg[key].attackDmg = entityDmg[key].attackDmg + dmg
+                entityDmg[key].attackDmg = entityDmg[key].attackDmg + math.max(dmg, 0)
             end
+        end
+    end
+    local function markPushed(q, r)
+        local key = q .. "," .. r
+        local e = getEntityAtHex(q, r, entities)
+        if e and e.health > 0 then
+            if not entityDmg[key] then entityDmg[key] = { entity = e, attackDmg = 0, collisionDmg = 0, isPushed = false } end
+            entityDmg[key].isPushed = true
         end
     end
 
@@ -368,6 +375,7 @@ function ui.collectPreviewIcons(hex, attacker, attack, hoverQ, hoverR, entities)
             if firstTarget and targetHex then
                 addDamage(targetHex.q, targetHex.r, attack.damage, false)
                 if firstTarget.isPushable and firstTarget.health > 0 then
+                    markPushed(targetHex.q, targetHex.r)
                     local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
                     local occ = getEntityAtHex(pushQ, pushR, entities)
                     if occ and occ ~= attacker and occ.health > 0 and not occ.noCollisionDamage then
@@ -377,7 +385,8 @@ function ui.collectPreviewIcons(hex, attacker, attack, hoverQ, hoverR, entities)
                     elseif occ and occ.noCollisionDamage then
                         addCollisionIcon(targetHex.q, targetHex.r, pushQ, pushR, "collision_no_damage")
                     elseif not hex:isActiveHex(pushQ, pushR) then
-                        addCollisionIcon(targetHex.q, targetHex.r, pushQ, pushR, "collision_no_damage")
+                        addDamage(targetHex.q, targetHex.r, 1, true)
+                        addCollisionIcon(targetHex.q, targetHex.r, pushQ, pushR, "collision_damage")
                     end
                 end
             end
@@ -389,6 +398,9 @@ function ui.collectPreviewIcons(hex, attacker, attack, hoverQ, hoverR, entities)
             if firstTarget and targetHex then
                 addDamage(targetHex.q, targetHex.r, attack.damage, false)
                 if firstTarget.isPushable and firstTarget.health > 0 then
+                    if attack.name == "Push" then
+                        markPushed(targetHex.q, targetHex.r)
+                    end
                     local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
                     local occ = getEntityAtHex(pushQ, pushR, entities)
                     if occ and occ ~= attacker and occ.health > 0 and not occ.noCollisionDamage then
@@ -398,7 +410,8 @@ function ui.collectPreviewIcons(hex, attacker, attack, hoverQ, hoverR, entities)
                     elseif occ and occ.noCollisionDamage then
                         addCollisionIcon(targetHex.q, targetHex.r, pushQ, pushR, "collision_no_damage")
                     elseif not hex:isActiveHex(pushQ, pushR) then
-                        addCollisionIcon(targetHex.q, targetHex.r, pushQ, pushR, "collision_no_damage")
+                        addDamage(targetHex.q, targetHex.r, 1, true)
+                        addCollisionIcon(targetHex.q, targetHex.r, pushQ, pushR, "collision_damage")
                     end
                 end
             end
@@ -407,6 +420,7 @@ function ui.collectPreviewIcons(hex, attacker, attack, hoverQ, hoverR, entities)
                 if secondTarget and secondHex then
                     addDamage(secondHex.q, secondHex.r, 1, false)
                     if secondTarget.isPushable and secondTarget.health > 0 then
+                        markPushed(secondHex.q, secondHex.r)
                         local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
                         local occ = getEntityAtHex(pushQ, pushR, entities)
                         if occ and occ ~= attacker and occ.health > 0 and not occ.noCollisionDamage then
@@ -416,7 +430,8 @@ function ui.collectPreviewIcons(hex, attacker, attack, hoverQ, hoverR, entities)
                         elseif occ and occ.noCollisionDamage then
                             addCollisionIcon(secondHex.q, secondHex.r, pushQ, pushR, "collision_no_damage")
                         elseif not hex:isActiveHex(pushQ, pushR) then
-                            addCollisionIcon(secondHex.q, secondHex.r, pushQ, pushR, "collision_no_damage")
+                            addDamage(secondHex.q, secondHex.r, 1, true)
+                            addCollisionIcon(secondHex.q, secondHex.r, pushQ, pushR, "collision_damage")
                         end
                     end
                 end
@@ -507,7 +522,7 @@ function ui.collectPreviewIcons(hex, attacker, attack, hoverQ, hoverR, entities)
         local q, r = key:match("^(%-?%d+),(%-?%d+)$")
         q, r = tonumber(q), tonumber(r)
         local d = hex:getDistance(attacker.q, attacker.r, q, r)
-        local iconName = ui.getEffectIcon(e, info.attackDmg, info.collisionDmg, attacker, nil, d)
+        local iconName = ui.getEffectIcon(e, info.attackDmg, info.collisionDmg, attacker, nil, d, info.isPushed)
         if iconName then
             local x, y = getDrawCoords(q, r)
             icons[#icons + 1] = { q = q, r = r, icon = iconName, x = x, y = y }
@@ -914,7 +929,9 @@ end
                 if targetHex then
                     pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
                     isEdge = not hex:isActiveHex(pushQ, pushR)
-                    if not isEdge then
+                    if isEdge then
+                        totalDamage = totalDamage + 1
+                    else
                         local collisionDamage, reason, second = ui.checkCollisionDamage(
                             firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities
                         )
@@ -929,8 +946,13 @@ end
                 if firstTarget:isBuilding() then
                 end
                 
-                if targetHex and not isEdge and firstTarget.isPushable then
-                    if not combat.getEntityAtHex(pushQ, pushR, entities) then
+                if targetHex and firstTarget.isPushable then
+                    if isEdge then
+                        love.graphics.setColor(1, 0.3, 0.3, 0.7)
+                        love.graphics.setLineWidth(2)
+                        love.graphics.circle("line", targetX, targetY, hex.radius * 0.5)
+                        love.graphics.setLineWidth(1)
+                    elseif not combat.getEntityAtHex(pushQ, pushR, entities) then
                         local pushX, pushY = getDrawCoords(pushQ, pushR)
                         ui.drawPushArrow(targetX, targetY, pushX, pushY, nil, nil, nil, nil, firstTarget.q, firstTarget.r, pushQ, pushR)
                     else

@@ -122,6 +122,25 @@ return function(ui)
         love.graphics.setBlendMode("alpha")
     end
 
+    function ui.drawRootedOnEntity(x, y, radius, time)
+        local t = time * 3
+        love.graphics.setBlendMode("add")
+        for i = 1, 6 do
+            local angle = (i / 6) * math.pi * 2 + t
+            local len = radius * 0.4 + radius * 0.2 * math.sin(t * 2 + i)
+            local rx = x + math.cos(angle) * len
+            local ry = y + math.sin(angle) * len
+            local rs = radius * 0.12 * (0.6 + 0.4 * math.sin(t * 4 + i * 2))
+            love.graphics.setColor(0.4, 0.7, 0.1, 0.6 + 0.3 * math.sin(t * 3 + i))
+            love.graphics.circle("fill", rx, ry, rs)
+        end
+        love.graphics.setColor(0.2, 0.5, 0.05, 0.2 + 0.1 * math.sin(t * 2))
+        love.graphics.circle("fill", x, y, radius * 0.7)
+        love.graphics.setColor(0.6, 0.8, 0.2, 0.4)
+        love.graphics.circle("line", x, y, radius * 0.8 + 2 * math.sin(t * 3))
+        love.graphics.setBlendMode("alpha")
+    end
+
     function ui.drawEntityStatusEffects(x, y, entity, radius, time)
         local statuses = status.getEntityStatuses(entity)
         if #statuses == 0 then return end
@@ -136,6 +155,9 @@ return function(ui)
         end
         if status.hasEntityStatus(entity, "empowered") then
             ui.drawEmpoweredOnEntity(x, y, radius, time)
+        end
+        if status.hasEntityStatus(entity, "rooted") then
+            ui.drawRootedOnEntity(x, y, radius, time)
         end
     end
 
