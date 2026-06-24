@@ -45,6 +45,9 @@ function ui.getEffectiveMoveRange(actor, entities, hex)
     if status and status.hasEntityStatus and status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
         return 0
     end
+    if status and status.hasEntityStatus and status.hasEntityStatus(actor, "stasis") then
+        return 0
+    end
     local base = actor.moveRange or 0
     if status and status.hasEntityStatus and status.hasEntityStatus(actor, "empowered") then
         base = base + 1

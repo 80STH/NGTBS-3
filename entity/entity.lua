@@ -142,6 +142,9 @@ function Entity:takeDamage(damage)
     if self.indestructible then
         return false
     end
+    if status.hasEntityStatus(self, "stasis") then
+        return false
+    end
     -- Apply squad armor bonus (for playable characters)
     if self.isPlayable and (_G.squadArmorBonus or 0) > 0 then
         damage = math.max(0, damage - _G.squadArmorBonus)
@@ -189,6 +192,14 @@ end
 -- Start death animation
 function Entity:startDeath()
     if self.isDying then return end
+    if status.hasEntityStatus(self, "stasis") then return end
+    if self.isPlayable then
+        self.health = 0
+        self.hasActedThisTurn = true
+        status.applyToEntity(self, "stasis")
+        log.infof("entity", "%s enters stasis!", self.name)
+        return
+    end
     self.isDying = true
     self.deathTimer = 0
     self.health = 0

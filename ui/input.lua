@@ -137,7 +137,8 @@ end
         if turnState.phase == "player" then
             local hasActive = false
             for _, e in ipairs(entities) do
-                if e.isPlayable and e.health > 0 and not e.hasActedThisTurn then
+                if e.isPlayable and e.health > 0 and not e.hasActedThisTurn
+                    and not (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis")) then
                     hasActive = true
                     break
                 end
@@ -372,7 +373,8 @@ end
 
     if selectedActor and not selectedActor.isMoving then
         local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(selectedActor, "rooted") and not selectedActor.rootImmune
-        local canMove = not isRooted and (not selectedActor.hasActedThisTurn or selectedActor.canMoveAfterAttack) and (not selectedActor.hasMovedThisTurn or selectedActor.canMoveAfterAttack)
+        local isStasis = status and status.hasEntityStatus and status.hasEntityStatus(selectedActor, "stasis")
+        local canMove = not isRooted and not isStasis and (not selectedActor.hasActedThisTurn or selectedActor.canMoveAfterAttack) and (not selectedActor.hasMovedThisTurn or selectedActor.canMoveAfterAttack)
         if canMove then
             performMove(selectedActor, tq, tr)
             hex.selectedQ, hex.selectedR = selectedActor.q, selectedActor.r
@@ -492,7 +494,8 @@ function input.keypressed(key)
         if turnState.phase == "player" and (not selectedActor or not selectedActor.isMoving) then
             local actors = {}
             for _, e in ipairs(entities) do
-                if e.isPlayable and e.health > 0 then
+                if e.isPlayable and e.health > 0
+                    and not (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis")) then
                     table.insert(actors, e)
                 end
             end

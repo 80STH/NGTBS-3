@@ -398,25 +398,10 @@ end
 function checkGameEnd()
     if not gameActive then return end
 
-    local anyAlly = false
-    for _, e in ipairs(entities) do
-        if e.isPlayable and e.health > 0 and not e.isDying then
-            anyAlly = true
-            break
-        end
-    end
     if (chaos or 0) >= chaosMax then
         loss = true
         gameActive = false
         log.warn("game", "DEFEAT: Chaos has consumed the realm!")
-        syncState()
-        return
-    end
-
-    if not anyAlly then
-        loss = true
-        gameActive = false
-        log.warn("game", "DEFEAT: All allies destroyed!")
         syncState()
         return
     end
@@ -578,7 +563,7 @@ function processDigSites()
     end
 
     for i = #entities, 1, -1 do
-        if entities[i].health <= 0 then
+        if entities[i].health <= 0 and not status.hasEntityStatus(entities[i], "stasis") then
             local e = entities[i]
             if e:isObstacle() and not e.indestructible then
                 if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end

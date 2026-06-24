@@ -633,8 +633,12 @@ function HealAbility:onClickHex(q, r, hex, state)
         end
     end
 
-    if not target or target.health <= 0 or target:isBuilding() then
+    if not target or target:isBuilding() then
         log.warn("abilities", "No valid target!")
+        return true
+    end
+    if target.health <= 0 and not status.hasEntityStatus(target, "stasis") then
+        log.warn("abilities", "Cannot heal dead units!")
         return true
     end
 
@@ -644,8 +648,15 @@ function HealAbility:onClickHex(q, r, hex, state)
         return true
     end
 
+    local wasStasis = status.hasEntityStatus(target, "stasis")
     target.health = target.maxHealth
     status.entityStatuses[target] = nil
+    if wasStasis then
+        target.hasActedThisTurn = false
+        target.hasMovedThisTurn = false
+        target.canMoveAfterAttack = false
+        log.infof("abilities", "%s revived from stasis!", tostring(target.name))
+    end
     if status.hasAtHex(target.q, target.r, "fire") then
         status.removeFromHex(target.q, target.r, "fire")
         log.info("abilities", "Fire on the ground extinguished!")
@@ -720,8 +731,12 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
                 break
             end
         end
-        if not target or not target.isPlayable or target.health <= 0 then
+        if not target or not target.isPlayable then
             log.warn("abilities", "No valid ally at this cell!")
+            return true
+        end
+        if target.health <= 0 and not status.hasEntityStatus(target, "stasis") then
+            log.warn("abilities", "Cannot target dead units!")
             return true
         end
         self.target = target
@@ -767,11 +782,19 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
         end
 
         -- Remove all negative statuses
+        local wasStasis = status.hasEntityStatus(self.target, "stasis")
         local statuses = status.getEntityStatuses(self.target)
         for _, st in ipairs(statuses) do
             if st ~= "empowered" then
                 status.removeFromEntity(self.target, st)
             end
+        end
+        if wasStasis then
+            self.target.health = 1
+            self.target.hasActedThisTurn = false
+            self.target.hasMovedThisTurn = false
+            self.target.canMoveAfterAttack = false
+            log.infof("abilities", "%s revived from stasis with 1 HP!", tostring(self.target.name))
         end
         if status.hasAtHex(self.target.q, self.target.r, "fire") then
             status.removeFromHex(self.target.q, self.target.r, "fire")

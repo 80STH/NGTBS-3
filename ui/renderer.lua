@@ -841,6 +841,12 @@ function drawEntity(entity, state)
         love.graphics.setColor(1, 1, 1, alpha)
     end
 
+    local inStasis = status.hasEntityStatus(entity, "stasis")
+    if inStasis then
+        alpha = 0.7
+        love.graphics.setColor(0.3, 0.5, 1, alpha)
+    end
+
     local wounded = entity:isCharacter() and entity.health > 0 and entity.health < entity.maxHealth
 
     -- Highlight shuntable train cars
@@ -863,7 +869,7 @@ function drawEntity(entity, state)
         if entity:isObstacle() or entity:isBuilding() then
             drawY = y - 6
         end
-        if wounded then
+        if wounded and not inStasis then
             love.graphics.setColor(1, 0.3, 0.3, alpha)
         elseif shuntHighlight then
             love.graphics.setColor(0.3, 0.6, 1, alpha)
@@ -914,8 +920,12 @@ function drawEntity(entity, state)
 
     drawActionIndicator(entity, x, y)
 
-    if state.selectedActor == entity and entity:isCharacter() and not entity.isDying then
-        love.graphics.setColor(1, 1, 0, 0.8)
+    if state.selectedActor == entity and entity:isCharacter() then
+        if inStasis then
+            love.graphics.setColor(0.4, 0.6, 1, 0.8)
+        elseif not entity.isDying then
+            love.graphics.setColor(1, 1, 0, 0.8)
+        end
         love.graphics.circle("line", x, y, 22)
         love.graphics.setColor(1, 1, 1, 1)
     end

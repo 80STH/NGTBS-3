@@ -2113,6 +2113,10 @@ function performMove(actor, targetQ, targetR)
         log.infof("combat", "%s is rooted by a Zombie and cannot move!", actor.name)
         return false
     end
+    if status.hasEntityStatus(actor, "stasis") then
+        log.infof("combat", "%s is in stasis and cannot move!", actor.name)
+        return false
+    end
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return false end
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then
         log.debugf("combat", "%s has already moved this turn!", actor.name)
@@ -2240,6 +2244,10 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
     if not attacker.isPlayable then
         log.debug("combat", "Not a playable character")
         return false, "Not a playable character"
+    end
+    if status.hasEntityStatus(attacker, "stasis") then
+        log.infof("combat", "%s is in stasis and cannot attack!", attacker.name)
+        return false, "Unit is in stasis"
     end
     if attacker.hasActedThisTurn then
         log.debug("combat", "Already acted this turn")

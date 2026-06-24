@@ -92,7 +92,8 @@ return function(ui)
         if btn.isHovered and isPlayerTurn then
             local unitsLeft = {}
             for _, e in ipairs(entities) do
-                if e.isPlayable and e.health > 0 and not e.hasActedThisTurn then
+                if e.isPlayable and e.health > 0 and not e.hasActedThisTurn
+                    and not (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis")) then
                     table.insert(unitsLeft, e.name)
                 end
             end
