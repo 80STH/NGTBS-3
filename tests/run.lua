@@ -42,7 +42,8 @@ end
 -- Загружаем все suites
 local suite1 = require("tests.hex_utils_test")
 local suite2 = require("tests.cell_rules_test")
-local suites = { suite1, suite2 }
+local suite3 = require("tests.attack_preview_test")
+local suites = { suite1, suite2, suite3 }
 
 for _, s in ipairs(suites) do
     runSuite(s)
