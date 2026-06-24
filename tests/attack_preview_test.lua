@@ -201,5 +201,21 @@ return {
                 return true
             end
         },
+        {
+            name = "shoot 2 damage vs 2 hp target is fatal",
+            fn = function()
+                local attacker = makeChar("A", 0, 0, 3, true)
+                local target   = makeChar("T", 1, 0, 2, false)
+                local wall     = makeBuilding("Wall", 2, 0, 5)
+                local entities = { attacker, target, wall }
+                local p = preview.compute(mockHex, attacker, shootAttack(), 2, 0, entities)
+                local info = p.damages["1,0"]
+                if not info then return false, "no damage entry for target" end
+                if info.totalDamage ~= 2 then return false, "expected total 2, got " .. tostring(info.totalDamage) end
+                local icon = preview.getDamageIcon(target, info.totalDamage)
+                if icon ~= "fatal_wound" then return false, "expected fatal_wound, got " .. tostring(icon) end
+                return true
+            end
+        },
     }
 }
