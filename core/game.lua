@@ -35,7 +35,7 @@ function restartGame(mapPath)
     -- Load native format map
     local mapData = love.filesystem.load(mapPath)()
     local mapActiveRadius, mapCenterQ, mapCenterR
-    terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation = environment.loadNativeMap(mapData)
+    terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation, upperTerrainMap = environment.loadNativeMap(mapData)
     mapActiveRadius = mapData and mapData.activeRadius or config.ACTIVE_RADIUS
     mapCenterQ = mapData and mapData.centerQ or math.floor(width / 2)
     mapCenterR = mapData and mapData.centerR or math.floor(height / 2)
@@ -491,6 +491,17 @@ function updateDeathAnimations(dt)
                     ruined.sprite = environment.generateBuildingSprite("RuinedMountainHouse", hex.tileWidth, hex.tileHeight)
                     table.insert(entities, ruined)
                 end
+
+                -- Place upper_terrain rubble for destroyed buildings/obstacles
+                if e:isObstacle() and not e.indestructible then
+                    if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
+                    upperTerrainMap[e.q][e.r] = "mountain_rubble"
+                elseif e:isBuilding() and not e.isTrainCar
+                    and e.name ~= "Tunnel" and e.name ~= "OccupiedTunnel" then
+                    if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
+                    upperTerrainMap[e.q][e.r] = "building_rubble"
+                end
+
                 table.remove(entities, i)
             end
         end
@@ -568,6 +579,15 @@ function processDigSites()
 
     for i = #entities, 1, -1 do
         if entities[i].health <= 0 then
+            local e = entities[i]
+            if e:isObstacle() and not e.indestructible then
+                if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
+                upperTerrainMap[e.q][e.r] = "mountain_rubble"
+            elseif e:isBuilding() and not e.isTrainCar
+                and e.name ~= "Tunnel" and e.name ~= "OccupiedTunnel" then
+                if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
+                upperTerrainMap[e.q][e.r] = "building_rubble"
+            end
             table.remove(entities, i)
         end
     end

@@ -664,6 +664,10 @@ function drawHexGrid(state, cellOverlays)
         local drawY = cell.y + (cell.testY or 0)
         local yOffset = (cell.terrain == "water" or cell.terrain == "underwater_mines") and state.config.WATER_Y_OFFSET or 0
         hex:drawTerrainHex(cell.q, cell.r, cell.terrain, cell.x, drawY)
+        local upperType = state.upperTerrainMap[cell.q] and state.upperTerrainMap[cell.q][cell.r]
+        if upperType then
+            hex:drawUpperTerrain(cell.q, cell.r, upperType, cell.x, drawY, yOffset)
+        end
         local hexStatuses = status.getAtHex(cell.q, cell.r)
         if #hexStatuses > 0 then
             ui.drawCellStatusEffects(cell.x, drawY + yOffset, hex.radius, hexStatuses, love.timer.getTime())

@@ -159,7 +159,8 @@ local EDITOR_CENTER = 5
 editor.LAYER_TERRAIN = 1
 editor.LAYER_ENTITY = 2
 editor.LAYER_STATUS = 3
-editor.layerNames = { "Terrain", "Entity", "Status" }
+editor.LAYER_UPPER_TERRAIN = 4
+editor.layerNames = { "Terrain", "Entity", "Status", "Upper" }
 
 -- Terrain palette: { id, display name }
 editor.terrainPalette = {
@@ -174,6 +175,11 @@ editor.terrainPalette = {
     { id = "underwater_mines", name = "Mines" },
     { id = "railway",          name = "Railway" },
     { id = "emptiness",        name = "Empty" },
+}
+
+editor.upperTerrainPalette = {
+    { id = "mountain_rubble", name = "MtnRubble" },
+    { id = "building_rubble", name = "BldRubble" },
 }
 
 -- Entity palette: { id, display name, type, color hint }
@@ -225,6 +231,7 @@ editor.eraser = false
 editor.terrainData = {}   -- terrainData["q,r"] = terrainId
 editor.entityData = {}    -- entityData["q,r"] = entityId
 editor.statusData = {}    -- statusData["q,r"] = { statusId, ... }
+editor.upperTerrainData = {}  -- upperTerrainData["q,r"] = upperTerrainId
 
 -- UI state
 editor.paletteScroll = 0
@@ -279,10 +286,12 @@ function editor.init()
     editor.terrainData = {}
     editor.entityData = {}
     editor.statusData = {}
+    editor.upperTerrainData = {}
     editor.currentLayer = editor.LAYER_TERRAIN
     editor.selectedTerrain = "grass"
     editor.selectedEntity = "Warrior"
     editor.selectedStatus = "fire"
+    editor.selectedUpperTerrain = "mountain_rubble"
     editor.eraser = false
     editor.message = nil
     editor.messageTimer = 0
@@ -320,8 +329,8 @@ end
 -- UNDO / REDO
 -- ============================================================
 
-local function deepCopyMap(t, e, s)
-    local tc, ec, sc = {}, {}, {}
+local function deepCopyMap(t, e, s, u)
+    local tc, ec, sc, uc = {}, {}, {}, {}
     for k, v in pairs(t) do tc[k] = v end
     for k, v in pairs(e) do ec[k] = v end
     for k, v in pairs(s) do
@@ -333,12 +342,13 @@ local function deepCopyMap(t, e, s)
             sc[k] = v
         end
     end
-    return tc, ec, sc
+    for k, v in pairs(u) do uc[k] = v end
+    return tc, ec, sc, uc
 end
 
 function editor.pushUndo()
-    local t, e, s = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData)
-    table.insert(editor.undoStack, { terrain = t, entities = e, statuses = s })
+    local t, e, s, u = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData, editor.upperTerrainData)
+    table.insert(editor.undoStack, { terrain = t, entities = e, statuses = s, upperTerrain = u })
     if #editor.undoStack > editor.maxUndo then
         table.remove(editor.undoStack, 1)
     end
@@ -352,13 +362,14 @@ function editor.undo()
         return
     end
     -- Save current state to redo
-    local t, e, s = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData)
-    table.insert(editor.redoStack, { terrain = t, entities = e, statuses = s })
+    local t, e, s, u = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData, editor.upperTerrainData)
+    table.insert(editor.redoStack, { terrain = t, entities = e, statuses = s, upperTerrain = u })
     -- Restore
     local snap = table.remove(editor.undoStack)
     editor.terrainData = snap.terrain
     editor.entityData = snap.entities
     editor.statusData = snap.statuses
+    editor.upperTerrainData = snap.upperTerrain or {}
 end
 
 function editor.redo()
@@ -368,13 +379,14 @@ function editor.redo()
         return
     end
     -- Save current state to undo
-    local t, e, s = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData)
-    table.insert(editor.undoStack, { terrain = t, entities = e, statuses = s })
+    local t, e, s, u = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData, editor.upperTerrainData)
+    table.insert(editor.undoStack, { terrain = t, entities = e, statuses = s, upperTerrain = u })
     -- Restore
     local snap = table.remove(editor.redoStack)
     editor.terrainData = snap.terrain
     editor.entityData = snap.entities
     editor.statusData = snap.statuses
+    editor.upperTerrainData = snap.upperTerrain or {}
 end
 
 -- ============================================================
@@ -385,6 +397,7 @@ function editor.loadMap(data)
     editor.terrainData = {}
     editor.entityData = {}
     editor.statusData = {}
+    editor.upperTerrainData = {}
 
     if data.terrain then
         for key, val in pairs(data.terrain) do
@@ -399,6 +412,11 @@ function editor.loadMap(data)
     if data.statuses then
         for key, val in pairs(data.statuses) do
             editor.statusData[key] = val
+        end
+    end
+    if data.upper_terrain then
+        for key, val in pairs(data.upper_terrain) do
+            editor.upperTerrainData[key] = val
         end
     end
 
@@ -435,6 +453,7 @@ function editor.getMapData()
         terrain = {},
         entities = {},
         statuses = {},
+        upper_terrain = {},
     }
     for key, val in pairs(editor.terrainData) do
         data.terrain[key] = val
@@ -444,6 +463,9 @@ function editor.getMapData()
     end
     for key, val in pairs(editor.statusData) do
         data.statuses[key] = val
+    end
+    for key, val in pairs(editor.upperTerrainData) do
+        data.upper_terrain[key] = val
     end
 
     data.objectives = {}
@@ -497,6 +519,13 @@ function editor.saveMap()
             end
             table.insert(lines, string.format('    ["%s"] = {%s},', key, table.concat(items, ", ")))
         end
+    end
+    table.insert(lines, "  },")
+
+    -- Upper terrain (visual debris layer)
+    table.insert(lines, "  upper_terrain = {")
+    for key, val in pairs(data.upper_terrain) do
+        table.insert(lines, string.format('    ["%s"] = "%s",', key, val))
     end
     table.insert(lines, "  },")
 
@@ -578,6 +607,12 @@ function editor.paintCell(q, r)
                 editor.statusData[k] = existing
             end
         end
+    elseif editor.currentLayer == editor.LAYER_UPPER_TERRAIN then
+        if editor.eraser then
+            editor.upperTerrainData[k] = nil
+        else
+            editor.upperTerrainData[k] = editor.selectedUpperTerrain
+        end
     end
 end
 
@@ -603,10 +638,10 @@ end
 
 function editor.getLayerTabRects()
     local px, py, pw, _ = editor.getPaletteRect()
-    local tabW = math.floor(pw / 3)
+    local tabW = math.floor(pw / 4)
     local tabH = 30
     local rects = {}
-    for i = 1, 3 do
+    for i = 1, 4 do
         rects[i] = { x = px + (i - 1) * tabW, y = py, w = tabW, h = tabH }
     end
     return rects
@@ -617,6 +652,8 @@ function editor.getTileItems()
         return editor.terrainPalette
     elseif editor.currentLayer == editor.LAYER_ENTITY then
         return editor.entityPalette
+    elseif editor.currentLayer == editor.LAYER_UPPER_TERRAIN then
+        return editor.upperTerrainPalette
     else
         return editor.statusPalette
     end
@@ -627,6 +664,8 @@ function editor.getSelectedItem()
         return editor.selectedTerrain
     elseif editor.currentLayer == editor.LAYER_ENTITY then
         return editor.selectedEntity
+    elseif editor.currentLayer == editor.LAYER_UPPER_TERRAIN then
+        return editor.selectedUpperTerrain
     else
         return editor.selectedStatus
     end
@@ -676,6 +715,8 @@ function editor.mousepressed(x, y, button)
                     editor.selectedTerrain = item.id
                 elseif editor.currentLayer == editor.LAYER_ENTITY then
                     editor.selectedEntity = item.id
+                elseif editor.currentLayer == editor.LAYER_UPPER_TERRAIN then
+                    editor.selectedUpperTerrain = item.id
                 else
                     editor.selectedStatus = item.id
                 end
@@ -838,6 +879,7 @@ function editor.keypressed(key)
     if key == "1" then editor.currentLayer = editor.LAYER_TERRAIN
     elseif key == "2" then editor.currentLayer = editor.LAYER_ENTITY
     elseif key == "3" then editor.currentLayer = editor.LAYER_STATUS
+    elseif key == "4" then editor.currentLayer = editor.LAYER_UPPER_TERRAIN
     elseif key == "e" then editor.eraser = not editor.eraser
     elseif key == "escape" then
         editor.cleanup()
@@ -898,6 +940,11 @@ local terrainColors = {
     railway          = {0.35, 0.3, 0.25},
 }
 
+local upperTerrainColors = {
+    mountain_rubble  = {0.42, 0.38, 0.33},
+    building_rubble  = {0.5, 0.33, 0.18},
+}
+
 function editor.draw()
     if not editor.hex then return end
 
@@ -921,6 +968,13 @@ function editor.draw()
                 love.graphics.setColor(0, 0, 0, 0.4)
                 love.graphics.setLineWidth(1)
                 love.graphics.polygon("line", verts)
+
+                -- Upper terrain indicator
+                local upperType = editor.upperTerrainData[k]
+                if upperType then
+                    local uCol = upperTerrainColors[upperType] or {0.5, 0.5, 0.5}
+                    editor.hex:drawUpperTerrain(q, r, upperType, x, y, 0)
+                end
 
                 -- Entity indicator
                 local entityId = editor.entityData[k]
@@ -1019,6 +1073,8 @@ function editor.draw()
         local bgCol
         if editor.currentLayer == editor.LAYER_TERRAIN then
             bgCol = terrainColors[item.id] or {0.3, 0.3, 0.3}
+        elseif editor.currentLayer == editor.LAYER_UPPER_TERRAIN then
+            bgCol = upperTerrainColors[item.id] or {0.5, 0.5, 0.5}
         elseif editor.currentLayer == editor.LAYER_ENTITY then
             bgCol = item.color or {0.5, 0.5, 0.5}
         else

@@ -485,6 +485,21 @@ function environment.loadNativeMap(data)
         end
     end
 
+    -- Load upper terrain (visual debris layer)
+    local upperTerrainMap = {}
+    if data.upper_terrain then
+        for key, value in pairs(data.upper_terrain) do
+            local q, r = key:match("^(%d+),(%d+)$")
+            if q and r then
+                q, r = tonumber(q), tonumber(r)
+                if tempHex:isActiveHex(q, r) then
+                    if not upperTerrainMap[q] then upperTerrainMap[q] = {} end
+                    upperTerrainMap[q][r] = value
+                end
+            end
+        end
+    end
+
     -- Load entities
     if data.entities then
         for key, entityName in pairs(data.entities) do
@@ -593,7 +608,7 @@ function environment.loadNativeMap(data)
     log.infof("env", "Native map loaded: %dx%d, radius=%d", width, height, activeRadius)
     log.infof("env", "Entities: %d, Allies: %d", #gameEntities, #deployableAllies)
 
-    return terrainMap, gameEntities, width, height, hexStatuses, {}, deployableAllies, orientation
+    return terrainMap, gameEntities, width, height, hexStatuses, {}, deployableAllies, orientation, upperTerrainMap
 end
 
 -- ============================================================

@@ -19,6 +19,7 @@ function GameState.new()
     self.entities = {}
     self.hex = nil
     self.terrainMap = {}
+    self.upperTerrainMap = {}
     self.terrainTextures = {}
     self.turnState = {
         phase = "enemy_prepare",
@@ -89,6 +90,7 @@ function GameState:syncFromGlobals()
     self.entities = _G.entities or {}
     self.hex = _G.hex
     self.terrainMap = _G.terrainMap or {}
+    self.upperTerrainMap = _G.upperTerrainMap or {}
     self.turnState = _G.turnState or self.turnState
     self.turnCount = _G.turnCount or 0
     self.maxTurns = _G.maxTurns or 5

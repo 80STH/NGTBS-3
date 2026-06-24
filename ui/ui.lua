@@ -1498,7 +1498,11 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
     -- Collect content
     local lines = {}
     -- Name + health
-    table.insert(lines, { text = entity.name .. "  " .. entity.health .. "/" .. entity.maxHealth, color = {1,1,1} })
+    if not entity.indestructible then
+        table.insert(lines, { text = entity.name .. "  " .. entity.health .. "/" .. entity.maxHealth, color = {1,1,1} })
+    else
+        table.insert(lines, { text = entity.name, color = {1,1,1} })
+    end
     -- Movement range
     local baseMove = entity.moveRange or 0
     local effMove = ui.getEffectiveMoveRange(entity, entities, hex)

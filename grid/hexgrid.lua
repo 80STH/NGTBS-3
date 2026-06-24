@@ -313,10 +313,18 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
         local x3, y3 = bottomVertices[(next_i-1)*2+1], bottomVertices[(next_i-1)*2+2]
         local x4, y4 = bottomVertices[(i-1)*2+1], bottomVertices[(i-1)*2+2]
         love.graphics.polygon("fill", x1, y1, x2, y2, x3, y3)
-        love.graphics.polygon("fill", x1, y1, x3, y3, x4, y4)
-    end
+	love.graphics.polygon("fill", x1, y1, x3, y3, x4, y4)
+	end
 
-    love.graphics.setColor(topColor)
+	love.graphics.setColor(edgeColor)
+	love.graphics.setLineWidth(1.5)
+	for i = 1, n do
+		local x1, y1 = topVertices[(i-1)*2+1], topVertices[(i-1)*2+2]
+		local x4, y4 = bottomVertices[(i-1)*2+1], bottomVertices[(i-1)*2+2]
+		love.graphics.line(x1, y1, x4, y4)
+	end
+
+	love.graphics.setColor(topColor)
     love.graphics.polygon("fill", topVertices)
 
     love.graphics.setColor(1, 1, 1, 0.15)
@@ -365,4 +373,46 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
 
     love.graphics.setLineWidth(1)
 end
+
+function HexGrid:drawUpperTerrain(q, r, terrainType, x, y, yOffset)
+	local radius = self.radius
+	local function srand(seed)
+		seed = (seed * 1103515245 + 12345) % 2147483648
+		return seed / 2147483648
+	end
+	local seed = q * 31 + r * 17 + 1
+
+	if terrainType == "mountain_rubble" then
+		for i = 0, 5 do
+			local sx = srand(seed + i * 3) - 0.5
+			local sy = srand(seed + i * 3 + 99) - 0.5
+			local sz = 3 + srand(seed + i * 3 + 199) * 5
+			local px = x + sx * radius * 1.1
+			local py = y + yOffset + sy * radius * 1.1
+			local dist = math.sqrt((px - x)^2 + (py - (y + yOffset))^2)
+			if dist < radius * 0.75 then
+				love.graphics.setColor(0.42, 0.38, 0.33, 0.85)
+				love.graphics.circle("fill", px, py, sz)
+				love.graphics.setColor(0.32, 0.28, 0.24, 0.85)
+				love.graphics.circle("fill", px + sz * 0.3, py - sz * 0.3, sz * 0.5)
+			end
+		end
+	elseif terrainType == "building_rubble" then
+		for i = 0, 6 do
+			local sx = srand(seed + i * 7) - 0.5
+			local sy = srand(seed + i * 7 + 77) - 0.5
+			local sz = 3 + srand(seed + i * 7 + 177) * 4
+			local px = x + sx * radius * 1.1
+			local py = y + yOffset + sy * radius * 1.1
+			local dist = math.sqrt((px - x)^2 + (py - (y + yOffset))^2)
+			if dist < radius * 0.7 then
+				love.graphics.setColor(0.5, 0.33, 0.18, 0.85)
+				love.graphics.rectangle("fill", px - sz, py - sz * 0.5, sz * 2, sz, sz * 0.3)
+				love.graphics.setColor(0.38, 0.25, 0.13, 0.85)
+				love.graphics.rectangle("fill", px - sz * 0.5, py - sz * 0.3, sz, sz * 0.6, sz * 0.2)
+			end
+		end
+	end
+end
+
 return HexGrid
