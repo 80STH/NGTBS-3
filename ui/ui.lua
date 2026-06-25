@@ -2421,20 +2421,28 @@ function ui.drawLeaderHPBar(mx, my)
     love.graphics.setColor(0.5, 0.1, 0.2, 0.6)
     love.graphics.rectangle("line", barX, bgY, totalW, cellH + pad * 2, 4)
 
-    -- Cells
+    -- Cells (2 cells, each divided into 3 sub-cells of 1 HP)
     local healthPerCell = 3
+    local subGap = 3
+    local subCellW = 8
     for i = 1, cellCount do
         local cx = barX + pad + (i - 1) * (cellW + gap)
         local cy = bgY + pad
         local remaining = leader.health - (i - 1) * healthPerCell
-        local fill = math.max(0, math.min(healthPerCell, remaining))
-        local fraction = fill / healthPerCell
-        if fraction > 0 then
-            local t = love.timer.getTime()
-            local pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 1.5)
-            love.graphics.setColor(0.9 * pulse, 0.1 * fraction * pulse, 0.2 * pulse, 0.9)
-            love.graphics.rectangle("fill", cx, cy, cellW * fraction, cellH, 2)
+        local filledSubCells = math.max(0, math.min(healthPerCell, remaining))
+
+        for j = 1, healthPerCell do
+            local scx = cx + (j - 1) * (subCellW + subGap)
+            if j <= filledSubCells then
+                local t = love.timer.getTime()
+                local pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 1.5 + j * 0.8)
+                love.graphics.setColor(0.9 * pulse, 0.1 * pulse, 0.2 * pulse, 0.9)
+                love.graphics.rectangle("fill", scx, cy, subCellW, cellH, 2)
+            end
+            love.graphics.setColor(0.5, 0.1, 0.2, 0.35)
+            love.graphics.rectangle("line", scx, cy, subCellW, cellH, 2)
         end
+
         love.graphics.setColor(0.5, 0.1, 0.2, 0.5)
         love.graphics.rectangle("line", cx, cy, cellW, cellH, 2)
     end
