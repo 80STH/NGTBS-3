@@ -2249,7 +2249,7 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
     allyPanelButtons = {}
     local allies = {}
     for _, e in ipairs(entities) do
-        if e:isCharacter() and e.isPlayable and e.health and e.health > 0 then
+        if e:isCharacter() and e.isPlayable and e.health and (e.health > 0 or (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis"))) then
             table.insert(allies, e)
         end
     end
@@ -2278,22 +2278,29 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
         love.graphics.rectangle("line", x, by, btnW, btnH, 4)
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.print(ally.name, x + 5, by + 2)
-        local hpStr = tostring(ally.health) .. "/" .. tostring(ally.maxHealth)
+        local inStasis = status and status.hasEntityStatus and status.hasEntityStatus(ally, "stasis")
+        local hpStr
         local hpColor
-        if ally.health <= ally.maxHealth * 0.3 then
-            hpColor = {1, 0.25, 0.25}
-        elseif ally.health <= ally.maxHealth * 0.6 then
-            hpColor = {1, 0.8, 0.2}
+        if inStasis then
+            hpStr = "STASIS"
+            hpColor = {0.3, 0.5, 1}
         else
-            hpColor = {0.5, 1, 0.5}
+            hpStr = tostring(ally.health) .. "/" .. tostring(ally.maxHealth)
+            if ally.health <= ally.maxHealth * 0.3 then
+                hpColor = {1, 0.25, 0.25}
+            elseif ally.health <= ally.maxHealth * 0.6 then
+                hpColor = {1, 0.8, 0.2}
+            else
+                hpColor = {0.5, 1, 0.5}
+            end
         end
         love.graphics.setColor(hpColor[1], hpColor[2], hpColor[3], 1)
         love.graphics.print(hpStr, x + 5, by + btnH / 2 + 1)
         local indX = x + btnW - 16
         local indY = by + btnH / 2 - 1
-        if isKnockedOut then
-            love.graphics.setColor(1, 0.2, 0.2, 1)
-            love.graphics.print("KO", indX - 6, indY - 2)
+        if inStasis then
+            love.graphics.setColor(0.3, 0.5, 1, 1)
+            love.graphics.print("STS", indX - 12, indY - 2)
         elseif ally.hasActedThisTurn then
             love.graphics.setColor(0.5, 0.5, 0.5, 1)
             love.graphics.print("✗", indX, indY - 2)

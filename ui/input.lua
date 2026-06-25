@@ -361,7 +361,8 @@ end
     end
 
     local clicked = getEntityAtHex(tq, tr)
-    if clicked and clicked.isPlayable and clicked.health > 0 then
+    local inStasis = clicked and status and status.hasEntityStatus and status.hasEntityStatus(clicked, "stasis")
+    if clicked and clicked.isPlayable and (clicked.health > 0 or inStasis) then
         selectedActor = clicked
         hex.selectedQ, hex.selectedR = tq, tr
         updateAttackButtons(selectedActor)
@@ -494,8 +495,7 @@ function input.keypressed(key)
         if turnState.phase == "player" and (not selectedActor or not selectedActor.isMoving) then
             local actors = {}
             for _, e in ipairs(entities) do
-                if e.isPlayable and e.health > 0
-                    and not (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis")) then
+                if e.isPlayable and (e.health > 0 or (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis"))) then
                     table.insert(actors, e)
                 end
             end

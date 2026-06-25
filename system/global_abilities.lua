@@ -652,9 +652,6 @@ function HealAbility:onClickHex(q, r, hex, state)
     target.health = target.maxHealth
     status.entityStatuses[target] = nil
     if wasStasis then
-        target.hasActedThisTurn = false
-        target.hasMovedThisTurn = false
-        target.canMoveAfterAttack = false
         log.infof("abilities", "%s revived from stasis!", tostring(target.name))
     end
     if status.hasAtHex(target.q, target.r, "fire") then
@@ -791,9 +788,6 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
         end
         if wasStasis then
             self.target.health = 1
-            self.target.hasActedThisTurn = false
-            self.target.hasMovedThisTurn = false
-            self.target.canMoveAfterAttack = false
             log.infof("abilities", "%s revived from stasis with 1 HP!", tostring(self.target.name))
         end
         if status.hasAtHex(self.target.q, self.target.r, "fire") then

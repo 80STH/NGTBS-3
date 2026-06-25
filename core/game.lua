@@ -328,6 +328,7 @@ function restartGame(mapPath)
     else
         gamePhase = "deploy"
     end
+    rebuildEntityIndex()
     syncState()
     log.infof("game", "=== MAP LOADED — %s ===", (skipDeploy and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
 end

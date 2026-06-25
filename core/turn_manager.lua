@@ -163,7 +163,7 @@ function processNextEnemyPrepare()
         sounds.play("turn_start")
         for _, a in ipairs(entities) do
             if a.isPlayable then
-                if a.health > 0 then
+                if a.health > 0 or (status and status.hasEntityStatus and status.hasEntityStatus(a, "stasis")) then
                     a.hasActedThisTurn = false
                     a.hasMovedThisTurn = false
                     a.canMoveAfterAttack = false
