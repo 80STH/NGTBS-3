@@ -195,8 +195,9 @@ function Entity:startDeath()
     if status.hasEntityStatus(self, "stasis") then return end
     if self.isPlayable then
         self.health = 0
+        _G.stasisCount = (_G.stasisCount or 0) + 1
         status.applyToEntity(self, "stasis")
-        log.infof("entity", "%s enters stasis!", self.name)
+        log.infof("entity", "%s enters stasis! (total: %d)", self.name, _G.stasisCount)
         return
     end
     self.isDying = true

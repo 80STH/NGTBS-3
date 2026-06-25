@@ -354,6 +354,24 @@ local function definePool()
             end,
         },
         {
+            id = "limit_stasis",
+            name = "Minimal Casualties",
+            desc = "No more than 1 unit enters stasis",
+            onGenerate = function(entities, hex)
+                _G.stasisCount = 0
+            end,
+            check = function(entities, state)
+                local count = _G.stasisCount or 0
+                if count > 1 then
+                    state["limit_stasis"] = "failed"
+                end
+            end,
+            checkOnVictory = function(entities, state)
+                local count = _G.stasisCount or 0
+                state["limit_stasis"] = (count <= 1) and "completed" or "failed"
+            end,
+        },
+        {
             id = "kill_leader",
             name = "Destroy the Leader",
             desc = "Find and eliminate the enemy leader!",
@@ -591,6 +609,7 @@ function objectives.reset()
     objectiveStates = {}
     _G.objective_enemiesKilled = 0
     _G.objective_digBlocks = 0
+    _G.stasisCount = 0
     _G.caravanCount = 0
     _G.caravansDestroyed = 0
     _G.blockpostMaxHealth = 0
@@ -659,7 +678,7 @@ function objectives.update(entities)
     for _, obj in ipairs(activeObjectives) do
         if objectiveStates[obj.id] == "pending" then
             -- Certain objectives check immediately; others wait for decay
-            local canCheck = decayApplied or obj.id == "protect_tower" or obj.id == "protect_blockpost"
+            local canCheck = decayApplied or obj.id == "protect_tower" or obj.id == "protect_blockpost" or obj.id == "limit_stasis"
             if canCheck and obj.check then
                 local prevState = objectiveStates[obj.id]
                 obj.check(entities, objectiveStates)
