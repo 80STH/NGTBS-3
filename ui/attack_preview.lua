@@ -22,7 +22,14 @@ local status    = require("system.status")
 local function cellKey(q, r) return q .. "," .. r end
 
 local function getEntity(q, r, entities)
-    return getEntityAtHex(q, r, entities)
+    -- Use combat.getEntityAtHex so temporary coordinate changes made during
+    -- preview (e.g. Piercing Shot pushing the second target first) are visible.
+    -- The global getEntityAtHex uses the entityAt spatial index and ignores the
+    -- passed entities table, so it would see stale positions.
+    if entities then
+        return combat.getEntityAtHex(q, r, entities)
+    end
+    return getEntityAtHex(q, r)
 end
 
 local function isActive(q, r, hex)
@@ -351,9 +358,6 @@ local function handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities
     local baseDamage = 0
     if attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Ghost Bolt" then
         baseDamage = attack.damage or 1
-    elseif attack.name == "Piercing Shot" then
-        -- First target takes 0, second takes 1 (handled below).
-        baseDamage = 0
     end
 
     if baseDamage > 0 then
@@ -368,23 +372,62 @@ local function handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities
         preview.applyPush(p, firstTarget, firstHex.q, firstHex.r, pushQ, pushR, hex, entities)
     end
 
-    -- Piercing Shot: second target.
-    if attack.name == "Piercing Shot" then
-        local _, _, secondTarget, secondHex = attack:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-        if secondTarget and secondHex then
-            preview.addOverlay(p, secondHex.q, secondHex.r, "target")
-            local dist2 = hex:getDistance(attacker.q, attacker.r, secondHex.q, secondHex.r)
-            local eff2 = preview.calculateEffectiveDamage(secondTarget, attacker, 1, nil, dist2)
-            preview.addAttackDamage(p, secondTarget, eff2)
+    return true
+end
 
-            if secondTarget.isPushable ~= false and secondTarget.health > 0 then
-                local push2Q, push2R = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
-                preview.applyPush(p, secondTarget, secondHex.q, secondHex.r, push2Q, push2R, hex, entities)
-            end
+-- Piercing Shot: second target is pushed FIRST, then the first target follows.
+-- This matters when the two targets are adjacent: the first target moves into the
+-- cell the second target just left, so no collision occurs between them.
+handlers["Piercing Shot"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+    if not stepX then return end
+
+    preview.addLine(p, attacker.q, attacker.r, hoverQ, hoverR)
+
+    local firstTarget, firstHex, secondTarget, secondHex = attack:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if not firstTarget or not firstHex then
+        local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+        if endCell then
+            preview.addLine(p, attacker.q, attacker.r, endCell.q, endCell.r)
+        end
+        return
+    end
+
+    preview.addOverlay(p, firstHex.q, firstHex.r, "target")
+
+    -- First target: 0 direct damage.
+    -- Second target: 1 direct damage.
+    if secondTarget and secondHex then
+        preview.addOverlay(p, secondHex.q, secondHex.r, "target")
+        local dist2 = hex:getDistance(attacker.q, attacker.r, secondHex.q, secondHex.r)
+        local eff2 = preview.calculateEffectiveDamage(secondTarget, attacker, 1, nil, dist2)
+        preview.addAttackDamage(p, secondTarget, eff2)
+    end
+
+    -- Push second target first (combat resolves it this way).
+    local secondMoved = false
+    local secondOldQ, secondOldR
+    if secondTarget and secondHex and secondTarget.isPushable ~= false and secondTarget.health > 0 then
+        secondOldQ, secondOldR = secondTarget.q, secondTarget.r
+        local push2Q, push2R = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
+        local col2 = preview.applyPush(p, secondTarget, secondHex.q, secondHex.r, push2Q, push2R, hex, entities)
+        -- If the second target actually moves, shift it so the first target's preview sees a free cell.
+        if col2 and not col2.type then
+            secondTarget.q, secondTarget.r = push2Q, push2R
+            secondMoved = true
         end
     end
 
-    return true
+    -- Then push the first target into the cell the second target occupied.
+    if firstTarget.isPushable ~= false and firstTarget.health > 0 then
+        local push1Q, push1R = hex_utils.applyCubeStep(firstHex.q, firstHex.r, stepX, stepY, stepZ)
+        preview.applyPush(p, firstTarget, firstHex.q, firstHex.r, push1Q, push1R, hex, entities)
+    end
+
+    -- Restore original coordinates so we don't mutate the real entity state.
+    if secondMoved then
+        secondTarget.q, secondTarget.r = secondOldQ, secondOldR
+    end
 end
 
 -- Ghost Bolt: no push.
@@ -411,9 +454,6 @@ handlers["Push"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities)
 end
 handlers["Dash"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
-    handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities)
-end
-handlers["Piercing Shot"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities)
 end
 

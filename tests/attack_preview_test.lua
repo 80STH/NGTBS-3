@@ -82,6 +82,24 @@ local function shootAttack()
             end
             return nil, nil
         end,
+        findFirstTwoTargetsOnLine = function(self, sq, sr, sx, sy, sz, hex, entities)
+            local cq, cr = sq, sr
+            local firstTarget, firstHex, secondTarget, secondHex = nil, nil, nil, nil
+            for i = 1, 10 do
+                cq, cr = self:step(cq, cr, sx, sy, sz)
+                if not hex:isActiveHex(cq, cr) then break end
+                local e = getEntityAtHex(cq, cr, entities)
+                if e then
+                    if not firstTarget then
+                        firstTarget, firstHex = e, {q = cq, r = cr}
+                    elseif not secondTarget and e ~= firstTarget then
+                        secondTarget, secondHex = e, {q = cq, r = cr}
+                        break
+                    end
+                end
+            end
+            return firstTarget, firstHex, secondTarget, secondHex
+        end,
         step = function(self, q, r, x, y, z)
             local ax, ay, az = mockHex:axialToCube(q, r)
             return mockHex:cubeToAxial(ax + x, ay + y, az + z)
@@ -214,6 +232,79 @@ return {
                 if info.totalDamage ~= 2 then return false, "expected total 2, got " .. tostring(info.totalDamage) end
                 local icon = preview.getDamageIcon(target, info.totalDamage)
                 if icon ~= "fatal_wound" then return false, "expected fatal_wound, got " .. tostring(icon) end
+                return true
+            end
+        },
+        {
+            name = "piercing shot adjacent targets push chain leaves first target unharmed by collision",
+            fn = function()
+                -- Bigger grid so the second target has room to move.
+                local wideHex = {}
+                for k, v in pairs(mockHex) do wideHex[k] = v end
+                wideHex.gridWidth = 5
+                function wideHex:isActiveHex(q, r)
+                    return q >= 0 and q < self.gridWidth and r >= 0 and r < self.gridHeight
+                end
+                function wideHex:isValidHex(q, r)
+                    return self:isActiveHex(q, r)
+                end
+
+                local attacker = makeChar("A", 0, 0, 3, true)
+                local first    = makeChar("T1", 1, 0, 3, false)
+                local second   = makeChar("T2", 2, 0, 3, false)
+                local entities = { attacker, first, second }
+
+                local atk = shootAttack()
+                atk.name = "Piercing Shot"
+                atk.damage = 0
+
+                local p = preview.compute(wideHex, attacker, atk, 3, 0, entities)
+                local firstInfo = p.damages["1,0"]
+                local secondInfo = p.damages["2,0"]
+                if not firstInfo then return false, "no damage entry for first target" end
+                if not secondInfo then return false, "no damage entry for second target" end
+                if firstInfo.collisionDamage ~= 0 then return false, "first target should not take collision damage, got " .. tostring(firstInfo.collisionDamage) end
+                if secondInfo.collisionDamage ~= 0 then return false, "second target should not take collision damage, got " .. tostring(secondInfo.collisionDamage) end
+                if firstInfo.totalDamage ~= 0 then return false, "first target expected 0 total damage, got " .. tostring(firstInfo.totalDamage) end
+                if secondInfo.totalDamage ~= 1 then return false, "second target expected 1 total damage, got " .. tostring(secondInfo.totalDamage) end
+                if #p.collisions ~= 0 then return { ok = false, msg = "expected no collision hints, got " .. tostring(#p.collisions) } end
+                return true
+            end
+        },
+        {
+            name = "piercing shot first target collides when second target is blocked",
+            fn = function()
+                local wideHex = {}
+                for k, v in pairs(mockHex) do wideHex[k] = v end
+                wideHex.gridWidth = 5
+                function wideHex:isActiveHex(q, r)
+                    return q >= 0 and q < self.gridWidth and r >= 0 and r < self.gridHeight
+                end
+                function wideHex:isValidHex(q, r)
+                    return self:isActiveHex(q, r)
+                end
+
+                local attacker = makeChar("A", 0, 0, 3, true)
+                local first    = makeChar("T1", 1, 0, 3, false)
+                local second   = makeChar("T2", 2, 0, 3, false)
+                local wall     = makeBuilding("Wall", 3, 0, 5)
+                local entities = { attacker, first, second, wall }
+
+                local atk = shootAttack()
+                atk.name = "Piercing Shot"
+                atk.damage = 0
+
+                local p = preview.compute(wideHex, attacker, atk, 3, 0, entities)
+                local firstInfo = p.damages["1,0"]
+                local secondInfo = p.damages["2,0"]
+                if not firstInfo or not secondInfo then
+                    local keys = {}
+                    for k in pairs(p.damages) do table.insert(keys, k) end
+                    return { ok = false, msg = "missing damage entries, have: " .. table.concat(keys, ", ") }
+                end
+                -- second target: 1 collision into wall + 1 collision from first target = 2
+                if firstInfo.collisionDamage ~= 1 then return { ok = false, msg = "first target expected collision damage, got " .. tostring(firstInfo.collisionDamage) } end
+                if secondInfo.collisionDamage ~= 2 then return { ok = false, msg = "second target expected 2 collision damage, got " .. tostring(secondInfo.collisionDamage) } end
                 return true
             end
         },
