@@ -22,6 +22,7 @@ function undo.snapshot()
     local snap = {
         entities = {},
         hexStatuses = {},
+        upperTerrain = {},
         selectedActor = _G.selectedActor,
         chaos = _G.chaos or 0,
         abilityMana = ga and ga.mana or 0,
@@ -68,6 +69,15 @@ function undo.snapshot()
             end
             snap.hexStatuses[key] = copy
         end
+    end
+    -- Copy upper terrain map
+    local utm = _G.upperTerrainMap or {}
+    for q, row in pairs(utm) do
+        local rowCopy = {}
+        for r, val in pairs(row) do
+            rowCopy[r] = val
+        end
+        snap.upperTerrain[q] = rowCopy
     end
     table.insert(undo.history, snap)
     log.infof("undo", "Snapshot saved #%d. Entities: %d", #undo.history, #snap.entities)
@@ -154,6 +164,20 @@ function undo.restore(snap)
             end
             status.hexStatuses[key] = copy
         end
+    end
+
+    -- Restore upper terrain map
+    if not _G.upperTerrainMap then _G.upperTerrainMap = {} end
+    local utm = _G.upperTerrainMap
+    for q, _ in pairs(utm) do
+        utm[q] = nil
+    end
+    for q, row in pairs(snap.upperTerrain or {}) do
+        local rowCopy = {}
+        for r, val in pairs(row) do
+            rowCopy[r] = val
+        end
+        utm[q] = rowCopy
     end
 
     -- Keep current selected actor, just update its highlight position

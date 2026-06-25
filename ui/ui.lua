@@ -516,18 +516,36 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
     local previewData = nil
     -- Flip: 1 damage, 3 cells for flip
     if attack.name == "Flip" then
-        local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
-        if distance == 1 then
-            local target = getEntityAtHex(hoverQ, hoverR, entities)
-            if target and target.health > 0 then
-                local targetX, targetY = getDrawCoords(hoverQ, hoverR)
-                if target:isBuilding() then
+        if flipTargetActor then
+            local cells = attack:getFlipCells(attacker, flipTargetActor.q, flipTargetActor.r, hex, entities)
+            local isValidDest = false
+            for _, cell in ipairs(cells) do
+                if cell.q == hoverQ and cell.r == hoverR then
+                    isValidDest = true
+                    break
                 end
-                local cells = attack:getFlipCells(attacker, hoverQ, hoverR, hex, entities)
-                local fromX, fromY = getDrawCoords(target.q, target.r)
-                for _, cell in ipairs(cells) do
-                    local toX, toY = getDrawCoords(cell.q, cell.r)
-                    ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, target.q, target.r, cell.q, cell.r)
+            end
+            if isValidDest then
+                local fromX, fromY = getDrawCoords(flipTargetActor.q, flipTargetActor.r)
+                local toX, toY = getDrawCoords(hoverQ, hoverR)
+                ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil,
+                    nil, nil, flipTargetActor.q, flipTargetActor.r, hoverQ, hoverR)
+            end
+        else
+            local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+            if distance == 1 then
+                local target = getEntityAtHex(hoverQ, hoverR, entities)
+                if target and target.health > 0 then
+                    local targetX, targetY = getDrawCoords(hoverQ, hoverR)
+                    if target:isBuilding() then
+                    end
+                    local cells = attack:getFlipCells(attacker, hoverQ, hoverR, hex, entities)
+                    local fromX, fromY = getDrawCoords(target.q, target.r)
+                    for _, cell in ipairs(cells) do
+                        local toX, toY = getDrawCoords(cell.q, cell.r)
+                        ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil,
+                            nil, nil, target.q, target.r, cell.q, cell.r)
+                    end
                 end
             end
         end
