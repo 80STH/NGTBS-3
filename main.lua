@@ -362,11 +362,26 @@ function getPushDirChoices(stepX, stepY, stepZ)
     return {ccw, {x = stepX, y = stepY, z = stepZ}, cw}
 end
 
+local cellDuplicateWarnings = {}
+
+function clearCellDuplicateWarnings()
+    cellDuplicateWarnings = {}
+end
+
 function rebuildEntityIndex()
     entityAt = {}
     for _, e in ipairs(entities) do
         if e.q and e.r then
-            entityAt[e.q .. "," .. e.r] = e
+            local key = e.q .. "," .. e.r
+            local existing = entityAt[key]
+            if existing then
+                local warnKey = key .. "|" .. tostring(existing.name or existing) .. "|" .. tostring(e.name or e)
+                if not cellDuplicateWarnings[warnKey] then
+                    cellDuplicateWarnings[warnKey] = true
+                    log.errorf("debug", "CELL DUPLICATE: %s and %s both at (%d,%d)!", tostring(existing.name or existing), tostring(e.name or e), e.q, e.r)
+                end
+            end
+            entityAt[key] = e
         end
     end
     if ui then ui._moveRangeCacheKey = nil end

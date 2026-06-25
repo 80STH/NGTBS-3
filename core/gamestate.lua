@@ -29,6 +29,7 @@ function GameState.new()
         enemyAttackTimer = 0,
         delayBetweenAttacks = 0.4,
         pendingDigProcessing = false,
+        caravansMoving = false,
     }
     self.attackButtons = {}
     self.sounds = {}

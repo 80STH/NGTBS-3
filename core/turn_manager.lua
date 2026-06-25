@@ -9,18 +9,25 @@ function turnManager.startGame()
     processDigSites()
 
     turnState.phase = "enemy_prepare"
-    local enemies = {}
-    for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable and e.health > 0 then
-            table.insert(enemies, e)
-        end
-    end
-    turnState.enemyPrepareQueue = enemies
     turnState.currentPreparingEnemy = nil
     turnState.enemyAttackQueue = {}
     turnState.enemyAttackTimer = 0
     turnState.pendingDigProcessing = false
-    processNextEnemyPrepare()
+    turnState.caravansMoving = false
+
+    moveCaravans()
+    if _G.pushAnimations and _G.pushAnimations.active then
+        turnState.caravansMoving = true
+    else
+        local enemies = {}
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and not e.isPlayable and e.health > 0 then
+                table.insert(enemies, e)
+            end
+        end
+        turnState.enemyPrepareQueue = enemies
+        processNextEnemyPrepare()
+    end
 end
 
 function turnManager.endPlayerTurn()
@@ -85,6 +92,20 @@ function turnManager.update(dt)
 end
 
 function updatePreparePhase(dt)
+    if turnState.caravansMoving then
+        if _G.pushAnimations and _G.pushAnimations.active then return end
+        turnState.caravansMoving = false
+        local enemies = {}
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and not e.isPlayable and e.health > 0 then
+                table.insert(enemies, e)
+            end
+        end
+        turnState.enemyPrepareQueue = enemies
+        processNextEnemyPrepare()
+        return
+    end
+
     if not turnState.currentPreparingEnemy then return end
 
     local enemy = turnState.currentPreparingEnemy
@@ -211,6 +232,7 @@ function moveCaravans()
         end
     end
     if #caravans == 0 or #blockposts == 0 then return end
+    local hasMoves = false
     for _, caravan in ipairs(caravans) do
         local nearestBP = nil
         local nearestDist = math.huge
@@ -236,6 +258,8 @@ function moveCaravans()
                             break
                         end
                     end
+                    if status.hasDigSite(n.q, n.r) then occupied = true end
+                    -- Also check against caravans already moved this batch (their q/r updated)
                     if not occupied then
                         local dist = hex:getDistance(n.q, n.r, nearestBP.q, nearestBP.r)
                         if dist < bestDist then
@@ -247,25 +271,35 @@ function moveCaravans()
             end
         end
         if bestNeighbor then
-            combat.addDirectPushAnimation(caravan, caravan.q, caravan.r, bestNeighbor.q, bestNeighbor.r)
+            local fromQ, fromR = caravan.q, caravan.r
+            caravan.q = bestNeighbor.q
+            caravan.r = bestNeighbor.r
+            combat.addDirectPushAnimation(caravan, fromQ, fromR, bestNeighbor.q, bestNeighbor.r)
+            hasMoves = true
         end
         ::continue::
     end
-    combat.startPushAnimations(hex)
+    if hasMoves then
+        combat.startPushAnimations(hex)
+    end
 end
 
 function startEnemyPreparePhase()
     moveCaravans()
-    local enemies = {}
-    for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable and e.health > 0 then
-            table.insert(enemies, e)
+    if _G.pushAnimations and _G.pushAnimations.active then
+        turnState.caravansMoving = true
+    else
+        local enemies = {}
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and not e.isPlayable and e.health > 0 then
+                table.insert(enemies, e)
+            end
         end
+        turnState.enemyPrepareQueue = enemies
+        turnState.phase = "enemy_prepare"
+        turnState.currentPreparingEnemy = nil
+        processNextEnemyPrepare()
     end
-    turnState.enemyPrepareQueue = enemies
-    turnState.phase = "enemy_prepare"
-    turnState.currentPreparingEnemy = nil
-    processNextEnemyPrepare()
 end
 
 return turnManager

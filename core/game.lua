@@ -27,6 +27,7 @@ function restartGame(mapPath)
         enemyAttackTimer = 0,
         delayBetweenAttacks = 0.4,
         pendingDigProcessing = false,
+        caravansMoving = false,
     }
 
     local hexStatuses
@@ -303,6 +304,7 @@ function restartGame(mapPath)
             enemyAttackTimer = 0,
             delayBetweenAttacks = 0.4,
             pendingDigProcessing = false,
+            caravansMoving = false,
         }
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable then
@@ -328,6 +330,7 @@ function restartGame(mapPath)
     else
         gamePhase = "deploy"
     end
+    clearCellDuplicateWarnings()
     rebuildEntityIndex()
     syncState()
     log.infof("game", "=== MAP LOADED — %s ===", (skipDeploy and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
@@ -362,6 +365,7 @@ function confirmDeploy()
         enemyAttackTimer = 0,
         delayBetweenAttacks = 0.4,
         pendingDigProcessing = false,
+        caravansMoving = false,
     }
 
     for _, e in ipairs(entities) do
