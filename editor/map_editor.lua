@@ -281,7 +281,7 @@ function editor.init()
     )
     editor.hex:centerOnScreen(love.graphics.getWidth() / (editor.dpiScale or 1), love.graphics.getHeight() / (editor.dpiScale or 1))
     -- Shift grid left to make room for palette
-    editor.hex.offsetX = editor.hex.offsetX - 100
+    editor.hex.offsetX = editor.hex.offsetX - 200
 
     editor.terrainData = {}
     editor.entityData = {}
@@ -289,7 +289,6 @@ function editor.init()
     editor.upperTerrainData = {}
     editor.currentLayer = editor.LAYER_TERRAIN
     editor.selectedTerrain = "grass"
-    editor.selectedEntity = "Warrior"
     editor.selectedStatus = "fire"
     editor.selectedUpperTerrain = "mountain_rubble"
     editor.eraser = false
@@ -298,7 +297,41 @@ function editor.init()
     editor.fileName = "custom_map"
     editor.objectivePrimary = nil
     editor.objectiveSecondaries = {}
+    editor.customEntityName = ""
     editor.active = true
+
+    -- Dynamic entity palette from environment.lua
+    local env = require("entity.environment")
+    local defs = env.getAvailableEntityDefs()
+    editor.entityPalette = {}
+    local etypeColors = {
+        character = {0.8, 0.2, 0.2},
+        obstacle  = {0.5, 0.5, 0.5},
+        building  = {0.4, 0.4, 0.7},
+    }
+    for _, def in ipairs(defs) do
+        local etype = def.type
+        if etype == "character" then etype = "enemy" end
+        table.insert(editor.entityPalette, {
+            id = def.name,
+            name = def.name,
+            etype = etype,
+            color = etypeColors[def.type] or {0.5, 0.5, 0.5},
+        })
+    end
+    editor.selectedEntity = editor.entityPalette[1] and editor.entityPalette[1].id or ""
+
+    -- Dynamic objective options from objectives.lua
+    local obj = require("system.objectives")
+    editor.primaryObjectiveOptions = { { id = nil, name = "Auto" } }
+    for _, pri in ipairs(obj.getAvailablePrimaries()) do
+        table.insert(editor.primaryObjectiveOptions, { id = pri.id, name = pri.name })
+    end
+    table.insert(editor.primaryObjectiveOptions, { id = "kill_leader", name = "Kill Leader" })
+    editor.secondaryObjectiveOptions = { { id = nil, name = "None" } }
+    for _, sec in ipairs(obj.getAvailableSecondaries()) do
+        table.insert(editor.secondaryObjectiveOptions, { id = sec.id, name = sec.name })
+    end
 
     buildEditorSpriteCache()
 
@@ -320,6 +353,8 @@ function editor.cleanup()
     editor.terrainData = {}
     editor.entityData = {}
     editor.statusData = {}
+    editor.customEntityName = ""
+    editor.focusNameInput = false
     editor.undoStack = {}
     editor.redoStack = {}
     log.info("editor", "Map editor cleaned up")
@@ -591,7 +626,7 @@ function editor.paintCell(q, r)
         if editor.eraser then
             editor.entityData[k] = nil
         else
-            editor.entityData[k] = editor.selectedEntity
+            editor.entityData[k] = (editor.customEntityName ~= "" and editor.customEntityName or editor.selectedEntity)
         end
     elseif editor.currentLayer == editor.LAYER_STATUS then
         if editor.eraser then
@@ -623,15 +658,15 @@ end
 -- Palette layout constants
 local PAL_X = 0
 local PAL_W = 0
-local PAL_BTN_H = 28
-local PAL_TILE_SIZE = 44
-local PAL_TILE_GAP = 4
-local PAL_COLS = 3
+local PAL_BTN_H = 40
+local PAL_TILE_SIZE = 68
+local PAL_TILE_GAP = 6
+local PAL_COLS = 4
 
 function editor.getPaletteRect()
     local lw = love.graphics.getWidth() / (editor.dpiScale or 1)
     local lh = love.graphics.getHeight() / (editor.dpiScale or 1)
-    PAL_W = 200
+    PAL_W = 400
     PAL_X = lw - PAL_W
     return PAL_X, 0, PAL_W, lh
 end
@@ -675,14 +710,15 @@ function editor.getButtonRects()
     local px, _, pw, _ = editor.getPaletteRect()
     local lh = love.graphics.getHeight() / (editor.dpiScale or 1)
     local btnW = pw - 20
-    local btnH = 30
+    local btnH = PAL_BTN_H
     local btnX = px + 10
-    local baseY = lh - 160
+    local btnGap = 8
+    local baseY = lh - (btnH + btnGap) * 4 - 20
     return {
-        save   = { x = btnX, y = baseY,        w = btnW, h = btnH },
-        load   = { x = btnX, y = baseY + 36,    w = btnW, h = btnH },
-        eraser = { x = btnX, y = baseY + 72,    w = btnW, h = btnH },
-        back   = { x = btnX, y = baseY + 108,   w = btnW, h = btnH },
+        save   = { x = btnX, y = baseY,               w = btnW, h = btnH },
+        load   = { x = btnX, y = baseY + btnH + btnGap, w = btnW, h = btnH },
+        eraser = { x = btnX, y = baseY + (btnH + btnGap) * 2, w = btnW, h = btnH },
+        back   = { x = btnX, y = baseY + (btnH + btnGap) * 3, w = btnW, h = btnH },
     }
 end
 
@@ -693,6 +729,7 @@ function editor.mousepressed(x, y, button)
     -- Check palette area
     if x >= px then
         -- Layer tabs
+        -- Layer tabs
         local tabs = editor.getLayerTabRects()
         for i, tab in ipairs(tabs) do
             if x >= tab.x and x <= tab.x + tab.w and y >= tab.y and y <= tab.y + tab.h then
@@ -702,9 +739,23 @@ function editor.mousepressed(x, y, button)
             end
         end
 
+        -- Custom entity name input click
+        local nameInputY = 32
+        if editor.currentLayer == editor.LAYER_ENTITY then
+            local inputW = pw - 20
+            local inputH = 24
+            if x >= px + 10 and x <= px + 10 + inputW and y >= nameInputY and y <= nameInputY + inputH then
+                editor.focusNameInput = true
+                return
+            end
+            nameInputY = nameInputY + inputH + 6
+        else
+            editor.focusNameInput = false
+        end
+
         -- Tile items
         local items = editor.getTileItems()
-        local tileStartY = 40
+        local tileStartY = nameInputY
         for idx, item in ipairs(items) do
             local col = (idx - 1) % PAL_COLS
             local row = math.floor((idx - 1) / PAL_COLS)
@@ -813,6 +864,8 @@ function editor.mousepressed(x, y, button)
         return -- clicked in palette but not on anything specific
     end
 
+    editor.focusNameInput = false
+
     -- Click on hex grid
     if not editor.hex then return end
     local hq, hr = editor.hex:pixelToHex(x, y)
@@ -848,6 +901,19 @@ end
 
 function editor.keypressed(key)
     local ctrl = love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl")
+    if editor.focusNameInput then
+        if key == "backspace" then
+            editor.customEntityName = editor.customEntityName:sub(1, -2)
+        elseif key == "return" or key == "escape" then
+            editor.focusNameInput = false
+        elseif key == "space" then
+            editor.customEntityName = editor.customEntityName .. " "
+        elseif #key == 1 then
+            editor.customEntityName = editor.customEntityName .. key
+        end
+        return
+    end
+
     if ctrl then
         if key == "z" then
             editor.undo()
@@ -876,10 +942,10 @@ function editor.keypressed(key)
         return
     end
 
-    if key == "1" then editor.currentLayer = editor.LAYER_TERRAIN
+    if key == "1" then editor.currentLayer = editor.LAYER_TERRAIN; editor.focusNameInput = false
     elseif key == "2" then editor.currentLayer = editor.LAYER_ENTITY
-    elseif key == "3" then editor.currentLayer = editor.LAYER_STATUS
-    elseif key == "4" then editor.currentLayer = editor.LAYER_UPPER_TERRAIN
+    elseif key == "3" then editor.currentLayer = editor.LAYER_STATUS; editor.focusNameInput = false
+    elseif key == "4" then editor.currentLayer = editor.LAYER_UPPER_TERRAIN; editor.focusNameInput = false
     elseif key == "e" then editor.eraser = not editor.eraser
     elseif key == "escape" then
         editor.cleanup()
@@ -1058,10 +1124,37 @@ function editor.draw()
         love.graphics.print(label, tab.x + tab.w / 2 - lw2 / 2, tab.y + 8)
     end
 
+    -- Custom entity name input (entity layer only)
+    local nameInputY = 32
+    if editor.currentLayer == editor.LAYER_ENTITY then
+        local inputW = pw - 20
+        local inputH = 24
+        local inputX = px + 10
+        love.graphics.setColor(0.15, 0.15, 0.2, 1)
+        love.graphics.rectangle("fill", inputX, nameInputY, inputW, inputH, 3)
+        if editor.focusNameInput then
+            love.graphics.setColor(1, 1, 0.2, 1)
+        else
+            love.graphics.setColor(0.5, 0.5, 0.6, 1)
+        end
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", inputX, nameInputY, inputW, inputH, 3)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        local displayText = editor.customEntityName
+        if editor.focusNameInput then
+            displayText = displayText .. "_"
+        elseif displayText == "" then
+            displayText = "custom name..."
+            love.graphics.setColor(0.5, 0.5, 0.5, 1)
+        end
+        love.graphics.print(displayText, inputX + 4, nameInputY + 5)
+        nameInputY = nameInputY + inputH + 6
+    end
+
     -- Tile palette
     local items = editor.getTileItems()
     local selected = editor.getSelectedItem()
-    local tileStartY = 40
+    local tileStartY = nameInputY
     for idx, item in ipairs(items) do
         local col = (idx - 1) % PAL_COLS
         local row = math.floor((idx - 1) / PAL_COLS)
@@ -1169,6 +1262,8 @@ function editor.draw()
     local toolText = "Layer: " .. editor.layerNames[editor.currentLayer]
     if editor.eraser then
         toolText = toolText .. " | ERASER"
+    elseif editor.currentLayer == editor.LAYER_ENTITY and editor.customEntityName ~= "" then
+        toolText = toolText .. " | \"" .. editor.customEntityName .. "\""
     else
         toolText = toolText .. " | " .. (selected or "-")
     end

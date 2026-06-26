@@ -222,14 +222,15 @@ function restartGame(mapPath)
     if mapPath:match("map3") then
         local hasTunnels = false
         for _, e in ipairs(entities) do
-            if e.name == "Tunnel" then hasTunnels = true; break end
+            if e.name == "TunnelEntrance" or e.name == "TunnelExit" then hasTunnels = true; break end
         end
         if not hasTunnels then
             local envMod = require("entity.environment")
             local loadedMap = envMod.loadedMap
             local tileW = (loadedMap and loadedMap.tilewidth) or 14
             local tileH = (loadedMap and loadedMap.tileheight) or 12
-            local tunnelData = {{2,2},{6,2},{2,6},{6,6}}
+            local entranceData = {{2,2},{2,6}}
+            local exitData = {{6,2},{6,6}}
             local railCells = {{2,2},{3,2},{4,2},{5,2},{6,2},{2,6},{3,6},{4,6},{5,6},{6,6}}
 
             for _, cell in ipairs(railCells) do
@@ -238,12 +239,19 @@ function restartGame(mapPath)
                 terrainMap[q][r] = "railway"
             end
 
-            for _, td in ipairs(tunnelData) do
-                local tunnel = Entity.new("Tunnel", Entity.TYPES.BUILDING, td[1], td[2], 2, false, 0, nil, nil, {})
+            for _, td in ipairs(entranceData) do
+                local tunnel = Entity.new("TunnelEntrance", Entity.TYPES.BUILDING, td[1], td[2], 2, false, 0, nil, nil, {})
                 tunnel.isObjective = true
-                tunnel.sprite = envMod.generateBuildingSprite("Tunnel", tileW, tileH)
+                tunnel.sprite = envMod.generateBuildingSprite("TunnelEntrance", tileW, tileH)
                 table.insert(entities, tunnel)
-                log.debugf("game", "Placed Tunnel at (%d,%d)", td[1], td[2])
+                log.debugf("game", "Placed TunnelEntrance at (%d,%d)", td[1], td[2])
+            end
+            for _, td in ipairs(exitData) do
+                local tunnel = Entity.new("TunnelExit", Entity.TYPES.BUILDING, td[1], td[2], 2, false, 0, nil, nil, {})
+                tunnel.isObjective = true
+                tunnel.sprite = envMod.generateBuildingSprite("TunnelExit", tileW, tileH)
+                table.insert(entities, tunnel)
+                log.debugf("game", "Placed TunnelExit at (%d,%d)", td[1], td[2])
             end
         end
     end
@@ -469,7 +477,7 @@ function updateDeathAnimations(dt)
                         end
                     end
                 end
-                if e.name == "Tunnel" or e.name == "OccupiedTunnel" then
+                if e.name == "TunnelEntrance" or e.name == "TunnelExit" or e.name == "OccupiedTunnel" then
                     local dtunnel = Entity.new("DestroyedTunnel", Entity.TYPES.BUILDING, e.q, e.r, 1, false, 0, nil, nil, {})
                     dtunnel.indestructible = true
                     dtunnel.sprite = environment.generateBuildingSprite("DestroyedTunnel", hex.tileWidth, hex.tileHeight)
@@ -487,7 +495,7 @@ function updateDeathAnimations(dt)
                     if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
                     upperTerrainMap[e.q][e.r] = "mountain_rubble"
                 elseif e:isBuilding() and not e.isTrainCar
-                    and e.name ~= "Tunnel" and e.name ~= "OccupiedTunnel" then
+                    and e.name ~= "TunnelEntrance" and e.name ~= "TunnelExit" and e.name ~= "OccupiedTunnel" then
                     if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
                     upperTerrainMap[e.q][e.r] = "building_rubble"
                 end
@@ -574,7 +582,7 @@ function processDigSites()
                 if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
                 upperTerrainMap[e.q][e.r] = "mountain_rubble"
             elseif e:isBuilding() and not e.isTrainCar
-                and e.name ~= "Tunnel" and e.name ~= "OccupiedTunnel" then
+                and e.name ~= "TunnelEntrance" and e.name ~= "TunnelExit" and e.name ~= "OccupiedTunnel" then
                 if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
                 upperTerrainMap[e.q][e.r] = "building_rubble"
             end

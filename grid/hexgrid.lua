@@ -219,6 +219,7 @@ function HexGrid:invalidateSortedCells()
 end
 
 function HexGrid:centerOnScreen(screenWidth, screenHeight)
+    self:invalidateSortedCells()
     local mapWidth, mapHeight
     if self.orientation == "flat" then
         mapWidth = self.gridWidth * self.hexWidth

@@ -256,7 +256,7 @@ combat.DashAttack = setmetatable({}, combat.Attack)
 combat.DashAttack.__index = combat.DashAttack
 
 function combat.DashAttack.new()
-    local self = combat.Attack.new("Dash", "Charge forward, stop before first entity", math.huge, 1, {})
+    local self = combat.Attack.new("Dash", "Charge forward, stop before first entity", math.huge, 0, {})
     return setmetatable(self, combat.DashAttack)
 end
 

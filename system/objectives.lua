@@ -39,11 +39,9 @@ primaryObjectiveDefs.protect_caravans = {
         local dead = (_G.caravanCount or 0) - alive
         local prevDead = _G.caravansDestroyed or 0
         if dead > prevDead then
-            local newDead = dead - prevDead
-            _G.chaos = (_G.chaos or 0) + newDead
             _G.caravansDestroyed = dead
-            for i = 1, newDead do
-                log.infof("objectives", "Caravan destroyed! Chaos +1 (total: %d)", _G.chaos)
+            for i = 1, dead - prevDead do
+                log.infof("objectives", "Caravan destroyed! (total dead: %d)", dead)
             end
         end
     end,
@@ -67,10 +65,7 @@ primaryObjectiveDefs.protect_railway = {
     check = function(entities, state)
         local totalDamage = 0
         for _, e in ipairs(entities) do
-            if e.isTrainCar and e.health and e.maxHealth then
-                totalDamage = totalDamage + (e.maxHealth - math.max(0, e.health))
-            end
-            if e.name == "Tunnel" and e.health and e.maxHealth then
+            if (e.name == "TunnelEntrance" or e.name == "TunnelExit") and e.health and e.maxHealth then
                 totalDamage = totalDamage + (e.maxHealth - math.max(0, e.health))
             end
         end
@@ -95,6 +90,30 @@ primaryObjectiveDefs.protect_railway = {
             log.infof("objectives", "Occupied tunnel destroyed! Chaos +%d (total: %d)", destroyed * 2, _G.chaos)
         end
         _G.occupiedTunnelCount = aliveOcc
+    end,
+}
+
+primaryObjectiveDefs.protect_buildings = {
+    id = "protect_buildings",
+    name = "Protect Buildings",
+    desc = "Every damage to buildings increases Chaos!",
+    isPrimary = true,
+    incompatibleWithSecondary = { "protect_tower", "protect_blockpost" },
+    onGenerate = function(entities, hex)
+        _G.buildingDamageTracked = 0
+    end,
+    check = function(entities, state)
+        local totalDamage = 0
+        for _, e in ipairs(entities) do
+            if e:isBuilding() and not e.isTrainCar and e.name ~= "Caravan" and e.name ~= "TunnelEntrance" and e.name ~= "TunnelExit" and e.name ~= "OccupiedTunnel" and e.health and e.maxHealth then
+                totalDamage = totalDamage + (e.maxHealth - math.max(0, e.health))
+            end
+        end
+        local prev = _G.buildingDamageTracked or 0
+        if totalDamage > prev then
+            _G.buildingDamageTracked = totalDamage
+            log.infof("objectives", "Buildings damaged! (total: %d)", totalDamage)
+        end
     end,
 }
 
@@ -615,6 +634,7 @@ function objectives.reset()
     _G.blockpostMaxHealth = 0
     _G.blockpostDamageTracked = 0
     _G.railwayTakenDamage = 0
+    _G.buildingDamageTracked = 0
 end
 
 function objectives.getList()
@@ -769,6 +789,23 @@ function objectives.draw()
             love.graphics.print(icon .. " " .. obj.name, x + padding, sy)
         end
     end
+end
+
+function objectives.getAvailablePrimaries()
+    local list = {}
+    for id, def in pairs(primaryObjectiveDefs) do
+        table.insert(list, { id = id, name = def.name })
+    end
+    table.sort(list, function(a, b) return a.id < b.id end)
+    return list
+end
+
+function objectives.getAvailableSecondaries()
+    local list = {}
+    for _, def in ipairs(objectivePool) do
+        table.insert(list, { id = def.id, name = def.name })
+    end
+    return list
 end
 
 definePool()

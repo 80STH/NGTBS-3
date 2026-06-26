@@ -49,27 +49,27 @@ end
 function trains.findRailwayPaths(entities, terrainMap, hex)
     if not hex then return {} end
 
-    local tunnels = {}
+    local entrances = {}
+    local exits = {}
     for _, e in ipairs(entities) do
-        if e.name == "Tunnel" and e.health and e.health > 0 then
-            table.insert(tunnels, e)
+        if e.name == "TunnelEntrance" and e.health and e.health > 0 then
+            table.insert(entrances, e)
+        elseif e.name == "TunnelExit" and e.health and e.health > 0 then
+            table.insert(exits, e)
         end
     end
-    if #tunnels < 2 then return {} end
+    if #entrances == 0 or #exits == 0 then return {} end
 
     local paths = {}
-    local usedTunnels = {}
-    for i, t1 in ipairs(tunnels) do
-        if not usedTunnels[i] then
-            for j, t2 in ipairs(tunnels) do
-                if i ~= j and not usedTunnels[j] then
-                    local rawPath = findRailPath(t1.q, t1.r, t2.q, t2.r, terrainMap, hex)
-                    if rawPath and #rawPath >= 3 then
-                        table.insert(paths, {tunnelA = t1, tunnelB = t2, path = rawPath})
-                        usedTunnels[i] = true
-                        usedTunnels[j] = true
-                        break
-                    end
+    local usedExits = {}
+    for _, entrance in ipairs(entrances) do
+        for j, exitTunnel in ipairs(exits) do
+            if not usedExits[j] then
+                local rawPath = findRailPath(entrance.q, entrance.r, exitTunnel.q, exitTunnel.r, terrainMap, hex)
+                if rawPath and #rawPath >= 3 then
+                    table.insert(paths, {tunnelA = entrance, tunnelB = exitTunnel, path = rawPath})
+                    usedExits[j] = true
+                    break
                 end
             end
         end
@@ -161,27 +161,29 @@ end
 function trains.isGroupActive(group)
     if not group or not group.active then return false end
     local entities = _G.entities or {}
-    local function tunnelAliveByName(name)
+    local function isTunnelAlive()
+        local tunnelTypes = { "TunnelEntrance", "TunnelExit", "OccupiedTunnel" }
         for _, e in ipairs(entities) do
-            if e.name == name and e.q == group.tunnelA.q and e.r == group.tunnelA.r and e.health and e.health > 0 then
-                return true
-            end
-            if e.name == name and e.q == group.tunnelB.q and e.r == group.tunnelB.r and e.health and e.health > 0 then
-                return true
+            for _, tname in ipairs(tunnelTypes) do
+                if e.name == tname and e.health and e.health > 0 then
+                    if (e.q == group.tunnelA.q and e.r == group.tunnelA.r) or
+                       (e.q == group.tunnelB.q and e.r == group.tunnelB.r) then
+                        return true
+                    end
+                end
             end
         end
         return false
     end
-    if not tunnelAliveByName("Tunnel") and not tunnelAliveByName("OccupiedTunnel") then
+    if not isTunnelAlive() then
         group.active = false
         return false
     end
     if group.cars then
-        for _, c in ipairs(group.cars) do
-            if c.health <= 0 or c.isDying then
-                group.active = false
-                return false
-            end
+        local loco = group.cars[1]
+        if loco and (loco.health <= 0 or loco.isDying) then
+            group.active = false
+            return false
         end
     end
     return true
@@ -223,7 +225,8 @@ function trains.prepareTrainAttacks(entities, hex)
 end
 
 local function convertTunnelToOccupied(tunnelEntity, entities, hex)
-    if not tunnelEntity or tunnelEntity.name ~= "Tunnel" then return end
+    if not tunnelEntity then return end
+    if tunnelEntity.name ~= "TunnelEntrance" and tunnelEntity.name ~= "TunnelExit" then return end
     if tunnelEntity.health <= 0 then return end
 
     local loadedMap = env.loadedMap
@@ -308,7 +311,7 @@ local function completeShunt(group, entities, hex)
         if e ~= loco and e ~= wagon and e.trainGroupId ~= group.id
             and e.q == crushQ and e.r == crushR
             and e.health and e.health > 0 and not e.isDying
-            and e.name ~= "Tunnel" and e.name ~= "OccupiedTunnel" then
+            and e.name ~= "TunnelEntrance" and e.name ~= "TunnelExit" and e.name ~= "OccupiedTunnel" then
             local wasDestroyed = e:takeDamage(999)
             if wasDestroyed then e:startDeath() end
             if e.health and e.health <= 0 and not status.hasEntityStatus(e, "stasis") then table.remove(entities, i) end
@@ -316,7 +319,7 @@ local function completeShunt(group, entities, hex)
     end
 
     for _, e in ipairs(entities) do
-        if e.q == crushQ and e.r == crushR and e.name == "Tunnel" and e.health and e.health > 0 then
+        if e.q == crushQ and e.r == crushR and (e.name == "TunnelEntrance" or e.name == "TunnelExit") and e.health and e.health > 0 then
             convertTunnelToOccupied(e, entities, hex)
             break
         end

@@ -535,7 +535,7 @@ function love.resize(w, h)
     logicalH = h / dpiScale
     if gamePhase == "editor" and map_editor.hex then
         map_editor.hex:centerOnScreen(logicalW, logicalH)
-        map_editor.hex.offsetX = map_editor.hex.offsetX - 100
+        map_editor.hex.offsetX = map_editor.hex.offsetX - 200
     elseif hex then
         hex:centerOnScreen(logicalW, logicalH)
     end

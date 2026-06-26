@@ -96,4 +96,7 @@ return {
   statuses = {
     ["4,1"] = {"fire"},
   },
+  objectives = {
+    primary = "protect_buildings",
+  },
 }

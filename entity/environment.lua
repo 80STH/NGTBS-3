@@ -221,7 +221,8 @@ local gidToEntity = {
     [83] = { type = "character", name = "SummoningRod", isPlayable = false, maxHealth = 2, moveRange = 0, attacks = "summoningrod" },
     [48] = { type = "building",  name = "Caravan",   health = 1, moveRange = 1 },
     [77] = { type = "building",  name = "Blockpost", health = 2 },
-    [67] = { type = "building",  name = "Tunnel",    health = 2, isObjective = true },
+    [67] = { type = "building",  name = "TunnelEntrance", health = 2, isObjective = true },
+    [68] = { type = "building",  name = "TunnelExit",     health = 2, isObjective = true },
     [74] = { type = "building",  name = "TrainCar",  health = 1, moveRange = 1 },
     [84] = { type = "building",  name = "MountainHouse", health = 2 },
     [85] = { type = "building",  name = "SmallMountainHouse", health = 1 },
@@ -323,7 +324,7 @@ local function generateCustomSprite(name, w, h)
         love.graphics.setColor(0.5, 0.4, 0.25)
         love.graphics.rectangle("fill", w/2-3, 0, 6, h)
 
-    elseif name == "Tunnel" then
+    elseif name == "TunnelEntrance" then
         love.graphics.setColor(0.15, 0.15, 0.15)
         love.graphics.rectangle("fill", 0, 0, w, h-2)
         love.graphics.setColor(0.6, 0.55, 0.5)
@@ -332,6 +333,20 @@ local function generateCustomSprite(name, w, h)
         love.graphics.rectangle("fill", 0, h-2, w, 2)
         love.graphics.setColor(0.4, 0.4, 0.4)
         love.graphics.arc("fill", w/2, h-2, w/3, math.pi, 0)
+        love.graphics.setColor(0.2, 1, 0.2)
+        love.graphics.polygon("fill", w/2, 2, w/2-3, 6, w/2+3, 6)
+
+    elseif name == "TunnelExit" then
+        love.graphics.setColor(0.15, 0.15, 0.15)
+        love.graphics.rectangle("fill", 0, 0, w, h-2)
+        love.graphics.setColor(0.6, 0.55, 0.5)
+        love.graphics.rectangle("fill", w/2-1, 0, 2, h-2)
+        love.graphics.setColor(0.25, 0.25, 0.25)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+        love.graphics.setColor(0.4, 0.4, 0.4)
+        love.graphics.arc("fill", w/2, h-2, w/3, math.pi, 0)
+        love.graphics.setColor(1, 0.2, 0.2)
+        love.graphics.polygon("fill", w/2, 6, w/2-3, 2, w/2+3, 2)
 
     elseif name == "DestroyedTunnel" then
         love.graphics.setColor(0.25, 0.22, 0.2)
@@ -543,6 +558,9 @@ function environment.loadNativeMap(data)
                         end
 
                         if entity then
+                            if def.name == "Caravan" then
+                                entity.isPushable = true
+                            end
                             -- Generate sprite: custom for buildings/obstacles, colored circle for characters
                             local spriteSize = 16
                             local canvas = nil
@@ -845,6 +863,15 @@ end
 
 function environment.generateBuildingSprite(name, w, h)
     return generateCustomSprite(name, w or 32, h or 32)
+end
+
+function environment.getAvailableEntityDefs()
+    local list = {}
+    for name, def in pairs(nameToEntityDef) do
+        table.insert(list, { id = name, name = name, type = def.type, health = def.health })
+    end
+    table.sort(list, function(a, b) return a.name < b.name end)
+    return list
 end
 
 return environment
