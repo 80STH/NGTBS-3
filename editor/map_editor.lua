@@ -24,6 +24,11 @@ local entityNameToGid = {
     MountainHouse = 84, SmallMountainHouse = 85,
 }
 
+local function isDirectionalEntity(name)
+    local env = require("entity.environment")
+    return env.getEntityDirection(name) ~= nil
+end
+
 -- Custom sprite generation for buildings/obstacles (same as environment.lua)
 local function generateCustomSprite(name, w, h)
     local canvas = love.graphics.newCanvas(w, h)
@@ -226,6 +231,7 @@ editor.selectedTerrain = "grass"
 editor.selectedEntity = "Warrior"
 editor.selectedStatus = "fire"
 editor.eraser = false
+editor.directionIndex = 1
 
 -- Map data (simple string-based tables)
 editor.terrainData = {}   -- terrainData["q,r"] = terrainId
@@ -367,7 +373,13 @@ end
 local function deepCopyMap(t, e, s, u)
     local tc, ec, sc, uc = {}, {}, {}, {}
     for k, v in pairs(t) do tc[k] = v end
-    for k, v in pairs(e) do ec[k] = v end
+    for k, v in pairs(e) do
+        if type(v) == "table" then
+            ec[k] = { name = v.name, dir = v.dir }
+        else
+            ec[k] = v
+        end
+    end
     for k, v in pairs(s) do
         if type(v) == "table" then
             local copy = {}
@@ -540,7 +552,11 @@ function editor.saveMap()
     -- Entities
     table.insert(lines, "  entities = {")
     for key, val in pairs(data.entities) do
-        table.insert(lines, string.format('    ["%s"] = "%s",', key, val))
+        if type(val) == "table" then
+            table.insert(lines, string.format('    ["%s"] = { name = "%s", dir = %d },', key, val.name, val.dir))
+        else
+            table.insert(lines, string.format('    ["%s"] = "%s",', key, val))
+        end
     end
     table.insert(lines, "  },")
 
@@ -626,7 +642,12 @@ function editor.paintCell(q, r)
         if editor.eraser then
             editor.entityData[k] = nil
         else
-            editor.entityData[k] = (editor.customEntityName ~= "" and editor.customEntityName or editor.selectedEntity)
+            local name = (editor.customEntityName ~= "" and editor.customEntityName or editor.selectedEntity)
+            if isDirectionalEntity(name) then
+                editor.entityData[k] = { name = name, dir = editor.directionIndex }
+            else
+                editor.entityData[k] = name
+            end
         end
     elseif editor.currentLayer == editor.LAYER_STATUS then
         if editor.eraser then
@@ -947,6 +968,24 @@ function editor.keypressed(key)
     elseif key == "3" then editor.currentLayer = editor.LAYER_STATUS; editor.focusNameInput = false
     elseif key == "4" then editor.currentLayer = editor.LAYER_UPPER_TERRAIN; editor.focusNameInput = false
     elseif key == "e" then editor.eraser = not editor.eraser
+    elseif key == "r" then
+        if editor.currentLayer == editor.LAYER_ENTITY then
+            -- If hovering over a placed directional entity, rotate it in-place
+            if editor.hex and editor.hex.hoverQ >= 0 and editor.hex.hoverR >= 0 then
+                local hk = editor.hex.hoverQ .. "," .. editor.hex.hoverR
+                local ev = editor.entityData[hk]
+                if type(ev) == "table" and ev.dir then
+                    editor.pushUndo()
+                    ev.dir = ev.dir % 6 + 1
+                    return
+                end
+            end
+            -- Otherwise rotate painting direction
+            local name = (editor.customEntityName ~= "" and editor.customEntityName or editor.selectedEntity)
+            if isDirectionalEntity(name) then
+                editor.directionIndex = editor.directionIndex % 6 + 1
+            end
+        end
     elseif key == "escape" then
         editor.cleanup()
         gamePhase = "menu"
@@ -1043,29 +1082,64 @@ function editor.draw()
                 end
 
                 -- Entity indicator
-                local entityId = editor.entityData[k]
-                if entityId then
-                    local sprite = editorSpriteCache[entityId]
+                local entityVal = editor.entityData[k]
+                if entityVal then
+                    local entityName, entityDir = nil, nil
+                    if type(entityVal) == "table" then
+                        entityName = entityVal.name
+                        entityDir = entityVal.dir
+                    else
+                        entityName = entityVal
+                    end
+                    local sprite = editorSpriteCache[entityName]
+                    local rot = 0
+                    if entityDir then
+                        rot = (entityDir - 1) * math.pi / 3
+                    end
                     if sprite then
                         local sw, sh = sprite:getDimensions()
                         local scale = editor.hex.radius * 0.055
                         love.graphics.setColor(1, 1, 1, 0.95)
-                        love.graphics.draw(sprite, x, y, 0, scale, scale, sw/2, sh/2)
+                        love.graphics.draw(sprite, x, y, rot, scale, scale, sw/2, sh/2)
                     else
                         local entCol = {0.8, 0.8, 0.8}
                         for _, ep in ipairs(editor.entityPalette) do
-                            if ep.id == entityId then entCol = ep.color; break end
+                            if ep.id == entityName then entCol = ep.color; break end
                         end
                         love.graphics.setColor(entCol[1], entCol[2], entCol[3], 0.9)
                         love.graphics.circle("fill", x, y, editor.hex.radius * 0.35)
                         love.graphics.setColor(1, 1, 1, 1)
                         love.graphics.setLineWidth(2)
                         love.graphics.circle("line", x, y, editor.hex.radius * 0.35)
-                        local letter = entityId:sub(1, 1)
+                        local letter = entityName:sub(1, 1)
                         local font = love.graphics.getFont()
                         local tw = font:getWidth(letter)
                         love.graphics.setColor(1, 1, 1, 1)
                         love.graphics.print(letter, x - tw / 2, y - 7)
+                    end
+                    -- Direction arrow for directional entities
+                    if entityDir then
+                        local cubeDir = hex_utils.CUBE_DIRECTIONS[entityDir]
+                        local tq, tr = hex_utils.applyCubeDiff(q, r, cubeDir.dx, cubeDir.dy, cubeDir.dz)
+                        local tx, ty = getDrawCoordsEditor(editor.hex, tq, tr)
+                        local angle = math.atan2(ty - y, tx - x)
+                        local dist = editor.hex.radius * 0.55
+                        local tipX = x + math.cos(angle) * dist
+                        local tipY = y + math.sin(angle) * dist
+                        local baseX = x + math.cos(angle) * dist * 0.45
+                        local baseY = y + math.sin(angle) * dist * 0.45
+                        love.graphics.setColor(0.9, 0.25, 0.25, 0.7)
+                        love.graphics.setLineWidth(2)
+                        love.graphics.line(baseX, baseY, tipX, tipY)
+                        -- Arrow head
+                        local perp = angle + math.pi / 2
+                        local headSize = 4
+                        local hx1 = tipX - math.cos(angle) * headSize + math.cos(perp) * headSize * 0.5
+                        local hy1 = tipY - math.sin(angle) * headSize + math.sin(perp) * headSize * 0.5
+                        local hx2 = tipX - math.cos(angle) * headSize - math.cos(perp) * headSize * 0.5
+                        local hy2 = tipY - math.sin(angle) * headSize - math.sin(perp) * headSize * 0.5
+                        love.graphics.polygon("fill", tipX, tipY, hx1, hy1, hx2, hy2)
+                        love.graphics.setLineWidth(1)
                     end
                 end
 
@@ -1183,8 +1257,12 @@ function editor.draw()
             if sprite then
                 local sw, sh = sprite:getDimensions()
                 local scale = PAL_TILE_SIZE * 0.035
+                local sprRot = 0
+                if isDirectionalEntity(item.id) then
+                    sprRot = (editor.directionIndex - 1) * math.pi / 3
+                end
                 love.graphics.setColor(1, 1, 1, 0.95)
-                love.graphics.draw(sprite, ix + PAL_TILE_SIZE/2, iy + PAL_TILE_SIZE/2 - 4, 0, scale, scale, sw/2, sh/2)
+                love.graphics.draw(sprite, ix + PAL_TILE_SIZE/2, iy + PAL_TILE_SIZE/2 - 4, sprRot, scale, scale, sw/2, sh/2)
             end
         end
 
@@ -1196,6 +1274,28 @@ function editor.draw()
             love.graphics.setColor(0.3, 0.3, 0.3, 1)
             love.graphics.setLineWidth(1)
             love.graphics.rectangle("line", ix, iy, PAL_TILE_SIZE, PAL_TILE_SIZE, 4)
+        end
+
+        -- Direction indicator on tile for directional entities
+        if editor.currentLayer == editor.LAYER_ENTITY and isDirectionalEntity(item.id) then
+            local cx, cy = ix + PAL_TILE_SIZE / 2, iy + PAL_TILE_SIZE / 2
+            local dirAngle = (editor.directionIndex - 1) * math.pi / 3
+            local arrowLen = PAL_TILE_SIZE * 0.35
+            local ax = cx + math.cos(dirAngle) * arrowLen
+            local ay = cy + math.sin(dirAngle) * arrowLen
+            love.graphics.setColor(0.9, 0.3, 0.3, 0.8)
+            love.graphics.setLineWidth(2)
+            love.graphics.line(cx, cy, ax, ay)
+            local perp = dirAngle + math.pi / 2
+            local hSize = 3
+            love.graphics.polygon("fill",
+                ax, ay,
+                ax - math.cos(dirAngle) * hSize + math.cos(perp) * hSize * 0.5,
+                ay - math.sin(dirAngle) * hSize + math.sin(perp) * hSize * 0.5,
+                ax - math.cos(dirAngle) * hSize - math.cos(perp) * hSize * 0.5,
+                ay - math.sin(dirAngle) * hSize - math.sin(perp) * hSize * 0.5
+            )
+            love.graphics.setLineWidth(1)
         end
 
         -- Label
@@ -1266,6 +1366,12 @@ function editor.draw()
         toolText = toolText .. " | \"" .. editor.customEntityName .. "\""
     else
         toolText = toolText .. " | " .. (selected or "-")
+    end
+    if editor.currentLayer == editor.LAYER_ENTITY and not editor.eraser then
+        local checkName = (editor.customEntityName ~= "" and editor.customEntityName or editor.selectedEntity)
+        if isDirectionalEntity(checkName) then
+            toolText = toolText .. " | Dir: " .. editor.directionIndex .. " [R]"
+        end
     end
     love.graphics.print(toolText, px + 10, toolY)
 

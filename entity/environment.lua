@@ -517,11 +517,23 @@ function environment.loadNativeMap(data)
 
     -- Load entities
     if data.entities then
-        for key, entityName in pairs(data.entities) do
+        for key, entityDataVal in pairs(data.entities) do
             local q, r = key:match("^(%d+),(%d+)$")
             if q and r then
                 q, r = tonumber(q), tonumber(r)
                 if tempHex:isActiveHex(q, r) then
+                    local entityName, entityDir = nil, nil
+                    if type(entityDataVal) == "table" then
+                        entityName = entityDataVal.name or entityDataVal[1]
+                        if entityDataVal.dir ~= nil then
+                            local dirs = hex_utils.CUBE_DIRECTIONS
+                            entityDir = dirs[entityDataVal.dir]
+                        elseif entityDataVal.direction then
+                            entityDir = entityDataVal.direction
+                        end
+                    else
+                        entityName = entityDataVal
+                    end
                     local def = nameToEntityDef[entityName]
                     if def then
                         local entity = nil
@@ -550,7 +562,11 @@ function environment.loadNativeMap(data)
                             if def.indestructible then entity.indestructible = true end
                             if def.noCollisionDamage then entity.noCollisionDamage = true end
                             if def.isHazard then entity.isHazard = true end
-                            if def.direction then entity.direction = def.direction end
+                            if entityDir then
+                                entity.direction = { dx = entityDir.dx, dy = entityDir.dy, dz = entityDir.dz }
+                            elseif def.direction then
+                                entity.direction = { dx = def.direction.dx, dy = def.direction.dy, dz = def.direction.dz }
+                            end
                         elseif def.type == "building" then
                             entity = Entity.new(def.name, Entity.TYPES.BUILDING, q, r, def.health, false, (def.moveRange or 0), nil, nil, {})
                             if def.waterWalker then entity.waterWalker = true end
@@ -865,10 +881,20 @@ function environment.generateBuildingSprite(name, w, h)
     return generateCustomSprite(name, w or 32, h or 32)
 end
 
+function environment.getEntityDirection(name)
+    local def = nameToEntityDef[name]
+    if def and def.direction then
+        return { dx = def.direction.dx, dy = def.direction.dy, dz = def.direction.dz }
+    end
+    return nil
+end
+
 function environment.getAvailableEntityDefs()
     local list = {}
     for name, def in pairs(nameToEntityDef) do
-        table.insert(list, { id = name, name = name, type = def.type, health = def.health })
+        local entry = { id = name, name = name, type = def.type, health = def.health }
+        if def.direction then entry.hasDirection = true end
+        table.insert(list, entry)
     end
     table.sort(list, function(a, b) return a.name < b.name end)
     return list

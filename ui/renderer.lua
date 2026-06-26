@@ -874,7 +874,18 @@ function drawEntity(entity, state)
         elseif shuntHighlight then
             love.graphics.setColor(0.3, 0.6, 1, alpha)
         end
-        love.graphics.draw(entity.sprite, x, drawY, 0, finalScale, finalScale, sw/2, sh/2)
+        -- Directional entities: rotate sprite to match direction
+        local spriteRotation = 0
+        if entity.direction then
+            for i = 1, 6 do
+                local cd = hex_utils.CUBE_DIRECTIONS[i]
+                if cd.dx == entity.direction.dx and cd.dy == entity.direction.dy and cd.dz == entity.direction.dz then
+                    spriteRotation = (i - 2) * math.pi / 3
+                    break
+                end
+            end
+        end
+        love.graphics.draw(entity.sprite, x, drawY, spriteRotation, finalScale, finalScale, sw/2, sh/2)
 
         -- Cracks on damaged buildings (not indestructible ones)
         if entity:isBuilding() and entity.health > 0 and entity.health < entity.maxHealth and not entity.indestructible then
