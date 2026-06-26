@@ -168,7 +168,6 @@ function Entity:takeDamage(damage)
         _G.chaos = (_G.chaos or 0) + actualDamage
         log.infof("entity", "Train car damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos)
     end
-    end
 
     log.debugf("entity", "%s takes %d damage! (%d/%d HP)",
           self.name, actualDamage, math.max(0, self.health), self.maxHealth)
