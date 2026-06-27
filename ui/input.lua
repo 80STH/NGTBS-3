@@ -471,8 +471,6 @@ function input.keypressed(key)
         return
     end
 
-    if global_abilities.handleKey(key, state) then return end
-
     if key == "1" then
         if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and #attackButtons >= 1 then
             selectedAttack = attackButtons[1].attack
@@ -550,6 +548,10 @@ function input.mousereleased(x, y, button)
             sounds.play("undo")
         end
     end
+end
+
+function input.wheelmoved(x, y, scrollY, state)
+    return global_abilities.handleWheelMoved(x, y, scrollY, state)
 end
 
 function input.keyreleased(key)

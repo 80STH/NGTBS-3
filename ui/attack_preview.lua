@@ -66,6 +66,9 @@ function preview.calculateEffectiveDamage(target, attacker, baseDamage, directio
     if status.hasEntityStatus(attacker, "empowered") then
         damage = damage + 1
     end
+    if baseDamage == 1 and status.hasEntityStatus(attacker, "rage") then
+        damage = 99
+    end
     if status.hasEntityStatus(attacker, "fatal_damage") then
         damage = 99
     end

@@ -5,6 +5,7 @@
 
 local undo = {}
 local log = require("util.log")
+local objectives = require("system.objectives")
 
 undo.history = {}
 
@@ -29,6 +30,23 @@ function undo.snapshot()
         abilityUsedThisTurn = ga and ga.abilityUsedThisTurn or false,
         activeAbilityName = ga and ga.activeAbility and ga.activeAbility.name or nil,
         abilityStates = abilityStates,
+        objectiveStates = objectives.saveState(),
+        objectiveTracking = {
+            enemiesKilled = _G.objective_enemiesKilled or 0,
+            digBlocks = _G.objective_digBlocks or 0,
+            stasisCount = _G.stasisCount or 0,
+            caravanCount = _G.caravanCount or 0,
+            caravansDestroyed = _G.caravansDestroyed or 0,
+            blockpostMaxHealth = _G.blockpostMaxHealth,
+            blockpostDamageTracked = _G.blockpostDamageTracked or 0,
+            railwayTakenDamage = _G.railwayTakenDamage or 0,
+            buildingDamageTracked = _G.buildingDamageTracked or 0,
+            poisonousSeenAlive = _G.poisonousSeenAlive or false,
+            poisonousResolved = _G.poisonousResolved or false,
+            poisonousHadDecay = _G.poisonousHadDecay or false,
+            occupiedTunnelCount = _G.occupiedTunnelCount or 0,
+            lichKilledPlayer = _G.lichKilledPlayer or false,
+        },
         actionHistoryCount = #undo.history,
     }
     -- Save every entity's state
@@ -205,6 +223,28 @@ function undo.restore(snap)
         else
             ga.activeAbility = nil
         end
+    end
+
+    -- Restore objective states
+    if snap.objectiveStates then
+        objectives.restoreState(snap.objectiveStates)
+    end
+    -- Restore objective tracking globals
+    if snap.objectiveTracking then
+        _G.objective_enemiesKilled = snap.objectiveTracking.enemiesKilled
+        _G.objective_digBlocks = snap.objectiveTracking.digBlocks
+        _G.stasisCount = snap.objectiveTracking.stasisCount
+        _G.caravanCount = snap.objectiveTracking.caravanCount
+        _G.caravansDestroyed = snap.objectiveTracking.caravansDestroyed
+        _G.blockpostMaxHealth = snap.objectiveTracking.blockpostMaxHealth
+        _G.blockpostDamageTracked = snap.objectiveTracking.blockpostDamageTracked
+        _G.railwayTakenDamage = snap.objectiveTracking.railwayTakenDamage
+        _G.buildingDamageTracked = snap.objectiveTracking.buildingDamageTracked
+        _G.poisonousSeenAlive = snap.objectiveTracking.poisonousSeenAlive
+        _G.poisonousResolved = snap.objectiveTracking.poisonousResolved
+        _G.poisonousHadDecay = snap.objectiveTracking.poisonousHadDecay
+        _G.occupiedTunnelCount = snap.objectiveTracking.occupiedTunnelCount
+        _G.lichKilledPlayer = snap.objectiveTracking.lichKilledPlayer
     end
 
     log.debugf("undo", "Snapshot restored. History size: %d", #undo.history)

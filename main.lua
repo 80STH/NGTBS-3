@@ -639,3 +639,11 @@ end
 function love.keyreleased(key)
     input.keyreleased(key)
 end
+
+function love.wheelmoved(dx, dy)
+    if gamePhase ~= "playing" then return end
+    local mx, my = love.mouse.getPosition()
+    mx = mx / dpiScale
+    my = my / dpiScale
+    input.wheelmoved(mx, my, dy, state)
+end

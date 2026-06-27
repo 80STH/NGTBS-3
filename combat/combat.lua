@@ -1999,6 +1999,11 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
         finalDamage = finalDamage + 1
     end
 
+    -- Rage: attacks with base damage 1 become fatal
+    if damage == 1 and status.hasEntityStatus(attacker, "rage") then
+        finalDamage = 99
+    end
+
     -- Fatal damage: increases damage to 99 (one-time, removed after attack)
     if damage > 0 and status.hasEntityStatus(attacker, "fatal_damage") then
         finalDamage = 99

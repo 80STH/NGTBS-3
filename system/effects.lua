@@ -79,6 +79,12 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
             end
             -- ====================================
 
+            -- Rage expires at end of turn
+            if status.hasEntityStatus(entity, "rage") then
+                status.removeFromEntity(entity, "rage")
+                log.infof("effects", "%s's rage fades", entity.name)
+            end
+
             -- Drowning check (if character is on water and not dead, not flying/hovering)
             if entity:isCharacter() and not entity.flying and not entity.hovering then
                 local terrain = terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] or "grass"

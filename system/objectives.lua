@@ -724,6 +724,23 @@ function objectives.checkOnVictory(entities)
     end
 end
 
+function objectives.saveState()
+    local saved = {}
+    for id, state in pairs(objectiveStates) do
+        saved[id] = state
+    end
+    return saved
+end
+
+function objectives.restoreState(saved)
+    objectiveStates = {}
+    if saved then
+        for id, state in pairs(saved) do
+            objectiveStates[id] = state
+        end
+    end
+end
+
 function objectives.draw()
     if not smallFont then smallFont = fonts.get(12) end
     local x = 10
