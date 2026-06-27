@@ -246,6 +246,7 @@ editor.lastPainted = nil
 editor.fileName = "custom_map"
 editor.message = nil
 editor.messageTimer = 0
+editor.focusFileName = false
 
 -- Undo/redo stacks
 editor.undoStack = {}
@@ -756,6 +757,7 @@ function editor.mousepressed(x, y, button)
             if x >= tab.x and x <= tab.x + tab.w and y >= tab.y and y <= tab.y + tab.h then
                 editor.currentLayer = i
                 editor.eraser = false
+                editor.focusFileName = false
                 return
             end
         end
@@ -767,6 +769,7 @@ function editor.mousepressed(x, y, button)
             local inputH = 24
             if x >= px + 10 and x <= px + 10 + inputW and y >= nameInputY and y <= nameInputY + inputH then
                 editor.focusNameInput = true
+                editor.focusFileName = false
                 return
             end
             nameInputY = nameInputY + inputH + 6
@@ -793,6 +796,7 @@ function editor.mousepressed(x, y, button)
                     editor.selectedStatus = item.id
                 end
                 editor.eraser = false
+                editor.focusFileName = false
                 return
             end
         end
@@ -876,6 +880,17 @@ function editor.mousepressed(x, y, button)
             editor.eraser = not editor.eraser
             return
         end
+
+        -- File name input click
+        local nameY = btns.save.y - 40
+        local nameW = pw - 20
+        local nameH = 24
+        if x >= px + 10 and x <= px + 10 + nameW and y >= nameY and y <= nameY + nameH then
+            editor.focusFileName = true
+            editor.focusNameInput = false
+            return
+        end
+
         if x >= btns.back.x and x <= btns.back.x + btns.back.w and y >= btns.back.y and y <= btns.back.y + btns.back.h then
             editor.cleanup()
             gamePhase = "menu"
@@ -886,6 +901,7 @@ function editor.mousepressed(x, y, button)
     end
 
     editor.focusNameInput = false
+    editor.focusFileName = false
 
     -- Click on hex grid
     if not editor.hex then return end
@@ -935,6 +951,19 @@ function editor.keypressed(key)
         return
     end
 
+    if editor.focusFileName then
+        if key == "backspace" then
+            editor.fileName = editor.fileName:sub(1, -2)
+        elseif key == "return" or key == "escape" then
+            editor.focusFileName = false
+        elseif key == "space" then
+            editor.fileName = editor.fileName .. " "
+        elseif #key == 1 then
+            editor.fileName = editor.fileName .. key
+        end
+        return
+    end
+
     if ctrl then
         if key == "z" then
             editor.undo()
@@ -963,10 +992,10 @@ function editor.keypressed(key)
         return
     end
 
-    if key == "1" then editor.currentLayer = editor.LAYER_TERRAIN; editor.focusNameInput = false
-    elseif key == "2" then editor.currentLayer = editor.LAYER_ENTITY
-    elseif key == "3" then editor.currentLayer = editor.LAYER_STATUS; editor.focusNameInput = false
-    elseif key == "4" then editor.currentLayer = editor.LAYER_UPPER_TERRAIN; editor.focusNameInput = false
+    if key == "1" then editor.currentLayer = editor.LAYER_TERRAIN; editor.focusNameInput = false; editor.focusFileName = false
+    elseif key == "2" then editor.currentLayer = editor.LAYER_ENTITY; editor.focusFileName = false
+    elseif key == "3" then editor.currentLayer = editor.LAYER_STATUS; editor.focusNameInput = false; editor.focusFileName = false
+    elseif key == "4" then editor.currentLayer = editor.LAYER_UPPER_TERRAIN; editor.focusNameInput = false; editor.focusFileName = false
     elseif key == "e" then editor.eraser = not editor.eraser
     elseif key == "r" then
         if editor.currentLayer == editor.LAYER_ENTITY then
@@ -1351,10 +1380,19 @@ function editor.draw()
     local nameY = btns.save.y - 40
     love.graphics.setColor(0.15, 0.15, 0.2, 1)
     love.graphics.rectangle("fill", px + 10, nameY, pw - 20, 24, 3)
-    love.graphics.setColor(0.5, 0.5, 0.6, 1)
+    if editor.focusFileName then
+        love.graphics.setColor(1, 1, 0.2, 1)
+    else
+        love.graphics.setColor(0.5, 0.5, 0.6, 1)
+    end
+    love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", px + 10, nameY, pw - 20, 24, 3)
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
-    love.graphics.print("Name: " .. editor.fileName, px + 14, nameY + 6)
+    local displayName = editor.fileName
+    if editor.focusFileName then
+        displayName = displayName .. "_"
+    end
+    love.graphics.print("Name: " .. displayName, px + 14, nameY + 6)
 
     -- Current tool info
     local toolY = nameY - 30

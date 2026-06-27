@@ -73,7 +73,7 @@ function restartGame(mapPath)
         end
     end
 
-    -- Map4: Power Lich boss + 4 pre-dug enemies
+    -- Map4: Power Lich boss
     if mapPath:match("map4") then
         local occupiedSet = {}
         for _, e in ipairs(entities) do
@@ -95,8 +95,6 @@ function restartGame(mapPath)
             local j = love.math.random(i)
             candidates[i], candidates[j] = candidates[j], candidates[i]
         end
-
-        -- Place Power Lich
         if #candidates >= 1 then
             local cell = candidates[1]
             local lich = environment.createEnemyByType("PowerLich", cell.q, cell.r)
@@ -104,23 +102,21 @@ function restartGame(mapPath)
             table.insert(entities, lich)
             log.debugf("game", "Power Lich placed at (%d,%d)", cell.q, cell.r)
         end
+    end
 
-        -- Place 4 pre-dug enemies
-        local enemyTypes = { "Zombie", "Ghost", "Lich", "Brute" }
-        for i = 1, math.min(4, #candidates - 1) do
-            local cell = candidates[i + 1]
-            local etype = enemyTypes[(i - 1) % #enemyTypes + 1]
-            local enemy = environment.createEnemyByType(etype, cell.q, cell.r)
-            table.insert(entities, enemy)
-            log.debugf("game", "Pre-dug %s placed at (%d,%d)", etype, cell.q, cell.r)
+    -- Spawn 5 random enemies at game start
+    local occupiedSet = {}
+    for _, e in ipairs(entities) do
+        local k = e.q .. "," .. e.r
+        occupiedSet[k] = true
+    end
+    local initialAlive = 0
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable and e.health > 0 and not e.isSummoningRod then
+            initialAlive = initialAlive + 1
         end
-    -- For map1, spawn 5 random enemies if none are present (user cleared the entity layer)
-    elseif mapPath:match("map1%.lua$") then
-        local occupiedSet = {}
-        for _, e in ipairs(entities) do
-            local k = e.q .. "," .. e.r
-            occupiedSet[k] = true
-        end
+    end
+    if initialAlive < 5 then
         local candidates = {}
         for q = 0, width - 1 do
             for r = 0, height - 1 do
@@ -136,27 +132,16 @@ function restartGame(mapPath)
             local j = love.math.random(i)
             candidates[i], candidates[j] = candidates[j], candidates[i]
         end
-        local initialSpawn = 5
+        local needed = 5 - initialAlive
         local spawned = 0
         for _, cell in ipairs(candidates) do
-            if spawned >= initialSpawn then break end
+            if spawned >= needed then break end
             local enemy = environment.createRandomEnemy(cell.q, cell.r)
             table.insert(entities, enemy)
             spawned = spawned + 1
-            log.debugf("game", "Spawned random enemy %s at (%d,%d)", enemy.name, cell.q, cell.r)
+            log.debugf("game", "Initial spawn: %s at (%d,%d)", enemy.name, cell.q, cell.r)
         end
-        log.debugf("game", "Spawned %d random enemies on map1", spawned)
-
-        -- 50% chance to spawn SummoningRod
-        if love.math.random() < 0.5 then
-            local emptyCells = findRandomEmptyCells(1)
-            if #emptyCells > 0 then
-                local cell = emptyCells[1]
-                local rod = environment.createEnemyByType("SummoningRod", cell.q, cell.r)
-                table.insert(entities, rod)
-                log.debugf("game", "SummoningRod spawned at (%d,%d) with 50%% chance", cell.q, cell.r)
-            end
-        end
+        log.infof("game", "Initial spawn complete: %d enemies added (total %d)", spawned, initialAlive + spawned)
     end
 
     -- Setup deploy phase
@@ -631,7 +616,7 @@ function processDigSites()
         end
     end
     if not (state and state.disableEnemySpawn) then
-        local spawnLimit = 7
+        local spawnLimit = 6
         local needed = spawnLimit - aliveEnemies
         if needed > 0 then
             local spots = findRandomEmptyCells(needed, function(q, r)

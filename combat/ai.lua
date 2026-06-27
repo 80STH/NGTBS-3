@@ -142,6 +142,25 @@ function ai.getBestTargetForEnemy(enemy, entities, hex, selectedTargets)
         elseif t.health <= 3 then score = score + 5 end
         if t.type == "building" and t.health < t.entity.maxHealth then score = score + 8 end
 
+        -- PowerLich: prioritize hitting as many targets as possible with cone
+        if attack.name == "Power Bolt" then
+            local extraHits = 0
+            local coneCells = attack:getConeCells(enemy, target.q, target.r, hex)
+            for _, cell in ipairs(coneCells) do
+                if cell.q ~= target.q or cell.r ~= target.r then
+                    for _, e in ipairs(entities) do
+                        if e.q == cell.q and e.r == cell.r and e.health > 0 then
+                            if (e:isCharacter() and e.isPlayable) or e:isBuilding() then
+                                extraHits = extraHits + 1
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+            score = score + extraHits * 80
+        end
+
         if score > bestScore then
             bestScore = score
             bestTarget = target
