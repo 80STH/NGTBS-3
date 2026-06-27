@@ -465,13 +465,13 @@ function updateDeathAnimations(dt)
                 if e.name == "TunnelEntrance" or e.name == "TunnelExit" or e.name == "OccupiedTunnel" then
                     local dtunnel = Entity.new("DestroyedTunnel", Entity.TYPES.BUILDING, e.q, e.r, 1, false, 0, nil, nil, {})
                     dtunnel.indestructible = true
-                    dtunnel.sprite = environment.generateBuildingSprite("DestroyedTunnel", hex.tileWidth, hex.tileHeight)
+                    dtunnel.sprite = environment.generateBuildingSprite("DestroyedTunnel", 12, 12)
                     table.insert(entities, dtunnel)
                 end
                 if e.name == "MountainHouse" or e.name == "SmallMountainHouse" then
                     local ruined = Entity.new("RuinedMountainHouse", Entity.TYPES.BUILDING, e.q, e.r, 1, false, 0, nil, nil, {})
                     ruined.indestructible = true
-                    ruined.sprite = environment.generateBuildingSprite("RuinedMountainHouse", hex.tileWidth, hex.tileHeight)
+                    ruined.sprite = environment.generateBuildingSprite("RuinedMountainHouse", 12, 12)
                     table.insert(entities, ruined)
                 end
 

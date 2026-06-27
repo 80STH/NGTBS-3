@@ -67,6 +67,7 @@ squadHpBonus = 0
 squadMoveBonus = 0
 squadArmorBonus = 0
 disableEnemySpawn = false
+unlimitedAbilities = false
 chaos = 0
 chaosMax = 5
 entityAt = {}
@@ -580,11 +581,19 @@ function getEnemyAttackOrder(entities, turnState)
     if turnState.phase == "enemy_attack" then
         queue = turnState.enemyAttackQueue or {}
     else
+        local priority = {}
+        local waterWalkers = {}
+        local normal = {}
         for _, e in ipairs(entities) do
             if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 then
-                table.insert(queue, e)
+                local tbl = e.attacksFirst and priority or (e.waterWalker and waterWalkers or normal)
+                table.insert(tbl, e)
             end
         end
+        for _, e in ipairs(priority) do table.insert(queue, e) end
+        for _, e in ipairs(waterWalkers) do table.insert(queue, e) end
+        for _, e in ipairs(normal) do table.insert(queue, e) end
+
         local trainGroups = trains_mod.getTrainGroups()
         for _, group in pairs(trainGroups) do
             if group.active and group.cars and #group.cars > 0 then

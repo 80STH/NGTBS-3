@@ -37,6 +37,7 @@ function undo.snapshot()
             ref = e,
             q = e.q, r = e.r,
             health = e.health, maxHealth = e.maxHealth,
+            attacksFirst = e.attacksFirst,
             hasActedThisTurn = e.hasActedThisTurn,
             hasMovedThisTurn = e.hasMovedThisTurn,
             canMoveAfterAttack = e.canMoveAfterAttack,
@@ -107,6 +108,7 @@ function undo.restore(snap)
             es.ref.currentDrawY = nil
             es.ref.health = es.health
             es.ref.maxHealth = es.maxHealth
+            es.ref.attacksFirst = es.attacksFirst
             es.ref.hasActedThisTurn = es.hasActedThisTurn
             es.ref.hasMovedThisTurn = es.hasMovedThisTurn
             es.ref.canMoveAfterAttack = es.canMoveAfterAttack
@@ -133,7 +135,7 @@ function undo.restore(snap)
 
     -- Remove entities that weren't in the snapshot (created after snapshot)
     for i = #entities, 1, -1 do
-        if not existingRefs[entities[i]] and entities[i]:isCharacter() then
+        if not existingRefs[entities[i]] then
             table.remove(entities, i)
         end
     end

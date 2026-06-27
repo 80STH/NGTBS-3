@@ -60,6 +60,7 @@ function GameState.new()
     self.dpiScale = 1
     self.difficultyModifier = 1
     self.disableEnemySpawn = false
+    self.unlimitedAbilities = false
 
     -- === Entity/cell references (nil or table; syncState copies the reference) ===
     self.selectedActor = nil
@@ -119,6 +120,7 @@ function GameState:syncFromGlobals()
     self.dpiScale = _G.dpiScale or 1
     self.difficultyModifier = _G.difficultyModifier or 1
     self.disableEnemySpawn = _G.disableEnemySpawn or false
+    self.unlimitedAbilities = _G.unlimitedAbilities or false
     self.showEnemyOrder = _G.showEnemyOrder or false
     self.chaos = _G.chaos or 0
     self.chaosMax = _G.chaosMax or 5

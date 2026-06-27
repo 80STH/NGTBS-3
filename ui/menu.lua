@@ -195,11 +195,15 @@ local function computeLayout(w, h)
     end
     y = y + 2 * (btnH + btnGap) + 4
 
-    -- Checkbox
+    -- Checkboxes
     local cbSize = 14
     l.cb = { x = cx, y = y, w = cbSize, h = cbSize }
     l.cbLabelX = cx + cbSize + 6
     l.cbLabelY = y
+    y = y + cbSize + 6
+    l.cb2 = { x = cx, y = y, w = cbSize, h = cbSize }
+    l.cb2LabelX = cx + cbSize + 6
+    l.cb2LabelY = y
     y = y + cbSize + 12
 
     -- Hint
@@ -327,7 +331,7 @@ function menu.draw()
         love.graphics.printf(btn.label, btn.x + 6, btn.y + btn.h/2 - 7, btn.w - 12, "center")
     end
 
-    -- Checkbox
+    -- Checkboxes
     local cb = l.cb
     local cbHover = mx >= cb.x and mx <= cb.x + 180 and my >= cb.y and my <= cb.y + cb.h
     love.graphics.setColor(0.15, 0.15, 0.2, 0.9)
@@ -344,6 +348,23 @@ function menu.draw()
     love.graphics.setColor(1, 1, 1, 0.8)
     love.graphics.setFont(l.tinyFont)
     love.graphics.printf("Disable Enemy Spawn", l.cbLabelX, l.cbLabelY + 1, 160, "left")
+
+    local cb2 = l.cb2
+    local cb2Hover = mx >= cb2.x and mx <= cb2.x + 180 and my >= cb2.y and my <= cb2.y + cb2.h
+    love.graphics.setColor(0.15, 0.15, 0.2, 0.9)
+    love.graphics.rectangle("fill", cb2.x, cb2.y, cb2.w, cb2.h, 3)
+    love.graphics.setColor(cb2Hover and 0.5 or 0.35, cb2Hover and 0.5 or 0.35, cb2Hover and 0.7 or 0.5, 0.8)
+    love.graphics.rectangle("line", cb2.x, cb2.y, cb2.w, cb2.h, 3)
+    if unlimitedAbilities then
+        love.graphics.setColor(0.3, 0.8, 0.3, 1)
+        love.graphics.setLineWidth(2)
+        love.graphics.line(cb2.x + 3, cb2.y + cb2.h/2, cb2.x + cb2.h/2, cb2.y + cb2.h - 3)
+        love.graphics.line(cb2.x + cb2.h/2, cb2.y + cb2.h - 3, cb2.x + cb2.h - 3, cb2.y + 3)
+        love.graphics.setLineWidth(1)
+    end
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.setFont(l.tinyFont)
+    love.graphics.printf("All abilities + unlimited mana", l.cb2LabelX, l.cb2LabelY + 1, 160, "left")
 
     -- Hint
     love.graphics.setColor(0.4, 0.4, 0.4, 0.6)
@@ -415,10 +436,15 @@ function menu.mousepressed(x, y)
         end
     end
 
-    -- Checkbox
+    -- Checkboxes
     local cb = l.cb
     if x >= cb.x and x <= cb.x + 180 and y >= cb.y and y <= cb.y + cb.h then
         disableEnemySpawn = not disableEnemySpawn
+        return true
+    end
+    local cb2 = l.cb2
+    if x >= cb2.x and x <= cb2.x + 180 and y >= cb2.y and y <= cb2.y + cb2.h then
+        unlimitedAbilities = not unlimitedAbilities
         return true
     end
 

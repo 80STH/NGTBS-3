@@ -24,7 +24,7 @@ global_abilities.abilityUsedThisTurn = false
 global_abilities.mana = 3
 global_abilities.maxMana = 3
 global_abilities.abilityUsedThisTurn = false
-global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay"}
+global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack"}
 
 global_abilities.unlocked = {}
 
@@ -59,10 +59,11 @@ function global_abilities.initWithCommander(commanderName)
     global_abilities.maxMana = cmd.startMaxMana
 end
 
-function global_abilities.getDisplayOrder()
+function global_abilities.getDisplayOrder(state)
     local result = {}
+    local unlimited = state and state.unlimitedAbilities
     for _, name in ipairs(global_abilities.abilityOrder) do
-        if global_abilities.unlocked[name] then
+        if unlimited or global_abilities.unlocked[name] then
             table.insert(result, name)
         end
     end
@@ -80,9 +81,11 @@ function global_abilities.register(obj)
 end
 
 function global_abilities.spendAbility(ab)
+    if not _G.unlimitedAbilities then
+        global_abilities.mana = global_abilities.mana - ab.manaCost
+        global_abilities.abilityUsedThisTurn = true
+    end
     ab.hasBeenUsed = true
-    global_abilities.mana = global_abilities.mana - ab.manaCost
-    global_abilities.abilityUsedThisTurn = true
     local abilitySounds = {
         ["Heal"] = "heal_ability",
         ["Extra Move"] = "extra_move",
@@ -122,30 +125,23 @@ function global_abilities.handleButtonClick(x, y, state)
         return true
     end
     if not global_abilities.dropdownOpen then return false end
-    local displayOrder = global_abilities.getDisplayOrder()
+    local displayOrder = global_abilities.getDisplayOrder(state)
     for i, name in ipairs(displayOrder) do
         local ab = global_abilities.registry[name]
         if ab then
             local ix, iy, iw, ih = getAbilityItemRect(i)
             if x >= ix and x <= ix + iw and y >= iy and y <= iy + ih then
-            if state.turnState.phase == "player" and not ab.hasBeenUsed and not (state.selectedActor and state.selectedActor.isMoving) then
-                    if ab.name == "Unearth" and not ab:hasDigSites(state) then
-                        log.info("abilities", "Unearth: No dig sites on the map!")
+            if state.turnState.phase == "player" and not (state.selectedActor and state.selectedActor.isMoving) then
+                    local unlimited = state.unlimitedAbilities
+                    if not unlimited and ab.hasBeenUsed then
+                        log.infof("abilities", "%s has already been used this game!", ab.name)
                         return true
                     end
-                    if global_abilities.abilityUsedThisTurn then
+                    if not unlimited and global_abilities.abilityUsedThisTurn then
                         log.info("abilities", "Already used an ability this turn!")
                         return true
                     end
-                    if global_abilities.mana < ab.manaCost then
-                        log.infof("abilities", "%s costs %s mana, only %s left!", ab.name, ab.manaCost, global_abilities.mana)
-                        return true
-                    end
-                    if global_abilities.abilityUsedThisTurn then
-                        log.info("abilities", "Already used an ability this turn!")
-                        return true
-                    end
-                    if global_abilities.mana < ab.manaCost then
+                    if not unlimited and global_abilities.mana < ab.manaCost then
                         log.infof("abilities", "%s costs %s mana, only %s left!", ab.name, ab.manaCost, global_abilities.mana)
                         return true
                     end
@@ -155,7 +151,7 @@ function global_abilities.handleButtonClick(x, y, state)
                     global_abilities.activeAbility = ab
                     ab:onActivate(state)
                     global_abilities.dropdownOpen = false
-                elseif ab.hasBeenUsed then
+                elseif not state.unlimitedAbilities and ab.hasBeenUsed then
                     log.infof("abilities", "%s has already been used this game!", ab.name)
                 elseif state.turnState.phase ~= "player" then
                     log.info("abilities", "Can only use abilities during your turn!")
@@ -185,28 +181,21 @@ end
 function global_abilities.handleKey(key, state)
     for _, ab in pairs(global_abilities.registry) do
         if key == ab.key then
-            if not global_abilities.unlocked[ab.name] then
+            if not state.unlimitedAbilities and not global_abilities.unlocked[ab.name] then
                 log.infof("abilities", "%s is not unlocked yet!", ab.name)
                 return true
             end
-            if state.turnState.phase == "player" and not ab.hasBeenUsed and not (state.selectedActor and state.selectedActor.isMoving) then
-                if ab.name == "Unearth" and not ab:hasDigSites(state) then
-                    log.info("abilities", "Unearth: No dig sites on the map!")
+            if state.turnState.phase == "player" and not (state.selectedActor and state.selectedActor.isMoving) then
+                local unlimited = state.unlimitedAbilities
+                if not unlimited and ab.hasBeenUsed then
+                    log.infof("abilities", "%s has already been used this game!", ab.name)
                     return true
                 end
-                if global_abilities.abilityUsedThisTurn then
+                if not unlimited and global_abilities.abilityUsedThisTurn then
                     log.info("abilities", "Already used an ability this turn!")
                     return true
                 end
-                if global_abilities.mana < ab.manaCost then
-                    log.infof("abilities", "%s costs %s mana, only %s left!", ab.name, ab.manaCost, global_abilities.mana)
-                    return true
-                end
-                if global_abilities.abilityUsedThisTurn then
-                    log.info("abilities", "Already used an ability this turn!")
-                    return true
-                end
-                if global_abilities.mana < ab.manaCost then
+                if not unlimited and global_abilities.mana < ab.manaCost then
                     log.infof("abilities", "%s costs %s mana, only %s left!", ab.name, ab.manaCost, global_abilities.mana)
                     return true
                 end
@@ -215,7 +204,7 @@ function global_abilities.handleKey(key, state)
                 end
                 global_abilities.activeAbility = ab
                 ab:onActivate(state)
-            elseif ab.hasBeenUsed then
+            elseif not state.unlimitedAbilities and ab.hasBeenUsed then
                 log.infof("abilities", "%s has already been used this game!", ab.name)
             elseif state.turnState.phase ~= "player" then
                 log.info("abilities", "Can only use abilities during your turn!")
@@ -266,7 +255,7 @@ function global_abilities.drawButtons(mx, my, state)
     if not global_abilities.dropdownOpen then return end
 
     -- Items
-    local displayOrder = global_abilities.getDisplayOrder()
+    local displayOrder = global_abilities.getDisplayOrder(state)
     for i, name in ipairs(displayOrder) do
         local ab = global_abilities.registry[name]
         if ab then
@@ -286,9 +275,8 @@ end
 function global_abilities.drawAbilityButton(self, mx, my, state, cfg)
     local isActive = (global_abilities.activeAbility == self)
     local enoughMana = global_abilities.mana >= self.manaCost
-    local available = (state.turnState.phase == "player" and not self.hasBeenUsed and not global_abilities.abilityUsedThisTurn and enoughMana)
-    local enoughMana = global_abilities.mana >= self.manaCost
-    local available = (state.turnState.phase == "player" and not self.hasBeenUsed and not global_abilities.abilityUsedThisTurn and enoughMana)
+    local unlimited = state.unlimitedAbilities
+    local available = (state.turnState.phase == "player" and (unlimited or (not self.hasBeenUsed and not global_abilities.abilityUsedThisTurn and enoughMana)))
     local x, y, w, h = self.button.x, self.button.y, self.button.width, self.button.height
     local buttonFont = fonts.get(11)
     local logicalW = love.graphics.getWidth()
@@ -1113,6 +1101,81 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
     return true
 end
 
+-- ============================================================
+-- FORCE ATTACK: mark an enemy to attack first
+-- ============================================================
+local ForceAttackAbility = {}
+ForceAttackAbility.__index = ForceAttackAbility
+
+function ForceAttackAbility.new()
+    local self = {
+        name = "Force Attack",
+        key = "f",
+        manaCost = 1,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }
+    return setmetatable(self, ForceAttackAbility)
+end
+
+function ForceAttackAbility:reset()
+    self.hasBeenUsed = false
+end
+
+function ForceAttackAbility:onActivate(state)
+    _G.showEnemyOrder = true
+    log.info("abilities", "Click on an enemy to mark it as first attacker, or press ESC to cancel")
+end
+
+function ForceAttackAbility:onDeactivate(state)
+    _G.showEnemyOrder = false
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+
+function ForceAttackAbility:onClickHex(q, r, hex, state)
+    local target = nil
+    for _, e in ipairs(state.entities) do
+        if e.q == q and e.r == r and e.health > 0 and e:isCharacter() and not e.isPlayable then
+            target = e
+            break
+        end
+    end
+
+    if not target then
+        log.warn("abilities", "No valid enemy at this cell!")
+        return true
+    end
+
+    if target.attacksFirst then
+        log.warn("abilities", "This enemy already attacks first!")
+        return true
+    end
+
+    target.attacksFirst = true
+    global_abilities.spendAbility(self)
+    undo.snapshot()
+    log.infof("abilities", "%s marked to attack first!", tostring(target.name))
+    _G.showEnemyOrder = false
+    restoreSelectedActor()
+    global_abilities.activeAbility = nil
+    return true
+end
+
+function ForceAttackAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.9, 0.6, 0.1},
+        label = "Force Attack (F)",
+        activeLabel = "Select enemy (F)",
+        tooltipH = 80,
+        tooltipTitle = "Force Attack",
+        tooltipLines = {
+            "Mark an enemy to attack first",
+            "in the turn order.",
+        },
+    })
+end
+
 -- Register all abilities
 global_abilities.register(HealAbility.new())
 global_abilities.register(ExtraMoveAbility.new())
@@ -1120,5 +1183,6 @@ global_abilities.register(WindTorrent.new())
 global_abilities.register(UnearthAbility.new())
 global_abilities.register(MindControlAbility.new())
 global_abilities.register(AccelerateDecayAbility.new())
+global_abilities.register(ForceAttackAbility.new())
 
 return global_abilities

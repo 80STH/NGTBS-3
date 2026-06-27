@@ -56,13 +56,21 @@ function turnManager.endPlayerTurn()
     local trains_mod = require("system.trains")
     trains_mod.prepareTrainAttacks(entities, hex)
 
-    -- Queue enemy attacks
-    local attackers = {}
+    -- Queue enemy attacks: attacksFirst -> water walkers -> normal
+    local priority = {}
+    local waterWalkers = {}
+    local normal = {}
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 and not e.isDying then
-            table.insert(attackers, e)
+            local tbl = e.attacksFirst and priority or (e.waterWalker and waterWalkers or normal)
+            table.insert(tbl, e)
         end
     end
+
+    local attackers = {}
+    for _, e in ipairs(priority) do table.insert(attackers, e) end
+    for _, e in ipairs(waterWalkers) do table.insert(attackers, e) end
+    for _, e in ipairs(normal) do table.insert(attackers, e) end
 
     -- Add train attacks LAST in queue
     local trainGroups = trains_mod.getTrainGroups()
@@ -285,6 +293,12 @@ function moveCaravans()
 end
 
 function startEnemyPreparePhase()
+    -- Clear temporary flags from previous turn
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable then
+            e.attacksFirst = nil
+        end
+    end
     moveCaravans()
     if _G.pushAnimations and _G.pushAnimations.active then
         turnState.caravansMoving = true

@@ -315,7 +315,17 @@ function renderer.draw(state)
         local orderMap = getEnemyAttackOrder(state.entities, state.turnState)
         local num = 0
         for _, e in ipairs(state.entities) do
-            if e.waterWalker and e.health > 0 then
+            if e.attacksFirst and e.health > 0 then
+                num = num + 1
+                local x, y = hex:hexToPixel(e.q, e.r)
+                love.graphics.setColor(1, 0.4, 0.2, 0.9)
+                love.graphics.circle("fill", x + 15, y - 20, 12)
+                love.graphics.setColor(0, 0, 0, 1)
+                love.graphics.print(tostring(num), x + 11, y - 28)
+            end
+        end
+        for _, e in ipairs(state.entities) do
+            if e.waterWalker and not e.attacksFirst and e.health > 0 then
                 num = num + 1
                 local x, y = hex:hexToPixel(e.q, e.r)
                 love.graphics.setColor(1, 0.8, 0.2, 0.9)
@@ -325,7 +335,7 @@ function renderer.draw(state)
             end
         end
         for _, enemy in ipairs(state.entities) do
-            if enemy:isCharacter() and not enemy.isPlayable and enemy.health > 0 then
+            if enemy:isCharacter() and not enemy.isPlayable and not enemy.attacksFirst and enemy.health > 0 then
                 local n = orderMap[enemy]
                 if n then
                     num = num + 1
