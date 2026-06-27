@@ -15,127 +15,127 @@ local ATTACK_SETS = {
     warrior = function()
         local c = require("combat.combat")
         return {
-            { attack = c.DashAttack.new(), name = "Dash", description = "Charge and push" },
-            { attack = c.FlipAttack.new(), name = "Flip", description = "Flip enemy behind" },
+            { attack = c.DashAttack.new(), name = "Dash", description = "Charge forward, pushes enemy" },
+            { attack = c.FlipAttack.new(), name = "Flip", description = "Flips enemy behind you" },
         }
     end,
     puncher = function()
         local c = require("combat.combat")
         return {
-            { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Melee attack, 1 damage, pushes target away. Lethal if empowered" },
-            { attack = c.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack damage. Deals 1 damage if empowered" },
+            { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Heavy strike, wounds and pushes. Lethal if empowered" },
+            { attack = c.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack. Wounds if empowered" },
         }
     end,
     rogue = function()
         local c = require("combat.combat")
         return {
-            { attack = c.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
-            { attack = c.PiercingShootAttack.new(), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
+            { attack = c.ShootAttack.new(), name = "Shoot", description = "Shoots and pushes first enemy in line" },
+            { attack = c.PiercingShootAttack.new(), name = "Piercing Shot", description = "Pierces first enemy, wounds and pushes the second" },
         }
     end,
     ghost = function()
         local c = require("combat.combat")
         return {
-            { attack = c.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, 2 damage" },
+            { attack = c.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, wounds twice" },
         }
     end,
     zombie = function()
         local c = require("combat.combat")
         return {
-            { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
+            { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee bite, wounds thrice" },
         }
     end,
     lich = function()
         local c = require("combat.combat")
         return {
-            { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any target cell, ignores obstacles" },
+            { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any cell, ignores obstacles, wounds" },
         }
     end,
     powerlich = function()
         local c = require("combat.combat")
         return {
-            { attack = c.PowerLichBoltAttack.new(), name = "Power Bolt", description = "Lethal bolt hitting target and 3 cells in front" },
+            { attack = c.PowerLichBoltAttack.new(), name = "Power Bolt", description = "Lethal bolt: wounds target and 3 cells ahead" },
         }
     end,
     summoner = function()
         local c = require("combat.combat")
         return {
-            { attack = c.SummonAttack.new(), name = "Summon", description = "Summon a minion at target cell (min 2)" },
+            { attack = c.SummonAttack.new(), name = "Summon", description = "Summons a minion at target cell" },
         }
     end,
     summoned = function()
         local c = require("combat.combat")
         return {
-            { attack = c.PushAttack.new(5), name = "Shoot", description = "Push first enemy in line (no damage)" },
+            { attack = c.PushAttack.new(5), name = "Shoot", description = "Pushes first enemy in line, no damage" },
         }
     end,
     divider = function()
         local c = require("combat.combat")
         return {
-            { attack = c.DividerAttack.new(), name = "Split", description = "Split into two Divided units" },
+            { attack = c.DividerAttack.new(), name = "Split", description = "Splits into two Divided units" },
         }
     end,
     brute = function()
         local c = require("combat.combat")
         return {
-            { attack = c.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
+            { attack = c.BashAttack.new(), name = "Bash", description = "Heavy blow: wounds target and enemy behind attacker" },
         }
     end,
     dervish = function()
         local c = require("combat.combat")
         return {
-            { attack = c.CleaveAttack.new(), name = "Cleave", description = "Melee 1 dmg to 3 targets in front" },
+            { attack = c.CleaveAttack.new(), name = "Cleave", description = "Wide swing: wounds up to 3 targets in front" },
         }
     end,
     raider = function()
         local c = require("combat.combat")
         return {
-            { attack = c.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
+            { attack = c.LungeAttack.new(), name = "Lunge", description = "Lunge: wounds target and enemy behind it" },
         }
     end,
     crusher = function()
         local c = require("combat.combat")
         return {
-            { attack = c.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
+            { attack = c.BashAttack.new(), name = "Bash", description = "Heavy blow: wounds target and enemy behind attacker" },
         }
     end,
     lancer = function()
         local c = require("combat.combat")
         return {
-            { attack = c.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
+            { attack = c.LungeAttack.new(), name = "Lunge", description = "Lunge: wounds target and enemy behind it" },
         }
     end,
     bogshaman = function()
         local c = require("combat.combat")
         return {
-            { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
+            { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee bite, wounds thrice" },
         }
     end,
     summoningrod = function()
         local c = require("combat.combat")
         return {
-            { attack = c.SummonEnemyAttack.new(), name = "Summon", description = "Summon a random enemy" },
+            { attack = c.SummonEnemyAttack.new(), name = "Summon", description = "Summons a random enemy" },
         }
     end,
     vortex = function()
         local c = require("combat.combat")
         return {
-            { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shift an enemy right or left and deal 1 damage" },
-            { attack = c.WideVortexAttack.new(), name = "Wide Vortex", description = "Shift 3 enemies in front right or left" },
+            { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shifts an enemy left or right and wounds" },
+            { attack = c.WideVortexAttack.new(), name = "Wide Vortex", description = "Shifts 3 enemies in front left or right" },
         }
     end,
     hooks = function()
         local c = require("combat.combat")
         return {
-            { attack = c.PullHookAttack.new(), name = "Pull Hook", description = "Hook a target and pull it towards you" },
-            { attack = c.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning that damages everyone on the line" },
+            { attack = c.PullHookAttack.new(), name = "Pull Hook", description = "Hooks target and pulls it toward you" },
+            { attack = c.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning, wounds everyone on the line" },
         }
     end,
     area = function()
         local c = require("combat.combat")
         return {
-            { attack = c.AoePushAttack.new(), name = "Stone Throw", description = "Throw stone at adjacent cell, push enemies in cone" },
-            { attack = c.AoeDirectionalAttack.new(), name = "Cone Blast", description = "Push 3 front enemies away from attacker" },
+            { attack = c.AoePushAttack.new(), name = "Stone Throw", description = "Hurls stone at adjacent cell, pushes enemies in a cone" },
+            { attack = c.AoeDirectionalAttack.new(), name = "Cone Blast", description = "Pushes 3 enemies in front away from attacker" },
         }
     end,
     none = function()
@@ -144,27 +144,27 @@ local ATTACK_SETS = {
     all = function()
         local c = require("combat.combat")
         return {
-            { attack = c.DashAttack.new(), name = "Dash", description = "Charge and push" },
-            { attack = c.FlipAttack.new(), name = "Flip", description = "Flip enemy behind" },
-            { attack = c.ShootAttack.new(), name = "Shoot", description = "Shoot and push first enemy" },
-            { attack = c.PushAttack.new(5), name = "Push", description = "Push first enemy in line (no damage)" },
-            { attack = c.PiercingShootAttack.new(), name = "Piercing Shot", description = "Shoot through first enemy, hit and push the second" },
-            { attack = c.AoePushAttack.new(), name = "Stone Throw", description = "Throw stone at adjacent cell, push enemies in cone" },
-            { attack = c.AoeDirectionalAttack.new(), name = "Cone Blast", description = "Push 3 front enemies away from attacker" },
-            { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any target cell, ignores obstacles" },
-            { attack = c.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, 2 damage" },
-            { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee attack, 3 damage" },
-            { attack = c.SummonAttack.new(), name = "Summon", description = "Summon a minion at target cell" },
-            { attack = c.DividerAttack.new(), name = "Split", description = "Split into two Divided units" },
-            { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shift an enemy right or left and deal 1 damage" },
-            { attack = c.WideVortexAttack.new(), name = "Wide Vortex", description = "Shift 3 enemies in front right or left" },
-            { attack = c.PullHookAttack.new(), name = "Pull Hook", description = "Hook a target and pull it towards you" },
-            { attack = c.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning that damages everyone on the line" },
-            { attack = c.BashAttack.new(), name = "Bash", description = "Melee 2 dmg to target and behind attacker" },
-            { attack = c.CleaveAttack.new(), name = "Cleave", description = "Melee 1 dmg to 3 targets in front" },
-            { attack = c.LungeAttack.new(), name = "Lunge", description = "Melee 2 dmg to target and target behind it" },
-            { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Melee 2 dmg and push target away" },
-            { attack = c.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Melee 1 dmg, push target, double next attack damage" },
+            { attack = c.DashAttack.new(), name = "Dash", description = "Charge forward, pushes enemy" },
+            { attack = c.FlipAttack.new(), name = "Flip", description = "Flips enemy behind you" },
+            { attack = c.ShootAttack.new(), name = "Shoot", description = "Shoots and pushes first enemy in line" },
+            { attack = c.PushAttack.new(5), name = "Push", description = "Pushes first enemy in line, no damage" },
+            { attack = c.PiercingShootAttack.new(), name = "Piercing Shot", description = "Pierces first enemy, wounds and pushes the second" },
+            { attack = c.AoePushAttack.new(), name = "Stone Throw", description = "Hurls stone at adjacent cell, pushes enemies in a cone" },
+            { attack = c.AoeDirectionalAttack.new(), name = "Cone Blast", description = "Pushes 3 enemies in front away from attacker" },
+            { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any cell, ignores obstacles, wounds" },
+            { attack = c.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, wounds twice" },
+            { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee bite, wounds thrice" },
+            { attack = c.SummonAttack.new(), name = "Summon", description = "Summons a minion at target cell" },
+            { attack = c.DividerAttack.new(), name = "Split", description = "Splits into two Divided units" },
+            { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shifts an enemy left or right and wounds" },
+            { attack = c.WideVortexAttack.new(), name = "Wide Vortex", description = "Shifts 3 enemies in front left or right" },
+            { attack = c.PullHookAttack.new(), name = "Pull Hook", description = "Hooks target and pulls it toward you" },
+            { attack = c.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning, wounds everyone on the line" },
+            { attack = c.BashAttack.new(), name = "Bash", description = "Heavy blow: wounds target and enemy behind attacker" },
+            { attack = c.CleaveAttack.new(), name = "Cleave", description = "Wide swing: wounds up to 3 targets in front" },
+            { attack = c.LungeAttack.new(), name = "Lunge", description = "Lunge: wounds target and enemy behind it" },
+            { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Heavy strike, wounds and pushes. Lethal if empowered" },
+            { attack = c.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack. Wounds if empowered" },
         }
     end,
 }

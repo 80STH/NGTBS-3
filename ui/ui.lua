@@ -1518,9 +1518,9 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
     end
     -- Collect content
     local lines = {}
-    -- Name + health
+    -- Name
     if not entity.indestructible then
-        table.insert(lines, { text = entity.name .. "  " .. entity.health .. "/" .. entity.maxHealth, color = {1,1,1} })
+        table.insert(lines, { text = entity.name, color = {1,1,1} })
     else
         table.insert(lines, { text = entity.name, color = {1,1,1} })
     end
@@ -2279,23 +2279,6 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.print(ally.name, x + 5, by + 2)
         local inStasis = status and status.hasEntityStatus and status.hasEntityStatus(ally, "stasis")
-        local hpStr
-        local hpColor
-        if inStasis then
-            hpStr = "STASIS"
-            hpColor = {0.3, 0.5, 1}
-        else
-            hpStr = tostring(ally.health) .. "/" .. tostring(ally.maxHealth)
-            if ally.health <= ally.maxHealth * 0.3 then
-                hpColor = {1, 0.25, 0.25}
-            elseif ally.health <= ally.maxHealth * 0.6 then
-                hpColor = {1, 0.8, 0.2}
-            else
-                hpColor = {0.5, 1, 0.5}
-            end
-        end
-        love.graphics.setColor(hpColor[1], hpColor[2], hpColor[3], 1)
-        love.graphics.print(hpStr, x + 5, by + btnH / 2 + 1)
         local indX = x + btnW - 16
         local indY = by + btnH / 2 - 1
         if inStasis then
