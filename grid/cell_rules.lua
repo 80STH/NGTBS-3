@@ -62,9 +62,6 @@ function cell_rules.isPassable(q, r, mover, opts)
                 return false
             end
         end
-        if terrain == "underwater_mines" then
-            return false
-        end
     end
 
     -- Flying ignores everything on the ground
@@ -116,9 +113,6 @@ function cell_rules.isOccupied(q, r, mover, opts)
             else
                 return true
             end
-        end
-        if terrain == "underwater_mines" then
-            return true
         end
     end
 

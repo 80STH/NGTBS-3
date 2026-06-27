@@ -19,6 +19,7 @@ local entityNameToGid = {
     Dervish = 28, Crusher = 66, SummoningRod = 83,
     SuperMountain = 11, WeakMountain = 6,
     MountainSlope = 9, SuperMountainSlope = 16,
+    SharpReefs = 5,
     SmallBuilding = 12, BigBuilding = 7, Tower = 29,
     Caravan = 48, Blockpost = 77,
     MountainHouse = 84, SmallMountainHouse = 85,
@@ -62,6 +63,17 @@ local function generateCustomSprite(name, w, h)
         love.graphics.polygon("fill", w*0.55-1, 0, w*0.55+1, 0, w*0.55, 2)
         love.graphics.setColor(0.3, 0.25, 0.2)
         love.graphics.rectangle("fill", 0, h-2, w, 2)
+    elseif name == "SharpReefs" then
+        love.graphics.setColor(0.3, 0.45, 0.55)
+        love.graphics.rectangle("fill", 0, h-3, w, 3)
+        love.graphics.setColor(0.45, 0.55, 0.65)
+        love.graphics.polygon("fill", w*0.5, 1, w*0.1, h-1, w*0.3, h-1)
+        love.graphics.polygon("fill", w*0.7, 2, w*0.5, h-1, w*0.9, h-1)
+        love.graphics.setColor(0.35, 0.5, 0.6)
+        love.graphics.polygon("fill", w*0.2, 3, 0, h-1, w*0.15, h-1)
+        love.graphics.polygon("fill", w*0.85, 2, w*0.75, h-1, w, h-1)
+        love.graphics.setColor(0.55, 0.65, 0.75)
+        love.graphics.polygon("fill", w*0.6, 0, w*0.45, h-2, w*0.75, h-2)
     elseif name == "SmallBuilding" then
         love.graphics.setColor(0.7, 0.55, 0.35)
         love.graphics.rectangle("fill", 1, 4, w-2, h-4)
@@ -177,7 +189,6 @@ editor.terrainPalette = {
     { id = "swamp",            name = "Swamp" },
     { id = "lava",             name = "Lava" },
     { id = "water",            name = "Water" },
-    { id = "underwater_mines", name = "Mines" },
     { id = "railway",          name = "Railway" },
     { id = "emptiness",        name = "Empty" },
 }
@@ -247,6 +258,8 @@ editor.fileName = "custom_map"
 editor.message = nil
 editor.messageTimer = 0
 editor.focusFileName = false
+editor.mapListOpen = false
+editor.availableMaps = {}
 
 -- Undo/redo stacks
 editor.undoStack = {}
@@ -343,8 +356,8 @@ function editor.init()
     buildEditorSpriteCache()
 
     -- Fill all active cells with grass by default
-    for q = 0, EDITOR_GRID_SIZE - 1 do
-        for r = 0, EDITOR_GRID_SIZE - 1 do
+    for q = 0, editor.hex.gridWidth - 1 do
+        for r = 0, editor.hex.gridHeight - 1 do
             if editor.hex:isActiveHex(q, r) then
                 editor.terrainData[q .. "," .. r] = "grass"
             end
@@ -447,6 +460,25 @@ function editor.loadMap(data)
     editor.statusData = {}
     editor.upperTerrainData = {}
 
+    -- Use map's grid parameters (same as game does in restartGame)
+    local mapWidth = data.width or EDITOR_GRID_SIZE
+    local mapHeight = data.height or EDITOR_GRID_SIZE
+    local mapActiveRadius = data.activeRadius or EDITOR_RADIUS
+    local mapCenterQ = data.centerQ or math.floor(mapWidth / 2)
+    local mapCenterR = data.centerR or math.floor(mapHeight / 2)
+    local mapOrientation = data.orientation or "flat"
+
+    hex_utils.setOrientation(mapOrientation)
+    editor.hex = hexgrid.new(
+        config.HEX_RADIUS,
+        mapWidth, mapHeight,
+        mapActiveRadius,
+        mapCenterQ, mapCenterR,
+        mapOrientation
+    )
+    editor.hex:centerOnScreen(love.graphics.getWidth() / (editor.dpiScale or 1), love.graphics.getHeight() / (editor.dpiScale or 1))
+    editor.hex.offsetX = editor.hex.offsetX - 200
+
     if data.terrain then
         for key, val in pairs(data.terrain) do
             editor.terrainData[key] = val
@@ -492,12 +524,12 @@ function editor.getMapData()
     local data = {
         version = 1,
         format = "native",
-        width = EDITOR_GRID_SIZE,
-        height = EDITOR_GRID_SIZE,
-        activeRadius = EDITOR_RADIUS,
-        centerQ = EDITOR_CENTER,
-        centerR = EDITOR_CENTER,
-        orientation = "flat",
+        width = editor.hex.gridWidth,
+        height = editor.hex.gridHeight,
+        activeRadius = editor.hex.activeRadius,
+        centerQ = editor.hex.centerQ,
+        centerR = editor.hex.centerR,
+        orientation = editor.hex.orientation,
         terrain = {},
         entities = {},
         statuses = {},
@@ -541,7 +573,7 @@ function editor.saveMap()
     table.insert(lines, string.format("  activeRadius = %d,", data.activeRadius))
     table.insert(lines, string.format("  centerQ = %d,", data.centerQ))
     table.insert(lines, string.format("  centerR = %d,", data.centerR))
-    table.insert(lines, string.format('  orientation = "flat",'))
+    table.insert(lines, string.format('  orientation = "%s",', data.orientation))
 
     -- Terrain
     table.insert(lines, "  terrain = {")
@@ -873,7 +905,7 @@ function editor.mousepressed(x, y, button)
             return
         end
         if x >= btns.load.x and x <= btns.load.x + btns.load.w and y >= btns.load.y and y <= btns.load.y + btns.load.h then
-            editor.loadMapFromFile()
+            editor.openMapList()
             return
         end
         if x >= btns.eraser.x and x <= btns.eraser.x + btns.eraser.w and y >= btns.eraser.y and y <= btns.eraser.y + btns.eraser.h then
@@ -898,6 +930,26 @@ function editor.mousepressed(x, y, button)
         end
 
         return -- clicked in palette but not on anything specific
+    end
+
+    -- Map list dropdown: click on item or outside closes it
+    if editor.mapListOpen then
+        local lw = love.graphics.getWidth() / (editor.dpiScale or 1)
+        local btnRects = editor.getButtonRects()
+        local listW = 200
+        local listX = lw - 400 - listW - 10
+        local listY = btnRects.load.y
+        local listItemH = 28
+        local totalH = #editor.availableMaps * listItemH
+        if x >= listX and x <= listX + listW and y >= listY and y <= listY + totalH then
+            local idx = math.floor((y - listY) / listItemH) + 1
+            if idx >= 1 and idx <= #editor.availableMaps then
+                editor.loadMapFromList(editor.availableMaps[idx])
+                return
+            end
+        end
+        editor.mapListOpen = false
+        return
     end
 
     editor.focusNameInput = false
@@ -972,14 +1024,14 @@ function editor.keypressed(key)
         elseif key == "s" then
             editor.saveMap()
         elseif key == "l" then
-            editor.loadMapFromFile()
+            editor.openMapList()
         elseif key == "n" then
             editor.pushUndo()
             editor.terrainData = {}
             editor.entityData = {}
             editor.statusData = {}
-            for q = 0, EDITOR_GRID_SIZE - 1 do
-                for r = 0, EDITOR_GRID_SIZE - 1 do
+            for q = 0, editor.hex.gridWidth - 1 do
+                for r = 0, editor.hex.gridHeight - 1 do
                     if editor.hex and editor.hex:isActiveHex(q, r) then
                         editor.terrainData[q .. "," .. r] = "grass"
                     end
@@ -1016,44 +1068,46 @@ function editor.keypressed(key)
             end
         end
     elseif key == "escape" then
-        editor.cleanup()
-        gamePhase = "menu"
+        if editor.mapListOpen then
+            editor.mapListOpen = false
+        else
+            editor.cleanup()
+            gamePhase = "menu"
+        end
     end
 end
 
-function editor.loadMapFromFile()
-    -- Scan maps/ for native format maps
+function editor.openMapList()
+    editor.mapListOpen = true
+    editor.availableMaps = {}
     local items = love.filesystem.getDirectoryItems("maps")
-    local nativeMaps = {}
     for _, file in ipairs(items) do
         if file:match("%.lua$") then
             local path = "maps/" .. file
-            local ok, data = pcall(love.filesystem.load(path))
-            if ok and data then
-                local ok2, result = pcall(data)
-                if ok2 and result and result.format == "native" then
-                    table.insert(nativeMaps, { name = file:gsub("%.lua$", ""), path = path, data = result })
+            local ok, loader = pcall(love.filesystem.load, path)
+            if ok and loader then
+                local ok2, mapData = pcall(loader)
+                if ok2 and mapData and mapData.format == "native" then
+                    local name = file:gsub("%.lua$", "")
+                    table.insert(editor.availableMaps, { name = name, data = mapData })
                 end
             end
         end
     end
-
-    if #nativeMaps == 0 then
+    table.sort(editor.availableMaps, function(a, b) return a.name < b.name end)
+    if #editor.availableMaps == 0 then
         editor.message = "No native maps found in maps/"
         editor.messageTimer = 3
-        return
+        editor.mapListOpen = false
     end
+end
 
-    -- Cycle to next map after current fileName
-    local currentIdx = 0
-    for i, m in ipairs(nativeMaps) do
-        if m.name == editor.fileName then currentIdx = i; break end
-    end
-    local nextIdx = (currentIdx % #nativeMaps) + 1
-    local chosen = nativeMaps[nextIdx]
-
-    editor.fileName = chosen.name
-    editor.loadMap(chosen.data)
+function editor.loadMapFromList(mapEntry)
+    editor.loadMap(mapEntry.data)
+    editor.fileName = mapEntry.name
+    editor.mapListOpen = false
+    editor.message = "Loaded: " .. mapEntry.name
+    editor.messageTimer = 2
 end
 
 -- ============================================================
@@ -1070,7 +1124,6 @@ local terrainColors = {
     snow             = {0.9, 0.95, 1},
     swamp            = {0.45, 0.65, 0.35},
     water            = {0.2, 0.5, 0.85},
-    underwater_mines = {0.08, 0.25, 0.45},
     railway          = {0.35, 0.3, 0.25},
 }
 
@@ -1087,8 +1140,8 @@ function editor.draw()
     local px, py, pw, ph = editor.getPaletteRect()
 
     -- Draw hex grid
-    for q = 0, EDITOR_GRID_SIZE - 1 do
-        for r = 0, EDITOR_GRID_SIZE - 1 do
+    for q = 0, editor.hex.gridWidth - 1 do
+        for r = 0, editor.hex.gridHeight - 1 do
             if editor.hex:isActiveHex(q, r) then
                 local x, y = getDrawCoordsEditor(editor.hex, q, r)
                 local k = q .. "," .. r
@@ -1198,8 +1251,8 @@ function editor.draw()
 
     -- Draw coordinate labels
     local font = love.graphics.getFont()
-    for q = 0, EDITOR_GRID_SIZE - 1 do
-        for r = 0, EDITOR_GRID_SIZE - 1 do
+    for q = 0, editor.hex.gridWidth - 1 do
+        for r = 0, editor.hex.gridHeight - 1 do
             if editor.hex:isActiveHex(q, r) then
                 local x, y = getDrawCoordsEditor(editor.hex, q, r)
                 love.graphics.setColor(1, 1, 1, 0.4)
@@ -1418,6 +1471,41 @@ function editor.draw()
         love.graphics.setColor(1, 1, 0.2, math.min(1, editor.messageTimer))
         local mw = font:getWidth(editor.message)
         love.graphics.print(editor.message, lw / 2 - mw / 2, 10)
+    end
+
+    -- Map list dropdown
+    if editor.mapListOpen then
+        local btnRects = editor.getButtonRects()
+        local listW = 200
+        local listX = lw - 400 - listW - 10
+        local listY = btnRects.load.y
+        local listItemH = 28
+
+        -- Background
+        love.graphics.setColor(0.1, 0.1, 0.15, 0.97)
+        local totalH = #editor.availableMaps * listItemH
+        love.graphics.rectangle("fill", listX, listY, listW, totalH, 4)
+        love.graphics.setColor(0.4, 0.4, 0.5, 1)
+        love.graphics.setLineWidth(2)
+        love.graphics.rectangle("line", listX, listY, listW, totalH, 4)
+
+        -- Items
+        for i, m in ipairs(editor.availableMaps) do
+            local iy = listY + (i - 1) * listItemH
+            -- Hover highlight
+            local mx, my = love.mouse.getPosition()
+            mx = mx / (editor.dpiScale or 1)
+            my = my / (editor.dpiScale or 1)
+            if mx >= listX and mx <= listX + listW and my >= iy and my <= iy + listItemH then
+                love.graphics.setColor(0.3, 0.5, 0.7, 0.6)
+                love.graphics.rectangle("fill", listX, iy, listW, listItemH)
+            end
+            -- Name
+            local color = (m.name == editor.fileName) and {0.4, 1, 0.4} or {1, 1, 1}
+            love.graphics.setColor(color[1], color[2], color[3], 1)
+            love.graphics.print(m.name, listX + 8, iy + 6)
+        end
+        love.graphics.setLineWidth(1)
     end
 end
 

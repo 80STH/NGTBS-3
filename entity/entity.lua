@@ -65,6 +65,9 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     
     -- Hazard zone (doesn't block movement, but kills those who enter)
     self.isHazard = false
+
+    -- Lethal collision: any push into this entity = instant death
+    self.lethalCollision = false
     
     -- Entity direction (cubic vector {dx, dy, dz})
     self.direction = nil

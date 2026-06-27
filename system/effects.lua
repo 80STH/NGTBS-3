@@ -42,18 +42,6 @@ function effects.applyAllCellEffects(entity, q, r, terrainMap, entities)
         died = true
     end
 
-    -- 5. Underwater mines (kills everyone who steps on them)
-    if entity:isCharacter() or entity:isBuilding() then
-        local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-        if terrain == "underwater_mines" then
-            log.infof("effects", "%s destroyed by underwater mines!", entity.name)
-            sounds.play("collision")
-            entity.health = 0
-            entity:startDeath()
-            died = true
-        end
-    end
-
     return died
 end
 
@@ -96,17 +84,6 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
                 local terrain = terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] or "grass"
                 if terrain == "water" and entity.health > 0 then
                     log.infof("effects", "%s drowns at end of turn!", entity.name)
-                    sounds.play("collision")
-                    entity.health = 0
-                    entity:startDeath()
-                end
-            end
-
-            -- Underwater mines at end of turn (finishes off survivors)
-            if entity.health > 0 then
-                local terrain = terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] or "grass"
-                if terrain == "underwater_mines" then
-                    log.infof("effects", "%s destroyed by underwater mines at end of turn!", entity.name)
                     sounds.play("collision")
                     entity.health = 0
                     entity:startDeath()

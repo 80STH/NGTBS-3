@@ -782,10 +782,6 @@ function ai.getLivingEnemies(entities)
 end
 
 function isCellDangerousForEntity(q, r, entity)
-    -- Underwater mines — lethal, never go there
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "underwater_mines" then
-        return true
-    end
     local cellStatuses = status.getAtHex(q, r)
     if not cellStatuses or #cellStatuses == 0 then
         return false

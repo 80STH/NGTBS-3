@@ -111,6 +111,14 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
     -- Check cell occupancy
     local occupant = combat.getEntityAtHex(toQ, toR, entities)
     if occupant and occupant ~= target then
+        -- SharpReefs / lethal collision: instant death
+        if occupant.lethalCollision then
+            target.health = 0
+            target:startDeath()
+            log.infof("combat", "%s is pushed into %s! Instant death!", target.name, occupant.name)
+            if onComplete then onComplete(false) end
+            return
+        end
         -- Mountain slope (indestructible) — bounce animation without damage
         if occupant.noCollisionDamage then
             combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant, true)
@@ -1739,6 +1747,14 @@ function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
             -- Check if target cell is free (skip hazard zones)
             local occupant = combat.getEntityAtHex(toQ, toR, entities)
             if occupant and occupant ~= pushedObj and occupant.health > 0 and not occupant.isHazard then
+                -- Lethal collision: instant death
+                if occupant.lethalCollision then
+                    pushedObj.health = 0
+                    pushedObj:startDeath()
+                    log.infof("combat", "%s collides with %s! Instant death!", pushedObj.name, occupant.name)
+                    sounds.play("collision")
+                    return
+                end
                 -- Collision: damage to pushed unit, immovable targets take no damage
                 if pushedObj.health and pushedObj.health > 0 then
                     pushedObj.health = pushedObj.health - 1

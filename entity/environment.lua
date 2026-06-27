@@ -206,7 +206,7 @@ local gidToEntity = {
     [9]  = { type = "obstacle",  name = "MountainSlope", health = 2, maxDamagePerHit = 1, direction = {dx = 1, dy = 0, dz = -1} },
     [15] = { type = "obstacle",  name = "MountainSlope", indestructible = true, noCollisionDamage = true },
     [16] = { type = "obstacle",  name = "SuperMountainSlope", indestructible = true, noCollisionDamage = true },
-    -- [17] removed: DeepWater is now terrain "underwater_mines"
+    [5]  = { type = "obstacle",  name = "SharpReefs", indestructible = true, lethalCollision = true },
     [12] = { type = "building",  name = "SmallBuilding", health = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2 },
     [6] = { type = "obstacle",  name = "WeakMountain",  health = 2, maxDamagePerHit = 1 },
@@ -443,6 +443,18 @@ local function generateCustomSprite(name, w, h)
         love.graphics.polygon("fill", w*0.55-1, 0, w*0.55+1, 0, w*0.55, 2)
         love.graphics.setColor(0.3, 0.25, 0.2)
         love.graphics.rectangle("fill", 0, h-2, w, 2)
+
+    elseif name == "SharpReefs" then
+        love.graphics.setColor(0.3, 0.45, 0.55)
+        love.graphics.rectangle("fill", 0, h-3, w, 3)
+        love.graphics.setColor(0.45, 0.55, 0.65)
+        love.graphics.polygon("fill", w*0.5, 1, w*0.1, h-1, w*0.3, h-1)
+        love.graphics.polygon("fill", w*0.7, 2, w*0.5, h-1, w*0.9, h-1)
+        love.graphics.setColor(0.35, 0.5, 0.6)
+        love.graphics.polygon("fill", w*0.2, 3, 0, h-1, w*0.15, h-1)
+        love.graphics.polygon("fill", w*0.85, 2, w*0.75, h-1, w, h-1)
+        love.graphics.setColor(0.55, 0.65, 0.75)
+        love.graphics.polygon("fill", w*0.6, 0, w*0.45, h-2, w*0.75, h-2)
     end
 
     love.graphics.setCanvas()
@@ -562,6 +574,7 @@ function environment.loadNativeMap(data)
                             if def.indestructible then entity.indestructible = true end
                             if def.noCollisionDamage then entity.noCollisionDamage = true end
                             if def.isHazard then entity.isHazard = true end
+                            if def.lethalCollision then entity.lethalCollision = true end
                             if entityDir then
                                 entity.direction = { dx = entityDir.dx, dy = entityDir.dy, dz = entityDir.dz }
                             elseif def.direction then
