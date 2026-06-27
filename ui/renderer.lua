@@ -282,6 +282,9 @@ function renderer.draw(state)
                 end
                 if hex:isValidHex(targetQ, targetR) then
                     ui.drawAttackPreview(hex, hoverEntity, attack, true, targetQ, targetR, state.entities)
+                    -- Show damage icons on the victims of the enemy's prepared attack.
+                    local enemyPreviewIcons = ui.collectPreviewIcons(hex, hoverEntity, attack, targetQ, targetR, state.entities)
+                    ui.drawPreviewIcons(hex, enemyPreviewIcons)
                 end
             end
         end
