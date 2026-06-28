@@ -730,6 +730,165 @@ handlers["Pull Hook"] = function(p, attacker, attack, hoverQ, hoverR, hex, entit
     end
 end
 
+-- Rampage: dash, push enemies aside, lethal to primary target.
+handlers["Rampage"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+    if not stepX then return end
+
+    preview.addLine(p, attacker.q, attacker.r, hoverQ, hoverR)
+
+    local firstTarget, firstHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+
+    -- Walk the path and push adjacent enemies sideways
+    local curQ, curR = attacker.q, attacker.r
+    while true do
+        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if not isActive(nextQ, nextR, hex) then break end
+        if firstTarget and firstHex and nextQ == firstHex.q and nextR == firstHex.r then break end
+
+        local sideX1, sideY1, sideZ1 = -stepY, -stepZ, -stepX
+        local sideX2, sideY2, sideZ2 = -stepZ, -stepX, -stepY
+        for _, side in ipairs({{sideX1, sideY1, sideZ1}, {sideX2, sideY2, sideZ2}}) do
+            local sideQ, sideR = hex_utils.applyCubeStep(nextQ, nextR, side[1], side[2], side[3])
+            local e = getEntity(sideQ, sideR, entities)
+            if e and e:isCharacter() and e.health > 0 and e.isPushable ~= false and not e.isPlayable then
+                local pushQ, pushR = hex_utils.applyCubeStep(sideQ, sideR, side[1], side[2], side[3])
+                preview.applyPush(p, e, sideQ, sideR, pushQ, pushR, hex, entities)
+                preview.addOverlay(p, sideQ, sideR, "target")
+            end
+        end
+        curQ, curR = nextQ, nextR
+    end
+
+    -- Primary target: lethal damage + push
+    if firstTarget and firstHex then
+        preview.addOverlay(p, firstHex.q, firstHex.r, "target")
+        local dist = hex:getDistance(attacker.q, attacker.r, firstHex.q, firstHex.r)
+        local eff = preview.calculateEffectiveDamage(firstTarget, attacker, attack.damage or 99, nil, dist)
+        preview.addAttackDamage(p, firstTarget, eff)
+
+        if firstTarget.isPushable ~= false and firstTarget.health > 0 then
+            local pushQ, pushR = hex_utils.applyCubeStep(firstHex.q, firstHex.r, stepX, stepY, stepZ)
+            preview.applyPush(p, firstTarget, firstHex.q, firstHex.r, pushQ, pushR, hex, entities)
+        end
+    end
+end
+
+-- Mend: show Colossus as target, no damage preview needed.
+handlers["Mend"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local colossus = nil
+    for _, e in ipairs(entities) do
+        if e.name == "Colossus" and e.isPlayable then
+            colossus = e
+            break
+        end
+    end
+    if not colossus then return end
+    if hoverQ ~= colossus.q or hoverR ~= colossus.r then return end
+    local dist = hex:getDistance(attacker.q, attacker.r, colossus.q, colossus.r)
+    if dist ~= 1 then return end
+    preview.addOverlay(p, colossus.q, colossus.r, "push_dest")
+end
+
+-- Phase Shift: show ally and landing options.
+handlers["Phase Shift"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local ally = getEntity(hoverQ, hoverR, entities)
+    if not ally or not ally.isPlayable or ally == attacker or ally.health <= 0 then return end
+
+    preview.addOverlay(p, hoverQ, hoverR, "target")
+
+    -- Show attacker's original position as push_dest (where ally goes)
+    preview.addOverlay(p, attacker.q, attacker.r, "push_dest")
+    preview.addPushArrow(p, hoverQ, hoverR, attacker.q, attacker.r)
+
+    -- Show landing options around ally (radius 1)
+    for dq = -1, 1 do
+        for dr = -1, 1 do
+            if dq ~= 0 or dr ~= 0 then
+                local q = hoverQ + dq
+                local r = hoverR + dr
+                local landingDist = hex:getDistance(hoverQ, hoverR, q, r)
+                if landingDist == 1 and isActive(q, r, hex) then
+                    local occupant = getEntity(q, r, entities)
+                    if not occupant or occupant == attacker then
+                        preview.addOverlay(p, q, r, "push_dest")
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Frenzy: lethal to target + behind, puts Colossus in stasis.
+handlers["Frenzy"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+    if dist ~= 1 then return end
+
+    local target = getEntity(hoverQ, hoverR, entities)
+    if not target or target.health <= 0 then return end
+
+    preview.addOverlay(p, hoverQ, hoverR, "target")
+    local eff = preview.calculateEffectiveDamage(target, attacker, attack.damage or 99, nil, dist)
+    preview.addAttackDamage(p, target, eff)
+
+    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+    if stepX then
+        local behindQ, behindR = hex_utils.applyCubeStep(hoverQ, hoverR, stepX, stepY, stepZ)
+        local behindTarget = getEntity(behindQ, behindR, entities)
+        if behindTarget and behindTarget.health > 0 then
+            preview.addOverlay(p, behindQ, behindR, "target")
+            local effBehind = preview.calculateEffectiveDamage(behindTarget, attacker, attack.damage or 99)
+            preview.addAttackDamage(p, behindTarget, effBehind)
+        end
+    end
+
+    -- Show Colossus affected
+    for _, e in ipairs(entities) do
+        if e.name == "Colossus" and e.isPlayable and e.health > 0 then
+            preview.addOverlay(p, e.q, e.r, "target")
+            preview.addAttackDamage(p, e, 99)
+            break
+        end
+    end
+end
+
+-- Hunt: push target, lethal collision with Colossus.
+handlers["Hunt"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+    if dist ~= 1 then return end
+
+    local target = getEntity(hoverQ, hoverR, entities)
+    if not target or target.health <= 0 or target.isPushable == false then return end
+
+    preview.addOverlay(p, hoverQ, hoverR, "target")
+
+    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+    if not stepX then return end
+
+    local pushQ, pushR = hex_utils.applyCubeStep(hoverQ, hoverR, stepX, stepY, stepZ)
+    local occupant = getEntity(pushQ, pushR, entities)
+
+    -- Check if push destination is Colossus
+    local colossus = nil
+    for _, e in ipairs(entities) do
+        if e.name == "Colossus" and e.isPlayable then
+            colossus = e
+            break
+        end
+    end
+
+    if colossus and occupant == colossus then
+        -- Lethal collision: Colossus unharmed, enemy dies
+        preview.addPushArrow(p, hoverQ, hoverR, pushQ, pushR)
+        preview.markPushed(p, target, pushQ, pushR)
+        preview.addCollisionHint(p, hoverQ, hoverR, pushQ, pushR, "collision_damage", target, colossus, "collision_both")
+        preview.addAttackDamage(p, target, 99)
+    else
+        -- Normal push
+        preview.applyPush(p, target, hoverQ, hoverR, pushQ, pushR, hex, entities)
+    end
+end
+
 -- Generic fallback for attacks that only provide getAffectedCells.
 function handlers.__fallback(p, attacker, attack, hoverQ, hoverR, hex, entities)
     handleAffectedCells(p, attacker, attack, hoverQ, hoverR, hex, entities)

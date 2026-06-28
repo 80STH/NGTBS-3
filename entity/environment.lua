@@ -138,6 +138,26 @@ local ATTACK_SETS = {
             { attack = c.AoeDirectionalAttack.new(), name = "Cone Blast", description = "Pushes 3 enemies in front away from attacker" },
         }
     end,
+    colossus = function()
+        local c = require("combat.combat")
+        return {
+            { attack = c.RampageAttack.new(), name = "Rampage", description = "Charge forward pushing enemies aside. Lethal to struck target" },
+        }
+    end,
+    keeper = function()
+        local c = require("combat.combat")
+        return {
+            { attack = c.MendAttack.new(), name = "Mend", description = "Fully heal adjacent Colossus and remove stasis" },
+            { attack = c.PhaseShiftAttack.new(), name = "Phase Shift", description = "Swap with an ally, choose landing within 1 tile of them" },
+        }
+    end,
+    provoker = function()
+        local c = require("combat.combat")
+        return {
+            { attack = c.FrenzyAttack.new(), name = "Frenzy", description = "Lethal to target and enemy behind. Puts Colossus in stasis" },
+            { attack = c.HuntAttack.new(), name = "Hunt", description = "Push target. Collision with Colossus = lethal, Colossus unharmed" },
+        }
+    end,
     none = function()
         return {}
     end,
@@ -226,6 +246,9 @@ local gidToEntity = {
     [74] = { type = "building",  name = "TrainCar",  health = 1, moveRange = 1 },
     [84] = { type = "building",  name = "MountainHouse", health = 2 },
     [85] = { type = "building",  name = "SmallMountainHouse", health = 1 },
+    [96] = { type = "character", name = "Colossus",  isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "colossus" },
+    [97] = { type = "character", name = "Keeper",   isPlayable = true,  maxHealth = 1, moveRange = 2, attacks = "keeper" },
+    [98] = { type = "character", name = "Provoker",  isPlayable = true,  maxHealth = 1, moveRange = 2, attacks = "provoker" },
 }
 
 environment.enemySpriteCache = {}
@@ -739,6 +762,7 @@ function environment.createSquadUnit(unitDef, q, r)
         Warrior = 34, Puncher = 30, Rogue = 31,
         Summoner = 40, Divider = 45, Summoned = 42, Divided = 44,
         AttackTest = 68,
+        Colossus = 96, Keeper = 97, Provoker = 98,
     }
     local gid = nameToGid[unitDef.name]
     local sprite = gid and unitSpriteCache[gid] or nil
@@ -752,6 +776,9 @@ function environment.createSquadUnit(unitDef, q, r)
         Summoned = {0.6, 0.3, 0.9},
         Divided = {0.6, 0.4, 0.1},
         AttackTest = {0.2, 0.9, 0.9},
+        Colossus = {0.9, 0.55, 0.1},
+        Keeper = {0.3, 0.9, 0.4},
+        Provoker = {0.9, 0.2, 0.3},
     }
 
     local entity = Entity.new(

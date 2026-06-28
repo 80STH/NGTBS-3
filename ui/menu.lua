@@ -42,6 +42,14 @@ local squads = {
         }
     },
     {
+        name = "Wildbond",
+        units = {
+            { name = "Colossus", maxHealth = 2, moveRange = 3, attacks = "colossus" },
+            { name = "Keeper",   maxHealth = 1, moveRange = 2, attacks = "keeper" },
+            { name = "Provoker", maxHealth = 1, moveRange = 2, attacks = "provoker" },
+        }
+    },
+    {
         name = "Attack Test",
         units = {
             { name = "AttackTest", maxHealth = 2, moveRange = 3, attacks = "all" },

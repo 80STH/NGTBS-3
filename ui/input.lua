@@ -300,15 +300,15 @@ end
     
                     end
                 end
-                pullHookTargetCell = nil
-            else
-                local target = selectedAttack:getLineTarget(selectedActor, tq, tr, hex, entities)
-                if target then
-                    pullHookTargetCell = {q = target.q, r = target.r, entity = target.entity}
+            pullHookTargetCell = nil
+                else
+                    local target = selectedAttack:getLineTarget(selectedActor, tq, tr, hex, entities)
+                    if target then
+                        pullHookTargetCell = {q = target.q, r = target.r, entity = target.entity}
+                    end
                 end
-            end
-            return
-        elseif (selectedAttack.name == "Heavy Punch" or selectedAttack.name == "Empower Punch") and selectedActor.choosePushDir then
+                return
+            elseif (selectedAttack.name == "Heavy Punch" or selectedAttack.name == "Empower Punch") and selectedActor.choosePushDir then
             if pushDirTargetCell then
                 -- Second click: choose push direction cell
                 local stepX, stepY, stepZ = selectedAttack:getLineDirection(selectedActor.q, selectedActor.r, pushDirTargetCell.q, pushDirTargetCell.r, hex)

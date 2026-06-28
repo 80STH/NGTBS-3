@@ -147,4 +147,39 @@ function attack_effects.bite(attacker, target, hex)
     visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.2, 0.2, 4, 0.8)
 end
 
+-- Effect for Rampage (Colossus charge)
+function attack_effects.rampage(attacker, target, targetQ, targetR, hex)
+    local fromX, fromY = getHexCenter(attacker, hex)
+    local toX, toY = hex:hexToPixel(targetQ, targetR)
+    visual.addDashEffect(fromX, fromY, toX, toY)
+    if target then
+        local x, y = getHexCenter(target, hex)
+        visual.addEffect(x, y, "hit", 0.5)
+        visual.addShockwave(x, y, 25)
+        visual.addBloodSplat(x, y)
+    end
+end
+
+-- Effect for Frenzy (Provoker)
+function attack_effects.frenzy(attacker, target, hex)
+    local fromX, fromY = getHexCenter(attacker, hex)
+    local toX, toY = getHexCenter(target, hex)
+    visual.addLineEffect(fromX, fromY, toX, toY, 1.0, 0.15, 0.1, 5, 1.0)
+    visual.addEffect(toX, toY, "hit", 0.5)
+    visual.addBloodSplat(toX, toY)
+end
+
+-- Effect for Hunt (Provoker push into Colossus)
+function attack_effects.hunt(attacker, target, colossus, hex)
+    if target then
+        local tx, ty = getHexCenter(target, hex)
+        visual.addEffect(tx, ty, "hit", 0.4)
+        visual.addBloodSplat(tx, ty)
+    end
+    if colossus then
+        local cx, cy = getHexCenter(colossus, hex)
+        visual.addEffect(cx, cy, "collision", 0.3)
+    end
+end
+
 return attack_effects

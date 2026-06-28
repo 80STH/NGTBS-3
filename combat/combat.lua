@@ -2341,4 +2341,407 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
     return success, message
 end
 
+-- ============================================================
+-- RAMPAGE (Colossus): dash forward, push enemies aside, lethal to target
+-- ============================================================
+combat.RampageAttack = setmetatable({}, combat.Attack)
+combat.RampageAttack.__index = combat.RampageAttack
+
+function combat.RampageAttack.new()
+    local self = combat.Attack.new("Rampage", "Charge forward pushing enemies aside. Lethal to the struck target", math.huge, 99, {})
+    return setmetatable(self, combat.RampageAttack)
+end
+
+function combat.RampageAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+
+    local firstTarget, targetHex, lastFree = combat.DashAttack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+
+    -- Determine where the attacker will land
+    local moveQ, moveR = attacker.q, attacker.r
+    local shouldMove = false
+    if firstTarget and targetHex then
+        local tx, ty, tz = hex_utils.axialToCube(targetHex.q, targetHex.r)
+        local bx, by, bz = tx - stepX, ty - stepY, tz - stepZ
+        local bq, br = hex_utils.cubeToAxial(bx, by, bz)
+        if bq ~= attacker.q or br ~= attacker.r then
+            moveQ, moveR = bq, br
+            shouldMove = true
+        end
+    elseif lastFree then
+        if lastFree.q ~= attacker.q or lastFree.r ~= attacker.r then
+            moveQ, moveR = lastFree.q, lastFree.r
+            shouldMove = true
+        end
+    else
+        if targetQ ~= attacker.q or targetR ~= attacker.r then
+            moveQ, moveR = targetQ, targetR
+            shouldMove = true
+        end
+    end
+
+    -- Push adjacent enemies sideways from the path
+    local curQ, curR = attacker.q, attacker.r
+    while true do
+        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if not hex:isActiveHex(nextQ, nextR) then break end
+        if firstTarget and targetHex and nextQ == targetHex.q and nextR == targetHex.r then break end
+
+        -- Get side directions (rotate left and right)
+        local sideX1, sideY1, sideZ1 = -stepY, -stepZ, -stepX
+        local sideX2, sideY2, sideZ2 = -stepZ, -stepX, -stepY
+        for _, side in ipairs({{sideX1, sideY1, sideZ1}, {sideX2, sideY2, sideZ2}}) do
+            local sideQ, sideR = hex_utils.applyCubeStep(nextQ, nextR, side[1], side[2], side[3])
+            local e = combat.getEntityAtHex(sideQ, sideR, entities)
+            if e and e:isCharacter() and e.health > 0 and e.isPushable ~= false and not e.isPlayable then
+                local pushQ, pushR = hex_utils.applyCubeStep(sideQ, sideR, side[1], side[2], side[3])
+                if hex:isActiveHex(pushQ, pushR) and not combat.getEntityAtHex(pushQ, pushR, entities) then
+                    combat.addPushAnimation(e, sideQ, sideR, pushQ, pushR)
+                else
+                    combat.addCollisionBounceAnimation(e, sideQ, sideR, pushQ, pushR, hex, entities, sounds, combat.getEntityAtHex(pushQ, pushR, entities))
+                end
+            end
+        end
+        curQ, curR = nextQ, nextR
+    end
+
+    -- Visual effect
+    local fxEndQ, fxEndR = attacker.q, attacker.r
+    if firstTarget and targetHex then
+        fxEndQ, fxEndR = targetHex.q, targetHex.r
+    elseif shouldMove then
+        fxEndQ, fxEndR = moveQ, moveR
+    end
+    attack_effects.rampage(attacker, firstTarget, fxEndQ, fxEndR, hex)
+
+    -- Lethal damage to first target
+    if firstTarget then
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
+    end
+
+    -- Push the target
+    if firstTarget and targetHex and firstTarget.isPushable and firstTarget.health and firstTarget.health > 0 then
+        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+        local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
+        local isEdge = not hex:isActiveHex(pushQ, pushR)
+        if isEdge or occupant then
+            combat.addCollisionBounceAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities, sounds, occupant)
+        else
+            combat.addPushAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR)
+        end
+    end
+
+    -- Move attacker
+    if shouldMove then
+        combat.addPushAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
+    end
+
+    combat.startPushAnimations(hex)
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.RampageAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if firstTarget and targetHex then
+        return targetHex
+    end
+    local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+    return endCell
+end
+
+function combat.RampageAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
+    return self:getLineShotPushCell(attacker, targetQ, targetR, hex, entities)
+end
+
+-- ============================================================
+-- MEND (Keeper): fully heal Colossus (adjacent)
+-- ============================================================
+combat.MendAttack = setmetatable({}, combat.Attack)
+combat.MendAttack.__index = combat.MendAttack
+
+function combat.MendAttack.new()
+    local self = combat.Attack.new("Mend", "Fully heal Colossus. Must be cast adjacent", 1, 0, {})
+    return setmetatable(self, combat.MendAttack)
+end
+
+function combat.MendAttack:findColossus(entities)
+    for _, e in ipairs(entities) do
+        if e.name == "Colossus" and e.isPlayable then
+            return e
+        end
+    end
+    return nil
+end
+
+function combat.MendAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local colossus = self:findColossus(entities)
+    if not colossus then return false, "Colossus is not on the battlefield!" end
+
+    local distance = hex:getDistance(attacker.q, attacker.r, colossus.q, colossus.r)
+    if distance ~= 1 then return false, "Colossus must be adjacent!" end
+
+    -- Remove stasis and fully heal
+    local st = require("system.status")
+    if st.hasEntityStatus(colossus, "stasis") then
+        st.removeFromEntity(colossus, "stasis")
+        _G.stasisCount = math.max(0, (_G.stasisCount or 1) - 1)
+    end
+    colossus.health = colossus.maxHealth
+
+    -- Visual
+    local fx, fy = getDrawCoords(attacker.q, attacker.r)
+    local tx, ty = getDrawCoords(colossus.q, colossus.r)
+    visual.addLineEffect(fx, fy, tx, ty, 0.2, 0.9, 0.4, 3, 0.8)
+    visual.addMagicExplosion(tx, ty, 0.2, 0.9, 0.4)
+
+    sounds.play("summon_attack")  -- healing sound stand-in
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.MendAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    local colossus = self:findColossus(entities)
+    if not colossus then return nil end
+    if targetQ == colossus.q and targetR == colossus.r then
+        if hex:getDistance(attacker.q, attacker.r, colossus.q, colossus.r) == 1 then
+            return {q = colossus.q, r = colossus.r}
+        end
+    end
+    return nil
+end
+
+-- ============================================================
+-- PHASE SHIFT (Keeper): swap positions with ally, choose landing within radius 1
+-- ============================================================
+combat.PhaseShiftAttack = setmetatable({}, combat.Attack)
+combat.PhaseShiftAttack.__index = combat.PhaseShiftAttack
+
+function combat.PhaseShiftAttack.new()
+    local self = combat.Attack.new("Phase Shift", "Swap places with an ally. Choose your landing spot within 1 tile of them", math.huge, 0, {})
+    return setmetatable(self, combat.PhaseShiftAttack)
+end
+
+function combat.PhaseShiftAttack:getLandingCells(allyQ, allyR, attackerQ, attackerR, hex, entities)
+    local cells = {}
+    for dq = -1, 1 do
+        for dr = -1, 1 do
+            if dq ~= 0 or dr ~= 0 then
+                local q = allyQ + dq
+                local r = allyR + dr
+                local dist = hex:getDistance(allyQ, allyR, q, r)
+                if dist == 1 and hex:isActiveHex(q, r) then
+                    local occupant = combat.getEntityAtHex(q, r, entities)
+                    if not occupant or occupant == attacker then
+                        table.insert(cells, {q = q, r = r})
+                    end
+                end
+            end
+        end
+    end
+    return cells
+end
+
+function combat.PhaseShiftAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local ally = combat.getEntityAtHex(targetQ, targetR, entities)
+    if not ally or not ally.isPlayable or ally == attacker then
+        return false, "Must target an ally!"
+    end
+
+    local landingQ, landingR = targetQ, targetR
+    if self._phaseLanding then
+        landingQ, landingR = self._phaseLanding.q, self._phaseLanding.r
+        self._phaseLanding = nil
+    end
+
+    local attackerOldQ, attackerOldR = attacker.q, attacker.r
+    local allyOldQ, allyOldR = ally.q, ally.r
+
+    -- Swap: attacker goes to landing near ally, ally goes to attacker's old spot
+    combat.addDirectPushAnimation(attacker, attackerOldQ, attackerOldR, landingQ, landingR)
+    combat.addDirectPushAnimation(ally, allyOldQ, allyOldR, attackerOldQ, attackerOldR)
+    combat.startPushAnimations(hex)
+
+    -- Visual effect on both
+    local fx1, fy1 = getDrawCoords(attackerOldQ, attackerOldR)
+    local fx2, fy2 = getDrawCoords(allyOldQ, allyOldR)
+    visual.addMagicExplosion(fx1, fy1, 0.4, 0.6, 1.0)
+    visual.addMagicExplosion(fx2, fy2, 0.4, 0.6, 1.0)
+
+    sounds.play("summon_attack")
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.PhaseShiftAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    for _, e in ipairs(entities) do
+        if e.q == targetQ and e.r == targetR and e.isPlayable and e ~= attacker and e.health > 0 then
+            return {q = targetQ, r = targetR}
+        end
+    end
+    return nil
+end
+
+-- ============================================================
+-- FRENZY (Provoker): lethal to target + behind, kills Colossus
+-- ============================================================
+combat.FrenzyAttack = setmetatable({}, combat.Attack)
+combat.FrenzyAttack.__index = combat.FrenzyAttack
+
+function combat.FrenzyAttack.new()
+    local self = combat.Attack.new("Frenzy", "Lethal strike on target and target behind. Puts Colossus in stasis", 1, 99, {})
+    return setmetatable(self, combat.FrenzyAttack)
+end
+
+function combat.FrenzyAttack:findColossus(entities)
+    for _, e in ipairs(entities) do
+        if e.name == "Colossus" and e.isPlayable then
+            return e
+        end
+    end
+    return nil
+end
+
+function combat.FrenzyAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+
+    local target = combat.getEntityAtHex(targetQ, targetR, entities)
+    if not target or target.health <= 0 then return false, "No valid target at that hex" end
+
+    -- Lethal damage to target
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
+
+    -- Lethal damage to target behind target
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local behindQ, behindR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+        local behindTarget = combat.getEntityAtHex(behindQ, behindR, entities)
+        if behindTarget and behindTarget.health > 0 then
+            self:dealDamageToTarget(behindTarget, attacker, self.damage, entities, sounds, nil)
+        end
+    end
+
+    -- Kill Colossus (put in stasis) wherever it is
+    local colossus = self:findColossus(entities)
+    if colossus and colossus.health > 0 then
+        local colQ, colR = colossus.q, colossus.r
+        colossus.health = 0
+        colossus:startDeath()
+        local fx, fy = getDrawCoords(colQ, colR)
+        visual.addMagicExplosion(fx, fy, 1.0, 0.2, 0.1)
+    end
+
+    -- Visual
+    attack_effects.frenzy(attacker, target, hex)
+
+    sounds.play("heavy_punch")
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.FrenzyAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) ~= 1 then return nil end
+    for _, e in ipairs(entities) do
+        if e.q == targetQ and e.r == targetR and e.health > 0 then
+            return {q = targetQ, r = targetR}
+        end
+    end
+    return nil
+end
+
+function combat.FrenzyAttack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
+    local cells = {{q = targetQ, r = targetR, damage = self.damage}}
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local behindQ, behindR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+        table.insert(cells, {q = behindQ, r = behindR, damage = self.damage})
+    end
+    -- Show Colossus affected cell
+    local colossus = self:findColossus(entities)
+    if colossus and colossus.health > 0 then
+        table.insert(cells, {q = colossus.q, r = colossus.r, damage = 99})
+    end
+    return cells
+end
+
+-- ============================================================
+-- HUNT (Provoker): push target, collision with Colossus = lethal
+-- ============================================================
+combat.HuntAttack = setmetatable({}, combat.Attack)
+combat.HuntAttack.__index = combat.HuntAttack
+
+function combat.HuntAttack.new()
+    local self = combat.Attack.new("Hunt", "Push target away. If target collides with Colossus — lethal damage, no harm to Colossus", 1, 0, {})
+    return setmetatable(self, combat.HuntAttack)
+end
+
+function combat.HuntAttack:findColossus(entities)
+    for _, e in ipairs(entities) do
+        if e.name == "Colossus" and e.isPlayable then
+            return e
+        end
+    end
+    return nil
+end
+
+function combat.HuntAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+
+    local target = combat.getEntityAtHex(targetQ, targetR, entities)
+    if not target or target.health <= 0 or target.isPushable == false then
+        return false, "No valid target at that hex"
+    end
+
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+
+    local pushQ, pushR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+    local colossus = self:findColossus(entities)
+    local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
+
+    -- Check if push destination is Colossus
+    if colossus and occupant == colossus then
+        -- Colossus takes no damage, enemy takes lethal
+        attack_effects.hunt(attacker, target, colossus, hex)
+        target.health = 0
+        target:startDeath()
+        local fx, fy = getDrawCoords(pushQ, pushR)
+        visual.addEffect(fx, fy, "hit", 0.5)
+        local tx, ty = getDrawCoords(targetQ, targetR)
+        visual.addLineEffect(tx, ty, fx, fy, 0.9, 0.2, 0.1, 4, 0.8)
+        if sounds then sounds.play("collision") end
+    else
+        -- Normal push
+        self:pushTargetToHex(target, targetQ, targetR, pushQ, pushR, hex, entities, sounds)
+        combat.startPushAnimations(hex)
+    end
+
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.HuntAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) ~= 1 then return nil end
+    for _, e in ipairs(entities) do
+        if e.q == targetQ and e.r == targetR and e.health > 0 then
+            return {q = targetQ, r = targetR}
+        end
+    end
+    return nil
+end
+
+function combat.HuntAttack:getPushCell(attacker, targetQ, targetR, hex, entities)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local pushQ, pushR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
+        return {q = pushQ, r = pushR, edge = not hex:isActiveHex(pushQ, pushR)}
+    end
+    return nil
+end
+
 return combat
