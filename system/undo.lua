@@ -74,6 +74,7 @@ function undo.snapshot()
             summonCooldown = e.summonCooldown,
             summonTargetQ = e.summonTargetQ,
             summonTargetR = e.summonTargetR,
+            indestructible = e.indestructible,
         }
         -- Copy statuses
         es.statuses = status.copyEntityStatuses(e)
@@ -145,6 +146,7 @@ function undo.restore(snap)
             es.ref.summonCooldown = es.summonCooldown
             es.ref.summonTargetQ = es.summonTargetQ
             es.ref.summonTargetR = es.summonTargetR
+            es.ref.indestructible = es.indestructible
             -- Restore statuses
             status.setEntityStatuses(es.ref, es.statuses)
             existingRefs[es.ref] = true

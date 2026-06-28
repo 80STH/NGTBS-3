@@ -2825,11 +2825,20 @@ function combat.MightyThrowAttack:execute(attacker, targetQ, targetR, hex, entit
 
     local impactQ, impactR
     if struckTarget and struckHex then
-        local prevQ, prevR = hex_utils.applyCubeStep(struckHex.q, struckHex.r, -stepX, -stepY, -stepZ)
-        if hex:isActiveHex(prevQ, prevR) and not combat.getEntityAtHex(prevQ, prevR, entities) then
-            impactQ, impactR = prevQ, prevR
-        else
-            impactQ, impactR = struckHex.q, struckHex.r
+        local backQ, backR = struckHex.q, struckHex.r
+        local found = false
+        for i = 1, 20 do
+            local nq, nr = hex_utils.applyCubeStep(backQ, backR, -stepX, -stepY, -stepZ)
+            if not hex:isActiveHex(nq, nr) then break end
+            if not combat.getEntityAtHex(nq, nr, entities) then
+                impactQ, impactR = nq, nr
+                found = true
+                break
+            end
+            backQ, backR = nq, nr
+        end
+        if not found then
+            impactQ, impactR = backQ, backR
         end
     else
         local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)

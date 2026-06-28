@@ -927,10 +927,20 @@ handlers["Mighty Throw"] = function(p, attacker, attack, hoverQ, hoverR, hex, en
         preview.addOverlay(p, struckQ, struckR, "target")
         preview.addAttackDamage(p, struckTarget, 99)
 
-        local prevQ, prevR = hex_utils.applyCubeStep(struckQ, struckR, -stepX, -stepY, -stepZ)
-        if isActive(prevQ, prevR, hex) and not getEntity(prevQ, prevR, entities) then
-            preview.markPushed(p, throwTarget, prevQ, prevR)
-            preview.addPushArrow(p, throwTarget.q, throwTarget.r, prevQ, prevR)
+        local backQ, backR = struckQ, struckR
+        local throwLandQ, throwLandR
+        for i = 1, 20 do
+            local nq, nr = hex_utils.applyCubeStep(backQ, backR, -stepX, -stepY, -stepZ)
+            if not isActive(nq, nr, hex) then break end
+            if not getEntity(nq, nr, entities) then
+                throwLandQ, throwLandR = nq, nr
+                break
+            end
+            backQ, backR = nq, nr
+        end
+        if throwLandQ then
+            preview.markPushed(p, throwTarget, throwLandQ, throwLandR)
+            preview.addPushArrow(p, throwTarget.q, throwTarget.r, throwLandQ, throwLandR)
         end
 
         local rightX, rightY, rightZ = -stepY, -stepZ, -stepX
