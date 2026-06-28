@@ -739,17 +739,13 @@ handlers["Rampage"] = function(p, attacker, attack, hoverQ, hoverR, hex, entitie
 
     local firstTarget, firstHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
 
-    -- Walk the path and push adjacent enemies sideways
+    -- Walk the path and push adjacent enemies sideways (including attacker's starting cell)
     local curQ, curR = attacker.q, attacker.r
     while true do
-        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
-        if not isActive(nextQ, nextR, hex) then break end
-        if firstTarget and firstHex and nextQ == firstHex.q and nextR == firstHex.r then break end
-
         local sideX1, sideY1, sideZ1 = -stepY, -stepZ, -stepX
         local sideX2, sideY2, sideZ2 = -stepZ, -stepX, -stepY
         for _, side in ipairs({{sideX1, sideY1, sideZ1}, {sideX2, sideY2, sideZ2}}) do
-            local sideQ, sideR = hex_utils.applyCubeStep(nextQ, nextR, side[1], side[2], side[3])
+            local sideQ, sideR = hex_utils.applyCubeStep(curQ, curR, side[1], side[2], side[3])
             local e = getEntity(sideQ, sideR, entities)
             if e and e:isCharacter() and e.health > 0 and e.isPushable ~= false and not e.isPlayable then
                 local pushQ, pushR = hex_utils.applyCubeStep(sideQ, sideR, side[1], side[2], side[3])
@@ -757,6 +753,10 @@ handlers["Rampage"] = function(p, attacker, attack, hoverQ, hoverR, hex, entitie
                 preview.addOverlay(p, sideQ, sideR, "target")
             end
         end
+
+        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if not isActive(nextQ, nextR, hex) then break end
+        if firstTarget and firstHex and nextQ == firstHex.q and nextR == firstHex.r then break end
         curQ, curR = nextQ, nextR
     end
 
@@ -889,6 +889,70 @@ handlers["Hunt"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     end
 end
 
+-- Mighty Throw: grab adjacent target, throw in direction, both die, struck pushed aside.
+handlers["Mighty Throw"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local throwTarget = _G.mightyThrowTarget
+    if not throwTarget then
+        local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+        if dist ~= 1 then return end
+        local target = getEntity(hoverQ, hoverR, entities)
+        if not target or not target:isCharacter() or target.health <= 0 or target.isPushable == false then return end
+        preview.addOverlay(p, hoverQ, hoverR, "target")
+        return
+    end
+
+    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+    if not stepX then return end
+
+    preview.addOverlay(p, throwTarget.q, throwTarget.r, "target")
+    preview.addAttackDamage(p, throwTarget, 99)
+
+    preview.addLine(p, attacker.q, attacker.r, hoverQ, hoverR)
+
+    local curQ, curR = attacker.q, attacker.r
+    local struckTarget, struckQ, struckR
+    while true do
+        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if not isValid(nextQ, nextR, hex) then break end
+        local e = getEntity(nextQ, nextR, entities)
+        if e and e ~= throwTarget and e.health > 0 then
+            struckTarget = e
+            struckQ, struckR = nextQ, nextR
+            break
+        end
+        curQ, curR = nextQ, nextR
+    end
+
+    if struckTarget and struckQ then
+        preview.addOverlay(p, struckQ, struckR, "target")
+        preview.addAttackDamage(p, struckTarget, 99)
+
+        local prevQ, prevR = hex_utils.applyCubeStep(struckQ, struckR, -stepX, -stepY, -stepZ)
+        if isActive(prevQ, prevR, hex) and not getEntity(prevQ, prevR, entities) then
+            preview.markPushed(p, throwTarget, prevQ, prevR)
+            preview.addPushArrow(p, throwTarget.q, throwTarget.r, prevQ, prevR)
+        end
+
+        local rightX, rightY, rightZ = -stepY, -stepZ, -stepX
+        local leftX, leftY, leftZ = -stepZ, -stepX, -stepY
+
+        local rq, rr = hex_utils.applyCubeStep(struckQ, struckR, rightX, rightY, rightZ)
+        local lq, lr = hex_utils.applyCubeStep(struckQ, struckR, leftX, leftY, leftZ)
+
+        local sideQ, sideR
+        if isActive(rq, rr, hex) and not getEntity(rq, rr, entities) then
+            sideQ, sideR = rq, rr
+        elseif isActive(lq, lr, hex) and not getEntity(lq, lr, entities) then
+            sideQ, sideR = lq, lr
+        end
+
+        if sideQ then
+            preview.applyPush(p, struckTarget, struckQ, struckR, sideQ, sideR, hex, entities)
+            preview.addOverlay(p, sideQ, sideR, "push_dest")
+        end
+    end
+end
+
 -- Generic fallback for attacks that only provide getAffectedCells.
 function handlers.__fallback(p, attacker, attack, hoverQ, hoverR, hex, entities)
     handleAffectedCells(p, attacker, attack, hoverQ, hoverR, hex, entities)
@@ -938,6 +1002,22 @@ function preview.buildIcons(p, hex)
         end
     end
     return icons
+end
+
+-- Build push arrow list from a computed preview.
+function preview.buildPushArrows(p, hex)
+    local arrows = {}
+    for _, arrow in ipairs(p.pushArrows) do
+        local fromX, fromY = getDrawCoords(arrow.fromQ, arrow.fromR)
+        local toX, toY = getDrawCoords(arrow.toQ, arrow.toR)
+        arrows[#arrows + 1] = {
+            fromX = fromX, fromY = fromY,
+            toX = toX, toY = toY,
+            fromQ = arrow.fromQ, fromR = arrow.fromR,
+            toQ = arrow.toQ, toR = arrow.toR,
+        }
+    end
+    return arrows
 end
 
 return preview

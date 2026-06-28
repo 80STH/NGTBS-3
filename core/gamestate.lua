@@ -66,6 +66,7 @@ function GameState.new()
     self.selectedActor = nil
     self.selectedAttack = nil
     self.flipTargetActor = nil
+    self.mightyThrowTarget = nil
     self.vortexTargetCell = nil
     self.pullHookTargetCell = nil
     self.pushDirTargetCell = nil
@@ -103,6 +104,7 @@ function GameState:syncFromGlobals()
     self.selectedAttack = _G.selectedAttack
     self.attackMode = _G.attackMode or false
     self.flipTargetActor = _G.flipTargetActor
+    self.mightyThrowTarget = _G.mightyThrowTarget
     self.vortexTargetCell = _G.vortexTargetCell
     self.pushDirTargetCell = _G.pushDirTargetCell
     self.pullHookTargetCell = _G.pullHookTargetCell

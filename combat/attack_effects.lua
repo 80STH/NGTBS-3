@@ -182,4 +182,22 @@ function attack_effects.hunt(attacker, target, colossus, hex)
     end
 end
 
+-- Effect for Mighty Throw (Colossus throws a target)
+function attack_effects.mightyThrow(attacker, thrownTarget, struckTarget, impactQ, impactR, hex)
+    local fromX, fromY = getHexCenter(attacker, hex)
+    local toX, toY = hex:hexToPixel(impactQ, impactR)
+    local midX = (fromX + toX) / 2
+    local midY = (fromY + toY) / 2
+    local ctrlX = midX
+    local ctrlY = midY - 50
+    visual.addArcEffect(fromX, fromY, toX, toY, 0.9, 0.4, 0.1, 0.3, ctrlX, ctrlY)
+    if struckTarget then
+        visual.addEffect(toX, toY, "hit", 0.5)
+        visual.addShockwave(toX, toY, 20)
+        visual.addBloodSplat(toX, toY)
+    else
+        visual.addEffect(toX, toY, "slam", 0.4)
+    end
+end
+
 return attack_effects

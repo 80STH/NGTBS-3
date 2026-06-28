@@ -223,10 +223,23 @@ function ui.drawPreviewIcons(hex, icons)
     end
 end
 
+function ui.drawPreviewPushArrows(arrows)
+    if not arrows then return end
+    for _, arrow in ipairs(arrows) do
+        ui.drawPushArrow(arrow.fromX, arrow.fromY, arrow.toX, arrow.toY, nil, nil, nil, nil, arrow.fromQ, arrow.fromR, arrow.toQ, arrow.toR)
+    end
+end
+
 function ui.collectPreviewIcons(hex, attacker, attack, hoverQ, hoverR, entities)
     if not attack or not attacker then return nil end
     local p = attack_preview.compute(hex, attacker, attack, hoverQ, hoverR, entities)
     return attack_preview.buildIcons(p, hex)
+end
+
+function ui.collectPreviewPushArrows(hex, attacker, attack, hoverQ, hoverR, entities)
+    if not attack or not attacker then return nil end
+    local p = attack_preview.compute(hex, attacker, attack, hoverQ, hoverR, entities)
+    return attack_preview.buildPushArrows(p, hex)
 end
 -- ============================================================
 -- MAIN UI FUNCTIONS, CALLED FROM MAIN.LUA
@@ -2188,6 +2201,34 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
                 if occupant and occupant:isCharacter() and occupant.health > 0 and not occupant.isPlayable then
                     table.insert(out, {q = hoverQ, r = hoverR})
                 end
+            end
+        end
+        return
+    end
+    if attack.name == "Rampage" then
+        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+        if stepX then
+            local firstTarget, firstHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+            if firstTarget and firstHex then
+                table.insert(out, {q = firstHex.q, r = firstHex.r})
+            end
+            -- Walk the path and show adjacent enemies that will be pushed aside (including attacker's starting cell)
+            local curQ, curR = attacker.q, attacker.r
+            while true do
+                local sideX1, sideY1, sideZ1 = -stepY, -stepZ, -stepX
+                local sideX2, sideY2, sideZ2 = -stepZ, -stepX, -stepY
+                for _, side in ipairs({{sideX1, sideY1, sideZ1}, {sideX2, sideY2, sideZ2}}) do
+                    local sideQ, sideR = hex_utils.applyCubeStep(curQ, curR, side[1], side[2], side[3])
+                    local e = getEntityAtHex(sideQ, sideR, entities)
+                    if e and e:isCharacter() and e.health > 0 and e.isPushable ~= false and not e.isPlayable then
+                        table.insert(out, {q = sideQ, r = sideR})
+                    end
+                end
+
+                local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+                if not hex:isActiveHex(nextQ, nextR) then break end
+                if firstTarget and firstHex and nextQ == firstHex.q and nextR == firstHex.r then break end
+                curQ, curR = nextQ, nextR
             end
         end
         return

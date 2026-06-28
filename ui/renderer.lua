@@ -17,14 +17,14 @@ function renderer.draw(state)
     -- Collect cell overlays for grid rendering
     local cellOverlays = {}
     ui.collectPreparedAttackOverlays(hex, state.entities, cellOverlays)
-    if state.attackMode and not state.flipTargetActor and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn then
+    if state.attackMode and not state.flipTargetActor and not state.mightyThrowTarget and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn then
         ui.collectAttackableCellOverlays(hex, state.selectedActor, state.selectedAttack, state.entities, state.terrainMap, cellOverlays)
     end
     if state.flipTargetActor then
         ui.collectFlipDestOverlays(state.hex, state.selectedActor, state.flipTargetActor, state.selectedAttack, state.entities, cellOverlays)
     end
     global_abilities.collectOverlays(hex, cellOverlays, state)
-    if state.attackMode and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn and not state.flipTargetActor and hex.hoverQ >= 0 and hex.hoverR >= 0 then
+    if state.attackMode and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn and not state.flipTargetActor and not state.mightyThrowTarget and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local ovCells = {}
         ui.collectAttackPreviewOverlays(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities, ovCells)
         for _, c in ipairs(ovCells) do
@@ -37,8 +37,10 @@ function renderer.draw(state)
 
     -- Collect preview icons
     local previewIcons = nil
+    local previewPushArrows = nil
     if state.attackMode and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn and not state.flipTargetActor and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         previewIcons = ui.collectPreviewIcons(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities)
+        previewPushArrows = ui.collectPreviewPushArrows(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities)
     end
 
     -- Normalize overlay data
@@ -194,6 +196,67 @@ function renderer.draw(state)
         end
         love.graphics.setLineWidth(1)
     end
+    if state.mightyThrowTarget and state.selectedAttack and state.selectedActor then
+        local mtx, mty = getDrawCoords(state.mightyThrowTarget.q, state.mightyThrowTarget.r)
+        local mtVerts = hex:drawInsetHexagon(mtx, mty, hex.radius, 0.92)
+        love.graphics.setColor(0.9, 0.3, 0.1, 0.4)
+        love.graphics.polygon("fill", mtVerts)
+        love.graphics.setColor(0.9, 0.3, 0.1, 0.9)
+        love.graphics.setLineWidth(3)
+        love.graphics.polygon("line", mtVerts)
+        love.graphics.setLineWidth(1)
+        if hex.hoverQ >= 0 and hex.hoverR >= 0 then
+            local stepX, stepY, stepZ = state.selectedAttack:getLineDirection(state.selectedActor.q, state.selectedActor.r, hex.hoverQ, hex.hoverR, hex)
+            if stepX then
+                local endCell = combat.getFarthestActiveCellOnLine(state.selectedActor.q, state.selectedActor.r, stepX, stepY, stepZ, hex)
+                if endCell then
+                    local ex, ey = getDrawCoords(endCell.q, endCell.r)
+                    love.graphics.setColor(0.9, 0.3, 0.1, 0.5)
+                    love.graphics.setLineWidth(3)
+                    love.graphics.line(mtx, mty, ex, ey)
+                    love.graphics.setLineWidth(1)
+                end
+                local curQ, curR = state.selectedActor.q, state.selectedActor.r
+                while true do
+                    local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+                    if not hex:isActiveHex(nextQ, nextR) then break end
+                    local e = getEntityAtHex(nextQ, nextR, state.entities)
+                    if e and e ~= state.mightyThrowTarget and e.health > 0 then
+                        local sx, sy = getDrawCoords(nextQ, nextR)
+                        local sv = hex:drawInsetHexagon(sx, sy, hex.radius, 0.92)
+                        love.graphics.setColor(1, 0.2, 0.1, 0.4)
+                        love.graphics.polygon("fill", sv)
+                        love.graphics.setColor(1, 0.2, 0.1, 0.9)
+                        love.graphics.setLineWidth(3)
+                        love.graphics.polygon("line", sv)
+                        love.graphics.setLineWidth(1)
+                        local rightX, rightY, rightZ = -stepY, -stepZ, -stepX
+                        local leftX, leftY, leftZ = -stepZ, -stepX, -stepY
+                        local rq, rr = hex_utils.applyCubeStep(nextQ, nextR, rightX, rightY, rightZ)
+                        local lq, lr = hex_utils.applyCubeStep(nextQ, nextR, leftX, leftY, leftZ)
+                        local sideQ, sideR
+                        if hex:isActiveHex(rq, rr) and not getEntityAtHex(rq, rr, state.entities) then
+                            sideQ, sideR = rq, rr
+                        elseif hex:isActiveHex(lq, lr) and not getEntityAtHex(lq, lr, state.entities) then
+                            sideQ, sideR = lq, lr
+                        end
+                        if sideQ then
+                            local sdx, sdy = getDrawCoords(sideQ, sideR)
+                            local sdv = hex:drawInsetHexagon(sdx, sdy, hex.radius, 0.92)
+                            love.graphics.setColor(0.4, 0.8, 1, 0.3)
+                            love.graphics.polygon("fill", sdv)
+                            love.graphics.setColor(0.4, 0.8, 1, 0.8)
+                            love.graphics.setLineWidth(2)
+                            love.graphics.polygon("line", sdv)
+                            love.graphics.setLineWidth(1)
+                        end
+                        break
+                    end
+                    curQ, curR = nextQ, nextR
+                end
+            end
+        end
+    end
     for _, entity in ipairs(state.entities) do
         if (entity:isCharacter() and not entity.isPlayable or entity.isTrainAttack) and entity.hasPreparedAttack and entity.health > 0 then
             ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
@@ -213,6 +276,7 @@ function renderer.draw(state)
     end
     drawAllEntities(state)
     ui.drawPreviewIcons(hex, previewIcons)
+    ui.drawPreviewPushArrows(previewPushArrows)
     visual.draw()
 
     if not state.attackMode then

@@ -197,7 +197,27 @@ end
     end
 
     if attackMode and selectedAttack and selectedActor and not selectedActor.hasActedThisTurn then
-        if selectedAttack.name == "Flip" then
+        if selectedAttack.name == "Mighty Throw" then
+            if mightyThrowTarget then
+                local stepX, stepY, stepZ = selectedAttack:getLineDirection(selectedActor.q, selectedActor.r, tq, tr, hex)
+                if stepX then
+                    selectedAttack._throwDir = {x = stepX, y = stepY, z = stepZ}
+                    local success, msg = performAttackWithSelectedAttack(selectedActor, mightyThrowTarget.q, mightyThrowTarget.r, selectedAttack)
+                    if not success then log.warnf("input", "Attack failed: %s", msg) end
+                    attackMode = false
+                    selectedAttack = nil
+                end
+                mightyThrowTarget = nil
+            else
+                local clicked = getEntityAtHex(tq, tr)
+                if clicked and clicked:isCharacter() and clicked ~= selectedActor and
+                   hex:getDistance(selectedActor.q, selectedActor.r, tq, tr) == 1 and
+                   clicked.isPushable ~= false and clicked.health > 0 then
+                    mightyThrowTarget = clicked
+                end
+            end
+            return
+        elseif selectedAttack.name == "Flip" then
             if flipTargetActor then
                 local destQ, destR = tq, tr
                 local targetQ, targetR = flipTargetActor.q, flipTargetActor.r
@@ -368,6 +388,7 @@ end
         updateAttackButtons(selectedActor)
         attackMode = false
         selectedAttack = nil
+        mightyThrowTarget = nil
         log.debugf("input", "Selected: %s%s", clicked.name, (clicked.hasActedThisTurn and " (acted)" or ""))
         return
     end
@@ -381,6 +402,7 @@ end
             hex.selectedQ, hex.selectedR = selectedActor.q, selectedActor.r
             attackMode = false
             selectedAttack = nil
+            mightyThrowTarget = nil
         end
     end
 end
@@ -413,6 +435,9 @@ function input.keypressed(key)
         elseif flipTargetActor then
             flipTargetActor = nil
             log.debug("input", "Flip target cancelled")
+        elseif mightyThrowTarget then
+            mightyThrowTarget = nil
+            log.debug("input", "Mighty Throw target cancelled")
         elseif vortexTargetCell then
             vortexTargetCell = nil
             log.debug("input", "Vortex target cancelled")

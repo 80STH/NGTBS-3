@@ -2381,18 +2381,14 @@ function combat.RampageAttack:execute(attacker, targetQ, targetR, hex, entities,
         end
     end
 
-    -- Push adjacent enemies sideways from the path
+    -- Push adjacent enemies sideways from the path (including attacker's starting cell)
     local curQ, curR = attacker.q, attacker.r
     while true do
-        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
-        if not hex:isActiveHex(nextQ, nextR) then break end
-        if firstTarget and targetHex and nextQ == targetHex.q and nextR == targetHex.r then break end
-
         -- Get side directions (rotate left and right)
         local sideX1, sideY1, sideZ1 = -stepY, -stepZ, -stepX
         local sideX2, sideY2, sideZ2 = -stepZ, -stepX, -stepY
         for _, side in ipairs({{sideX1, sideY1, sideZ1}, {sideX2, sideY2, sideZ2}}) do
-            local sideQ, sideR = hex_utils.applyCubeStep(nextQ, nextR, side[1], side[2], side[3])
+            local sideQ, sideR = hex_utils.applyCubeStep(curQ, curR, side[1], side[2], side[3])
             local e = combat.getEntityAtHex(sideQ, sideR, entities)
             if e and e:isCharacter() and e.health > 0 and e.isPushable ~= false and not e.isPlayable then
                 local pushQ, pushR = hex_utils.applyCubeStep(sideQ, sideR, side[1], side[2], side[3])
@@ -2403,6 +2399,10 @@ function combat.RampageAttack:execute(attacker, targetQ, targetR, hex, entities,
                 end
             end
         end
+
+        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if not hex:isActiveHex(nextQ, nextR) then break end
+        if firstTarget and targetHex and nextQ == targetHex.q and nextR == targetHex.r then break end
         curQ, curR = nextQ, nextR
     end
 
@@ -2415,13 +2415,8 @@ function combat.RampageAttack:execute(attacker, targetQ, targetR, hex, entities,
     end
     attack_effects.rampage(attacker, firstTarget, fxEndQ, fxEndR, hex)
 
-    -- Lethal damage to first target
-    if firstTarget then
-        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
-    end
-
-    -- Push the target
-    if firstTarget and targetHex and firstTarget.isPushable and firstTarget.health and firstTarget.health > 0 then
+    -- Push the target (before dealing damage, so target is still alive)
+    if firstTarget and targetHex and firstTarget.isPushable ~= false then
         local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
         local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
         local isEdge = not hex:isActiveHex(pushQ, pushR)
@@ -2430,6 +2425,11 @@ function combat.RampageAttack:execute(attacker, targetQ, targetR, hex, entities,
         else
             combat.addPushAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR)
         end
+    end
+
+    -- Lethal damage to first target
+    if firstTarget then
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
     end
 
     -- Move attacker
@@ -2740,6 +2740,136 @@ function combat.HuntAttack:getPushCell(attacker, targetQ, targetR, hex, entities
     if stepX then
         local pushQ, pushR = hex_utils.applyCubeStep(targetQ, targetR, stepX, stepY, stepZ)
         return {q = pushQ, r = pushR, edge = not hex:isActiveHex(pushQ, pushR)}
+    end
+    return nil
+end
+
+-- ============================================================
+-- MIGHTY THROW (Colossus): grab adjacent target, throw in chosen direction
+-- Both thrown target and struck target take lethal damage
+-- Struck target is knocked to the side
+-- ============================================================
+combat.MightyThrowAttack = setmetatable({}, combat.Attack)
+combat.MightyThrowAttack.__index = combat.MightyThrowAttack
+
+function combat.MightyThrowAttack.new()
+    local self = combat.Attack.new("Mighty Throw", "Grab adjacent target and throw it in a line. Both thrown and struck target take lethal damage. Struck target is knocked aside", 1, 99, {})
+    return setmetatable(self, combat.MightyThrowAttack)
+end
+
+function combat.MightyThrowAttack:getThrowDirections(attacker, hex)
+    local ax, ay, az = hex_utils.axialToCube(attacker.q, attacker.r)
+    local dirs = {
+        {1, -1, 0}, {1, 0, -1}, {0, 1, -1},
+        {-1, 1, 0}, {-1, 0, 1}, {0, -1, 1},
+    }
+    local result = {}
+    for _, d in ipairs(dirs) do
+        local nq, nr = hex_utils.cubeToAxial(ax + d[1], ay + d[2], az + d[3])
+        if hex:isActiveHex(nq, nr) then
+            table.insert(result, {x = d[1], y = d[2], z = d[3], q = nq, r = nr})
+        end
+    end
+    return result
+end
+
+function combat.MightyThrowAttack:findStruckTarget(attacker, stepX, stepY, stepZ, thrownTarget, hex, entities)
+    local curQ, curR = attacker.q, attacker.r
+    while true do
+        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if not hex:isValidHex(nextQ, nextR) then break end
+        local e = combat.getEntityAtHex(nextQ, nextR, entities)
+        if e and e ~= thrownTarget and e.health > 0 then
+            return e, {q = nextQ, r = nextR}
+        end
+        curQ, curR = nextQ, nextR
+    end
+    return nil, nil
+end
+
+function combat.MightyThrowAttack:getSidePushCell(struckQ, struckR, stepX, stepY, stepZ, hex, entities)
+    local rightX, rightY, rightZ = -stepY, -stepZ, -stepX
+    local leftX, leftY, leftZ = -stepZ, -stepX, -stepY
+
+    local rq, rr = hex_utils.applyCubeStep(struckQ, struckR, rightX, rightY, rightZ)
+    if hex:isActiveHex(rq, rr) and not combat.getEntityAtHex(rq, rr, entities) then
+        return rq, rr, rightX, rightY, rightZ
+    end
+
+    local lq, lr = hex_utils.applyCubeStep(struckQ, struckR, leftX, leftY, leftZ)
+    if hex:isActiveHex(lq, lr) and not combat.getEntityAtHex(lq, lr, entities) then
+        return lq, lr, leftX, leftY, leftZ
+    end
+
+    return nil, nil, nil, nil, nil
+end
+
+function combat.MightyThrowAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+
+    local thrownTarget = combat.getEntityAtHex(targetQ, targetR, entities)
+    if not thrownTarget or not thrownTarget:isCharacter() or thrownTarget.isPushable == false then
+        return false, "Target must be a pushable character!"
+    end
+
+    local stepX, stepY, stepZ
+    if self._throwDir then
+        stepX, stepY, stepZ = self._throwDir.x, self._throwDir.y, self._throwDir.z
+        self._throwDir = nil
+    else
+        return false, "No throw direction selected!"
+    end
+
+    local struckTarget, struckHex = self:findStruckTarget(attacker, stepX, stepY, stepZ, thrownTarget, hex, entities)
+
+    local impactQ, impactR
+    if struckTarget and struckHex then
+        local prevQ, prevR = hex_utils.applyCubeStep(struckHex.q, struckHex.r, -stepX, -stepY, -stepZ)
+        if hex:isActiveHex(prevQ, prevR) and not combat.getEntityAtHex(prevQ, prevR, entities) then
+            impactQ, impactR = prevQ, prevR
+        else
+            impactQ, impactR = struckHex.q, struckHex.r
+        end
+    else
+        local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+        if endCell then
+            impactQ, impactR = endCell.q, endCell.r
+        else
+            impactQ, impactR = targetQ, targetR
+        end
+    end
+
+    attack_effects.mightyThrow(attacker, thrownTarget, struckTarget, impactQ, impactR, hex)
+
+    combat.addPushAnimation(thrownTarget, targetQ, targetR, impactQ, impactR)
+
+    if struckTarget and struckHex then
+        self:dealDamageToTarget(thrownTarget, attacker, self.damage, entities, sounds, nil)
+        self:dealDamageToTarget(struckTarget, attacker, self.damage, entities, sounds, nil)
+
+        local sideQ, sideR, sideX, sideY, sideZ = self:getSidePushCell(struckHex.q, struckHex.r, stepX, stepY, stepZ, hex, entities)
+        if sideQ and sideR then
+            combat.addPushAnimation(struckTarget, struckHex.q, struckHex.r, sideQ, sideR)
+        else
+            local bounceQ, bounceR = hex_utils.applyCubeStep(struckHex.q, struckHex.r, -stepY, -stepZ, -stepX)
+            combat.addCollisionBounceAnimation(struckTarget, struckHex.q, struckHex.r, bounceQ, bounceR, hex, entities, sounds, combat.getEntityAtHex(bounceQ, bounceR, entities))
+        end
+    else
+        self:dealDamageToTarget(thrownTarget, attacker, self.damage, entities, sounds, nil)
+    end
+
+    combat.startPushAnimations(hex)
+    sounds.play("heavy_punch")
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.MightyThrowAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) ~= 1 then return nil end
+    local e = combat.getEntityAtHex(targetQ, targetR, entities)
+    if e and e:isCharacter() and e.health > 0 and e.isPushable ~= false then
+        return {q = targetQ, r = targetR}
     end
     return nil
 end

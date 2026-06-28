@@ -142,6 +142,7 @@ local ATTACK_SETS = {
         local c = require("combat.combat")
         return {
             { attack = c.RampageAttack.new(), name = "Rampage", description = "Charge forward pushing enemies aside. Lethal to struck target" },
+            { attack = c.MightyThrowAttack.new(), name = "Mighty Throw", description = "Grab adjacent target and throw it in a line. Both thrown and struck target die. Struck target is knocked aside" },
         }
     end,
     keeper = function()
