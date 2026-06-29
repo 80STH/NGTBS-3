@@ -26,7 +26,7 @@ global_abilities.abilityUsedThisTurn = false
 global_abilities.scrollOffset = 0
 global_abilities.maxVisibleItems = 6
 
-global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Stasis Overload", "Chain Lightning", "Invulnerability"}
+global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability"}
 
 global_abilities.unlocked = {}
 
@@ -1618,6 +1618,202 @@ function AirStrikeAbility:drawButton(mx, my, state)
 end
 
 -- ============================================================
+-- JUMPING STRIKE: like Air Strike but damages every other cell
+-- ============================================================
+local JumpingStrikeAbility = {}
+JumpingStrikeAbility.__index = JumpingStrikeAbility
+
+function JumpingStrikeAbility.new()
+    local self = {
+        name = "Jumping Strike",
+        manaCost = 2,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+        phase = nil,
+        startCell = nil,
+    }
+    return setmetatable(self, JumpingStrikeAbility)
+end
+
+function JumpingStrikeAbility:reset()
+    self.hasBeenUsed = false
+    self.phase = nil
+    self.startCell = nil
+end
+
+function JumpingStrikeAbility:_getDirection(fromQ, fromR, toQ, toR)
+    local ax, ay, az = hex_utils.axialToCube(fromQ, fromR)
+    local bx, by, bz = hex_utils.axialToCube(toQ, toR)
+    local dx, dy, dz = bx - ax, by - ay, bz - az
+    if dx == 0 and dy == 0 and dz == 0 then return nil end
+
+    local absDx, absDy, absDz = math.abs(dx), math.abs(dy), math.abs(dz)
+    local maxVal = math.max(absDx, absDy, absDz)
+    local ndx = math.floor(dx / maxVal + 0.5)
+    local ndy = math.floor(dy / maxVal + 0.5)
+    local ndz = math.floor(dz / maxVal + 0.5)
+    if ndx + ndy + ndz ~= 0 then return nil end
+
+    return ndx, ndy, ndz
+end
+
+function JumpingStrikeAbility:onActivate(state)
+    self.phase = "select_start"
+    self.startCell = nil
+    log.info("abilities", "Click on a hex to start the jumping strike line, or press ESC to cancel")
+end
+
+function JumpingStrikeAbility:onDeactivate(state)
+    self.phase = nil
+    self.startCell = nil
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+
+function JumpingStrikeAbility:onClickHex(q, r, hex, state)
+    if self.phase == "select_start" then
+        self.startCell = {q = q, r = r}
+        self.phase = "select_direction"
+        log.info("abilities", "Now click in the direction of the strike")
+        return true
+    end
+
+    if self.phase == "select_direction" then
+        if q == self.startCell.q and r == self.startCell.r then
+            log.info("abilities", "Click on another cell to choose the strike direction")
+            return true
+        end
+        local stepX, stepY, stepZ = self:_getDirection(self.startCell.q, self.startCell.r, q, r)
+        if not stepX then
+            log.warn("abilities", "Cannot determine direction!")
+            return true
+        end
+
+        local function processLine(startQ, startR, stepX, stepY, stepZ, hex, state)
+            local curQ, curR = startQ, startR
+            local distance = 0
+            while true do
+                curQ, curR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+                if not hex:isActiveHex(curQ, curR) then break end
+                distance = distance + 1
+                if distance % 2 == 0 then
+                    local target = combat.getEntityAtHex(curQ, curR, state.entities)
+                    if target and target.health > 0 then
+                        local wasDestroyed = target:takeDamage(1)
+                        if wasDestroyed then target:startDeath() end
+                    end
+                    if visual then
+                        local x, y = getDrawCoords(curQ, curR)
+                        visual.addEffect(x, y, "hit", 0.25)
+                    end
+                end
+            end
+        end
+
+        processLine(self.startCell.q, self.startCell.r, stepX, stepY, stepZ, hex, state)
+        processLine(self.startCell.q, self.startCell.r, -stepX, -stepY, -stepZ, hex, state)
+
+        global_abilities.spendAbility(self)
+        undo.snapshot()
+        log.info("abilities", "Jumping Strike executed!")
+        if _G.checkGameEnd then _G.checkGameEnd() end
+        restoreSelectedActor()
+        global_abilities.activeAbility = nil
+        self.phase = nil
+        self.startCell = nil
+        return true
+    end
+
+    return false
+end
+
+function JumpingStrikeAbility:collectOverlays(hex, cellOverlays, state)
+    if self.phase == "select_start" then
+        if hex.hoverQ >= 0 and hex.hoverR >= 0 and hex:isActiveHex(hex.hoverQ, hex.hoverR) then
+            local key = hex.hoverQ .. "," .. hex.hoverR
+            cellOverlays[key] = {fill = {0.5, 0.8, 0.5, 0.3}, line = {0.5, 0.8, 0.5, 0.7}}
+        end
+    elseif self.phase == "select_direction" and self.startCell then
+        local skey = self.startCell.q .. "," .. self.startCell.r
+        cellOverlays[skey] = {fill = {0.5, 0.8, 0.5, 0.4}, line = {0.5, 0.8, 0.5, 0.8}}
+
+        local hq, hr = hex.hoverQ, hex.hoverR
+        if hq < 0 or hr < 0 then return end
+        if hq == self.startCell.q and hr == self.startCell.r then return end
+        local stepX, stepY, stepZ = self:_getDirection(self.startCell.q, self.startCell.r, hq, hr)
+        if not stepX then return end
+
+        local function showLine(sx, sy, sz)
+            local curQ, curR = self.startCell.q, self.startCell.r
+            local distance = 0
+            while true do
+                curQ, curR = hex_utils.applyCubeStep(curQ, curR, sx, sy, sz)
+                if not hex:isActiveHex(curQ, curR) then break end
+                distance = distance + 1
+                if distance % 2 == 0 then
+                    local key = curQ .. "," .. curR
+                    cellOverlays[key] = {fill = {1, 0.8, 0.2, 0.4}, line = {1, 0.8, 0.2, 0.8}}
+                end
+            end
+        end
+
+        showLine(stepX, stepY, stepZ)
+        showLine(-stepX, -stepY, -stepZ)
+    end
+end
+
+function JumpingStrikeAbility:drawPreview(hex, state)
+    if self.phase == "select_direction" and self.startCell then
+        local hq, hr = hex.hoverQ, hex.hoverR
+        if hq < 0 or hr < 0 then return end
+        if hq == self.startCell.q and hr == self.startCell.r then return end
+        local stepX, stepY, stepZ = self:_getDirection(self.startCell.q, self.startCell.r, hq, hr)
+        if not stepX then return end
+
+        local curQ, curR = self.startCell.q, self.startCell.r
+        local lastQ, lastR = curQ, curR
+        while true do
+            local nq, nr = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+            if not hex:isActiveHex(nq, nr) then break end
+            lastQ, lastR = nq, nr
+            curQ, curR = nq, nr
+        end
+        local endQ, endR = lastQ, lastR
+
+        curQ, curR = self.startCell.q, self.startCell.r
+        lastQ, lastR = curQ, curR
+        while true do
+            local nq, nr = hex_utils.applyCubeStep(curQ, curR, -stepX, -stepY, -stepZ)
+            if not hex:isActiveHex(nq, nr) then break end
+            lastQ, lastR = nq, nr
+            curQ, curR = nq, nr
+        end
+
+        local fx, fy = getDrawCoords(lastQ, lastR)
+        local tx, ty = getDrawCoords(endQ, endR)
+        love.graphics.setLineWidth(3)
+        love.graphics.setColor(1, 0.8, 0.2, 0.5)
+        love.graphics.line(fx, fy, tx, ty)
+        love.graphics.setLineWidth(1)
+        love.graphics.setColor(1, 1, 1, 1)
+    end
+end
+
+function JumpingStrikeAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.6, 0.8, 0.2},
+        label = "Jumping Strike",
+        activeLabel = self.phase == "select_direction" and "Choose direction" or "Select start",
+        tooltipH = 64,
+        tooltipTitle = "Jumping Strike",
+        tooltipLines = {
+            "Wound every other unit in a",
+            "straight line for 1 damage.",
+        },
+    })
+end
+
+-- ============================================================
 -- STASIS OVERLOAD: fatal damage to ally and all adjacent
 -- ============================================================
 local StasisOverloadAbility = {}
@@ -2043,6 +2239,7 @@ global_abilities.register(ForceAttackAbility.new())
 global_abilities.register(RageAbility.new())
 global_abilities.register(TheBigOneAbility.new())
 global_abilities.register(AirStrikeAbility.new())
+global_abilities.register(JumpingStrikeAbility.new())
 global_abilities.register(StasisOverloadAbility.new())
 global_abilities.register(ChainLightningAbility.new())
 global_abilities.register(InvulnerabilityAbility.new())
