@@ -158,7 +158,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
             log.infof("combat", "%s is slammed against the edge! Takes 1 damage!", target.name)
             sounds.play("collision")
             if target.health <= 0 then
-                target.startDeath()
+                target:startDeath()
             end
         end
         local effectX, effectY = getDrawCoords(fromQ, fromR)
@@ -342,13 +342,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     end
     attack_effects.dash(attacker, firstTarget, fxEndQ, fxEndR, hex)
 
-    -- Deal damage to first target
-    if firstTarget then
-        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
-    end
-
-    -- If target exists and is pushable, push it
-    if firstTarget and targetHex and firstTarget.isPushable and firstTarget.health and firstTarget.health > 0 then
+    if firstTarget and targetHex and firstTarget.isPushable then
         local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
         local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
         local isEdge = not hex:isActiveHex(pushQ, pushR)
@@ -359,12 +353,16 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
         end
     end
 
-    -- Move attacker (only if there's a cell to move to)
     if shouldMove then
         combat.addPushAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
     end
 
     combat.startPushAnimations(hex)
+
+    if firstTarget then
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
+    end
+
     attacker.hasActedThisTurn = true
     return true
 end
@@ -430,12 +428,12 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     if combat.getEntityAtHex(destQ, destR, entities) then
         return false, "Destination cell is occupied!"
     end
-    -- Deal 1 damage
-    self:dealDamageToTarget(targetActor, attacker, 1, entities, sounds, nil)
     -- Movement
     attack_effects.flip(attacker, targetActor, destQ, destR, hex)
     combat.addPushAnimation(targetActor, targetQ, targetR, destQ, destR)
     combat.startPushAnimations(hex)
+    -- Deal 1 damage
+    self:dealDamageToTarget(targetActor, attacker, 1, entities, sounds, nil)
     log.debugf("combat", "%s flips %s to (%d,%d)!", attacker.name, targetActor.name, destQ, destR)
     sounds.play("flip")
     attacker.hasActedThisTurn = true
@@ -470,10 +468,10 @@ function combat.LineShotAttack:execute(attacker, targetQ, targetR, hex, entities
     end
     attack_effects.shoot(attacker, firstTarget, pushQ, pushR, hex)
     self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+    combat.startPushAnimations(hex)
     if self.damage > 0 then
         self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
     end
-    combat.startPushAnimations(hex)
     attacker.hasActedThisTurn = true
     return true
 end
@@ -531,13 +529,13 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
             secondTarget.currentDrawY = nil
         end
     end
-    if secondTarget then
-        self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil)
-    end
     if firstTarget.isPushable ~= false then
         self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, entities, sounds)
     end
     combat.startPushAnimations(hex)
+    if secondTarget then
+        self:dealDamageToTarget(secondTarget, attacker, 1, entities, sounds, nil)
+    end
     attacker.hasActedThisTurn = true
     return true
 end
@@ -2427,17 +2425,17 @@ function combat.RampageAttack:execute(attacker, targetQ, targetR, hex, entities,
         end
     end
 
-    -- Lethal damage to first target
-    if firstTarget then
-        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
-    end
-
     -- Move attacker
     if shouldMove then
         combat.addPushAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
     end
 
     combat.startPushAnimations(hex)
+
+    if firstTarget then
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
+    end
+
     attacker.hasActedThisTurn = true
     return true
 end
@@ -2854,9 +2852,6 @@ function combat.MightyThrowAttack:execute(attacker, targetQ, targetR, hex, entit
     combat.addPushAnimation(thrownTarget, targetQ, targetR, impactQ, impactR)
 
     if struckTarget and struckHex then
-        self:dealDamageToTarget(thrownTarget, attacker, self.damage, entities, sounds, nil)
-        self:dealDamageToTarget(struckTarget, attacker, self.damage, entities, sounds, nil)
-
         local sideQ, sideR, sideX, sideY, sideZ = self:getSidePushCell(struckHex.q, struckHex.r, stepX, stepY, stepZ, hex, entities)
         if sideQ and sideR then
             combat.addPushAnimation(struckTarget, struckHex.q, struckHex.r, sideQ, sideR)
@@ -2864,11 +2859,17 @@ function combat.MightyThrowAttack:execute(attacker, targetQ, targetR, hex, entit
             local bounceQ, bounceR = hex_utils.applyCubeStep(struckHex.q, struckHex.r, -stepY, -stepZ, -stepX)
             combat.addCollisionBounceAnimation(struckTarget, struckHex.q, struckHex.r, bounceQ, bounceR, hex, entities, sounds, combat.getEntityAtHex(bounceQ, bounceR, entities))
         end
+    end
+
+    combat.startPushAnimations(hex)
+
+    if struckTarget and struckHex then
+        self:dealDamageToTarget(thrownTarget, attacker, self.damage, entities, sounds, nil)
+        self:dealDamageToTarget(struckTarget, attacker, self.damage, entities, sounds, nil)
     else
         self:dealDamageToTarget(thrownTarget, attacker, self.damage, entities, sounds, nil)
     end
 
-    combat.startPushAnimations(hex)
     sounds.play("heavy_punch")
     attacker.hasActedThisTurn = true
     return true

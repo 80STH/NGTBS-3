@@ -929,58 +929,55 @@ function WindTorrent:drawPreview(hex, state)
         return getProjection(a) > getProjection(b)
     end)
 
-    local immovableMap = {}
-    for _, entity in ipairs(state.entities) do
-        if not entity.isPushable and entity.health > 0 then
-            local key = entity.q .. "," .. entity.r
-            immovableMap[key] = entity
+    local proxyToReal = {}
+    local proxyOf = {}
+    local virtualEntities = {}
+    for _, e in ipairs(state.entities) do
+        if e.health > 0 then
+            local proxy = setmetatable({q = e.q, r = e.r}, {__index = e})
+            proxyToReal[proxy] = e
+            proxyOf[e] = proxy
+            virtualEntities[#virtualEntities + 1] = proxy
         end
     end
 
-    local targetMap = {}
-    local previewData = {}
-    local damagedEntities = {}
+    local p = attack_preview.new()
 
     for _, obj in ipairs(movableObjects) do
         if obj.health <= 0 then goto continue end
 
-        local newQ, newR = hex_utils.applyCubeDiff(obj.q, obj.r, step.dx, step.dy, step.dz)
-        local fromX, fromY = getDrawCoords(obj.q, obj.r)
-        local toX, toY = getDrawCoords(newQ, newR)
+        local proxy = proxyOf[obj]
+        local newQ, newR = hex_utils.applyCubeDiff(proxy.q, proxy.r, step.dx, step.dy, step.dz)
 
-        if not hex:isActiveHex(newQ, newR) then
-            local damage = 1
-            table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isEdge=true, entity=obj, fromQ=obj.q, fromR=obj.r, toQ=newQ, toR=newR})
-            table.insert(damagedEntities, {entity=obj, damage=damage, x=fromX, y=fromY})
-        else
-            local immovableKey = newQ .. "," .. newR
-            if immovableMap[immovableKey] then
-                local damage = 1
-                table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true, entity=obj, fromQ=obj.q, fromR=obj.r, toQ=newQ, toR=newR})
-                table.insert(damagedEntities, {entity=obj, damage=damage, x=fromX, y=fromY})
-                local immX, immY = getDrawCoords(immovableMap[immovableKey].q, immovableMap[immovableKey].r)
-                table.insert(damagedEntities, {entity=immovableMap[immovableKey], damage=damage, x=immX, y=immY})
-            else
-                local targetOcc = targetMap[newQ .. "," .. newR]
-                if targetOcc then
-                    local damage = 1
-                    table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=damage, isCollision=true, doubleDamage=true, entity=obj, with=targetOcc, fromQ=obj.q, fromR=obj.r, toQ=newQ, toR=newR})
-                    table.insert(damagedEntities, {entity=obj, damage=damage, x=fromX, y=fromY})
-                    local otherX, otherY = getDrawCoords(targetOcc.q, targetOcc.r)
-                    table.insert(damagedEntities, {entity=targetOcc, damage=damage, x=otherX, y=otherY})
-                else
-                    targetMap[newQ .. "," .. newR] = obj
-                    table.insert(previewData, {fromX=fromX, fromY=fromY, toX=toX, toY=toY, damage=0, entity=obj, fromQ=obj.q, fromR=obj.r, toQ=newQ, toR=newR})
-                end
-            end
+        attack_preview.addPushArrow(p, proxy.q, proxy.r, newQ, newR)
+
+        local col = attack_preview.predictCollision(obj, proxy.q, proxy.r, newQ, newR, hex, virtualEntities)
+
+        if col.type then
+            local realOccupant = col.occupant and (proxyToReal[col.occupant] or col.occupant) or nil
+            attack_preview.addCollisionHint(p, proxy.q, proxy.r, newQ, newR, col.type, obj, realOccupant, col.reason)
         end
+        if col.damage > 0 then
+            attack_preview.addCollisionDamage(p, obj, attack_preview.calculateEffectiveCollisionDamage(obj))
+        end
+        if col.occupantDmg > 0 and col.occupant then
+            local realOccupant = proxyToReal[col.occupant] or col.occupant
+            attack_preview.addCollisionDamage(p, realOccupant, attack_preview.calculateEffectiveCollisionDamage(realOccupant))
+        end
+
+        if not col.type then
+            proxy.q = newQ
+            proxy.r = newR
+        end
+
         ::continue::
     end
 
-    for _, pd in ipairs(previewData) do
-        ui.drawPushArrow(pd.fromX, pd.fromY, pd.toX, pd.toY, nil, nil, nil, nil, pd.fromQ, pd.fromR, pd.toQ, pd.toR)
-    end
+    local arrows = attack_preview.buildPushArrows(p, hex)
+    ui.drawPreviewPushArrows(arrows)
 
+    local icons = attack_preview.buildIcons(p, hex)
+    ui.drawPreviewIcons(hex, icons)
 end
 
 function WindTorrent:drawButton(mx, my, state)

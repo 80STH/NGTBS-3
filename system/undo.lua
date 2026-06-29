@@ -48,6 +48,7 @@ function undo.snapshot()
             lichKilledPlayer = _G.lichKilledPlayer or false,
         },
         actionHistoryCount = #undo.history,
+        maxTurns = _G.maxTurns,
     }
     -- Save every entity's state
     for _, e in ipairs(_G.entities) do
@@ -211,6 +212,10 @@ function undo.restore(snap)
     _G.attackMode = false
     _G.selectedAttack = nil
     _G.chaos = snap.chaos or 0
+    if snap.maxTurns then
+        _G.maxTurns = snap.maxTurns
+        if _G.state then _G.state.maxTurns = snap.maxTurns end
+    end
 
     -- Restore ability state
     local ga = _G.global_abilities
