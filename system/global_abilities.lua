@@ -1796,6 +1796,31 @@ function JumpingStrikeAbility:drawPreview(hex, state)
         love.graphics.line(fx, fy, tx, ty)
         love.graphics.setLineWidth(1)
         love.graphics.setColor(1, 1, 1, 1)
+
+        local icon_cache = require("ui.icon_cache")
+        local function drawDamageIcons(sx, sy, sz)
+            local cq, cr = self.startCell.q, self.startCell.r
+            local distance = 0
+            while true do
+                cq, cr = hex_utils.applyCubeStep(cq, cr, sx, sy, sz)
+                if not hex:isActiveHex(cq, cr) then break end
+                distance = distance + 1
+                if distance % 2 == 0 then
+                    local target = combat.getEntityAtHex(cq, cr, state.entities)
+                    if target and target.health > 0 and not target.indestructible then
+                        local eff = attack_preview.calculateEffectiveDamage(target, target, 1, nil, nil)
+                        local icon = attack_preview.getDamageIcon(target, eff)
+                        if icon then
+                            local x, y = getDrawCoords(cq, cr)
+                            icon_cache.draw(icon, x, y, 0.95)
+                        end
+                    end
+                end
+            end
+        end
+
+        drawDamageIcons(stepX, stepY, stepZ)
+        drawDamageIcons(-stepX, -stepY, -stepZ)
     end
 end
 

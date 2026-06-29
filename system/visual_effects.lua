@@ -1,7 +1,9 @@
 -- visual_effects.lua
 local visual = {}
+local visual_shaders = require("system.visual_shaders")
 
 visual.effects = {}
+visual.shadersInitialized = false
 
 function visual.addEffect(x, y, effectType, duration)
     duration = duration or 0.5
@@ -25,6 +27,11 @@ function visual.addPushEffect(fromX, fromY, toX, toY, duration)
 end
 
 function visual.update(dt)
+    if not visual.shadersInitialized then
+        visual_shaders.init()
+        visual.shadersInitialized = true
+    end
+    
     local effects = visual.effects
     local n = #effects
     local i = 1
@@ -60,16 +67,7 @@ function visual.draw()
             love.graphics.circle("line", e.x, e.y, 18 * t)
 
         elseif e.type == "drown" then
-            love.graphics.setColor(0.2, 0.6, 0.9, alpha)
-            for i = 1, 12 do
-                local angle = (i / 12) * math.pi * 2 + e.timer * 15
-                local r = 25 * t
-                local dx = math.cos(angle) * r
-                local dy = math.sin(angle) * r - 12 * t
-                love.graphics.circle("fill", e.x + dx, e.y + dy, 5)
-            end
-            love.graphics.setColor(0.3, 0.7, 1, alpha)
-            love.graphics.circle("fill", e.x, e.y, 15 * (1 - t))
+            visual_shaders.drawDrown(e.x, e.y, 25, t)
 
         elseif e.type == "push" then
             love.graphics.setColor(0.7, 0.9, 1, alpha)
@@ -93,20 +91,8 @@ function visual.draw()
             love.graphics.polygon("fill", tipX, tipY, lx, ly, rx, ry)
 
         elseif e.type == "collision" then
-            local radius = 8 + t * 20
-            love.graphics.setColor(1, 0.8, 0.2, alpha)
-            love.graphics.circle("line", e.x, e.y, radius)
-            love.graphics.setColor(1, 0.4, 0.1, alpha)
-            love.graphics.circle("fill", e.x, e.y, radius * 0.6)
-            love.graphics.setLineWidth(2)
-            for i = 0, 5 do
-                local angle = i * math.pi * 2 / 6 + t * 12
-                local x2 = e.x + math.cos(angle) * radius * 1.3
-                local y2 = e.y + math.sin(angle) * radius * 1.3
-                love.graphics.setColor(1, 0.9, 0.3, alpha * 0.9)
-                love.graphics.line(e.x, e.y, x2, y2)
-            end
-            love.graphics.setLineWidth(1)
+            visual_shaders.drawUnitCollision(e.x, e.y, 25, t, 1.0)
+
         elseif e.type == "dig" then
             local radius = 10 + t * 20
             love.graphics.setColor(0.6, 0.4, 0.2, alpha)
@@ -162,88 +148,23 @@ elseif e.type == "line" then
     love.graphics.line(e.fromX, e.fromY, e.toX, e.toY)
     love.graphics.setLineWidth(1)
 
-elseif e.type == "shockwave" then
-    local t = e.timer / e.duration
-    local rad = e.radius * t
-    love.graphics.setColor(1, 1, 0.8, 0.7 - t)
-    love.graphics.circle("line", e.x, e.y, rad)
-    love.graphics.setColor(0.8, 0.5, 0.2, 0.5 - t*0.5)
-    love.graphics.circle("fill", e.x, e.y, rad * 0.7)
+ elseif e.type == "shockwave" then
+    visual_shaders.drawShockwave(e.x, e.y, e.radius, t, e.radius)
 
-elseif e.type == "sparks" then
-    local t = e.timer / e.duration
-    for i = 1, e.count do
-        local angle = (i / e.count) * math.pi * 2 + e.timer * 15
-        local r = 20 * t
-        local dx = math.cos(angle) * r * (1 - t)
-        local dy = math.sin(angle) * r * (1 - t)
-        love.graphics.setColor(1, 0.6 + t*0.4, 0.2, 1 - t)
-        love.graphics.circle("fill", e.x + dx, e.y + dy, 3)
-    end
+ elseif e.type == "sparks" then
+    visual_shaders.drawSparks(e.x, e.y, 20, t, e.count)
 
-elseif e.type == "blood" then
-    local t = e.timer / e.duration
-    love.graphics.setColor(0.8, 0.1, 0.1, 1 - t)
-    for i = 1, 8 do
-        local angle = (i * 45) + e.timer * 10
-        local dist = 12 * t
-        local dx = math.cos(angle) * dist
-        local dy = math.sin(angle) * dist * 0.7
-        love.graphics.circle("fill", e.x + dx, e.y + dy, 3)
-    end
+ elseif e.type == "blood" then
+    visual_shaders.drawBlood(e.x, e.y, 15, t)
 
-elseif e.type == "magic_explosion" then
-    local t = e.timer / e.duration
-    local rad = 15 * (1 - t) + 5 * t
-    love.graphics.setColor(e.r, e.g, e.b, 1 - t)
-    love.graphics.circle("fill", e.x, e.y, rad)
-    love.graphics.setColor(1, 1, 1, 0.8 - t)
-    love.graphics.circle("line", e.x, e.y, rad + 4)
-    for i = 1, 6 do
-        local angle = (i / 6) * math.pi * 2 + e.timer * 20
-        local dx = math.cos(angle) * rad * 1.5
-        local dy = math.sin(angle) * rad * 1.5
-        love.graphics.setColor(e.r, e.g, e.b, 0.7 - t)
-        love.graphics.line(e.x, e.y, e.x + dx, e.y + dy)
-    end
+ elseif e.type == "magic_explosion" then
+    visual_shaders.drawMagicExplosion(e.x, e.y, 20, t, e.r, e.g, e.b)
 
-elseif e.type == "ghost_hit" then
-    local t = e.timer / e.duration
-    local alpha = 0.8 - t
-    love.graphics.setColor(0.7, 0.3, 1, alpha)
-    love.graphics.circle("fill", e.x, e.y, 12 + t*10)
-    love.graphics.setColor(0.9, 0.6, 1, alpha*0.8)
-    love.graphics.circle("line", e.x, e.y, 16 + t*12)
+ elseif e.type == "ghost_hit" then
+    visual_shaders.drawGhostHit(e.x, e.y, 16, t)
 
-elseif e.type == "lightning" then
-    local t = e.timer / e.duration
-    local alpha = 1 - t
-    love.graphics.setBlendMode("add")
-    -- Flash
-    love.graphics.setColor(1, 1, 1, alpha * 0.5)
-    love.graphics.circle("fill", e.x, e.y, 14 + 8 * t)
-    -- Main bolt from top to target
-    local segments = 6
-    local prevX, prevY = e.x, 0
-    for i = 1, segments do
-        local p = i / segments
-        local bx = e.x + (math.random() - 0.5) * 18 * (1 - p) * (1 + 0.5 * math.sin(t * 20))
-        local by = e.y * p + (math.random() - 0.5) * 10 * (1 - p)
-        love.graphics.setColor(1, 0.9, 0.5, alpha)
-        love.graphics.setLineWidth(2.5 * (1 - p) + 0.5)
-        love.graphics.line(prevX, prevY, bx, by)
-        prevX, prevY = bx, by
-        -- Branch
-        if i % 2 == 0 then
-            local brX = bx + (math.random() - 0.5) * 14
-            local brY = by + math.random() * 10
-            love.graphics.setColor(0.8, 0.8, 1, alpha * 0.4)
-            love.graphics.setLineWidth(1)
-            love.graphics.line(bx, by, brX, brY)
-        end
-    end
-    love.graphics.setLineWidth(1)
-    love.graphics.setBlendMode("alpha")
+ elseif e.type == "lightning" then
+    visual_shaders.drawLightning(e.x, e.y, t, 1.0)
 
 elseif e.type == "ground_slam" then
     local t = e.timer / e.duration

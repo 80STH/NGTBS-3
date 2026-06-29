@@ -25,6 +25,7 @@ local objectives = require("system.objectives")
 global_abilities = require("system.global_abilities")
 shop = require("ui.shop")
 map_editor = require("editor.map_editor")
+shader_demo = require("ui.shader_demo")
 require("core.game")
 local commanders = require("system.commanders")
 local trains_mod = require("system.trains")
@@ -329,6 +330,8 @@ function love.mousepressed(x, y, button)
         menu.mousepressed(lx, ly)
     elseif gamePhase == "editor" then
         map_editor.mousepressed(lx, ly, button)
+    elseif gamePhase == "shaderDemo" then
+        shader_demo.mousepressed(lx, ly)
     else
         input.mousepressed(lx, ly, button)
     end
@@ -555,6 +558,8 @@ function love.draw()
         menu.draw()
     elseif gamePhase == "editor" then
         map_editor.draw()
+    elseif gamePhase == "shaderDemo" then
+        shader_demo.draw()
     elseif gamePhase == "deploy" then
         syncState()
         renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
@@ -631,6 +636,8 @@ function love.keypressed(key)
         menu.keypressed(key)
     elseif gamePhase == "editor" then
         map_editor.keypressed(key)
+    elseif gamePhase == "shaderDemo" then
+        shader_demo.keypressed(key)
     else
         input.keypressed(key)
     end

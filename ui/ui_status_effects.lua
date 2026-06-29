@@ -3,44 +3,24 @@
 -- Do not depend on other ui.* functions (except drawCellStatusEffects -> drawFireOnHex/AcidOnHex).
 -- Takes a ui-table and registers functions on it.
 return function(ui)
-    function ui.drawFireOnHex(x, y, radius, time)
-        local t = time * 5
-        love.graphics.setBlendMode("add")
-        for i = 1, 5 do
-            local angle = (i / 5) * math.pi * 2 + t * 2
-            local lenVar = 0.5 + 0.3 * math.sin(t * 3 + i)
-            local height = radius * 0.6 * lenVar
-            local width = radius * 0.3 * (0.7 + 0.3 * math.sin(t * 5 + i))
+    local fire_shader = require("ui.fire_shader")
+    local status_shaders = require("system.status_shaders")
+    local shadersInitialized = false
 
-            local tipX = x + math.cos(angle) * width * 0.5
-            local tipY = y - height * 0.8
-            local baseLeftX = x + math.cos(angle - 0.3) * width
-            local baseLeftY = y + math.sin(angle - 0.3) * width * 0.5
-            local baseRightX = x + math.cos(angle + 0.3) * width
-            local baseRightY = y + math.sin(angle + 0.3) * width * 0.5
-
-            local rCol = 1
-            local gCol = 0.3 + 0.7 * (lenVar - 0.5) * 2
-            love.graphics.setColor(rCol, gCol, 0, 0.8)
-            love.graphics.polygon("fill", tipX, tipY, baseLeftX, baseLeftY, baseRightX, baseRightY)
+    local function initShaders()
+        if not shadersInitialized then
+            status_shaders.init()
+            shadersInitialized = true
         end
-        love.graphics.setBlendMode("alpha")
-        love.graphics.setColor(1, 0.6, 0, 0.9)
-        love.graphics.circle("fill", x, y, radius * 0.2)
+    end
+
+    function ui.drawFireOnHex(x, y, radius, time)
+        fire_shader.drawFireOnHex(x, y, radius, time)
     end
 
     function ui.drawAcidOnHex(x, y, radius, time)
-        local t = time * 2
-        love.graphics.setColor(0.3, 0.8, 0.2, 0.7 + 0.3 * math.sin(t))
-        love.graphics.circle("fill", x, y, radius * 0.4)
-        for i = 1, 4 do
-            local angle = (i * 1.5 + t) % (math.pi * 2)
-            local bx = x + math.cos(angle) * radius * 0.5
-            local by = y + math.sin(angle) * radius * 0.6
-            local size = radius * 0.15 * (0.7 + 0.3 * math.sin(t * 3 + i))
-            love.graphics.setColor(0.5, 0.9, 0.3, 0.8)
-            love.graphics.circle("fill", bx, by, size)
-        end
+        initShaders()
+        status_shaders.drawAcid(x, y, radius * 0.5, time, 1.0)
     end
 
     function ui.drawCellStatusEffects(x, y, radius, statuses, time)
@@ -54,91 +34,27 @@ return function(ui)
     end
 
     function ui.drawFireOnEntity(x, y, radius, time)
-        local t = time * 8
-        love.graphics.setBlendMode("add")
-        for i = 1, 3 do
-            local size = radius * (0.6 + 0.2 * math.sin(t * 2 + i))
-            love.graphics.setColor(1, 0.3, 0, 0.2)
-            love.graphics.circle("fill", x, y, size)
-        end
-        for i = 1, 5 do
-            local angle = (i / 5) * math.pi * 2 + t * 2
-            local flicker = 0.6 + 0.4 * math.sin(t * 3 + i * 2)
-            local fx = x + math.cos(angle) * radius * 0.3 * flicker
-            local fy = y - radius * 0.5 * flicker - 5 + math.sin(t * 4 + i) * 3
-            local fs = radius * 0.25 * flicker
-            local rCol = 1
-            local gCol = 0.3 + 0.5 * flicker
-            love.graphics.setColor(rCol, gCol, 0, 0.7 * flicker)
-            love.graphics.circle("fill", fx, fy, fs)
-        end
-        love.graphics.setBlendMode("alpha")
+        fire_shader.drawFireOnEntity(x, y, radius, time)
     end
 
     function ui.drawAcidOnEntity(x, y, radius, time)
-        local t = time * 3
-        love.graphics.setBlendMode("add")
-        for i = 1, 4 do
-            local angle = (i * 1.5 + t) % (math.pi * 2)
-            local bx = x + math.cos(angle) * radius * 0.5
-            local by = y + math.sin(angle) * radius * 0.6
-            local size = radius * 0.15 * (0.7 + 0.3 * math.sin(t * 3 + i))
-            love.graphics.setColor(0.3, 0.8, 0.2, 0.6)
-            love.graphics.circle("fill", bx, by, size)
-        end
-        love.graphics.setBlendMode("alpha")
+        initShaders()
+        status_shaders.drawAcid(x, y, radius * 0.6, time, 0.8)
     end
 
     function ui.drawDecayOnEntity(x, y, radius, time)
-        local t = time * 2
-        love.graphics.setBlendMode("add")
-        for i = 1, 6 do
-            local angle = (i / 6) * math.pi * 2 + t * 1.5
-            local dx = x + math.cos(angle) * radius * 0.6
-            local dy = y + math.sin(angle) * radius * 0.6
-            local ds = radius * 0.08 * (0.5 + 0.5 * math.sin(t * 4 + i * 3))
-            love.graphics.setColor(0.2, 0.4, 0.1, 0.7)
-            love.graphics.circle("fill", dx, dy, ds)
-        end
-        love.graphics.setBlendMode("alpha")
-        love.graphics.setColor(0.1, 0.25, 0.05, 0.3)
-        love.graphics.circle("fill", x, y, radius * 0.5)
+        initShaders()
+        status_shaders.drawDecay(x, y, radius * 0.7, time, 0.9)
     end
 
     function ui.drawEmpoweredOnEntity(x, y, radius, time)
-        local t = time * 6
-        love.graphics.setBlendMode("add")
-        for i = 1, 6 do
-            local angle = (i / 6) * math.pi * 2 + t * 2
-            local len = radius * 0.5 + radius * 0.3 * math.sin(t * 3 + i)
-            local ex = x + math.cos(angle) * len
-            local ey = y + math.sin(angle) * len
-            local es = radius * 0.1 * (0.6 + 0.4 * math.sin(t * 5 + i * 2))
-            love.graphics.setColor(1, 0.9, 0.2, 0.5 + 0.3 * math.sin(t * 4 + i))
-            love.graphics.circle("fill", ex, ey, es)
-        end
-        love.graphics.setColor(1, 1, 0.5, 0.15 + 0.1 * math.sin(t))
-        love.graphics.circle("fill", x, y, radius * 0.8)
-        love.graphics.setBlendMode("alpha")
+        initShaders()
+        status_shaders.drawEmpowered(x, y, radius * 0.8, time, 1.0)
     end
 
     function ui.drawRootedOnEntity(x, y, radius, time)
-        local t = time * 3
-        love.graphics.setBlendMode("add")
-        for i = 1, 6 do
-            local angle = (i / 6) * math.pi * 2 + t
-            local len = radius * 0.4 + radius * 0.2 * math.sin(t * 2 + i)
-            local rx = x + math.cos(angle) * len
-            local ry = y + math.sin(angle) * len
-            local rs = radius * 0.12 * (0.6 + 0.4 * math.sin(t * 4 + i * 2))
-            love.graphics.setColor(0.4, 0.7, 0.1, 0.6 + 0.3 * math.sin(t * 3 + i))
-            love.graphics.circle("fill", rx, ry, rs)
-        end
-        love.graphics.setColor(0.2, 0.5, 0.05, 0.2 + 0.1 * math.sin(t * 2))
-        love.graphics.circle("fill", x, y, radius * 0.7)
-        love.graphics.setColor(0.6, 0.8, 0.2, 0.4)
-        love.graphics.circle("line", x, y, radius * 0.8 + 2 * math.sin(t * 3))
-        love.graphics.setBlendMode("alpha")
+        initShaders()
+        status_shaders.drawRooted(x, y, radius * 0.8, time, 0.9)
     end
 
     function ui.drawEntityStatusEffects(x, y, entity, radius, time)

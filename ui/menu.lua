@@ -177,7 +177,7 @@ local function computeLayout(w, h)
     end
     y = y + 6
 
-    -- Bottom buttons (2×2 grid)
+    -- Bottom buttons (3×2 grid)
     local btnH = 50
     local btnGap = 10
     local btnColW = math.floor((contentW - btnGap) / 2)
@@ -186,6 +186,7 @@ local function computeLayout(w, h)
         { key = "progression", label = "Progression Test", r = 0.2, g = 0.7, b = 0.3 },
         { key = "shop",        label = "Shop",             r = 0.8, g = 0.7, b = 0.2 },
         { key = "editor",      label = "Map Editor",       r = 0.3, g = 0.5, b = 0.8 },
+        { key = "shaders",     label = "Shader Demo",      r = 0.6, g = 0.3, b = 0.8 },
         { key = "quit",        label = "Quit",             r = 0.7, g = 0.2, b = 0.2 },
     }
     for i, def in ipairs(btnDefs) do
@@ -201,7 +202,7 @@ local function computeLayout(w, h)
             h = btnH,
         }
     end
-    y = y + 2 * (btnH + btnGap) + 4
+    y = y + 3 * (btnH + btnGap) + 4
 
     -- Checkboxes
     local cbSize = 14
@@ -436,6 +437,9 @@ function menu.mousepressed(x, y)
                 gamePhase = "editor"
                 map_editor.dpiScale = dpiScale or 1
                 map_editor.init()
+                return true
+            elseif btn.key == "shaders" then
+                gamePhase = "shaderDemo"
                 return true
             elseif btn.key == "quit" then
                 love.event.quit()
