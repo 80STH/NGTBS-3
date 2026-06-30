@@ -16,7 +16,7 @@
 --                    ("ally" for allies, "enemy" for enemies; default —
 --                    side of mover)
 --   allowPhaseThroughEnemies — whether to consider mover.phaseThroughEnemies (default true)
---   ignoreWater    — don't check water/underwater_mines (for stopping)
+--   ignoreWater    — don't check water (for stopping)
 
 local cell_rules = {}
 

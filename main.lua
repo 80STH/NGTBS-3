@@ -303,7 +303,7 @@ end
 function getDrawCoords(q, r)
     local x, y = hex:hexToPixel(q, r)
     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r]
-    if terrain == "water" or terrain == "underwater_mines" then
+    if terrain == "water" then
         y = y + config.WATER_Y_OFFSET
     end
     return x, y

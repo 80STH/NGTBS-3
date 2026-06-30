@@ -463,6 +463,93 @@ local unitCollisionShaderCode = [[
     }
 ]]
 
+-- ============================================================
+-- PUSH EFFECT SHADER - эффект отталкивания (позиционный)
+-- ============================================================
+local pushEffectShaderCode = [[
+    extern vec2 fromPos;       // Начальная позиция
+    extern vec2 toPos;         // Конечная позиция
+    extern float progress;     // Прогресс анимации (0.0-1.0)
+    extern float radius;       // Радиус эффекта
+    extern float intensity;    // Интенсивность (0.0-1.0)
+
+    float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+
+    float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
+
+    vec4 effect(vec4 color, Image tex, vec2 texcoord, vec2 screenCoord) {
+        // Направление движения
+        vec2 dir = toPos - fromPos;
+        float totalDist = length(dir);
+        vec2 normDir = normalize(dir);
+        
+        // Перпендикулярное направление
+        vec2 perpDir = vec2(-normDir.y, normDir.x);
+        
+        // Текущая позиция объекта (интерполяция)
+        vec2 currentPos = mix(fromPos, toPos, progress);
+        
+        // Расстояние от пикселя до линии движения
+        vec2 toPixel = screenCoord - fromPos;
+        float along = dot(toPixel, normDir);
+        float perp = abs(dot(toPixel, perpDir));
+        
+        // === ЗАТУХАЮЩИЙ СЛЕД ===
+        // След от начальной позиции до текущей
+        float trailLength = totalDist * progress;
+        float trail = 0.0;
+        if (along > 0.0 && along < trailLength) {
+            // Ширина следа уменьшается к концу
+            float trailWidth = radius * 0.4 * (1.0 - along / trailLength);
+            trail = 1.0 - smoothstep(0.0, trailWidth, perp);
+            // Затухание к концу следа
+            trail *= (1.0 - along / trailLength) * 0.6;
+        }
+        
+        // === СВЕЧЕНИЕ ВОКРУГ ОБЪЕКТА ===
+        float distToCurrent = length(screenCoord - currentPos);
+        float glow = 1.0 - smoothstep(0.0, radius * 0.6, distToCurrent);
+        glow *= 0.5;
+        
+        // === ВСПЫШКА В ТОЧКЕ ПРИЗЕМЛЕНИЯ ===
+        float landingFlash = 0.0;
+        if (progress > 0.7) {
+            float flashProgress = (progress - 0.7) / 0.3;
+            float distToLanding = length(screenCoord - toPos);
+            landingFlash = 1.0 - smoothstep(0.0, radius * (0.5 + flashProgress * 0.5), distToLanding);
+            landingFlash *= (1.0 - flashProgress) * 0.8;
+        }
+        
+        // === ШУМ ДЛЯ ТЕКСТУРЫ ===
+        vec2 noiseCoord = vec2(along * 0.05, perp * 0.1) + progress * 2.0;
+        float noiseVal = noise(noiseCoord) * 0.2;
+        
+        // === ИТОГОВАЯ ЯРКОСТЬ ===
+        float alpha = (trail + glow + landingFlash) * intensity;
+        
+        // === ЦВЕТ ===
+        // Голубовато-белый с акцентом на приземлении
+        vec3 trailColor = vec3(0.7, 0.9, 1.0);
+        vec3 glowColor = vec3(0.9, 0.95, 1.0);
+        vec3 landingColor = vec3(1.0, 1.0, 0.9);
+        
+        vec3 col = trailColor * trail + glowColor * glow + landingColor * landingFlash;
+        
+        return vec4(col, alpha * (0.9 + noiseVal));
+    }
+]]
+
 -- Инициализация шейдеров
 function visual_shaders.init()
     visual_shaders.shockwave = love.graphics.newShader(shockwaveShaderCode)
@@ -473,6 +560,7 @@ function visual_shaders.init()
     visual_shaders.ghostHit = love.graphics.newShader(ghostHitShaderCode)
     visual_shaders.drown = love.graphics.newShader(drownShaderCode)
     visual_shaders.unitCollision = love.graphics.newShader(unitCollisionShaderCode)
+    visual_shaders.pushEffect = love.graphics.newShader(pushEffectShaderCode)
 end
 
 -- Функции отрисовки
@@ -534,7 +622,7 @@ function visual_shaders.drawBlood(x, y, radius, progress)
 end
 
 function visual_shaders.drawGhostHit(x, y, radius, progress)
-    love.graphics.setBlendMode("add")
+    love.graphics.setBlendMode("add") 
     visual_shaders.ghostHit:send("center", {x, y})
     visual_shaders.ghostHit:send("radius", radius)
     visual_shaders.ghostHit:send("progress", progress)
@@ -562,6 +650,26 @@ function visual_shaders.drawUnitCollision(x, y, radius, progress, intensity)
     visual_shaders.unitCollision:send("intensity", intensity or 1.0)
     love.graphics.setShader(visual_shaders.unitCollision)
     love.graphics.rectangle("fill", x - radius * 1.5, y - radius * 1.5, radius * 3, radius * 3)
+    love.graphics.setShader()
+    love.graphics.setBlendMode("alpha")
+end
+
+function visual_shaders.drawPushEffect(fromX, fromY, toX, toY, radius, progress, intensity)
+    love.graphics.setBlendMode("add")
+    visual_shaders.pushEffect:send("fromPos", {fromX, fromY})
+    visual_shaders.pushEffect:send("toPos", {toX, toY})
+    visual_shaders.pushEffect:send("progress", progress)
+    visual_shaders.pushEffect:send("radius", radius)
+    visual_shaders.pushEffect:send("intensity", intensity or 1.0)
+    
+    -- Вычисляем bounding box для отрисовки
+    local minX = math.min(fromX, toX) - radius
+    local minY = math.min(fromY, toY) - radius
+    local maxX = math.max(fromX, toX) + radius
+    local maxY = math.max(fromY, toY) + radius
+    
+    love.graphics.setShader(visual_shaders.pushEffect)
+    love.graphics.rectangle("fill", minX, minY, maxX - minX, maxY - minY)
     love.graphics.setShader()
     love.graphics.setBlendMode("alpha")
 end

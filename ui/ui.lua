@@ -71,11 +71,6 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
             return false
         end
     end
-    -- Underwater mines are always impassable (even flying)
-    if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "underwater_mines" then
-        return false
-    end
-    
     -- The cell must not be occupied (for stopping)
     if isCellOccupiedForStop(targetQ, targetR, actor) then
         return false
@@ -152,7 +147,7 @@ function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
 end
 -- Draw push arrow (with offset from centers)
 function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, toQ, toR)
-    local isLowTerrain = function(q, r) local t = terrainMap and terrainMap[q] and terrainMap[q][r]; return t == "water" or t == "underwater_mines" end
+    local isLowTerrain = function(q, r) local t = terrainMap and terrainMap[q] and terrainMap[q][r]; return t == "water" end
     if fromQ ~= nil and isLowTerrain(fromQ, fromR) then
         fromY = fromY - config.WATER_Y_OFFSET
     end
@@ -1875,9 +1870,6 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
         if not (enemy and (enemy.flying or enemy.hovering)) then
             return false
         end
-    end
-    if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "underwater_mines" then
-        return false
     end
     -- Cell must not be occupied (by ally or enemy)
     for _, e in ipairs(entities) do

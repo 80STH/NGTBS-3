@@ -258,7 +258,7 @@ function moveCaravans()
         for _, n in ipairs(neighbors) do
             if hex:isActiveHex(n.q, n.r) then
                 local terrain = _G.terrainMap and _G.terrainMap[n.q] and _G.terrainMap[n.q][n.r] or "grass"
-                if terrain ~= "water" and terrain ~= "underwater_mines" then
+                if terrain ~= "water" then
                     local occupied = false
                     for _, other in ipairs(entities) do
                         if other ~= caravan and other.q == n.q and other.r == n.r and other.health and other.health > 0 then

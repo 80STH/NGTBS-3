@@ -739,7 +739,7 @@ function drawHexGrid(state, cellOverlays)
 
     for _, cell in ipairs(cells) do
         local drawY = cell.y + (cell.testY or 0)
-        local yOffset = (cell.terrain == "water" or cell.terrain == "underwater_mines") and state.config.WATER_Y_OFFSET or 0
+        local yOffset = (cell.terrain == "water") and state.config.WATER_Y_OFFSET or 0
         hex:drawTerrainHex(cell.q, cell.r, cell.terrain, cell.x, drawY)
         local upperType = state.upperTerrainMap[cell.q] and state.upperTerrainMap[cell.q][cell.r]
         if upperType then
@@ -1044,7 +1044,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) then
                 local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
-                if terrain ~= "water" and terrain ~= "underwater_mines" then
+                if terrain ~= "water" then
                     local occupied = false
                     for _, e in ipairs(state.entities) do
                         if e.q == q and e.r == r then

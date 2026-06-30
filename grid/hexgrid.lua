@@ -205,7 +205,7 @@ function HexGrid:getSortedCells(terrainMap, waterYOffset)
         local col, row = ac.q, ac.r
         local terrainType = terrainMap and terrainMap[col] and terrainMap[col][row] or "grass"
         local cellX, cellY = self:hexToPixel(col, row)
-        local yOffset = (terrainType == "water" or terrainType == "underwater_mines") and waterYOffset or 0
+        local yOffset = (terrainType == "water") and waterYOffset or 0
         local depth = cellY + yOffset
         cells[#cells + 1] = { q = col, r = row, x = cellX, y = cellY, terrain = terrainType, depth = depth }
     end
@@ -243,7 +243,7 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
     local radius = self.radius
     local extrude = 36
     local waterExtrude = 18
-    local isLowTerrain = terrainType == "water" or terrainType == "underwater_mines"
+    local isLowTerrain = terrainType == "water"
     local actualExtrude = isLowTerrain and waterExtrude or extrude
 
     local yOffset = 0
@@ -284,10 +284,6 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
         topColor = {0.45, 0.65, 0.35, 1}
         sideColor = {0.3, 0.5, 0.2, 1}
         edgeColor = {0.2, 0.4, 0.15, 1}
-    elseif terrainType == "underwater_mines" then
-        topColor = {0.08, 0.25, 0.45, 1}
-        sideColor = {0.05, 0.15, 0.35, 1}
-        edgeColor = {0.02, 0.1, 0.25, 1}
     elseif terrainType == "railway" then
         topColor = {0.35, 0.3, 0.25, 1}
         sideColor = {0.25, 0.2, 0.15, 1}
@@ -342,17 +338,6 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
         shadowVertices[i+1] = topVertices[i+1]
     end
     love.graphics.polygon("fill", shadowVertices)
-
-    if terrainType == "underwater_mines" then
-        local cx, cy = x, y + yOffset
-        love.graphics.setColor(0.8, 0.15, 0.15, 0.9)
-        love.graphics.circle("fill", cx - radius * 0.25, cy - radius * 0.15, radius * 0.08)
-        love.graphics.circle("fill", cx + radius * 0.3, cy + radius * 0.2, radius * 0.08)
-        love.graphics.circle("fill", cx + radius * 0.05, cy - radius * 0.35, radius * 0.07)
-        love.graphics.setColor(0.9, 0.6, 0.1, 0.8)
-        love.graphics.circle("fill", cx - radius * 0.15, cy + radius * 0.3, radius * 0.06)
-        love.graphics.circle("fill", cx + radius * 0.2, cy - radius * 0.2, radius * 0.06)
-    end
 
     if terrainType == "railway" then
         local cx, cy = x, y + yOffset

@@ -47,6 +47,14 @@ local shaderList = {
         local progress = (t % 0.8) / 0.8
         visual_shaders.drawUnitCollision(x, y, r, progress, 1.0) 
     end },
+    { name = "Push Effect", draw = function(x, y, r, t) 
+        local progress = (t % 1.2) / 1.2
+        local fromX = x - r * 0.8
+        local fromY = y
+        local toX = x + r * 0.8
+        local toY = y
+        visual_shaders.drawPushEffect(fromX, fromY, toX, toY, r * 0.6, progress, 1.0) 
+    end },
 }
 
 function shader_demo.init()

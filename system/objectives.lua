@@ -136,7 +136,7 @@ local function findEmptyCells(entities, hex, qMin)
         end
         if not occupied then
             local terrain = _G.terrainMap and _G.terrainMap[q] and _G.terrainMap[q][r] or "grass"
-            if terrain ~= "water" and terrain ~= "underwater_mines" then
+            if terrain ~= "water" then
                 if not status.hasNegativeHexStatus(q, r) then
                     if q >= qMin then
                         table.insert(candidatesBias, {q = q, r = r})

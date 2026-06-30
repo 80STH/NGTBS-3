@@ -355,7 +355,7 @@ function UnearthAbility:onActivate(state)
         end
         if not occupied then
             local terrain = state.terrainMap and state.terrainMap[site.q] and state.terrainMap[site.q][site.r] or "grass"
-            if terrain ~= "water" and terrain ~= "underwater_mines" and terrain ~= "railway" and not status.hasNegativeHexStatus(site.q, site.r) then
+            if terrain ~= "water" and terrain ~= "railway" and not status.hasNegativeHexStatus(site.q, site.r) then
                 local newEnemy = environment.createRandomEnemy(site.q, site.r)
                 table.insert(state.entities, newEnemy)
                 spawned = spawned + 1
@@ -733,10 +733,6 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
         local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
         if terrain == "water" and not (self.target.waterWalker or self.target.flying or self.target.hovering) then
             log.warn("abilities", "Cannot shift into water!")
-            return true
-        end
-        if terrain == "underwater_mines" then
-            log.warn("abilities", "Cannot shift into underwater mines!")
             return true
         end
         -- Check occupancy

@@ -89,19 +89,6 @@ local suite = {
             end,
         },
         {
-            name = "isPassable: underwater_mines blocks all",
-            fn = function()
-                local hex = makeHexMock()
-                local terrainMap = { [2] = { [2] = "underwater_mines" } }
-                local mover = makeChar(1, 2, true)
-                mover.flying = true
-                local ok = cell_rules.isPassable(2, 2, mover, {
-                    entities = {}, terrainMap = terrainMap, hex = hex,
-                })
-                return assertEq(ok, false, "mines block even flying")
-            end,
-        },
-        {
             name = "isPassable: same-side character passable",
             fn = function()
                 local hex = makeHexMock()

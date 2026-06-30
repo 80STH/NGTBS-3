@@ -4,7 +4,7 @@ function love.conf(t)
     t.version = "11.4"
     
     t.window.highdpi = true
-    t.window.width = 720
+    t.window.width = 800
     t.window.height = 1280
     t.window.resizable = true
     t.window.fullscreen = false
