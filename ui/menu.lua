@@ -187,6 +187,7 @@ local function computeLayout(w, h)
         { key = "shop",        label = "Shop",             r = 0.8, g = 0.7, b = 0.2 },
         { key = "editor",      label = "Map Editor",       r = 0.3, g = 0.5, b = 0.8 },
         { key = "shaders",     label = "Shader Demo",      r = 0.6, g = 0.3, b = 0.8 },
+        { key = "hex_demo",    label = "Hex Grass",        r = 0.3, g = 0.7, b = 0.3 },
         { key = "quit",        label = "Quit",             r = 0.7, g = 0.2, b = 0.2 },
     }
     for i, def in ipairs(btnDefs) do
@@ -440,6 +441,9 @@ function menu.mousepressed(x, y)
                 return true
             elseif btn.key == "shaders" then
                 gamePhase = "shaderDemo"
+                return true
+            elseif btn.key == "hex_demo" then
+                gamePhase = "hexDemo"
                 return true
             elseif btn.key == "quit" then
                 love.event.quit()
