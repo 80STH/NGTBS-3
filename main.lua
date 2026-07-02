@@ -30,6 +30,7 @@ hex_demo = require("ui.hex_demo")
 require("core.game")
 local commanders = require("system.commanders")
 local trains_mod = require("system.trains")
+lighting = require("system.lighting")
 
 -- Logging: enable here (or via _G.LOG_ENABLED).
 -- Categories: ai, combat, effects, entity, env, game, input, objectives,
@@ -294,6 +295,8 @@ function love.load()
     sounds = require("system.sounds")
     sounds.init()
 
+    lighting:init()
+
     showEnemyOrder = false
     gamePhase = "menu"
 
@@ -546,9 +549,16 @@ function love.resize(w, h)
     elseif hex then
         hex:centerOnScreen(logicalW, logicalH)
     end
+    if lighting then lighting:resize() end
 end
 
 function love.draw()
+    local useLighting = gamePhase == "playing" and lighting and lighting.enabled
+
+    if useLighting then
+        lighting:beginRender()
+    end
+
     love.graphics.push()
     love.graphics.scale(dpiScale)
     logicalW = love.graphics.getWidth() / dpiScale
@@ -582,6 +592,10 @@ function love.draw()
     shop.draw()
 
     love.graphics.pop()
+
+    if useLighting then
+        lighting:endRender(state)
+    end
 end
 
 function getEnemyAttackOrder(entities, turnState)

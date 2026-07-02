@@ -214,6 +214,10 @@ local function computeLayout(w, h)
     l.cb2 = { x = cx, y = y, w = cbSize, h = cbSize }
     l.cb2LabelX = cx + cbSize + 6
     l.cb2LabelY = y
+    y = y + cbSize + 6
+    l.cb3 = { x = cx, y = y, w = cbSize, h = cbSize }
+    l.cb3LabelX = cx + cbSize + 6
+    l.cb3LabelY = y
     y = y + cbSize + 12
 
     -- Hint
@@ -376,6 +380,23 @@ function menu.draw()
     love.graphics.setFont(l.tinyFont)
     love.graphics.printf("All abilities + unlimited mana", l.cb2LabelX, l.cb2LabelY + 1, 160, "left")
 
+    local cb3 = l.cb3
+    local cb3Hover = mx >= cb3.x and mx <= cb3.x + 180 and my >= cb3.y and my <= cb3.y + cb3.h
+    love.graphics.setColor(0.15, 0.15, 0.2, 0.9)
+    love.graphics.rectangle("fill", cb3.x, cb3.y, cb3.w, cb3.h, 3)
+    love.graphics.setColor(cb3Hover and 0.5 or 0.35, cb3Hover and 0.5 or 0.35, cb3Hover and 0.7 or 0.5, 0.8)
+    love.graphics.rectangle("line", cb3.x, cb3.y, cb3.w, cb3.h, 3)
+    if lighting and lighting.enabled then
+        love.graphics.setColor(0.3, 0.8, 0.3, 1)
+        love.graphics.setLineWidth(2)
+        love.graphics.line(cb3.x + 3, cb3.y + cb3.h/2, cb3.x + cb3.h/2, cb3.y + cb3.h - 3)
+        love.graphics.line(cb3.x + cb3.h/2, cb3.y + cb3.h - 3, cb3.x + cb3.h - 3, cb3.y + 3)
+        love.graphics.setLineWidth(1)
+    end
+    love.graphics.setColor(1, 1, 1, 0.8)
+    love.graphics.setFont(l.tinyFont)
+    love.graphics.printf("Lighting Test", l.cb3LabelX, l.cb3LabelY + 1, 160, "left")
+
     -- Hint
     love.graphics.setColor(0.4, 0.4, 0.4, 0.6)
     love.graphics.printf("Click a map to start  |  Hold R to restart", 0, l.hintY, w, "center")
@@ -461,6 +482,11 @@ function menu.mousepressed(x, y)
     local cb2 = l.cb2
     if x >= cb2.x and x <= cb2.x + 180 and y >= cb2.y and y <= cb2.y + cb2.h then
         unlimitedAbilities = not unlimitedAbilities
+        return true
+    end
+    local cb3 = l.cb3
+    if x >= cb3.x and x <= cb3.x + 180 and y >= cb3.y and y <= cb3.y + cb3.h then
+        if lighting then lighting.enabled = not lighting.enabled end
         return true
     end
 
