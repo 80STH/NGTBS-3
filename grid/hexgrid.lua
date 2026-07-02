@@ -1,5 +1,6 @@
 local HexGrid = {}
 local hex_utils = require("grid.hex_utils")
+local water_shader = require("ui.water_shader")
 
 -- Pre-computed direction tables (module-level constants)
 local FLAT_DIRS_EVEN = {
@@ -71,6 +72,8 @@ function HexGrid.new(radius, gridWidth, gridHeight, activeRadius, centerQ, cente
             end
         end
     end
+
+    self._hexMesh = nil
 
     return self
 end
@@ -172,6 +175,42 @@ end
 
 function HexGrid:getDistance(q1, r1, q2, r2)
     return hex_utils.getDistance(q1, r1, q2, r2)
+end
+
+function HexGrid:buildHexMesh()
+    if self._hexMesh then return self._hexMesh end
+    local r = self.radius
+    local sqrt3 = math.sqrt(3)
+    local hw = r * 1.5
+    local hh = r * sqrt3 * 0.5
+    local left, right = -hw, hw
+    local top, bottom = -hh, hh
+
+    local function addVert(angle)
+        local vx = math.cos(angle) * r
+        local vy = math.sin(angle) * r
+        return { vx, vy, (vx - left) / (right - left), (vy - top) / (bottom - top), 1, 1, 1, 1 }
+    end
+
+    local center = { 0, 0, 0.5, 0.5, 1, 1, 1, 1 }
+    local corners = {}
+    for i = 0, 5 do
+        corners[i+1] = addVert(math.rad(60 * i))
+    end
+
+    local meshVerts = {}
+    for i = 1, 6 do
+        local ni = i % 6 + 1
+        meshVerts[#meshVerts + 1] = center
+        meshVerts[#meshVerts + 1] = corners[i]
+        meshVerts[#meshVerts + 1] = corners[ni]
+    end
+    self._hexMesh = love.graphics.newMesh(meshVerts, "triangles")
+    return self._hexMesh
+end
+
+function HexGrid:getHexMesh()
+    return self._hexMesh or self:buildHexMesh()
 end
 
 function HexGrid:drawHexagon(x, y, radius)
@@ -321,11 +360,16 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
 		love.graphics.line(x1, y1, x4, y4)
 	end
 
-	love.graphics.setColor(topColor)
-    love.graphics.polygon("fill", topVertices)
+	if terrainType == "water" then
+		local mesh = self:getHexMesh()
+		water_shader.drawWaterHex(x, y + yOffset, self.radius, mesh, love.timer.getTime(), 1.0)
+	else
+		love.graphics.setColor(topColor)
+		love.graphics.polygon("fill", topVertices)
 
-    love.graphics.setColor(1, 1, 1, 0.15)
-    love.graphics.polygon("fill", topVertices)
+		love.graphics.setColor(1, 1, 1, 0.15)
+		love.graphics.polygon("fill", topVertices)
+	end
 
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.setLineWidth(2)

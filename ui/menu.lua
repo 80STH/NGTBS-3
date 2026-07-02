@@ -177,7 +177,7 @@ local function computeLayout(w, h)
     end
     y = y + 6
 
-    -- Bottom buttons (3×2 grid)
+    -- Bottom buttons (2-column grid)
     local btnH = 50
     local btnGap = 10
     local btnColW = math.floor((contentW - btnGap) / 2)
@@ -187,9 +187,11 @@ local function computeLayout(w, h)
         { key = "shop",        label = "Shop",             r = 0.8, g = 0.7, b = 0.2 },
         { key = "editor",      label = "Map Editor",       r = 0.3, g = 0.5, b = 0.8 },
         { key = "shaders",     label = "Shader Demo",      r = 0.6, g = 0.3, b = 0.8 },
-        { key = "hex_demo",    label = "Hex Grass",        r = 0.3, g = 0.7, b = 0.3 },
+        { key = "hex_demo",    label = "Stone+Grass",      r = 0.4, g = 0.6, b = 0.3 },
+        { key = "lighting_test", label = "Lighting Test",  r = 0.8, g = 0.8, b = 0.2 },
         { key = "quit",        label = "Quit",             r = 0.7, g = 0.2, b = 0.2 },
     }
+    local btnRows = math.ceil(#btnDefs / 2)
     for i, def in ipairs(btnDefs) do
         local col = (i - 1) % 2
         local row = math.floor((i - 1) / 2)
@@ -203,7 +205,7 @@ local function computeLayout(w, h)
             h = btnH,
         }
     end
-    y = y + 3 * (btnH + btnGap) + 4
+    y = y + btnRows * (btnH + btnGap) + 4
 
     -- Checkboxes
     local cbSize = 14
@@ -465,6 +467,10 @@ function menu.mousepressed(x, y)
                 return true
             elseif btn.key == "hex_demo" then
                 gamePhase = "hexDemo"
+                return true
+            elseif btn.key == "lighting_test" then
+                gamePhase = "lightingTest"
+                lighting_test.init()
                 return true
             elseif btn.key == "quit" then
                 love.event.quit()

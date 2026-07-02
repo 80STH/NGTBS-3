@@ -27,6 +27,7 @@ shop = require("ui.shop")
 map_editor = require("editor.map_editor")
 shader_demo = require("ui.shader_demo")
 hex_demo = require("ui.hex_demo")
+lighting_test = require("ui.lighting_test")
 require("core.game")
 local commanders = require("system.commanders")
 local trains_mod = require("system.trains")
@@ -338,13 +339,17 @@ function love.mousepressed(x, y, button)
         shader_demo.mousepressed(lx, ly)
     elseif gamePhase == "hexDemo" then
         hex_demo.mousepressed(lx, ly)
+    elseif gamePhase == "lightingTest" then
+        lighting_test.mousepressed(lx, ly)
     else
         input.mousepressed(lx, ly, button)
     end
 end
 
 function love.mousereleased(x, y, button)
-    if gamePhase == "editor" then
+    if gamePhase == "hexDemo" then
+        hex_demo.mousereleased(x / dpiScale, y / dpiScale)
+    elseif gamePhase == "editor" then
         map_editor.mousereleased(x / dpiScale, y / dpiScale, button)
     else
         input.mousereleased(x / dpiScale, y / dpiScale, button)
@@ -421,6 +426,7 @@ function love.update(dt)
         return
     end
 
+    if gamePhase == "lightingTest" then return end
     if gamePhase ~= "playing" then return end
 
     visual.update(dt)
@@ -575,6 +581,8 @@ function love.draw()
         shader_demo.draw()
     elseif gamePhase == "hexDemo" then
         hex_demo.draw()
+    elseif gamePhase == "lightingTest" then
+        lighting_test.draw()
     elseif gamePhase == "deploy" then
         syncState()
         renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
@@ -659,6 +667,8 @@ function love.keypressed(key)
         shader_demo.keypressed(key)
     elseif gamePhase == "hexDemo" then
         hex_demo.keypressed(key)
+    elseif gamePhase == "lightingTest" then
+        lighting_test.keypressed(key)
     else
         input.keypressed(key)
     end

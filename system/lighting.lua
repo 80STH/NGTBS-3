@@ -1,6 +1,6 @@
 local lighting = {}
 
-lighting.enabled = true
+lighting.enabled = false
 lighting.ambientLight = 0.12
 
 lighting.cursor = {
