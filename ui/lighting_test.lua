@@ -2,8 +2,7 @@ local lighting_test = {}
 local fonts
 
 local testScenarios = {
-    { name = "Grid + Mouse Light", desc = "Move mouse to light hexes" },
-    { name = "Fire Entities",      desc = "Burning entities emit light" },
+    { name = "Grid + Sun Light",   desc = "Day cycle moves sun across the grid" },
     { name = "Mixed Terrain",      desc = "Lighting on different terrain" },
 }
 local scenarioIdx = 1
@@ -11,8 +10,11 @@ local scenarioIdx = 1
 local hexTest
 local hexRadius = 56
 local gridW, gridH = 5, 5
-local fireEntities = {}
 local terrainMap = {}
+
+local dayCycleActive = false
+local dayCycleTime = 0
+local dayCycleSpeed = 0.15
 
 local function rebuildGrid()
     local HexGrid = require("grid.hexgrid")
@@ -21,36 +23,20 @@ local function rebuildGrid()
     hexTest.offsetY = 0
     hexTest:centerOnScreen(logicalW or 800, logicalH or 1280)
 
-    fireEntities = {}
     terrainMap = {}
 
     if scenarioIdx == 1 then
         for q = 0, gridW - 1 do
+            terrainMap[q] = terrainMap[q] or {}
             for r = 0, gridH - 1 do
-                terrainMap[q] = terrainMap[q] or {}
                 terrainMap[q][r] = "grass"
             end
         end
     elseif scenarioIdx == 2 then
-        local terrainTypes = {"grass", "stone", "dirt", "sand", "water", "lava", "snow", "swamp"}
-        for q = 0, gridW - 1 do
-            for r = 0, gridH - 1 do
-                terrainMap[q] = terrainMap[q] or {}
-                terrainMap[q][r] = terrainTypes[(q + r * 3) % #terrainTypes + 1]
-            end
-        end
-        for i = 1, 3 do
-            fireEntities[i] = {
-                q = math.floor(gridW / 2) + (i - 2),
-                r = math.floor(gridH / 2) + (i - 2),
-                health = 1,
-            }
-        end
-    elseif scenarioIdx == 3 then
         local terrainTypes = {"grass", "stone", "lava", "sand", "dirt", "snow", "swamp", "water", "railway"}
         for q = 0, gridW - 1 do
+            terrainMap[q] = terrainMap[q] or {}
             for r = 0, gridH - 1 do
-                terrainMap[q] = terrainMap[q] or {}
                 terrainMap[q][r] = terrainTypes[(q * 7 + r * 13) % #terrainTypes + 1]
             end
         end
@@ -64,18 +50,34 @@ end
 
 function lighting_test.draw()
     local w, h = logicalW, logicalH
-    local time = love.timer.getTime()
+    local dt = love.timer.getDelta()
+
+    if dayCycleActive then
+        dayCycleTime = dayCycleTime + dt * dayCycleSpeed
+    end
 
     love.graphics.setColor(0.05, 0.05, 0.08, 1)
     love.graphics.rectangle("fill", 0, 0, w, h)
+
+    if dayCycleActive then
+        local phase = dayCycleTime % 1
+        local t = phase
+        local sunX = w * 0.1 + w * 0.8 * t
+        local sunY = h * 0.6 - math.sin(t * math.pi) * h * 0.4
+
+        lighting.sun.pos = {sunX, sunY}
+        lighting.sun.radius = 400
+        lighting.sun.color = {1.0, 0.95, 0.8}
+        lighting.sun.softness = 0.5
+
+        local edgeFade = math.min(t / 0.1, (1 - t) / 0.1, 1)
+        lighting.ambientLight = 0.05 + 0.2 * edgeFade
+    end
 
     local useLighting = lighting and lighting.enabled
     if useLighting then
         lighting:beginRender()
     end
-
-    love.graphics.push()
-    love.graphics.scale(dpiScale)
 
     if hexTest then
         for q = 0, gridW - 1 do
@@ -85,31 +87,13 @@ function lighting_test.draw()
                 hexTest:drawTerrainHex(q, r, terrain, x, y)
             end
         end
-
-        if scenarioIdx == 2 then
-            for _, e in ipairs(fireEntities) do
-                local x, y = hexTest:hexToPixel(e.q, e.r)
-                love.graphics.setColor(1, 1, 1, 0.3)
-                love.graphics.circle("fill", x, y, hexRadius * 0.5)
-                love.graphics.setColor(1, 0.4, 0.1, 0.6)
-                love.graphics.circle("fill", x, y, hexRadius * 0.3)
-                love.graphics.setColor(1, 0.8, 0.2, 0.8)
-                local flicker = 0.8 + 0.2 * math.sin(time * 8 + e.q * 3 + e.r * 7)
-                love.graphics.circle("fill", x + math.sin(time * 5 + e.q) * 5, y + math.cos(time * 6 + e.r) * 5, hexRadius * 0.15 * flicker)
-            end
-        end
     end
-
-    love.graphics.pop()
 
     if useLighting then
         local stateMock = {
             hex = hexTest,
             entities = {},
         }
-        if scenarioIdx == 2 then
-            stateMock.entities = fireEntities
-        end
         local status_mod = require("system.status")
         local savedHexStatuses = status_mod.hexStatuses
         status_mod.hexStatuses = {}
@@ -127,7 +111,7 @@ function lighting_test.draw()
 
     love.graphics.setFont(fonts.get(11))
     love.graphics.setColor(0.6, 0.6, 0.6, 0.7)
-    love.graphics.printf("ESC: back  |  TAB: scenario  |  1-4: ambient 0-50%  |  L: toggle lighting", 0, 42, w, "center")
+    love.graphics.printf("ESC: back  |  TAB: scenario  |  1-4: ambient  |  L: toggle lighting  |  D: day cycle", 0, 42, w, "center")
 
     love.graphics.setFont(fonts.get(13))
     love.graphics.setColor(0.5, 0.8, 0.5, 0.9)
@@ -142,13 +126,14 @@ function lighting_test.draw()
     love.graphics.printf("Ambient: " .. ambientPct .. "%  |  Lighting: " .. (lighting.enabled and "ON" or "OFF"), 10, h - 85, 300, "left")
 
     local btnW, btnH, gap = 120, 40, 15
-    local totalW = btnW * 2 + gap
+    local totalW = btnW * 3 + gap * 2
     local startX = w / 2 - totalW / 2
     local btnY = h - 50
 
     local buttons = {
         { label = "Back",   x = startX,             y = btnY, w = btnW, h = btnH, action = "back" },
         { label = "Next >", x = startX + btnW + gap, y = btnY, w = btnW, h = btnH, action = "next" },
+        { label = dayCycleActive and "Day: ON" or "Day: OFF", x = startX + (btnW + gap) * 2, y = btnY, w = btnW, h = btnH, action = "daycycle" },
     }
 
     for _, btn in ipairs(buttons) do
@@ -174,6 +159,12 @@ function lighting_test.mousepressed(x, y)
             elseif btn.action == "next" then
                 scenarioIdx = scenarioIdx % #testScenarios + 1
                 rebuildGrid()
+            elseif btn.action == "daycycle" then
+                dayCycleActive = not dayCycleActive
+                if not dayCycleActive then
+                    lighting.sun.radius = 0
+                    lighting.ambientLight = 0.25
+                end
             end
             return true
         end
@@ -191,6 +182,13 @@ function lighting_test.keypressed(key)
         return true
     elseif key == "l" then
         if lighting then lighting.enabled = not lighting.enabled end
+        return true
+    elseif key == "d" then
+        dayCycleActive = not dayCycleActive
+        if not dayCycleActive then
+            lighting.sun.radius = 0
+            lighting.ambientLight = 0.25
+        end
         return true
     elseif key == "1" then
         lighting.ambientLight = 0

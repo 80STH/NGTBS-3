@@ -62,6 +62,10 @@ screenShake = { timer = 0, intensity = 6, duration = 0.3 }
 testViewActive = false
 testViewOffsetY = 0
 
+dayCycleActive = false
+dayCycleTime = 0
+dayCycleSpeed = 0.15
+
 gamePhase = "menu"
 selectedMapPath = nil
 selectedSquad = nil
@@ -559,6 +563,23 @@ function love.resize(w, h)
 end
 
 function love.draw()
+    local dt = love.timer.getDelta()
+    if dayCycleActive then
+        dayCycleTime = dayCycleTime + dt * dayCycleSpeed
+        local phase = dayCycleTime % 1
+        local t = phase
+        local sunX = logicalW * 0.1 + logicalW * 0.8 * t
+        local sunY = logicalH * 0.6 - math.sin(t * math.pi) * logicalH * 0.4
+
+        lighting.sun.pos = {sunX, sunY}
+        lighting.sun.radius = 400
+        lighting.sun.color = {1.0, 0.95, 0.8}
+        lighting.sun.softness = 0.5
+
+        local edgeFade = math.min(t / 0.1, (1 - t) / 0.1, 1)
+        lighting.ambientLight = 0.05 + 0.2 * edgeFade
+    end
+
     local useLighting = gamePhase == "playing" and lighting and lighting.enabled
 
     if useLighting then
@@ -597,13 +618,16 @@ function love.draw()
         renderer.draw(state)
     end
 
-    shop.draw()
-
     love.graphics.pop()
 
     if useLighting then
         lighting:endRender(state)
     end
+
+    love.graphics.push()
+    love.graphics.scale(dpiScale)
+    shop.draw()
+    love.graphics.pop()
 end
 
 function getEnemyAttackOrder(entities, turnState)

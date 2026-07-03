@@ -1,6 +1,7 @@
 local HexGrid = {}
 local hex_utils = require("grid.hex_utils")
 local water_shader = require("ui.water_shader")
+local pbr_shader = require("ui.pbr_shader")
 
 -- Pre-computed direction tables (module-level constants)
 local FLAT_DIRS_EVEN = {
@@ -363,6 +364,9 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
 	if terrainType == "water" then
 		local mesh = self:getHexMesh()
 		water_shader.drawWaterHex(x, y + yOffset, self.radius, mesh, love.timer.getTime(), 1.0)
+	elseif terrainType == "sand" then
+		local mesh = self:getHexMesh()
+		pbr_shader.drawPBRHex(mesh, x, y + yOffset, "sand", x, y + yOffset, 1.0)
 	else
 		love.graphics.setColor(topColor)
 		love.graphics.polygon("fill", topVertices)

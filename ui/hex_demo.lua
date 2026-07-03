@@ -108,6 +108,7 @@ local function ensureLoaded()
     if mats.stone then return end
     mats.stone = loadTextures("stone")
     mats.grass = loadTextures("grass")
+    mats.sand = loadTextures("sand")
     for _, set in pairs(mats) do
         for _, tex in pairs(set) do
             tex:setFilter("linear", "linear")
@@ -121,12 +122,14 @@ local function ensureLoaded()
         materialMap[q] = {}
         for r = 0, gridH - 1 do
             local rnd = love.math.random()
-            if rnd < 0.33 then
+            if rnd < 0.25 then
                 materialMap[q][r] = "stone"
-            elseif rnd < 0.66 then
+            elseif rnd < 0.50 then
                 materialMap[q][r] = "grass"
-            else
+            elseif rnd < 0.75 then
                 materialMap[q][r] = "water"
+            else
+                materialMap[q][r] = "sand"
             end
         end
     end
@@ -216,7 +219,7 @@ function hex_demo.draw()
 
     love.graphics.setFont(fonts.get(24))
     love.graphics.setColor(1, 1, 1, 0.9)
-    love.graphics.printf("STONE + GRASS + WATER", 0, 15, w, "center")
+    love.graphics.printf("STONE + GRASS + SAND + WATER", 0, 15, w, "center")
 
     love.graphics.setFont(fonts.get(11))
     love.graphics.setColor(0.6, 0.6, 0.6, 0.7)
@@ -270,7 +273,7 @@ function hex_demo.draw()
 
             love.graphics.setFont(fonts.get(12))
             love.graphics.setColor(0.6, 0.8, 0.4, 0.8)
-            love.graphics.printf("Stone + Grass + Water — mixed", 0, h - 130, w, "center")
+            love.graphics.printf("Stone + Grass + Sand + Water — mixed", 0, h - 130, w, "center")
             love.graphics.setFont(fonts.get(11))
             love.graphics.setColor(0.5, 0.5, 0.5, 0.6)
             love.graphics.printf("Grid: " .. gridW .. "x" .. gridH, 0, h - 112, w, "center")
