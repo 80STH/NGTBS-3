@@ -310,6 +310,9 @@ function getDrawCoords(q, r)
     if terrain == "water" then
         y = y + config.WATER_Y_OFFSET
     end
+    if testViewActive and q == hex.centerQ and r == hex.centerR then
+        y = y + testViewOffsetY
+    end
     return x, y
 end
 
@@ -457,7 +460,7 @@ function love.update(dt)
     updateHoldButton(undoButton, function() end)
 
     if testViewActive then
-        testViewOffsetY = math.sin(love.timer.getTime() * 1.5) * 60
+        testViewOffsetY = (1 - math.abs((love.timer.getTime() * 3) % 2 - 1)) * 30
     end
 
     if screenShake.timer > 0 then

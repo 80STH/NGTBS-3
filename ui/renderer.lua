@@ -730,7 +730,7 @@ function drawHexGrid(state, cellOverlays)
         if testViewActive and bc.q == hex.centerQ and bc.r == hex.centerR then
             testY = testViewOffsetY
         end
-        cells[i] = { q = bc.q, r = bc.r, x = bc.x, y = bc.y, terrain = bc.terrain, depth = bc.depth + testY, testY = testY }
+        cells[i] = { q = bc.q, r = bc.r, x = bc.x, y = bc.y, terrain = bc.terrain, depth = bc.depth, testY = testY }
     end
 
     if testViewActive then
