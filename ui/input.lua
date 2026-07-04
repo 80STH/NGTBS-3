@@ -496,16 +496,6 @@ function input.keypressed(key)
         return
     end
 
-    if key == "d" or key == "D" then
-        dayCycleActive = not dayCycleActive
-        if not dayCycleActive then
-            lighting.sun.radius = 0
-            lighting.ambientLight = 0.25
-        end
-        log.debugf("input", "Day cycle: %s", (dayCycleActive and "ON" or "OFF"))
-        return
-    end
-
     if key == "1" then
         if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and #attackButtons >= 1 then
             selectedAttack = attackButtons[1].attack

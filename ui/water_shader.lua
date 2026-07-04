@@ -169,15 +169,14 @@ local shaderCode = [[
         );
         float mask3 = 1.0 - step(dot(toned3.rgb, vec3(1.0)) / 3.0, vorDist3);
 
-        vec3 deepColor = vec3(0.248168945, 0.626656353, 0.835937500);
-        vec3 midColor = vec3(0.391082764, 0.758568466, 0.910156250);
-        vec3 lightColor = vec3(0.882476807, 0.949218750, 0.941209733);
+        vec3 deepColor = vec3(0.18, 0.36, 0.54);
+        vec3 midColor = vec3(0.29, 0.56, 0.89);
+        vec3 lightColor = vec3(0.91, 0.96, 0.97);
 
         vec3 waterCol = midColor;
         waterCol = mix(waterCol, deepColor, clamp(mask3 * 0.57, 0.0, 1.0));
         waterCol = mix(waterCol, lightColor, clamp(mask1 * 1.0, 0.0, 1.0));
 
-        waterCol = pow(waterCol, vec3(1.0 / 2.2));
         waterCol *= brightness;
 
         return vec4(waterCol, 1.0);
@@ -189,6 +188,7 @@ water_shader.shader = love.graphics.newShader(shaderCode)
 function water_shader.drawWaterHex(x, y, radius, mesh, time, bright)
     water_shader.shader:send("time", time)
     water_shader.shader:send("brightness", bright or 1.0)
+    love.graphics.setDefaultFilter("linear", "linear")
     love.graphics.setShader(water_shader.shader)
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.draw(mesh, x, y)

@@ -1,7 +1,121 @@
 local HexGrid = {}
 local hex_utils = require("grid.hex_utils")
 local water_shader = require("ui.water_shader")
-local pbr_shader = require("ui.pbr_shader")
+
+local sandTexture = nil
+local sandMesh = nil
+local grassTexture = nil
+local grassMesh = nil
+local stoneTexture = nil
+local stoneMesh = nil
+
+local function loadSandTexture()
+    if sandTexture then return end
+    sandTexture = love.graphics.newImage("assets/textures/sand_albedo.png")
+    sandTexture:setFilter("linear", "linear")
+end
+
+local function loadGrassTexture()
+    if grassTexture then return end
+    grassTexture = love.graphics.newImage("assets/textures/grass_albedo.png")
+    grassTexture:setFilter("linear", "linear")
+end
+
+local function loadStoneTexture()
+    if stoneTexture then return end
+    stoneTexture = love.graphics.newImage("assets/textures/stone_albedo.png")
+    stoneTexture:setFilter("linear", "linear")
+end
+
+local function buildSandMesh(radius)
+    if sandMesh then return end
+    local sqrt3 = math.sqrt(3)
+    local hw = radius * 1.5
+    local hh = radius * sqrt3 * 0.5
+    local left, right = -hw, hw
+    local top, bottom = -hh, hh
+    
+    local function addVert(angle)
+        local vx = math.cos(angle) * radius
+        local vy = math.sin(angle) * radius
+        return { vx, vy, (vx - left) / (right - left), (vy - top) / (bottom - top), 1, 1, 1, 1 }
+    end
+    
+    local center = { 0, 0, 0.5, 0.5, 1, 1, 1, 1 }
+    local corners = {}
+    for i = 0, 5 do
+        corners[i+1] = addVert(math.rad(60 * i))
+    end
+    
+    local meshVerts = {}
+    for i = 1, 6 do
+        local ni = i % 6 + 1
+        meshVerts[#meshVerts + 1] = center
+        meshVerts[#meshVerts + 1] = corners[i]
+        meshVerts[#meshVerts + 1] = corners[ni]
+    end
+    sandMesh = love.graphics.newMesh(meshVerts, "triangles")
+end
+
+local function buildGrassMesh(radius)
+    if grassMesh then return end
+    local sqrt3 = math.sqrt(3)
+    local hw = radius * 1.5
+    local hh = radius * sqrt3 * 0.5
+    local left, right = -hw, hw
+    local top, bottom = -hh, hh
+    
+    local function addVert(angle)
+        local vx = math.cos(angle) * radius
+        local vy = math.sin(angle) * radius
+        return { vx, vy, (vx - left) / (right - left), (vy - top) / (bottom - top), 1, 1, 1, 1 }
+    end
+    
+    local center = { 0, 0, 0.5, 0.5, 1, 1, 1, 1 }
+    local corners = {}
+    for i = 0, 5 do
+        corners[i+1] = addVert(math.rad(60 * i))
+    end
+    
+    local meshVerts = {}
+    for i = 1, 6 do
+        local ni = i % 6 + 1
+        meshVerts[#meshVerts + 1] = center
+        meshVerts[#meshVerts + 1] = corners[i]
+        meshVerts[#meshVerts + 1] = corners[ni]
+    end
+    grassMesh = love.graphics.newMesh(meshVerts, "triangles")
+end
+
+local function buildStoneMesh(radius)
+    if stoneMesh then return end
+    local sqrt3 = math.sqrt(3)
+    local hw = radius * 1.5
+    local hh = radius * sqrt3 * 0.5
+    local left, right = -hw, hw
+    local top, bottom = -hh, hh
+    
+    local function addVert(angle)
+        local vx = math.cos(angle) * radius
+        local vy = math.sin(angle) * radius
+        return { vx, vy, (vx - left) / (right - left), (vy - top) / (bottom - top), 1, 1, 1, 1 }
+    end
+    
+    local center = { 0, 0, 0.5, 0.5, 1, 1, 1, 1 }
+    local corners = {}
+    for i = 0, 5 do
+        corners[i+1] = addVert(math.rad(60 * i))
+    end
+    
+    local meshVerts = {}
+    for i = 1, 6 do
+        local ni = i % 6 + 1
+        meshVerts[#meshVerts + 1] = center
+        meshVerts[#meshVerts + 1] = corners[i]
+        meshVerts[#meshVerts + 1] = corners[ni]
+    end
+    stoneMesh = love.graphics.newMesh(meshVerts, "triangles")
+end
 
 -- Pre-computed direction tables (module-level constants)
 local FLAT_DIRS_EVEN = {
@@ -207,6 +321,14 @@ function HexGrid:buildHexMesh()
         meshVerts[#meshVerts + 1] = corners[ni]
     end
     self._hexMesh = love.graphics.newMesh(meshVerts, "triangles")
+    
+    -- Привязываем dummy-текстуру с linear-фильтром для корректной интерполяции UV
+    local imageData = love.image.newImageData(1, 1)
+    imageData:setPixel(0, 0, 1, 1, 1, 1)
+    local dummyTex = love.graphics.newImage(imageData)
+    dummyTex:setFilter("linear", "linear")
+    self._hexMesh:setTexture(dummyTex)
+    
     return self._hexMesh
 end
 
@@ -365,8 +487,29 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
 		local mesh = self:getHexMesh()
 		water_shader.drawWaterHex(x, y + yOffset, self.radius, mesh, love.timer.getTime(), 1.0)
 	elseif terrainType == "sand" then
-		local mesh = self:getHexMesh()
-		pbr_shader.drawPBRHex(mesh, x, y + yOffset, "sand", x, y + yOffset, 1.0)
+		loadSandTexture()
+		buildSandMesh(radius)
+		sandMesh:setTexture(sandTexture)
+		love.graphics.setColor(1, 1, 1, 1)
+		love.graphics.draw(sandMesh, x, y + yOffset)
+		love.graphics.setColor(1, 1, 1, 0.15)
+		love.graphics.polygon("fill", topVertices)
+	elseif terrainType == "grass" then
+		loadGrassTexture()
+		buildGrassMesh(radius)
+		grassMesh:setTexture(grassTexture)
+		love.graphics.setColor(1, 1, 1, 1)
+		love.graphics.draw(grassMesh, x, y + yOffset)
+		love.graphics.setColor(1, 1, 1, 0.15)
+		love.graphics.polygon("fill", topVertices)
+	elseif terrainType == "stone" then
+		loadStoneTexture()
+		buildStoneMesh(radius)
+		stoneMesh:setTexture(stoneTexture)
+		love.graphics.setColor(1, 1, 1, 1)
+		love.graphics.draw(stoneMesh, x, y + yOffset)
+		love.graphics.setColor(1, 1, 1, 0.15)
+		love.graphics.polygon("fill", topVertices)
 	else
 		love.graphics.setColor(topColor)
 		love.graphics.polygon("fill", topVertices)

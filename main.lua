@@ -4,6 +4,9 @@
 -- Rendering is delegated to the renderer.
 state = require("core.gamestate").new()
 
+-- Устанавливаем linear-фильтрацию по умолчанию для всех текстур
+love.graphics.setDefaultFilter("linear", "linear")
+
 undo = require("system.undo")
 combat = require("combat.combat")
 ai = require("combat.ai")
@@ -27,11 +30,9 @@ shop = require("ui.shop")
 map_editor = require("editor.map_editor")
 shader_demo = require("ui.shader_demo")
 hex_demo = require("ui.hex_demo")
-lighting_test = require("ui.lighting_test")
 require("core.game")
 local commanders = require("system.commanders")
 local trains_mod = require("system.trains")
-lighting = require("system.lighting")
 
 -- Logging: enable here (or via _G.LOG_ENABLED).
 -- Categories: ai, combat, effects, entity, env, game, input, objectives,
@@ -61,10 +62,6 @@ logicalH = 0
 screenShake = { timer = 0, intensity = 6, duration = 0.3 }
 testViewActive = false
 testViewOffsetY = 0
-
-dayCycleActive = false
-dayCycleTime = 0
-dayCycleSpeed = 0.15
 
 gamePhase = "menu"
 selectedMapPath = nil
@@ -300,8 +297,6 @@ function love.load()
     sounds = require("system.sounds")
     sounds.init()
 
-    lighting:init()
-
     showEnemyOrder = false
     gamePhase = "menu"
 
@@ -343,8 +338,6 @@ function love.mousepressed(x, y, button)
         shader_demo.mousepressed(lx, ly)
     elseif gamePhase == "hexDemo" then
         hex_demo.mousepressed(lx, ly)
-    elseif gamePhase == "lightingTest" then
-        lighting_test.mousepressed(lx, ly)
     else
         input.mousepressed(lx, ly, button)
     end
@@ -430,7 +423,6 @@ function love.update(dt)
         return
     end
 
-    if gamePhase == "lightingTest" then return end
     if gamePhase ~= "playing" then return end
 
     visual.update(dt)
@@ -559,33 +551,9 @@ function love.resize(w, h)
     elseif hex then
         hex:centerOnScreen(logicalW, logicalH)
     end
-    if lighting then lighting:resize() end
 end
 
 function love.draw()
-    local dt = love.timer.getDelta()
-    if dayCycleActive then
-        dayCycleTime = dayCycleTime + dt * dayCycleSpeed
-        local phase = dayCycleTime % 1
-        local t = phase
-        local sunX = logicalW * 0.1 + logicalW * 0.8 * t
-        local sunY = logicalH * 0.6 - math.sin(t * math.pi) * logicalH * 0.4
-
-        lighting.sun.pos = {sunX, sunY}
-        lighting.sun.radius = 400
-        lighting.sun.color = {1.0, 0.95, 0.8}
-        lighting.sun.softness = 0.5
-
-        local edgeFade = math.min(t / 0.1, (1 - t) / 0.1, 1)
-        lighting.ambientLight = 0.05 + 0.2 * edgeFade
-    end
-
-    local useLighting = gamePhase == "playing" and lighting and lighting.enabled
-
-    if useLighting then
-        lighting:beginRender()
-    end
-
     love.graphics.push()
     love.graphics.scale(dpiScale)
     logicalW = love.graphics.getWidth() / dpiScale
@@ -602,8 +570,6 @@ function love.draw()
         shader_demo.draw()
     elseif gamePhase == "hexDemo" then
         hex_demo.draw()
-    elseif gamePhase == "lightingTest" then
-        lighting_test.draw()
     elseif gamePhase == "deploy" then
         syncState()
         renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
@@ -618,15 +584,8 @@ function love.draw()
         renderer.draw(state)
     end
 
-    love.graphics.pop()
-
-    if useLighting then
-        lighting:endRender(state)
-    end
-
-    love.graphics.push()
-    love.graphics.scale(dpiScale)
     shop.draw()
+
     love.graphics.pop()
 end
 
@@ -691,8 +650,6 @@ function love.keypressed(key)
         shader_demo.keypressed(key)
     elseif gamePhase == "hexDemo" then
         hex_demo.keypressed(key)
-    elseif gamePhase == "lightingTest" then
-        lighting_test.keypressed(key)
     else
         input.keypressed(key)
     end
