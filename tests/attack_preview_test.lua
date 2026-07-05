@@ -308,5 +308,55 @@ return {
                 return true
             end
         },
+        {
+            name = "pushable building pushed into wall takes collision damage and shows building_destruction",
+            fn = function()
+                local attacker = makeChar("A", 0, 0, 3, true)
+                local caravan = Entity.new("Caravan", Entity.TYPES.BUILDING, 1, 0, 1, false, 0, nil, {1,1,1,1}, {})
+                caravan.isPushable = true
+                local wall     = makeBuilding("Wall", 2, 0, 5)
+                local entities = { attacker, caravan, wall }
+                local p = preview.compute(mockHex, attacker, shootAttack(), 2, 0, entities)
+                local info = p.damages["1,0"]
+                if not info then return false, "no damage entry for caravan" end
+                if info.attackDamage ~= 1 then return false, "caravan expected 1 attack damage, got " .. tostring(info.attackDamage) end
+                if info.collisionDamage ~= 1 then return false, "caravan expected 1 collision damage, got " .. tostring(info.collisionDamage) end
+                if info.totalDamage ~= 2 then return false, "caravan expected 2 total damage, got " .. tostring(info.totalDamage) end
+                local icon = preview.getDamageIcon(caravan, info.totalDamage)
+                if icon ~= "building_destruction" then return false, "expected building_destruction icon, got " .. tostring(icon) end
+                if #p.collisions ~= 1 then return false, "expected 1 collision hint, got " .. tostring(#p.collisions) end
+                if p.collisions[1].reason ~= "collision_immovable" then return false, "expected collision_immovable" end
+                return true
+            end
+        },
+        {
+            name = "pushable building pushed off edge does not take damage",
+            fn = function()
+                local tinyHex = { gridWidth = 2, gridHeight = 3, radius = 32 }
+                function tinyHex:isActiveHex(q, r)
+                    return q >= 0 and q < self.gridWidth and r >= 0 and r < self.gridHeight
+                end
+                function tinyHex:isValidHex(q, r)
+                    return self:isActiveHex(q, r)
+                end
+                function tinyHex:getDistance(aq, ar, bq, br)
+                    local ax, ay, az = self:axialToCube(aq, ar)
+                    local bx, by, bz = self:axialToCube(bq, br)
+                    return (math.abs(ax - bx) + math.abs(ay - by) + math.abs(az - bz)) // 2
+                end
+                function tinyHex:axialToCube(q, r) return q, -q - r, r end
+                function tinyHex:cubeToAxial(x, y, z) return x, z end
+
+                local attacker = makeChar("A", 0, 1, 3, true)
+                local caravan = Entity.new("Caravan", Entity.TYPES.BUILDING, 0, 0, 1, false, 0, nil, {1,1,1,1}, {})
+                caravan.isPushable = true
+                local entities = { attacker, caravan }
+                local p = preview.compute(tinyHex, attacker, shootAttack(), 0, 0, entities)
+                local info = p.damages["0,0"]
+                if not info then return false, "no damage entry for caravan" end
+                if info.collisionDamage ~= 0 then return false, "caravan expected 0 collision damage at edge, got " .. tostring(info.collisionDamage) end
+                return true
+            end
+        },
     }
 }

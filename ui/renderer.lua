@@ -358,6 +358,7 @@ function renderer.draw(state)
     mx = mx / state.dpiScale
     my = my / state.dpiScale
 
+    local hoverOrder = ui.drawEnemyOrderButton(mx, my)
     ui.drawUndoButton(undo.history, state.maxUndoCount, state.selectedActor)
     ui.drawEndTurnButton(state.turnState, state.entities, state.turnCount, state.maxTurns, state)
     global_abilities.drawButtons(mx, my, state)
@@ -371,7 +372,6 @@ function renderer.draw(state)
     end
     love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 65)
 
-    local hoverOrder = ui.drawEnemyOrderButton(mx, my)
     local showOrder = hoverOrder or state.showEnemyOrder or love.keyboard.isDown("o")
     if showOrder then
         local orderMap = getEnemyAttackOrder(state.entities, state.turnState)

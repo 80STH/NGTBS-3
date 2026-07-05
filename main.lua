@@ -533,12 +533,17 @@ function love.update(dt)
     end
 
     undoButton = undoButton or {}
-    local bottomY = logicalH - 65
-    undoButton.isHovered = (mx >= 10 and mx <= 120 and my >= bottomY and my <= bottomY + 30)
-    local btnW, btnH = 140, 50
-    local btnX = logicalW - btnW - 10
+    local btnH = 50
+    local margin = 10
+    local gap = 10
+    local thirdW = math.floor((logicalW - margin * 2 - gap * 2) / 3)
     local btnY = logicalH - btnH - 10
-    endTurnButton.isHovered = (mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH)
+
+    local undoX = margin + thirdW + gap
+    undoButton.isHovered = (mx >= undoX and mx <= undoX + thirdW and my >= btnY and my <= btnY + btnH)
+
+    local endX = margin + (thirdW + gap) * 2
+    endTurnButton.isHovered = (mx >= endX and mx <= endX + thirdW and my >= btnY and my <= btnY + btnH)
     if undoButton.isHovered or endTurnButton.isHovered then
         sounds.hover(dt)
     end

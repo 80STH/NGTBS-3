@@ -101,8 +101,15 @@ end
 
     if global_abilities.handleClick(x, y, state) then return end
 
-    local bottomY = logicalH - 65
-    if x >= 10 and x <= 130 and y >= bottomY and y <= bottomY + 30 then
+    local btnH = 50
+    local margin = 10
+    local gap = 10
+    local thirdW = math.floor((logicalW - margin * 2 - gap * 2) / 3)
+    local btnY = logicalH - btnH - 10
+
+    -- Undo button (middle third)
+    local undoX = margin + thirdW + gap
+    if x >= undoX and x <= undoX + thirdW and y >= btnY and y <= btnY + btnH then
         if #undo.history > 1 then
             undoButton.isHeld = true
             undoButton.holdTimer = 0
@@ -114,10 +121,9 @@ end
         return
     end
 
-    local btnW, btnH = 140, 50
-    local btnX = logicalW - btnW - 10
-    local btnY = logicalH - btnH - 10
-    if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
+    -- End turn button (right third)
+    local endX = margin + (thirdW + gap) * 2
+    if x >= endX and x <= endX + thirdW and y >= btnY and y <= btnY + btnH then
         if turnState.phase == "player" then
             local hasActive = false
             for _, e in ipairs(entities) do

@@ -227,14 +227,14 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
         occupant    = nil,
     }
 
-    -- Only characters take collision damage.
-    if not entity:isCharacter() then return result end
-
     -- Off the edge.
     if not isActive(toQ, toR, hex) then
-        result.damage = 1
-        result.type   = "collision_damage"
-        result.reason = "edge"
+        -- Only characters take edge damage (buildings bounce without damage).
+        if entity:isCharacter() then
+            result.damage = 1
+            result.type   = "collision_damage"
+            result.reason = "edge"
+        end
         return result
     end
 

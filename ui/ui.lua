@@ -2268,7 +2268,7 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
     local totalH = #allies * (btnH + gap) - gap
     local ab = attackButtons or {}
     local attackPanelH = #ab > 0 and (#ab * 28 + (#ab - 1) * 4 + 10) or 0
-    local startY = logicalH - 65 - 10 - attackPanelH - 10 - totalH
+    local startY = logicalH - 60 - 10 - attackPanelH - 10 - totalH
     for i, ally in ipairs(allies) do
         local by = startY + (i - 1) * (btnH + gap)
         local hover = mx >= x and mx <= x + btnW and my >= by and my <= by + btnH

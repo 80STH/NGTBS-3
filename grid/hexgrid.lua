@@ -382,16 +382,7 @@ end
 
 function HexGrid:centerOnScreen(screenWidth, screenHeight)
     self:invalidateSortedCells()
-    local mapWidth, mapHeight
-    if self.orientation == "flat" then
-        mapWidth = self.gridWidth * self.hexWidth
-        mapHeight = self.gridHeight * self.hexHeight + self.hexHeight * 0.5
-    else
-        mapWidth = (self.gridWidth + 0.5) * self.hexWidth
-        mapHeight = self.gridHeight * self.hexHeight
-    end
-    self.offsetX = (screenWidth - mapWidth) / 2 + config.GRID_OFFSET_X
-    self.offsetY = (screenHeight - mapHeight) / 2
+
     if self.orientation == "flat" then
         self.centerPixelX = self.centerQ * self.hexWidth
         self.centerPixelY = (self.centerR + (self.centerQ % 2) * 0.5) * self.hexHeight
@@ -399,6 +390,9 @@ function HexGrid:centerOnScreen(screenWidth, screenHeight)
         self.centerPixelX = (self.centerQ + (self.centerR % 2) * 0.5) * self.hexWidth
         self.centerPixelY = self.centerR * self.hexHeight
     end
+
+    self.offsetX = screenWidth / 2 - self.centerPixelX
+    self.offsetY = screenHeight / 2 - self.centerPixelY
 end
 
 function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
