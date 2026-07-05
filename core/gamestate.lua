@@ -34,13 +34,8 @@ function GameState.new()
     self.attackButtons = {}
     self.sounds = {}
     self.pushAnimations = { queue = {}, active = false }
-    self.restartButton = {
-        x = 10, y = 295, width = 120, height = 30,
-        text = "Restart Game", isHovered = false,
-    }
     self.endTurnButton = {
-        x = 10, y = 260, width = 120, height = 30,
-        text = "End Turn", isHovered = false,
+        isHovered = false,
         holdTimer = 0, isHeld = false,
     }
     self.undoButton = { isHovered = false }
@@ -112,7 +107,6 @@ function GameState:syncFromGlobals()
     self.sounds = _G.sounds or {}
     self.actionHistory = (_G.undo and _G.undo.history) or {}
     self.maxUndoCount = _G.maxUndoCount or 0
-    self.restartButton = _G.restartButton or self.restartButton
     self.endTurnButton = _G.endTurnButton or self.endTurnButton
     self.undoButton = _G.undoButton or self.undoButton
     self.decayAppliedForTurnLimit = _G.decayAppliedForTurnLimit or false

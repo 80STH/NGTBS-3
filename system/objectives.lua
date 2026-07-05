@@ -744,7 +744,7 @@ end
 function objectives.draw()
     if not smallFont then smallFont = fonts.get(12) end
     local x = 10
-    local y = 1070
+    local y = 100
     local w = 200
     local lineH = 16
     local padding = 6

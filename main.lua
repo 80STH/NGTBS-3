@@ -30,6 +30,7 @@ shop = require("ui.shop")
 map_editor = require("editor.map_editor")
 shader_demo = require("ui.shader_demo")
 hex_demo = require("ui.hex_demo")
+pause_menu = require("ui.pause_menu")
 require("core.game")
 local commanders = require("system.commanders")
 local trains_mod = require("system.trains")
@@ -279,14 +280,8 @@ function love.load()
     local icon_cache = require("ui.icon_cache")
     icon_cache.loadAll()
 
-    restartButton = {
-        x = 270, y = 0, width = 110, height = 30,
-        text = "Restart Game", isHovered = false,
-        isHeld = false, holdTimer = 0,
-    }
     endTurnButton = {
-        x = 140, y = 0, width = 110, height = 30,
-        text = "End Turn", isHovered = false,
+        isHovered = false,
         holdTimer = 0, isHeld = false,
     }
     undoButton = {
@@ -321,6 +316,10 @@ end
 function love.mousepressed(x, y, button)
     if button ~= 1 then return end
     local lx, ly = x / dpiScale, y / dpiScale
+    if pause_menu.isOpen then
+        pause_menu.mousepressed(lx, ly)
+        return
+    end
     if shop.isOpen then
         shop.mousepressed(lx, ly)
         return
@@ -407,6 +406,7 @@ function getEntityAtHex(q, r)
 end
 
 function love.update(dt)
+    if pause_menu.isOpen then return end
     shop.update(dt)
     if gamePhase == "editor" then
         map_editor.dpiScale = dpiScale
@@ -456,7 +456,6 @@ function love.update(dt)
         end
     end
     updateHoldButton(endTurnButton, endTurn)
-    updateHoldButton(restartButton, restartGame)
     updateHoldButton(undoButton, function() end)
 
     if testViewActive then
@@ -536,10 +535,11 @@ function love.update(dt)
     undoButton = undoButton or {}
     local bottomY = logicalH - 65
     undoButton.isHovered = (mx >= 10 and mx <= 120 and my >= bottomY and my <= bottomY + 30)
-    endTurnButton.isHovered = (mx >= endTurnButton.x and mx <= endTurnButton.x + endTurnButton.width and
-                               my >= endTurnButton.y and my <= endTurnButton.y + endTurnButton.height)
-    -- UI hover sound (rate-limited internally)
-    if undoButton.isHovered or endTurnButton.isHovered or restartButton.isHovered then
+    local btnW, btnH = 140, 50
+    local btnX = logicalW - btnW - 10
+    local btnY = logicalH - btnH - 10
+    endTurnButton.isHovered = (mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH)
+    if undoButton.isHovered or endTurnButton.isHovered then
         sounds.hover(dt)
     end
 end
@@ -561,9 +561,6 @@ function love.draw()
     love.graphics.scale(dpiScale)
     logicalW = love.graphics.getWidth() / dpiScale
     logicalH = love.graphics.getHeight() / dpiScale
-    local bottomY = logicalH - 65
-    restartButton.y = bottomY
-    endTurnButton.y = bottomY
 
     if gamePhase == "menu" then
         menu.draw()
@@ -588,6 +585,7 @@ function love.draw()
     end
 
     shop.draw()
+    pause_menu.draw()
 
     love.graphics.pop()
 end
@@ -638,6 +636,10 @@ function isCellOccupiedForStop(q, r, movingEntity)
 end
 
 function love.keypressed(key)
+    if pause_menu.isOpen then
+        pause_menu.keypressed(key)
+        return
+    end
     if key == "f5" and gameActive then
         win = true
         gameActive = false

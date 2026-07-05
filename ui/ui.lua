@@ -1606,18 +1606,8 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         end
     end
     local panelHeight = topY + pad
-    -- Positioning: bottom-right corner, above Enemy Order button
-    local px = math.max(margin, logicalW - contentWidth - margin)
-    local py = math.max(margin, logicalH - panelHeight - 50)
-    -- Don't overlap left buttons (x<155)
-    if px < 155 and px + contentWidth > 10 then
-        px = 155 + margin
-    end
-    -- Don't overlap right attack buttons (x>logicalW-160, y<250)
-    if py < 250 and px + contentWidth > logicalW - 160 then
-        py = math.max(250, py)
-    end
-    -- Background and border
+    local px = logicalW - contentWidth - margin
+    local py = margin
     love.graphics.setColor(bgColor)
     love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
     love.graphics.setColor(borderColor)
@@ -1830,12 +1820,8 @@ function ui.drawCellTooltip(q, r, terrain, hex)
     contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
     -- Height
     local panelHeight = pad + #content * 16 + pad
-    -- Positioning: bottom right corner
-    local px = math.max(margin, logicalW - contentWidth - margin)
-    local py = math.max(margin, logicalH - panelHeight - 50)
-    if px < 155 and px + contentWidth > 10 then
-        px = 155 + margin
-    end
+    local px = logicalW - contentWidth - margin
+    local py = margin
     love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
     love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 5)
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
@@ -2291,7 +2277,10 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
     local btnW = 135
     local btnH = 30
     local gap = 2
-    local startY = 130
+    local totalH = #allies * (btnH + gap) - gap
+    local ab = attackButtons or {}
+    local attackPanelH = #ab > 0 and (#ab * 28 + (#ab - 1) * 4 + 10) or 0
+    local startY = logicalH - 65 - 10 - attackPanelH - 10 - totalH
     for i, ally in ipairs(allies) do
         local by = startY + (i - 1) * (btnH + gap)
         local hover = mx >= x and mx <= x + btnW and my >= by and my <= by + btnH

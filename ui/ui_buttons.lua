@@ -7,13 +7,14 @@ return function(ui)
 
     function ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
         local canUndo = #undo.history > 1
+        local undoCount = #undo.history - 1
         local btnY = logicalH - 65
         love.graphics.setColor(canUndo and 0.2 or 0.5, 0.2, 0.8, 0.8)
             love.graphics.rectangle("fill", 10, btnY, 120, 30, 5)
         love.graphics.setColor(1, 1, 1, 1)
         local old = love.graphics.getFont()
         love.graphics.setFont(buttonFont)
-        love.graphics.printf("Undo (U)", 10, btnY + 9, 120, "center")
+        love.graphics.printf("Undo (U) [" .. undoCount .. "]", 10, btnY + 9, 120, "center")
         love.graphics.setFont(old)
         if not canUndo then
             love.graphics.setColor(0, 0, 0, 0.6)
@@ -21,72 +22,78 @@ return function(ui)
         end
     end
 
-    function ui.drawDecayButton(mouseX, mouseY, turnCount, maxTurns, phase)
-        local decayActive = turnCount >= maxTurns
-        local text = decayActive and "Decay active!" or ("Decay in: " .. (maxTurns - turnCount))
-        local btnW, btnH = 140, 22
-        local x = 10
-    local y = logicalH - 105
-
-    local isHover = mouseX >= x and mouseX <= x + btnW and mouseY >= y and mouseY <= y + btnH
-
-        if decayActive then
-            local pulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 3)
-            love.graphics.setColor(pulse, 0.2, 0.2, 0.9)
-        else
-            love.graphics.setColor(isHover and 0.5 or 0.35, 0.35, 0.25, 0.85)
-        end
-        love.graphics.rectangle("fill", x, y, btnW, btnH, 4)
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print(text, x + 6, y + 4)
-
-        if isHover then
-            local tooltipW, tooltipH = 300, 82
-            local tx, ty = x + btnW + 6, y
-            if tx + tooltipW > logicalW - 10 then
-                tx = x - tooltipW - 6
-            end
-            love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
-            love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
-            love.graphics.setColor(0.8, 0.8, 0.8, 1)
-            love.graphics.rectangle("line", tx, ty, tooltipW, tooltipH, 6)
-
-            love.graphics.setColor(1, 1, 0.6, 1)
-            love.graphics.print("Turn " .. turnCount .. " / " .. maxTurns .. "  |  Phase: " .. phase, tx + 8, ty + 6)
-            love.graphics.setColor(0.8, 0.8, 0.8, 1)
-            love.graphics.print("All enemies gain Decay (1 dmg/end),", tx + 8, ty + 26)
-            love.graphics.print("dig sites are cleared, and new ones", tx + 8, ty + 42)
-            love.graphics.print("stop appearing. Defeat all to win.", tx + 8, ty + 58)
-            love.graphics.setColor(1, 1, 1, 1)
-        end
-
-        return isHover
-    end
-
-    function ui.drawEndTurnButton(turnState, entities)
+    function ui.drawEndTurnButton(turnState, entities, turnCount, maxTurns, state)
         local isPlayerTurn = (turnState.phase == "player")
         local btn = endTurnButton
         local isPressed = btn.isHeld
         local pressedOffset = isPressed and 2 or 0
-        local btnY = logicalH - 65
+        local btnW, btnH = 140, 50
+        local btnX = logicalW - btnW - 10
+        local btnY = logicalH - btnH - 10
 
-        love.graphics.setColor(isPlayerTurn and (isPressed and 0.5 or 0.8) or 0.4, 0.2, 0.2, 0.8)
-        love.graphics.rectangle("fill", 140, btnY + pressedOffset, 110, 30 - pressedOffset, 5)
+        local decayActive = turnCount >= maxTurns
+        local decayText = decayActive and "Decay!" or ("Decay: " .. (maxTurns - turnCount))
+
+        -- Check if should blink (no active units and no usable abilities)
+        local shouldBlink = false
+        if isPlayerTurn then
+            local hasActiveUnits = false
+            for _, e in ipairs(entities) do
+                if e.isPlayable and e.health > 0 and not e.hasActedThisTurn
+                    and not (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis")) then
+                    hasActiveUnits = true
+                    break
+                end
+            end
+
+            local canUseAbility = false
+            if state and global_abilities then
+                local displayOrder = global_abilities.getDisplayOrder(state)
+                for _, name in ipairs(displayOrder) do
+                    local ab = global_abilities.registry[name]
+                    if ab and not ab.hasBeenUsed and not global_abilities.abilityUsedThisTurn
+                        and global_abilities.mana >= ab.manaCost then
+                        canUseAbility = true
+                        break
+                    end
+                end
+            end
+
+            shouldBlink = not hasActiveUnits and not canUseAbility
+        end
+
+        -- Button color with blink effect
+        local baseR, baseG, baseB = 0.8, 0.2, 0.2
+        if shouldBlink then
+            local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
+            baseR = 0.2 + 0.6 * pulse
+            baseG = 0.6 + 0.4 * pulse
+            baseB = 0.2 + 0.3 * pulse
+        elseif not isPlayerTurn then
+            baseR, baseG, baseB = 0.4, 0.2, 0.2
+        elseif isPressed then
+            baseR, baseG, baseB = 0.5, 0.2, 0.2
+        end
+
+        love.graphics.setColor(baseR, baseG, baseB, 0.8)
+        love.graphics.rectangle("fill", btnX, btnY + pressedOffset, btnW, btnH - pressedOffset, 5)
 
         if isPressed then
             local progress = math.min(btn.holdTimer / config.HOLD_TIME, 1)
             love.graphics.setColor(0.9, 0.3, 0.2, 0.6)
-            love.graphics.rectangle("fill", 140, btnY + pressedOffset, 110 * progress, 30 - pressedOffset, 5)
+            love.graphics.rectangle("fill", btnX, btnY + pressedOffset, btnW * progress, btnH - pressedOffset, 5)
         end
 
         love.graphics.setColor(1, 1, 1, 1)
         local old = love.graphics.getFont()
         love.graphics.setFont(buttonFont)
-        love.graphics.printf("End Turn (E)", 140, btnY + 9 + pressedOffset, 110, "center")
+        love.graphics.printf("End Turn (E)", btnX, btnY + 10 + pressedOffset, btnW, "center")
+        love.graphics.setColor(decayActive and 1 or 0.7, decayActive and 0.3 or 0.7, decayActive and 0.3 or 0.9, 1)
+        love.graphics.printf(decayText, btnX, btnY + 28 + pressedOffset, btnW, "center")
         love.graphics.setFont(old)
         if not isPlayerTurn then
             love.graphics.setColor(0, 0, 0, 0.6)
-            love.graphics.rectangle("fill", 140, btnY, 110, 30, 5)
+            love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 5)
         end
 
         if btn.isHovered and isPlayerTurn then
@@ -100,10 +107,7 @@ return function(ui)
             if #unitsLeft > 0 then
                 local names = table.concat(unitsLeft, ", ")
                 local tooltipW, tooltipH = 260, 48
-                local tx, ty = 140 + 110 + 6, btnY
-                if tx + tooltipW > logicalW - 10 then
-                    tx = 140 - tooltipW - 6
-                end
+                local tx, ty = btnX - tooltipW - 6, btnY
                 love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
                 love.graphics.rectangle("fill", tx, ty, tooltipW, tooltipH, 6)
                 love.graphics.setColor(0.8, 0.8, 0.8, 1)
@@ -120,11 +124,13 @@ return function(ui)
         if not selectedActor or selectedActor.hasActedThisTurn then return end
         if #attackButtons == 0 then return end
 
-        local panelX = logicalW - 155
-        local btnStartY = 100
+        local panelX = 10
         local btnW = 145
         local btnH = 28
         local btnGap = 32
+        local totalAttackH = #attackButtons * btnH + (#attackButtons - 1) * (btnGap - btnH)
+        local undoY = logicalH - 65
+        local btnStartY = undoY - 10 - totalAttackH
 
         -- Chain indicator
         if selectedActor.chainAttack then
@@ -132,14 +138,31 @@ return function(ui)
             love.graphics.print("Chain: " .. selectedActor.chainAttack, panelX, btnStartY - 16)
         end
 
-        -- Description above buttons
+        -- Description above buttons with word wrap
         local descY = btnStartY - (selectedActor.chainAttack and 32 or 16)
         local hasDesc = false
         for _, btn in ipairs(attackButtons) do
             if selectedAttack == btn.attack and attackMode then
                 hasDesc = true
                 love.graphics.setColor(1, 1, 0.5, 0.9)
-                love.graphics.print(btn.desc, panelX, descY)
+                local font = love.graphics.getFont()
+                local maxW = 200
+                local lines = {}
+                for word in btn.desc:gmatch("%S+") do
+                    if #lines == 0 then
+                        table.insert(lines, word)
+                    else
+                        local candidate = lines[#lines] .. " " .. word
+                        if font:getWidth(candidate) <= maxW then
+                            lines[#lines] = candidate
+                        else
+                            table.insert(lines, word)
+                        end
+                    end
+                end
+                for i, line in ipairs(lines) do
+                    love.graphics.print(line, panelX, descY + (i - 1) * 16)
+                end
                 break
             end
         end
@@ -194,23 +217,6 @@ return function(ui)
         end
 
         return isHover
-    end
-
-    function ui.drawRestartButton(button, turnState)
-        local isPressed = button.isHeld
-        local pressedOffset = isPressed and 2 or 0
-        love.graphics.setColor(0.4, 0.2, 0.6, 0.8)
-        love.graphics.rectangle("fill", button.x, button.y + pressedOffset, button.width, button.height - pressedOffset, 5)
-        if isPressed then
-            local progress = math.min(button.holdTimer / config.HOLD_TIME, 1)
-            love.graphics.setColor(0.9, 0.3, 0.6, 0.6)
-            love.graphics.rectangle("fill", button.x, button.y + pressedOffset, button.width * progress, button.height - pressedOffset, 5)
-        end
-        love.graphics.setColor(1, 1, 1, 1)
-        local old = love.graphics.getFont()
-        love.graphics.setFont(buttonFont)
-        love.graphics.printf(button.text .. " (R)", button.x, button.y + 9 + pressedOffset, button.width, "center")
-        love.graphics.setFont(old)
     end
 
 end

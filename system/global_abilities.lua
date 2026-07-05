@@ -24,7 +24,7 @@ global_abilities.mana = 3
 global_abilities.maxMana = 3
 global_abilities.abilityUsedThisTurn = false
 global_abilities.scrollOffset = 0
-global_abilities.maxVisibleItems = 6
+global_abilities.maxVisibleItems = 3
 
 global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability"}
 

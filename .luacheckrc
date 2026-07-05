@@ -24,7 +24,7 @@ globals = {
   -- Модули, экспортированные как глобалы (main.lua)
   "state", "combat", "ai", "environment", "status", "ui", "pathfinding",
   "effects", "visual", "config", "menu", "global_abilities", "shop",
-  "hex", "sti",
+  "hex", "sti", "pause_menu",
 
   -- Игровое состояние (мигрирует в gamestate)
   "entities", "terrainMap", "turnState", "turnCount", "maxTurns",
@@ -40,7 +40,7 @@ globals = {
   "unitUpgrades", "artifacts", "placedAllies", "deploySelectedIdx",
   "allyPanelButtons", "showEnemyOrder",
   "width", "height", "orientation", "hexStatuses", "deployableAllies",
-  "restartButton", "endTurnButton", "undoButton",
+  "endTurnButton", "undoButton",
 
   -- Глобальные функции (game.lua / main.lua)
   "syncState", "handleAbilityMenuClick", "handleProgressionOverlayClick",

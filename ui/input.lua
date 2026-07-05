@@ -24,13 +24,6 @@ function input.mousepressed(x, y, button)
             end
         end
 
-        if x >= restartButton.x and x <= restartButton.x + restartButton.width and
-           y >= restartButton.y and y <= restartButton.y + restartButton.height then
-            if isProgressionRun and win then return end
-            restartGame()
-            return
-        end
-
     local tq, tr = hex:pixelToHex(x, y)
     if not hex or not hex:isValidHex(tq, tr) then return end
     if not hex:isActiveHex(tq, tr) then return end
@@ -106,17 +99,6 @@ end
 
     if global_abilities.handleButtonClick(x, y, state) then return end
 
-    if x >= restartButton.x and x <= restartButton.x + restartButton.width and
-       y >= restartButton.y and y <= restartButton.y + restartButton.height then
-        if gamePhase == "playing" then
-            restartButton.isHeld = true
-            restartButton.holdTimer = 0
-        else
-            restartGame()
-        end
-        return
-    end
-
     if global_abilities.handleClick(x, y, state) then return end
 
     local bottomY = logicalH - 65
@@ -132,8 +114,10 @@ end
         return
     end
 
-    if x >= endTurnButton.x and x <= endTurnButton.x + endTurnButton.width and
-       y >= endTurnButton.y and y <= endTurnButton.y + endTurnButton.height then
+    local btnW, btnH = 140, 50
+    local btnX = logicalW - btnW - 10
+    local btnY = logicalH - btnH - 10
+    if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
         if turnState.phase == "player" then
             local hasActive = false
             for _, e in ipairs(entities) do
@@ -444,10 +428,15 @@ function input.keypressed(key)
         elseif pullHookTargetCell then
             pullHookTargetCell = nil
             log.debug("input", "Pull Hook cancelled")
+        elseif pushDirTargetCell then
+            pushDirTargetCell = nil
+            log.debug("input", "Push dir cancelled")
         elseif attackMode then
             attackMode = false
             selectedAttack = nil
             log.debug("input", "Attack cancelled")
+        elseif gamePhase == "playing" and gameActive then
+            pause_menu.open()
         end
         return
     end
@@ -475,12 +464,7 @@ function input.keypressed(key)
     end
 
     if key == "r" or key == "R" then
-        if gamePhase == "playing" then
-            restartButton.isHeld = true
-            restartButton.holdTimer = 0
-        else
-            restartGame()
-        end
+        restartGame()
         return
     end
 
@@ -557,10 +541,6 @@ function input.mousereleased(x, y, button)
         endTurnButton.isHeld = false
         endTurnButton.holdTimer = 0
     end
-    if restartButton.isHeld then
-        restartButton.isHeld = false
-        restartButton.holdTimer = 0
-    end
     if undoButton.isHeld and not undoTriggeredThisCycle and not undoHeldByKeyboard then
         local wasHeld = undoButton.holdTimer >= (config.HOLD_TIME or 0.7)
         undoButton.isHeld = false
@@ -580,12 +560,6 @@ function input.wheelmoved(x, y, scrollY, state)
 end
 
 function input.keyreleased(key)
-    if key == "r" or key == "R" then
-        if restartButton.isHeld then
-            restartButton.isHeld = false
-            restartButton.holdTimer = 0
-        end
-    end
     if key == "u" or key == "U" then
         if undoButton.isHeld and not undoTriggeredThisCycle and undoHeldByKeyboard then
             local wasHeld = undoButton.holdTimer >= (config.HOLD_TIME or 0.7)

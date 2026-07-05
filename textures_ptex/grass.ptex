@@ -31,18 +31,6 @@
 			"to_port": 0
 		},
 		{
-			"from": "gradient",
-			"from_port": 0,
-			"to": "tonality",
-			"to_port": 0
-		},
-		{
-			"from": "gradient_2",
-			"from_port": 0,
-			"to": "transform2_2",
-			"to_port": 0
-		},
-		{
 			"from": "transform2_2",
 			"from_port": 0,
 			"to": "mirror",
@@ -79,12 +67,6 @@
 			"to_port": 0
 		},
 		{
-			"from": "mirror",
-			"from_port": 0,
-			"to": "blend_2",
-			"to_port": 1
-		},
-		{
 			"from": "perlin_3",
 			"from_port": 0,
 			"to": "remap_3",
@@ -113,12 +95,6 @@
 			"from_port": 0,
 			"to": "tiler_advanced",
 			"to_port": 2
-		},
-		{
-			"from": "transform2_3",
-			"from_port": 0,
-			"to": "buffer_2",
-			"to_port": 0
 		},
 		{
 			"from": "buffer_2",
@@ -217,18 +193,6 @@
 			"to_port": 2
 		},
 		{
-			"from": "blend_3",
-			"from_port": 0,
-			"to": "blend_5",
-			"to_port": 0
-		},
-		{
-			"from": "blend_5",
-			"from_port": 0,
-			"to": "Material",
-			"to_port": 0
-		},
-		{
 			"from": "colorize",
 			"from_port": 0,
 			"to": "blend_5",
@@ -238,6 +202,42 @@
 			"from": "perlin_5",
 			"from_port": 0,
 			"to": "remap_2",
+			"to_port": 0
+		},
+		{
+			"from": "gradient",
+			"from_port": 0,
+			"to": "tonality",
+			"to_port": 0
+		},
+		{
+			"from": "gradient_2",
+			"from_port": 0,
+			"to": "transform2_2",
+			"to_port": 0
+		},
+		{
+			"from": "blend_5",
+			"from_port": 0,
+			"to": "Material",
+			"to_port": 0
+		},
+		{
+			"from": "blend_3",
+			"from_port": 0,
+			"to": "blend_5",
+			"to_port": 0
+		},
+		{
+			"from": "mirror",
+			"from_port": 0,
+			"to": "blend_2",
+			"to_port": 1
+		},
+		{
+			"from": "transform2_3",
+			"from_port": 0,
+			"to": "buffer_2",
 			"to_port": 0
 		}
 	],
@@ -250,14 +250,13 @@
 	},
 	"nodes": [
 		{
-			"export_last_target": "Godot/Godot 4 Standard",
 			"export_paths": {
-				"Godot/Godot 4 Standard": "C:/Users/80STH/Desktop/test/assets/textures/grass"
+
 			},
 			"name": "Material",
 			"node_position": {
-				"x": 791.399963378906,
-				"y": 4.78992986679077
+				"x": 887.8974609375,
+				"y": 8.78293228149414
 			},
 			"parameters": {
 				"albedo_color": {
@@ -274,7 +273,7 @@
 				"metallic": 0.0,
 				"normal": 1.0,
 				"roughness": 1.0,
-				"size": 11.0,
+				"size": 10,
 				"sss": 0.0
 			},
 			"seed": 10445.0,
@@ -385,7 +384,7 @@
 			},
 			"parameters": {
 				"folds": 0.0,
-				"iterations": 1.0,
+				"iterations": 3.0,
 				"noise": 1.0,
 				"offset": 0.0,
 				"persistence": 0.5,
@@ -407,40 +406,6 @@
 			},
 			"seed": -17933.0,
 			"type": "blend"
-		},
-		{
-			"name": "gradient",
-			"node_position": {
-				"x": -1182.0,
-				"y": -314.5
-			},
-			"parameters": {
-				"gradient": {
-					"interpolation": 1,
-					"points": [
-						{
-							"a": 1.0,
-							"b": 0.0,
-							"g": 0.0,
-							"pos": 0.0,
-							"r": 0.0
-						},
-						{
-							"a": 1.0,
-							"b": 1.0,
-							"g": 1.0,
-							"pos": 1.0,
-							"r": 1.0
-						}
-					],
-					"type": "Gradient"
-				},
-				"mirror": false,
-				"repeat": 1.0,
-				"rotate": -90.0
-			},
-			"seed": 45080.0,
-			"type": "gradient"
 		},
 		{
 			"generic_size": 1,
@@ -482,7 +447,7 @@
 			"name": "transform2_2",
 			"node_position": {
 				"x": -650.0,
-				"y": -438.5
+				"y": -438.499969482422
 			},
 			"parameters": {
 				"mode": 0.0,
@@ -496,71 +461,16 @@
 			"type": "transform2"
 		},
 		{
-			"name": "gradient_2",
-			"node_position": {
-				"x": -990.0,
-				"y": -482.5
-			},
-			"parameters": {
-				"gradient": {
-					"interpolation": 0,
-					"points": [
-						{
-							"a": 1.0,
-							"b": 0.0,
-							"g": 0.0,
-							"pos": 0,
-							"r": 0.0
-						},
-						{
-							"a": 1.0,
-							"b": 0.0,
-							"g": 0.0,
-							"pos": 0.2230775,
-							"r": 0.0
-						},
-						{
-							"a": 1.0,
-							"b": 1.0,
-							"g": 1.0,
-							"pos": 0.2230975,
-							"r": 1.0
-						},
-						{
-							"a": 1.0,
-							"b": 1.0,
-							"g": 1.0,
-							"pos": 0.640899,
-							"r": 1.0
-						},
-						{
-							"a": 1.0,
-							"b": 0.0,
-							"g": 0.0,
-							"pos": 0.640919,
-							"r": 0.0
-						}
-					],
-					"type": "Gradient"
-				},
-				"mirror": false,
-				"repeat": 1.0,
-				"rotate": 0.0
-			},
-			"seed": 22528.0,
-			"type": "gradient"
-		},
-		{
 			"generic_size": 1,
 			"name": "mirror",
 			"node_position": {
-				"x": -380.0,
-				"y": -437.5
+				"x": -379.999969482422,
+				"y": -437.499969482422
 			},
 			"parameters": {
 				"direction": 0.0,
 				"flip_sides": false,
-				"offset": 0.0
+				"offset": 0.08
 			},
 			"seed": 13239.0,
 			"type": "mirror"
@@ -569,8 +479,8 @@
 			"generic_size": 1,
 			"name": "transform2_3",
 			"node_position": {
-				"x": -178.0,
-				"y": -417.5
+				"x": -154.116744995117,
+				"y": -468.305267333984
 			},
 			"parameters": {
 				"mode": 0.0,
@@ -649,12 +559,12 @@
 			},
 			"parameters": {
 				"folds": 0.0,
-				"iterations": 4.0,
+				"iterations": 6.0,
 				"noise": 1.0,
 				"offset": 0.0,
 				"persistence": 0.5,
-				"scale_x": 6.0,
-				"scale_y": 7.0
+				"scale_x": 4.0,
+				"scale_y": 4.0
 			},
 			"seed": 25159.0,
 			"type": "fbm2"
@@ -671,30 +581,16 @@
 					"points": [
 						{
 							"a": 1.0,
-							"b": 0.0216522216796875,
-							"g": 0.16796875,
-							"pos": 0.0,
-							"r": 0.103383719921112
-						},
-						{
-							"a": 1.0,
-							"b": 0.25531005859375,
-							"g": 0.6953125,
-							"pos": 0.292810293344351,
-							"r": 0.401977628469467
-						},
-						{
-							"a": 1.0,
-							"b": 0.162532806396484,
-							"g": 0.607421875,
-							"pos": 0.574367816631611,
-							"r": 0.291897654533386
+							"b": 0.0,
+							"g": 1.0,
+							"pos": 0.141336294320913,
+							"r": 0.898437976837158
 						},
 						{
 							"a": 1.0,
 							"b": 0.0,
 							"g": 0.699218988418579,
-							"pos": 1.0,
+							"pos": 0.37170175405649,
 							"r": 0.185729995369911
 						}
 					],
@@ -720,8 +616,8 @@
 		{
 			"name": "buffer_2",
 			"node_position": {
-				"x": -70.0,
-				"y": -179.5
+				"x": 59.9555168151855,
+				"y": -279.804107666016
 			},
 			"parameters": {
 				"size": 8.0
@@ -747,7 +643,7 @@
 			"name": "buffer_4",
 			"node_position": {
 				"x": -45.7999992370605,
-				"y": 255.648086547852
+				"y": 255.648101806641
 			},
 			"parameters": {
 				"size": 10.0
@@ -833,7 +729,7 @@
 		{
 			"name": "blend_4",
 			"node_position": {
-				"x": -14.9207077026367,
+				"x": -14.9207067489624,
 				"y": 76.7241287231445
 			},
 			"parameters": {
@@ -860,8 +756,8 @@
 		{
 			"name": "blend_5",
 			"node_position": {
-				"x": 697.079345703125,
-				"y": -217.533386230469
+				"x": 640.079345703125,
+				"y": -158.03337097168
 			},
 			"parameters": {
 				"amount": 1.0,
@@ -884,6 +780,95 @@
 			},
 			"seed": -24525.0,
 			"type": "perlin"
+		},
+		{
+			"name": "gradient",
+			"node_position": {
+				"x": -1182.0,
+				"y": -314.5
+			},
+			"parameters": {
+				"gradient": {
+					"interpolation": 1,
+					"points": [
+						{
+							"a": 1.0,
+							"b": 0.0,
+							"g": 0.0,
+							"pos": 0.0,
+							"r": 0.0
+						},
+						{
+							"a": 1.0,
+							"b": 1.0,
+							"g": 1.0,
+							"pos": 1.0,
+							"r": 1.0
+						}
+					],
+					"type": "Gradient"
+				},
+				"mirror": false,
+				"repeat": 1.0,
+				"rotate": -90.0
+			},
+			"seed": 45080.0,
+			"type": "gradient"
+		},
+		{
+			"name": "gradient_2",
+			"node_position": {
+				"x": -990.0,
+				"y": -482.5
+			},
+			"parameters": {
+				"gradient": {
+					"interpolation": 0,
+					"points": [
+						{
+							"a": 1.0,
+							"b": 0.0,
+							"g": 0.0,
+							"pos": 0,
+							"r": 0.0
+						},
+						{
+							"a": 1.0,
+							"b": 0.0,
+							"g": 0.0,
+							"pos": 0.2230775,
+							"r": 0.0
+						},
+						{
+							"a": 1.0,
+							"b": 1.0,
+							"g": 1.0,
+							"pos": 0.2230975,
+							"r": 1.0
+						},
+						{
+							"a": 1.0,
+							"b": 1.0,
+							"g": 1.0,
+							"pos": 0.640899,
+							"r": 1.0
+						},
+						{
+							"a": 1.0,
+							"b": 0.0,
+							"g": 0.0,
+							"pos": 0.640919,
+							"r": 0.0
+						}
+					],
+					"type": "Gradient"
+				},
+				"mirror": false,
+				"repeat": 1.0,
+				"rotate": 0.0
+			},
+			"seed": 22528.0,
+			"type": "gradient"
 		}
 	],
 	"parameters": {

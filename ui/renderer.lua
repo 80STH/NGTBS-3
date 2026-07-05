@@ -359,14 +359,12 @@ function renderer.draw(state)
     my = my / state.dpiScale
 
     ui.drawUndoButton(undo.history, state.maxUndoCount, state.selectedActor)
-    ui.drawEndTurnButton(state.turnState, state.entities)
-    ui.drawRestartButton(state.restartButton, state.turnState)
+    ui.drawEndTurnButton(state.turnState, state.entities, state.turnCount, state.maxTurns, state)
     global_abilities.drawButtons(mx, my, state)
 
     global_abilities.drawPreview(hex, state)
 
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
-    ui.drawDecayButton(mx, my, state.turnCount, state.maxTurns, state.turnState.phase)
     ui.drawAllyPanel(mx, my, state.entities, state.selectedActor)
     if state.selectedActor then
         love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 45)
