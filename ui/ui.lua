@@ -1960,36 +1960,24 @@ function ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
     love.graphics.setLineWidth(1)
 end
 -- ui.lua, function drawDigSites
+local dig_site_shader = require("ui.dig_site_shader")
+
 function ui.drawDigSites(hex, digSites)
     local time = love.timer.getTime()
     for _, site in ipairs(digSites) do
         local x, y = getDrawCoords(site.q, site.r)
         local radius = hex.radius
-        -- Pit shadow
-        love.graphics.setColor(0.2, 0.1, 0.05, 0.9)
-        love.graphics.circle("fill", x, y, radius * 0.45)
-        -- Pit interior (dark brown)
-        love.graphics.setColor(0.4, 0.2, 0.1, 0.9)
-        love.graphics.circle("fill", x, y, radius * 0.4)
-        -- Pulsing earth along edges
-        local pulse = 0.5 + 0.5 * math.sin(time * 5)
-        love.graphics.setColor(0.7, 0.4, 0.1, 0.7 + pulse * 0.3)
-        love.graphics.circle("line", x, y, radius * 0.42)
-        -- "Earth" dots around
-        for i = 1, 6 do
-            local angle = (i / 6) * math.pi * 2 + time * 3
-            local dx = math.cos(angle) * radius * 0.5
-            local dy = math.sin(angle) * radius * 0.4
-            love.graphics.setColor(0.5, 0.3, 0.1, 0.8)
-            love.graphics.circle("fill", x + dx, y + dy, 3)
-        end
+        
+        -- Urgency increases as timer decreases
+        local urgency = 1.0 + (3.0 - math.min(site.timer, 3.0)) * 0.3
+        
+        dig_site_shader.drawDigSite(x, y, radius, time, urgency)
+        
         -- Timer (number of turns until spawn) if >1
         if site.timer > 1 then
             love.graphics.setColor(1, 1, 1, 1)
             love.graphics.print(tostring(site.timer), x + 10, y - 14)
         end
-        -- Age display (for debug)
-        -- love.graphics.print(site.age, x + 15, y + 5)
     end
 end
 -- ============================================================

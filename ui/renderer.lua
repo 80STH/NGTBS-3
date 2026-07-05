@@ -372,7 +372,7 @@ function renderer.draw(state)
     love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 65)
 
     local hoverOrder = ui.drawEnemyOrderButton(mx, my)
-    local showOrder = hoverOrder or state.showEnemyOrder
+    local showOrder = hoverOrder or state.showEnemyOrder or love.keyboard.isDown("o")
     if showOrder then
         local orderMap = getEnemyAttackOrder(state.entities, state.turnState)
         local num = 0

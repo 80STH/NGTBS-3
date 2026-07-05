@@ -33,13 +33,15 @@ function effects.applyAllCellEffects(entity, q, r, terrainMap, entities)
         log.infof("effects", "%s covered in acid from cell, ground acid consumed!", entity.name)
     end
 
-    -- 4. Drowning in water (only for characters, not obstacles, not for flying/hovering)
-    if terrain == "water" and entity:isCharacter() and not entity.flying and not entity.hovering then
-        log.infof("effects", "%s drowns in water!", entity.name)
-        sounds.play("collision")
-        entity.health = 0
-        entity:startDeath()
-        died = true
+    -- 4. Drowning in water (characters + caravans, not flying/hovering)
+    if terrain == "water" and not entity.flying and not entity.hovering then
+        if entity:isCharacter() or entity.name == "Caravan" then
+            log.infof("effects", "%s drowns in water!", entity.name)
+            sounds.play("collision")
+            entity.health = 0
+            entity:startDeath()
+            died = true
+        end
     end
 
     return died
@@ -85,14 +87,16 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
                 log.infof("effects", "%s's rage fades", entity.name)
             end
 
-            -- Drowning check (if character is on water and not dead, not flying/hovering)
-            if entity:isCharacter() and not entity.flying and not entity.hovering then
-                local terrain = terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] or "grass"
-                if terrain == "water" and entity.health > 0 then
-                    log.infof("effects", "%s drowns at end of turn!", entity.name)
-                    sounds.play("collision")
-                    entity.health = 0
-                    entity:startDeath()
+            -- Drowning check (characters + caravans on water, not dead, not flying/hovering)
+            if not entity.flying and not entity.hovering then
+                if entity:isCharacter() or entity.name == "Caravan" then
+                    local terrain = terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] or "grass"
+                    if terrain == "water" and entity.health > 0 then
+                        log.infof("effects", "%s drowns at end of turn!", entity.name)
+                        sounds.play("collision")
+                        entity.health = 0
+                        entity:startDeath()
+                    end
                 end
             end
         end

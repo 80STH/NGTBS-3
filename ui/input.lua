@@ -139,15 +139,6 @@ end
         return
     end
 
-    -- Enemy Order button toggle
-    local orderBtnX = 160
-    local orderBtnY = logicalH - 105
-    if x >= orderBtnX and x <= orderBtnX + 100 and y >= orderBtnY and y <= orderBtnY + 30 then
-        showEnemyOrder = not showEnemyOrder
-        log.debugf("input", "Enemy order display: %s", (showEnemyOrder and "ON" or "OFF"))
-        return
-    end
-
     if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving then
         for _, btn in ipairs(attackButtons) do
             if x >= btn.x and x <= btn.x + btn.width and y >= btn.y and y <= btn.y + btn.height then
@@ -469,8 +460,8 @@ function input.keypressed(key)
     end
 
     if key == "o" or key == "O" then
-        showEnemyOrder = not showEnemyOrder
-        log.debugf("input", "Enemy order display: %s", (showEnemyOrder and "ON" or "OFF"))
+        showEnemyOrder = true
+        log.debugf("input", "Enemy order display: ON")
         return
     end
 
@@ -560,6 +551,10 @@ function input.wheelmoved(x, y, scrollY, state)
 end
 
 function input.keyreleased(key)
+    if key == "o" or key == "O" then
+        showEnemyOrder = false
+        log.debugf("input", "Enemy order display: OFF")
+    end
     if key == "u" or key == "U" then
         if undoButton.isHeld and not undoTriggeredThisCycle and undoHeldByKeyboard then
             local wasHeld = undoButton.holdTimer >= (config.HOLD_TIME or 0.7)
