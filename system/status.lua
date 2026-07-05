@@ -227,4 +227,23 @@ function status.clearAllDigSites()
     digSites = {}
 end
 
+-- Save dig sites for undo snapshot
+function status.saveDigSites()
+    local saved = {}
+    for key, data in pairs(digSites) do
+        saved[key] = { timer = data.timer, age = data.age, spawnType = data.spawnType }
+    end
+    return saved
+end
+
+-- Restore dig sites from undo snapshot
+function status.restoreDigSites(saved)
+    digSites = {}
+    if saved then
+        for key, data in pairs(saved) do
+            digSites[key] = { timer = data.timer, age = data.age, spawnType = data.spawnType }
+        end
+    end
+end
+
 return status

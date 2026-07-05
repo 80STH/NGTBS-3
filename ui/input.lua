@@ -363,7 +363,7 @@ end
 
     local clicked = getEntityAtHex(tq, tr)
     local inStasis = clicked and status and status.hasEntityStatus and status.hasEntityStatus(clicked, "stasis")
-    if clicked and clicked.isPlayable and (clicked.health > 0 or inStasis) then
+    if clicked and (clicked.health > 0 or inStasis) then
         selectedActor = clicked
         hex.selectedQ, hex.selectedR = tq, tr
         updateAttackButtons(selectedActor)

@@ -49,6 +49,7 @@ function undo.snapshot()
         },
         actionHistoryCount = #undo.history,
         maxTurns = _G.maxTurns,
+        digSites = status.saveDigSites(),
     }
     -- Save every entity's state
     for _, e in ipairs(_G.entities) do
@@ -188,6 +189,9 @@ function undo.restore(snap)
             status.hexStatuses[key] = copy
         end
     end
+
+    -- Restore dig sites
+    status.restoreDigSites(snap.digSites)
 
     -- Restore upper terrain map
     if not _G.upperTerrainMap then _G.upperTerrainMap = {} end

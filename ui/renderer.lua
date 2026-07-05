@@ -286,18 +286,9 @@ function renderer.draw(state)
             local canShowMove = not isRooted and (not sel.hasActedThisTurn or sel.canMoveAfterAttack) and (not sel.hasMovedThisTurn or sel.canMoveAfterAttack)
             if canShowMove then
                 ui.drawMovementRange(hex, sel, state.entities, state.terrainMap)
-                if hex.hoverQ >= 0 and hex.hoverR >= 0 then
+                if sel.isPlayable and hex.hoverQ >= 0 and hex.hoverR >= 0 then
                     ui.drawPathPreview(hex, sel, hex.hoverQ, hex.hoverR, state.entities, state.terrainMap)
                 end
-            end
-        end
-    end
-
-    if hex.hoverQ >= 0 and hex.hoverR >= 0 then
-        local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
-        if hoverEntity and hoverEntity:isCharacter() and not hoverEntity.isPlayable and hoverEntity.health > 0 then
-            if not state.attackMode and state.turnState.phase == "player" then
-                ui.drawEnemyMovementRange(hex, hoverEntity, state.entities, state.terrainMap)
             end
         end
     end

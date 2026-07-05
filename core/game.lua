@@ -38,8 +38,8 @@ function restartGame(mapPath)
     local mapActiveRadius, mapCenterQ, mapCenterR
     terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation, upperTerrainMap = environment.loadNativeMap(mapData)
     mapActiveRadius = mapData and mapData.activeRadius or config.ACTIVE_RADIUS
-    mapCenterQ = mapData and mapData.centerQ or math.floor(width / 2)
-    mapCenterR = mapData and mapData.centerR or math.floor(height / 2)
+    mapCenterQ = mapData and mapData.centerQ or config.CENTER_Q or math.floor(width / 2)
+    mapCenterR = mapData and mapData.centerR or config.CENTER_R or math.floor(height / 2)
     orientation = orientation or "pointy"
 
     hex = require("grid.hexgrid").new(
