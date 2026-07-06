@@ -435,9 +435,7 @@ function renderer.draw(state)
         local oldFont = love.graphics.getFont()
 
         if isProgressionRun and state.win then
-            if showAbilityMenu and abilityMenu then
-                drawAbilityMenu(width, height)
-            elseif progressionOverlay == "complete" then
+            if progressionOverlay == "complete" then
                 drawProgressionComplete(width, height)
             end
         else

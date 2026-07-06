@@ -427,13 +427,15 @@ function menu.mousepressed(x, y)
                 unitUpgrades = {}
                 artifacts = {}
                 commanderArtifacts = {}
+                genericUpgrades = {}
                 isProgressionRun = true
                 currentMapIndex = 1
+                progressionShopOpened = false
                 global_abilities.initWithCommander(selectedCommander)
                 restartGame("maps/map1.lua")
                 return true
             elseif btn.key == "shop" then
-                shop.isOpen = true
+                shop.open()
                 return true
             elseif btn.key == "editor" then
                 gamePhase = "editor"

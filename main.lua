@@ -80,8 +80,7 @@ entityAt = {}
 unplacedAllies = {}
 isProgressionRun = false
 currentMapIndex = 1
-showAbilityMenu = false
-abilityMenu = nil
+progressionShopOpened = false
 progressionOverlay = nil
 mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua", "maps/map4.lua"}
 unitUpgrades = {}  -- "Warrior" > { choices = {"dashToFlipChain"} }
@@ -120,139 +119,6 @@ ARTIFACT_CHOICES = {
 -- The goal of future migration: remove this function, accessing state.* directly.
 function syncState()
     state:syncFromGlobals()
-end
-
-function handleAbilityMenuClick(x, y)
-    local w, h = logicalW, logicalH
-    local menuW, menuH = 340, 340
-    local menuX = w/2 - menuW/2
-    local menuY = h/2 - menuH/2 + 30
-
-    if abilityMenu.mode == "upgrade" then
-        local itemH = 60
-        local itemStartY = menuY + 90
-
-        if not abilityMenu.selectedItem then
-            -- Stage 1: pick a unit to upgrade or an artifact
-            for i, entry in ipairs(abilityMenu.available) do
-                local ix = menuX + 20
-                local iy = itemStartY + (i - 1) * (itemH + 6)
-                local iw = menuW - 40
-                if x >= ix and x <= ix + iw and y >= iy and y <= iy + itemH then
-                    abilityMenu.selectedItem = entry
-                    if entry.type == "unit" then
-                        abilityMenu.availableChoices = UPGRADE_CHOICES[entry.name]
-                        abilityMenu.selectedChoice = nil
-                    else
-                        abilityMenu.selectedChoice = entry.id
-                        abilityMenu.availableChoices = nil
-                    end
-                    return
-                end
-            end
-        else
-            local entry = abilityMenu.selectedItem
-            if entry.type == "unit" then
-                -- Stage 2: pick a choice for the unit
-                local choiceH = 50
-                for i, choice in ipairs(abilityMenu.availableChoices) do
-                    local ix = menuX + 20
-                    local iy = itemStartY + (i - 1) * (choiceH + 6)
-                    local iw = menuW - 40
-                    if x >= ix and x <= ix + iw and y >= iy and y <= iy + choiceH then
-                        abilityMenu.selectedChoice = choice.id
-                        return
-                    end
-                end
-
-                -- Back button
-                local backBtnY = itemStartY + #abilityMenu.availableChoices * (choiceH + 6) + 10
-                if x >= menuX + 20 and x <= menuX + 20 + 100 and y >= backBtnY and y <= backBtnY + 30 then
-                    abilityMenu.selectedItem = nil
-                    abilityMenu.selectedChoice = nil
-                    abilityMenu.availableChoices = nil
-                    return
-                end
-            end
-
-            -- Confirm button (unit upgrade or artifact)
-            if abilityMenu.selectedChoice then
-                local btnW, btnH = 200, 40
-                local btnX = w/2 - btnW/2
-                local btnY = menuY + menuH - 60
-                if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
-                    if abilityMenu.selectedItem.type == "unit" then
-                        local data = unitUpgrades[abilityMenu.selectedItem.name] or { choices = {} }
-                        table.insert(data.choices, abilityMenu.selectedChoice)
-                        unitUpgrades[abilityMenu.selectedItem.name] = data
-                    elseif abilityMenu.selectedItem.type == "commander_artifact" then
-                        table.insert(commanderArtifacts, abilityMenu.selectedChoice)
-                        if abilityMenu.selectedItem.apply then
-                            abilityMenu.selectedItem.apply()
-                        end
-                    else
-                        table.insert(artifacts, abilityMenu.selectedChoice)
-                    end
-                    showAbilityMenu = false
-                    abilityMenu = nil
-                    local nextMap = currentMapIndex + 1
-                    if nextMap <= #mapProgression then
-                        currentMapIndex = nextMap
-                        restartGame(mapProgression[nextMap])
-                    else
-                        progressionOverlay = "complete"
-                    end
-                end
-            end
-        end
-        return
-    end
-
-    -- Ability item rects
-    local itemH = 36
-    local itemStartY = menuY + 90
-    for i, name in ipairs(abilityMenu.available) do
-        local ix = menuX + 20
-        local iy = itemStartY + (i - 1) * (itemH + 6)
-        local iw = menuW - 40
-        if x >= ix and x <= ix + iw and y >= iy and y <= iy + itemH then
-            local already = false
-            for _, s in ipairs(abilityMenu.selected) do
-                if s == name then already = true; break end
-            end
-            if already then
-                for j = #abilityMenu.selected, 1, -1 do
-                    if abilityMenu.selected[j] == name then
-                        table.remove(abilityMenu.selected, j)
-                        break
-                    end
-                end
-            elseif #abilityMenu.selected < abilityMenu.maxSelect then
-                table.insert(abilityMenu.selected, name)
-            end
-            return
-        end
-    end
-
-    -- Confirm button
-    if #abilityMenu.selected == abilityMenu.maxSelect then
-        local btnW, btnH = 200, 40
-        local btnX = w/2 - btnW/2
-        local btnY = menuY + menuH - 60
-        if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
-            global_abilities.unlockAll(abilityMenu.selected)
-            global_abilities.maxMana = global_abilities.maxMana + 1
-            showAbilityMenu = false
-            abilityMenu = nil
-            local nextMap = currentMapIndex + 1
-            if nextMap <= #mapProgression then
-                currentMapIndex = nextMap
-                restartGame(mapProgression[nextMap])
-            else
-                progressionOverlay = "complete"
-            end
-        end
-    end
 end
 
 function handleProgressionOverlayClick(x, y)
@@ -322,10 +188,6 @@ function love.mousepressed(x, y, button)
     end
     if shop.isOpen then
         shop.mousepressed(lx, ly)
-        return
-    end
-    if showAbilityMenu then
-        handleAbilityMenuClick(lx, ly)
         return
     end
     if progressionOverlay then
@@ -469,57 +331,9 @@ function love.update(dt)
     turnManager.update(dt)
     objectives.update(entities)
 
-    if isProgressionRun and win and gameActive == false and not showAbilityMenu and not progressionOverlay then
-        local squad = menu.getSquads()[selectedSquad]
-        local available = {}
-        if squad then
-            for _, unitDef in ipairs(squad.units) do
-                local name = unitDef.name
-                if name == "Warrior" or name == "Puncher" or name == "Rogue" then
-                    local data = unitUpgrades[name]
-                    local hasUpgrade = data and #data.choices > 0
-                    if not hasUpgrade then
-                        table.insert(available, { type = "unit", name = name })
-                    end
-                end
-            end
-            for _, art in ipairs(ARTIFACT_CHOICES) do
-                local already = false
-                for _, a in ipairs(artifacts) do
-                    if a == art.id then already = true; break end
-                end
-                if not already then
-                    table.insert(available, { type = "artifact", id = art.id, name = art.name, desc = art.desc })
-                end
-            end
-            -- Commander exclusive artifacts
-            if selectedCommander then
-                local cmd = commanders.get(selectedCommander)
-                if cmd and cmd.exclusiveArtifacts then
-                    for _, cart in ipairs(cmd.exclusiveArtifacts) do
-                        local already = false
-                        for _, a in ipairs(commanderArtifacts) do
-                            if a == cart.id then already = true; break end
-                        end
-                        if not already then
-                            table.insert(available, { type = "commander_artifact", id = cart.id, name = cart.name, desc = cart.desc, apply = cart.apply })
-                        end
-                    end
-                end
-            end
-        end
-        if #available > 0 then
-            showAbilityMenu = true
-            abilityMenu = {
-                available = available,
-                mode = "upgrade",
-                selectedItem = nil,
-                selectedChoice = nil,
-                availableChoices = nil,
-            }
-        else
-            progressionOverlay = "complete"
-        end
+    if isProgressionRun and win and gameActive == false and not shop.isOpen and not progressionOverlay and not progressionShopOpened then
+        progressionShopOpened = true
+        shop.openForProgression()
     end
 
     local mx, my = love.mouse.getPosition()

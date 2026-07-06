@@ -824,6 +824,19 @@ function environment.createSquadUnit(unitDef, q, r)
         if artId == "phaseThroughEnemies" then entity.phaseThroughEnemies = true end
     end
 
+    -- Apply generic upgrades (shop)
+    local genericList = _G.genericUpgrades or {}
+    for _, gid in ipairs(genericList) do
+        if gid == "fireImmune" then entity.fireImmune = true end
+        if gid == "acidImmune" then entity.acidImmune = true end
+        if gid == "rootImmune" then entity.rootImmune = true end
+        if gid == "armor" then entity.armor = 1 end
+        if gid == "moveSpeed" then entity.moveRange = entity.moveRange + 1 end
+        if gid == "deployAnywhere" then entity.deployAnywhere = true end
+        if gid == "canMoveAfterAttack" then entity.canMoveAfterAttack = true end
+        if gid == "phaseThroughEnemies" then entity.phaseThroughEnemies = true end
+    end
+
     return entity
 end
 

@@ -177,6 +177,7 @@ function restartGame(mapPath)
     _G.squadHpBonus = 0
     _G.squadMoveBonus = 0
     _G.squadArmorBonus = 0
+    _G.genericUpgrades = {}
     dpiScale = love.window.getDPIScale()
 
     flipTargetActor = nil
