@@ -186,8 +186,6 @@ local function computeLayout(w, h)
         { key = "progression", label = "Progression Test", r = 0.2, g = 0.7, b = 0.3 },
         { key = "shop",        label = "Shop",             r = 0.8, g = 0.7, b = 0.2 },
         { key = "editor",      label = "Map Editor",       r = 0.3, g = 0.5, b = 0.8 },
-        { key = "shaders",     label = "Shader Demo",      r = 0.6, g = 0.3, b = 0.8 },
-        { key = "hex_demo",    label = "Stone+Grass",      r = 0.4, g = 0.6, b = 0.3 },
         { key = "quit",        label = "Quit",             r = 0.7, g = 0.2, b = 0.2 },
     }
     local btnRows = math.ceil(#btnDefs / 2)
@@ -441,12 +439,6 @@ function menu.mousepressed(x, y)
                 gamePhase = "editor"
                 map_editor.dpiScale = dpiScale or 1
                 map_editor.init()
-                return true
-            elseif btn.key == "shaders" then
-                gamePhase = "shaderDemo"
-                return true
-            elseif btn.key == "hex_demo" then
-                gamePhase = "hexDemo"
                 return true
             elseif btn.key == "quit" then
                 love.event.quit()

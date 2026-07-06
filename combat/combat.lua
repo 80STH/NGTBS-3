@@ -9,6 +9,7 @@ local log = require("util.log")
 local sprites = require("util.sprites")
 
 local hex_utils = require("grid.hex_utils")
+local cell_rules = require("grid.cell_rules")
 local env = require("entity.environment")
 -- ============================================================
 -- BASE ATTACK CLASS
@@ -2154,12 +2155,12 @@ function performMove(actor, targetQ, targetR)
         log.debug("combat", "Too far")
         return false
     end
-    if isCellOccupiedForStop(targetQ, targetR, actor) then
+    if cell_rules.isOccupiedForStop(targetQ, targetR, actor) then
         log.debug("combat", "Cell occupied")
         return false
     end
     local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, effectiveRange,
-        function(q, r) return not isCellPassable(q, r, actor) end, hex,
+        function(q, r) return not cell_rules.isPassable(q, r, actor) end, hex,
         function(q, r) local e = getEntityAtHex(q, r); return e and e ~= actor and not e.isHazard end)
     if not path or #path == 0 then
         log.debug("combat", "No valid path")

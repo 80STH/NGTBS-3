@@ -25,18 +25,6 @@ commanders.list.Healer = {
             desc = "+1 max mana for the commander.",
             apply = function() global_abilities.maxMana = (global_abilities.maxMana or 3) + 1; global_abilities.mana = global_abilities.maxMana end,
         },
-        {
-            id = "healer_cleanse_all",
-            name = "Purification Aura",
-            desc = "Heal also removes negative hex statuses on the target cell.",
-            apply = function() end, -- placeholder: hook into HealAbility:onClickHex
-        },
-        {
-            id = "healer_range",
-            name = "Soothing Reach",
-            desc = "Heal can target allies up to 2 cells away.",
-            apply = function() end, -- placeholder: hook into HealAbility targeting
-        },
     },
 }
 
@@ -56,18 +44,6 @@ commanders.list.Enforcer = {
             name = "Tactical Genius",
             desc = "+1 max mana for the commander.",
             apply = function() global_abilities.maxMana = (global_abilities.maxMana or 3) + 1; global_abilities.mana = global_abilities.maxMana end,
-        },
-        {
-            id = "enforcer_range",
-            name = "Extended Orders",
-            desc = "Extra Move can shift allies up to 2 cells away.",
-            apply = function() end, -- placeholder: hook into ExtraMoveAbility
-        },
-        {
-            id = "enforcer_aoe",
-            name = "Forced March",
-            desc = "Extra Move shifts ALL adjacent allies by 1 cell in the chosen direction.",
-            apply = function() end, -- placeholder: hook into ExtraMoveAbility
         },
     },
 }

@@ -2,6 +2,7 @@
 -- Input processing (mouse, keyboard). Uses globals, like other modules.
 local input = {}
 local global_abilities = require("system.global_abilities")
+local turnManager = require("core.turn_manager")
 local hex_utils = require("grid.hex_utils")
 local log = require("util.log")
 
@@ -137,7 +138,7 @@ end
                 endTurnButton.isHeld = true
                 endTurnButton.holdTimer = 0
             else
-                endTurn()
+                turnManager.endPlayerTurn()
             end
         else
             log.debug("input", "Not your turn")
@@ -449,7 +450,7 @@ function input.keypressed(key)
     end
 
     if key == "e" or key == "E" then
-        if turnState.phase == "player" then endTurn() end
+        if turnState.phase == "player" then turnManager.endPlayerTurn() end
         return
     end
 
@@ -550,10 +551,6 @@ function input.mousereleased(x, y, button)
             sounds.play("undo")
         end
     end
-end
-
-function input.wheelmoved(x, y, scrollY, state)
-    return global_abilities.handleWheelMoved(x, y, scrollY, state)
 end
 
 function input.keyreleased(key)

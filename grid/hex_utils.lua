@@ -50,10 +50,7 @@ function hex_utils.getCubeDiff(fromQ, fromR, toQ, toR)
     return tx - fx, ty - fy, tz - fz
 end
 
-function hex_utils.applyCubeDiff(q, r, dx, dy, dz)
-    local x, y, z = hex_utils.axialToCube(q, r)
-    return hex_utils.cubeToAxial(x + dx, y + dy, z + dz)
-end
+hex_utils.applyCubeDiff = hex_utils.applyCubeStep
 
 function hex_utils.rotateCubeDir(dx, dy, dz, clockwise)
     if clockwise then

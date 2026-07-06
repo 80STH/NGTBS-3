@@ -1,8 +1,7 @@
 -- main.lua
 -- Entry point. Initialization, update, input dispatching.
--- Game state is stored in state (gamestate).
--- Rendering is delegated to the renderer.
-state = require("core.gamestate").new()
+-- Game state lives in globals; renderer reads from the state table.
+state = _G
 
 -- Устанавливаем linear-фильтрацию по умолчанию для всех текстур
 love.graphics.setDefaultFilter("linear", "linear")
@@ -28,8 +27,6 @@ local objectives = require("system.objectives")
 global_abilities = require("system.global_abilities")
 shop = require("ui.shop")
 map_editor = require("editor.map_editor")
-shader_demo = require("ui.shader_demo")
-hex_demo = require("ui.hex_demo")
 pause_menu = require("ui.pause_menu")
 require("core.game")
 local commanders = require("system.commanders")
@@ -56,7 +53,7 @@ do
     end
 end
 
-pushAnimations = state.pushAnimations
+pushAnimations = nil
 dpiScale = 1
 logicalW = 0
 logicalH = 0
@@ -113,13 +110,6 @@ ARTIFACT_CHOICES = {
     { id = "canMoveAfterAttack", name = "Hit & Run", desc = "All units move after attacking" },
     { id = "phaseThroughEnemies", name = "Ghost Cloak", desc = "All units phase through enemies" },
 }
-
--- Synchronization of globals -> state (renderer and gamestate methods read from state).
--- Implementation is in gamestate.lua:GameState:syncFromGlobals().
--- The goal of future migration: remove this function, accessing state.* directly.
-function syncState()
-    state:syncFromGlobals()
-end
 
 function handleProgressionOverlayClick(x, y)
     local w = logicalW
@@ -198,19 +188,13 @@ function love.mousepressed(x, y, button)
         menu.mousepressed(lx, ly)
     elseif gamePhase == "editor" then
         map_editor.mousepressed(lx, ly, button)
-    elseif gamePhase == "shaderDemo" then
-        shader_demo.mousepressed(lx, ly)
-    elseif gamePhase == "hexDemo" then
-        hex_demo.mousepressed(lx, ly)
     else
         input.mousepressed(lx, ly, button)
     end
 end
 
 function love.mousereleased(x, y, button)
-    if gamePhase == "hexDemo" then
-        hex_demo.mousereleased(x / dpiScale, y / dpiScale)
-    elseif gamePhase == "editor" then
+    if gamePhase == "editor" then
         map_editor.mousereleased(x / dpiScale, y / dpiScale, button)
     else
         input.mousereleased(x / dpiScale, y / dpiScale, button)
@@ -221,11 +205,6 @@ function love.mousemoved(x, y)
     if gamePhase == "editor" then
         map_editor.mousemoved(x / dpiScale, y / dpiScale)
     end
-end
-
-function isPositionOccupied(q, r, movingEntity)
-    -- Delegates to cell_rules.isOccupied (with water and phaseThroughEnemies).
-    return cell_rules.isOccupied(q, r, movingEntity)
 end
 
 -- Returns 3 push direction choices for choosePushDir (Puncher lvl3)
@@ -317,7 +296,7 @@ function love.update(dt)
             end
         end
     end
-    updateHoldButton(endTurnButton, endTurn)
+    updateHoldButton(endTurnButton, turnManager.endPlayerTurn)
     updateHoldButton(undoButton, function() end)
 
     if testViewActive then
@@ -385,12 +364,7 @@ function love.draw()
         menu.draw()
     elseif gamePhase == "editor" then
         map_editor.draw()
-    elseif gamePhase == "shaderDemo" then
-        shader_demo.draw()
-    elseif gamePhase == "hexDemo" then
-        hex_demo.draw()
     elseif gamePhase == "deploy" then
-        syncState()
         renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
     else
         if screenShake.timer > 0 then
@@ -399,7 +373,6 @@ function love.draw()
             local offsetY = screenShake.intensity * ease * math.sin(t * math.pi * 12)
             love.graphics.translate(0, offsetY)
         end
-        syncState()
         renderer.draw(state)
     end
 
@@ -446,14 +419,6 @@ function getEnemyAttackOrder(entities, turnState)
     return order
 end
 
-function isCellPassable(q, r, movingEntity)
-    return cell_rules.isPassable(q, r, movingEntity)
-end
-
-function isCellOccupiedForStop(q, r, movingEntity)
-    return cell_rules.isOccupiedForStop(q, r, movingEntity)
-end
-
 function love.keypressed(key)
     if pause_menu.isOpen then
         pause_menu.keypressed(key)
@@ -463,17 +428,12 @@ function love.keypressed(key)
         win = true
         gameActive = false
         log.warn("main", "AUTO WIN (debug)")
-        syncState()
         return
     end
     if gamePhase == "menu" then
         menu.keypressed(key)
     elseif gamePhase == "editor" then
         map_editor.keypressed(key)
-    elseif gamePhase == "shaderDemo" then
-        shader_demo.keypressed(key)
-    elseif gamePhase == "hexDemo" then
-        hex_demo.keypressed(key)
     else
         input.keypressed(key)
     end
@@ -488,5 +448,5 @@ function love.wheelmoved(dx, dy)
     local mx, my = love.mouse.getPosition()
     mx = mx / dpiScale
     my = my / dpiScale
-    input.wheelmoved(mx, my, dy, state)
+    global_abilities.handleWheelMoved(mx, my, dy, state)
 end

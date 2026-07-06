@@ -1,4 +1,4 @@
--- ui.lua
+﻿-- ui.lua
 -- All UI functions (buttons, panels, attack preview, movement, etc.)
 local ui = {}
 local pathfinding = require("grid.pathfinding")
@@ -72,7 +72,7 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
         end
     end
     -- The cell must not be occupied (for stopping)
-    if isCellOccupiedForStop(targetQ, targetR, actor) then
+    if cell_rules.isOccupiedForStop(targetQ, targetR, actor) then
         return false
     end
     
@@ -83,7 +83,7 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     if actor.flying then
         isBlockedFn = function(q, r) return not hex:isActiveHex(q, r) end
     else
-        isBlockedFn = function(q, r) return isPositionOccupied(q, r, actor) end
+        isBlockedFn = function(q, r) return cell_rules.isOccupied(q, r, actor) end
         isOccupiedFn = function(q, r)
             local e = getEntityAtHex(q, r)
             return e and e ~= actor and not e.isHazard
@@ -102,11 +102,11 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     local dist = hex:getDistance(actor.q, actor.r, hoverQ, hoverR)
     if dist > effectiveRange then return end
     -- Don't show path if the cell is occupied (by ally or enemy)
-    if isCellOccupiedForStop(hoverQ, hoverR, actor) then
+    if cell_rules.isOccupiedForStop(hoverQ, hoverR, actor) then
         return
     end
     local path = pathfinding.findPath(actor.q, actor.r, hoverQ, hoverR, effectiveRange,
-        function(q, r) return not isCellPassable(q, r, actor) end, hex,
+        function(q, r) return not cell_rules.isPassable(q, r, actor) end, hex,
         function(q, r) local e = getEntityAtHex(q, r); return e and e ~= actor and not e.isHazard end)
     if not path or #path == 0 then return end
     -- Draw line and silhouette (as before)
@@ -190,10 +190,6 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
     love.graphics.setColor(cr, cg, cb, ca)
     love.graphics.polygon("fill", tipX, tipY, lx, ly, rx, ry)
 end
--- Draw collision icon (replaced by icon_cache system)
-function ui.drawCollisionIcon(x, y, damage, isDouble)
-end
-
 local icon_cache = require("ui.icon_cache")
 
 function ui.willKillTarget(target, attacker, baseDamage, directionIndex, dist)
@@ -770,7 +766,7 @@ end
                 end
             end
         elseif vortexTargetCell then
-            -- Second click phase: show arrows for A→dest and B→further + damage preview
+            -- Second click phase: show arrows for Aв†’dest and Bв†’further + damage preview
             local target = getEntityAtHex(vortexTargetCell.q, vortexTargetCell.r, entities)
             if target then
                 local dests = attack:getShiftDestinations(attacker, vortexTargetCell.q, vortexTargetCell.r, hex)
@@ -787,7 +783,7 @@ end
                     local tx, ty = getDrawCoords(vortexTargetCell.q, vortexTargetCell.r)
                     local hx, hy = getDrawCoords(hoverQ, hoverR)
                     local occupant = getEntityAtHex(hoverQ, hoverR, entities)
-                    -- Arrow: A → destination
+                    -- Arrow: A в†’ destination
                     ui.drawPushArrow(tx, ty, hx, hy, nil, nil, nil, nil, vortexTargetCell.q, vortexTargetCell.r, hoverQ, hoverR)
                     local hasCollision = false
                     local occDamaged = false
@@ -1004,14 +1000,10 @@ end
                             totalDmg = totalDmg + colDmg
                             if colReason == "edge" then
                                 local crashX, crashY = pushX or tx, pushY or ty
-                                ui.drawCollisionIcon(crashX, crashY, 1, false)
                             elseif colOcc then
                                 local occX, occY = getDrawCoords(colOcc.q, colOcc.r)
                                 if colReason == "collision_both" then
-                                    ui.drawCollisionIcon(occX, occY, 1, true)
-                                    ui.drawCollisionIcon(pushX or occX, pushY or occY, 1, true)
                                 else
-                                    ui.drawCollisionIcon(pushX or occX, pushY or occY, 1, false)
                                 end
                                 if colOcc:isBuilding() then
                                 end
@@ -1043,14 +1035,10 @@ end
                     if collisionDamage > 0 then
                         totalDamage = totalDamage + collisionDamage
                         if reason == "edge" then
-                            ui.drawCollisionIcon(toX, toY, 1, false)
                         elseif second then
                             local secX, secY = getDrawCoords(second.q, second.r)
                             if reason == "collision_both" then
-                                ui.drawCollisionIcon(secX, secY, 1, true)
-                                ui.drawCollisionIcon(toX, toY, 1, true)
                             else
-                                ui.drawCollisionIcon(toX, toY, 1, false)
                             end
                         end
                     end
@@ -1092,14 +1080,10 @@ end
                     if collisionDamage > 0 then
                         totalDamage = totalDamage + collisionDamage
                         if reason == "edge" then
-                            ui.drawCollisionIcon(toX, toY, 1, false)
                         elseif second then
                             local secX, secY = getDrawCoords(second.q, second.r)
                             if reason == "collision_both" then
-                                ui.drawCollisionIcon(secX, secY, 1, true)
-                                ui.drawCollisionIcon(toX, toY, 1, true)
                             else
-                                ui.drawCollisionIcon(toX, toY, 1, false)
                             end
                         end
                     end
@@ -1120,14 +1104,10 @@ end
                     if collisionDamage > 0 then
                         totalDamage = totalDamage + collisionDamage
                         if reason == "edge" then
-                            ui.drawCollisionIcon(toX, toY, 1, false)
                         elseif second then
                             local secX, secY = getDrawCoords(second.q, second.r)
                             if reason == "collision_both" then
-                                ui.drawCollisionIcon(secX, secY, 1, true)
-                                ui.drawCollisionIcon(toX, toY, 1, true)
                             else
-                                ui.drawCollisionIcon(toX, toY, 1, false)
                             end
                         end
                     end
@@ -1294,7 +1274,6 @@ local hasTarget = target and target:isCharacter() and target.health > 0
                         if colOccupant:isBuilding() then
                         end
                     end
-                    ui.drawCollisionIcon(toX, toY, 1, colReason == "collision_both")
                 end
             else
                 ui.drawPushArrow(fromX, fromY, toX, toY, 0.7, 0.7, 0.7, 0.6, nb.q, nb.r, pushQ, pushR)
@@ -1332,7 +1311,6 @@ local hasTarget = target and target:isCharacter() and target.health > 0
                         if colOccupant:isBuilding() then
                         end
                     end
-                    ui.drawCollisionIcon(toX, toY, 1, colReason == "collision_both")
                 end
             else
                 ui.drawPushArrow(fromX, fromY, toX, toY, 0.7, 0.7, 0.7, 0.6, nb.q, nb.r, pushQ, pushR)
@@ -1416,14 +1394,11 @@ end
                     local crashX, crashY = toX, toY
                     if reason == "collision_both" and second then
                         local secX, secY = getDrawCoords(second.q, second.r)
-                        ui.drawCollisionIcon(secX, secY, 1, true)
-                        ui.drawCollisionIcon(crashX, crashY, 1, true)
                         if not previewTargetKeys[second.q .. "," .. second.r] then
                         end
                         if second:isBuilding() and not directBuildingIds[second.q .. "," .. second.r] then
                         end
                     elseif reason == "collision_immovable" then
-                        ui.drawCollisionIcon(crashX, crashY, 1, false)
                         if second then
                             local secX, secY = getDrawCoords(second.q, second.r)
                             if not previewTargetKeys[second.q .. "," .. second.r] then
@@ -1432,7 +1407,6 @@ end
                             end
                         end
                     elseif reason == "edge" then
-                        ui.drawCollisionIcon(crashX, crashY, 1, false)
                     end
                 end
             end
@@ -1500,10 +1474,10 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         fire = { name = "Fire", color = {1, 0.5, 0}, desc = "Burns for 1 damage at end of turn. Extinguished by water." },
         acid = { name = "Acid", color = {0.3, 0.9, 0.3}, desc = "Any damage is instantly lethal." },
         decay = { name = "Decay", color = {0.7, 0.2, 0.8}, desc = "Takes 1 damage per move and at end of turn." },
-        dig_site = { name = "Undermined", color = {0.8, 0.6, 0.2}, desc = "Standing on a dig site — enemy may spawn here!" },
+        dig_site = { name = "Undermined", color = {0.8, 0.6, 0.2}, desc = "Standing on a dig site вЂ” enemy may spawn here!" },
         empowered = { name = "Empowered", color = {1, 0.9, 0.2}, desc = "Move +1, damage +1." },
         fatal_damage = { name = "Fatal Damage", color = {1, 0.5, 0.5}, desc = "Next attack is lethal (one-time)." },
-        rooted = { name = "Rooted", color = {0.6, 0.8, 0.2}, desc = "Immobilized by a Zombie — cannot move until the Zombie is displaced." },
+        rooted = { name = "Rooted", color = {0.6, 0.8, 0.2}, desc = "Immobilized by a Zombie вЂ” cannot move until the Zombie is displaced." },
         wounded = { name = "Wounded", color = {1, 0.4, 0.2}, desc = "Health below max. Move range reduced by 1." },
 
     }
@@ -1759,7 +1733,7 @@ end
         end
         return
     end
-    -- For attacks with direction (Dash, Shoot, Piercing) – use direction
+    -- For attacks with direction (Dash, Shoot, Piercing) вЂ“ use direction
     if enemy.attackDirection then
         local step = enemy.attackDirection
         local targetQ, targetR = hex_utils.applyCubeStep(enemy.q, enemy.r, step.dx, step.dy, step.dz)
@@ -1881,7 +1855,7 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
         isBlockedFn, hex, isOccupiedFn)
     return path ~= nil and #path > 0
 end
-function isCellPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
+function cell_rules.isPassableForEnemy(q, r, enemy, entities, terrainMap, hex)
     -- Delegates to cell_rules.isPassable with passableSide = "enemy".
     -- Enemies can pass through other enemies, but not through allies/obstacles.
     return cell_rules.isPassable(q, r, enemy, {
@@ -2296,7 +2270,7 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
             love.graphics.print("STS", indX - 12, indY - 2)
         elseif ally.hasActedThisTurn then
             love.graphics.setColor(0.5, 0.5, 0.5, 1)
-            love.graphics.print("✗", indX, indY - 2)
+            love.graphics.print("вњ—", indX, indY - 2)
         elseif not ally.hasMovedThisTurn then
             local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(ally, "rooted") and not ally.rootImmune
             if isRooted then

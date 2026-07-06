@@ -14,66 +14,38 @@ return function(ui)
         end
     end
 
-    function ui.drawFireOnHex(x, y, radius, time)
-        fire_shader.drawFireOnHex(x, y, radius, time)
-    end
-
-    function ui.drawAcidOnHex(x, y, radius, time)
-        initShaders()
-        status_shaders.drawAcid(x, y, radius * 0.5, time, 1.0)
-    end
-
     function ui.drawCellStatusEffects(x, y, radius, statuses, time)
         for _, st in ipairs(statuses) do
             if st == "fire" then
-                ui.drawFireOnHex(x, y, radius, time)
+                fire_shader.drawFireOnHex(x, y, radius, time)
             elseif st == "acid" then
-                ui.drawAcidOnHex(x, y, radius, time)
+                initShaders()
+                status_shaders.drawAcid(x, y, radius * 0.5, time, 1.0)
             end
         end
-    end
-
-    function ui.drawFireOnEntity(x, y, radius, time)
-        fire_shader.drawFireOnEntity(x, y, radius, time)
-    end
-
-    function ui.drawAcidOnEntity(x, y, radius, time)
-        initShaders()
-        status_shaders.drawAcid(x, y, radius * 0.6, time, 0.8)
-    end
-
-    function ui.drawDecayOnEntity(x, y, radius, time)
-        initShaders()
-        status_shaders.drawDecay(x, y, radius * 0.7, time, 0.9)
-    end
-
-    function ui.drawEmpoweredOnEntity(x, y, radius, time)
-        initShaders()
-        status_shaders.drawEmpowered(x, y, radius * 0.8, time, 1.0)
-    end
-
-    function ui.drawRootedOnEntity(x, y, radius, time)
-        initShaders()
-        status_shaders.drawRooted(x, y, radius * 0.8, time, 0.9)
     end
 
     function ui.drawEntityStatusEffects(x, y, entity, radius, time)
         local statuses = status.getEntityStatuses(entity)
         if #statuses == 0 then return end
         if status.hasEntityStatus(entity, "fire") then
-            ui.drawFireOnEntity(x, y, radius, time)
+            fire_shader.drawFireOnEntity(x, y, radius, time)
         end
         if status.hasEntityStatus(entity, "decay") then
-            ui.drawDecayOnEntity(x, y, radius, time)
+            initShaders()
+            status_shaders.drawDecay(x, y, radius * 0.7, time, 0.9)
         end
         if status.hasEntityStatus(entity, "acid") then
-            ui.drawAcidOnEntity(x, y, radius, time)
+            initShaders()
+            status_shaders.drawAcid(x, y, radius * 0.6, time, 0.8)
         end
         if status.hasEntityStatus(entity, "empowered") then
-            ui.drawEmpoweredOnEntity(x, y, radius, time)
+            initShaders()
+            status_shaders.drawEmpowered(x, y, radius * 0.8, time, 1.0)
         end
         if status.hasEntityStatus(entity, "rooted") then
-            ui.drawRootedOnEntity(x, y, radius, time)
+            initShaders()
+            status_shaders.drawRooted(x, y, radius * 0.8, time, 0.9)
         end
     end
 

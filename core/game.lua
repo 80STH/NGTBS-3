@@ -8,18 +8,8 @@ local trains = require("system.trains")
 local Entity = require("entity.entity")
 local log = require("util.log")
 
-function endTurn()
-    turnManager.endPlayerTurn()
-end
-
-function restartGame(mapPath)
-    mapPath = mapPath or selectedMapPath or 'maps/map1.lua'
-    selectedMapPath = mapPath
-    log.infof("game", "=== RESTARTING GAME: %s ===", mapPath)
-
-    -- Guarantee a clean turnState on every restart (previously for deploy maps
-    -- it was not re-initialized, which could carry state from the previous game).
-    turnState = {
+local function newTurnState()
+    return {
         phase = "enemy_prepare",
         enemyPrepareQueue = {},
         currentPreparingEnemy = nil,
@@ -29,6 +19,44 @@ function restartGame(mapPath)
         pendingDigProcessing = false,
         caravansMoving = false,
     }
+end
+
+local function resetEnemyPrepareFlags()
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable then
+            e.hasPreparedAttack = false
+            e.preparePos = nil
+            e.preparedTarget = nil
+            e.movementFinished = false
+            e.isMoving = false
+            e.path = {}
+            e.currentPathIndex = 0
+        end
+        if e.rootedTarget then
+            status.removeFromEntity(e.rootedTarget, "rooted")
+            e.rootedTarget = nil
+        end
+    end
+end
+
+local function placeRubble(e)
+    if e:isObstacle() and not e.indestructible then
+        if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
+        upperTerrainMap[e.q][e.r] = "mountain_rubble"
+    elseif e:isBuilding() and not e.isTrainCar
+        and e.name ~= "TunnelEntrance" and e.name ~= "TunnelExit" and e.name ~= "OccupiedTunnel" then
+        if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
+        upperTerrainMap[e.q][e.r] = "building_rubble"
+    end
+end
+
+function restartGame(mapPath)
+    mapPath = mapPath or selectedMapPath or 'maps/map1.lua'
+    selectedMapPath = mapPath
+    log.infof("game", "=== RESTARTING GAME: %s ===", mapPath)
+
+    -- Guarantee a clean turnState on every restart.
+    turnState = newTurnState()
 
     local hexStatuses
     local deployableAllies
@@ -57,46 +85,15 @@ function restartGame(mapPath)
 
 
 
-    for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable then
-            e.hasPreparedAttack = false
-            e.preparePos = nil
-            e.preparedTarget = nil
-            e.movementFinished = false
-            e.isMoving = false
-            e.path = {}
-            e.currentPathIndex = 0
-        end
-        if e.rootedTarget then
-            status.removeFromEntity(e.rootedTarget, "rooted")
-            e.rootedTarget = nil
-        end
-    end
+    resetEnemyPrepareFlags()
 
     -- Map4: Power Lich boss
     if mapPath:match("map4") then
-        local occupiedSet = {}
-        for _, e in ipairs(entities) do
-            local k = e.q .. "," .. e.r
-            occupiedSet[k] = true
-        end
-        local candidates = {}
-        for q = 0, width - 1 do
-            for r = 0, height - 1 do
-                if hex:isActiveHex(q, r) then
-                    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain ~= "water" and not occupiedSet[q .. "," .. r] and not status.hasNegativeHexStatus(q, r) then
-                        table.insert(candidates, {q = q, r = r})
-                    end
-                end
-            end
-        end
-        for i = #candidates, 2, -1 do
-            local j = love.math.random(i)
-            candidates[i], candidates[j] = candidates[j], candidates[i]
-        end
-        if #candidates >= 1 then
-            local cell = candidates[1]
+        local spots = findRandomEmptyCells(1, function(q, r)
+            return status.hasNegativeHexStatus(q, r)
+        end)
+        if #spots >= 1 then
+            local cell = spots[1]
             local lich = environment.createEnemyByType("PowerLich", cell.q, cell.r)
             lich.isLeader = true
             table.insert(entities, lich)
@@ -105,11 +102,6 @@ function restartGame(mapPath)
     end
 
     -- Spawn 5 random enemies at game start
-    local occupiedSet = {}
-    for _, e in ipairs(entities) do
-        local k = e.q .. "," .. e.r
-        occupiedSet[k] = true
-    end
     local initialAlive = 0
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.health > 0 and not e.isSummoningRod then
@@ -117,31 +109,16 @@ function restartGame(mapPath)
         end
     end
     if initialAlive < 5 then
-        local candidates = {}
-        for q = 0, width - 1 do
-            for r = 0, height - 1 do
-                if hex:isActiveHex(q, r) then
-                    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain ~= "water" and not occupiedSet[q .. "," .. r] and not status.hasNegativeHexStatus(q, r) then
-                        table.insert(candidates, {q = q, r = r})
-                    end
-                end
-            end
-        end
-        for i = #candidates, 2, -1 do
-            local j = love.math.random(i)
-            candidates[i], candidates[j] = candidates[j], candidates[i]
-        end
         local needed = 5 - initialAlive
-        local spawned = 0
-        for _, cell in ipairs(candidates) do
-            if spawned >= needed then break end
+        local spots = findRandomEmptyCells(needed, function(q, r)
+            return status.hasNegativeHexStatus(q, r)
+        end)
+        for _, cell in ipairs(spots) do
             local enemy = environment.createRandomEnemy(cell.q, cell.r)
             table.insert(entities, enemy)
-            spawned = spawned + 1
             log.debugf("game", "Initial spawn: %s at (%d,%d)", enemy.name, cell.q, cell.r)
         end
-        log.infof("game", "Initial spawn complete: %d enemies added (total %d)", spawned, initialAlive + spawned)
+        log.infof("game", "Initial spawn complete: %d enemies added (total %d)", #spots, initialAlive + #spots)
     end
 
     -- Setup deploy phase
@@ -291,43 +268,17 @@ function restartGame(mapPath)
                 a.hasMovedThisTurn = false
             end
         end
-        turnState = {
-            phase = "enemy_prepare",
-            enemyPrepareQueue = {},
-            currentPreparingEnemy = nil,
-            enemyAttackQueue = {},
-            enemyAttackTimer = 0,
-            delayBetweenAttacks = 0.4,
-            pendingDigProcessing = false,
-            caravansMoving = false,
-        }
-    for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable then
-            e.hasPreparedAttack = false
-            e.preparePos = nil
-            e.preparedTarget = nil
-            e.movementFinished = false
-            e.isMoving = false
-            e.path = {}
-            e.currentPathIndex = 0
-        end
-        if e.rootedTarget then
-            status.removeFromEntity(e.rootedTarget, "rooted")
-            e.rootedTarget = nil
-        end
-    end
-    updateAttackButtons(selectedActor)
-    maxUndoCount = countPlayableActors()
-    updateAttackButtons(selectedActor)
-    maxUndoCount = countPlayableActors()
-    turnManager.startGame()
+        turnState = newTurnState()
+        resetEnemyPrepareFlags()
+        updateAttackButtons(selectedActor)
+        maxUndoCount = countPlayableActors()
+        turnManager.startGame()
         gamePhase = "playing"
     else
         gamePhase = "deploy"
     end
     clearCellDuplicateWarnings()
     rebuildEntityIndex()
-    syncState()
     log.infof("game", "=== MAP LOADED — %s ===", (skipDeploy and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
 end
 
@@ -352,37 +303,13 @@ function confirmDeploy()
         end
     end
 
-    turnState = {
-        phase = "enemy_prepare",
-        enemyPrepareQueue = {},
-        currentPreparingEnemy = nil,
-        enemyAttackQueue = {},
-        enemyAttackTimer = 0,
-        delayBetweenAttacks = 0.4,
-        pendingDigProcessing = false,
-        caravansMoving = false,
-    }
-
-    for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable then
-            e.hasPreparedAttack = false
-            e.preparePos = nil
-            e.preparedTarget = nil
-            e.movementFinished = false
-            e.isMoving = false
-            e.path = {}
-            e.currentPathIndex = 0
-        end
-        if e.rootedTarget then
-            status.removeFromEntity(e.rootedTarget, "rooted")
-            e.rootedTarget = nil
-        end
-    end
+    turnState = newTurnState()
+    resetEnemyPrepareFlags()
 
     updateAttackButtons(selectedActor)
     maxUndoCount = countPlayableActors()
     gameActive = true
-    if rebuildEntityIndex then rebuildEntityIndex() end
+    rebuildEntityIndex()
 
     turnManager.startGame()
     gamePhase = "playing"
@@ -391,7 +318,6 @@ function confirmDeploy()
     placedAllies = {}
     deploySelectedIdx = nil
 
-    syncState()
     log.info("game", "=== DEPLOY CONFIRMED — GAME STARTED ===")
 end
 
@@ -402,7 +328,6 @@ function checkGameEnd()
         loss = true
         gameActive = false
         log.warn("game", "DEFEAT: Chaos has consumed the realm!")
-        syncState()
         return
     end
 
@@ -418,7 +343,6 @@ function checkGameEnd()
         gameActive = false
         objectives.checkOnVictory(entities)
         log.info("game", "VICTORY: All enemies defeated after turn limit!")
-        syncState()
         return
     end
 
@@ -427,7 +351,6 @@ function checkGameEnd()
         gameActive = false
         objectives.checkOnVictory(entities)
         log.info("game", "VICTORY: Turn limit reached and all enemies defeated!")
-        syncState()
     end
 end
 
@@ -478,14 +401,7 @@ function updateDeathAnimations(dt)
                 end
 
                 -- Place upper_terrain rubble for destroyed buildings/obstacles
-                if e:isObstacle() and not e.indestructible then
-                    if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
-                    upperTerrainMap[e.q][e.r] = "mountain_rubble"
-                elseif e:isBuilding() and not e.isTrainCar
-                    and e.name ~= "TunnelEntrance" and e.name ~= "TunnelExit" and e.name ~= "OccupiedTunnel" then
-                    if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
-                    upperTerrainMap[e.q][e.r] = "building_rubble"
-                end
+                placeRubble(e)
 
                 table.remove(entities, i)
             end
@@ -565,14 +481,7 @@ function processDigSites()
     for i = #entities, 1, -1 do
         if entities[i].health <= 0 and not status.hasEntityStatus(entities[i], "stasis") then
             local e = entities[i]
-            if e:isObstacle() and not e.indestructible then
-                if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
-                upperTerrainMap[e.q][e.r] = "mountain_rubble"
-            elseif e:isBuilding() and not e.isTrainCar
-                and e.name ~= "TunnelEntrance" and e.name ~= "TunnelExit" and e.name ~= "OccupiedTunnel" then
-                if not upperTerrainMap[e.q] then upperTerrainMap[e.q] = {} end
-                upperTerrainMap[e.q][e.r] = "building_rubble"
-            end
+            placeRubble(e)
             table.remove(entities, i)
         end
     end

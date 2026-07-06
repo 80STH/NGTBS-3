@@ -124,32 +124,6 @@ local function hasTrainCars(entities)
     return false
 end
 
-local function findEmptyCells(entities, hex, qMin)
-    qMin = qMin or 0
-    local candidates = {}
-    local candidatesBias = {}
-    for _, ac in ipairs(hex._activeCells) do
-        local q, r = ac.q, ac.r
-        local occupied = false
-        for _, e in ipairs(entities) do
-            if e.q == q and e.r == r then occupied = true; break end
-        end
-        if not occupied then
-            local terrain = _G.terrainMap and _G.terrainMap[q] and _G.terrainMap[q][r] or "grass"
-            if terrain ~= "water" then
-                if not status.hasNegativeHexStatus(q, r) then
-                    if q >= qMin then
-                        table.insert(candidatesBias, {q = q, r = r})
-                    else
-                        table.insert(candidates, {q = q, r = r})
-                    end
-                end
-            end
-        end
-    end
-    for _, c in ipairs(candidates) do table.insert(candidatesBias, c) end
-    return candidatesBias
-end
 
 local function findBuildingToReplace(entities)
     local candidates = {}
@@ -261,9 +235,9 @@ local function definePool()
                         local old = entities[idx]
                         entities[idx] = createTowerAt(old.q, old.r)
                     else
-                        local cells = findEmptyCells(entities, hex, 4)
+                        local cells = findRandomEmptyCells(1, function(q, r) return status.hasNegativeHexStatus(q, r) end, 4)
                         if #cells > 0 then
-                            local cell = cells[love.math.random(1, #cells)]
+                            local cell = cells[1]
                             table.insert(entities, createTowerAt(cell.q, cell.r))
                         end
                     end
@@ -294,9 +268,9 @@ local function definePool()
                     end
                 end
                 if not hasZombie then
-                    local cells = findEmptyCells(entities, hex)
+                    local cells = findRandomEmptyCells(1, function(q, r) return status.hasNegativeHexStatus(q, r) end)
                     if #cells > 0 then
-                        local cell = cells[love.math.random(1, #cells)]
+                        local cell = cells[1]
                         local zombie = env.createEnemyByType("PoisonousZombie", cell.q, cell.r)
                         table.insert(entities, zombie)
                     end
@@ -406,9 +380,9 @@ local function definePool()
                     leader = candidates[love.math.random(1, #candidates)]
                 else
                     leader = env.createRandomEnemy(-1, -1)
-                    local cells = findEmptyCells(entities, hex)
+                    local cells = findRandomEmptyCells(1, function(q, r) return status.hasNegativeHexStatus(q, r) end)
                     if #cells > 0 then
-                        local cell = cells[love.math.random(1, #cells)]
+                        local cell = cells[1]
                         leader.q = cell.q
                         leader.r = cell.r
                         table.insert(entities, leader)
