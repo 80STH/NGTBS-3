@@ -1,28 +1,60 @@
-﻿-- main.lua
--- Точка входа. Инициализация, обновление, диспетчеризация ввода.
--- Состояние игры хранится в `state` (gamestate).
--- Отрисовка делегирована renderer-у.
+-- main.lua
+-- Entry point. Initialization, update, input dispatching.
+-- Game state is stored in state (gamestate).
+-- Rendering is delegated to the renderer.
+state = require("core.gamestate").new()
 
-state = require("gamestate").new()
+-- Устанавливаем linear-фильтрацию по умолчанию для всех текстур
+love.graphics.setDefaultFilter("linear", "linear")
 
-combat = require("combat")
-ai = require("ai")
-require("hexgrid")
-environment = require("environment")
-status = require("status")
-ui = require("ui")
-pathfinding = require("pathfinding")
-effects = require("effects")
-visual = require("visual_effects")
-config = require("config")
-local hex_utils = require("hex_utils")
-local renderer = require("renderer")
-local input = require("input")
-local turnManager = require("turn_manager")
-menu = require("menu")
-local objectives = require("objectives")
-global_abilities = require("global_abilities")
-require("game")
+undo = require("system.undo")
+combat = require("combat.combat")
+ai = require("combat.ai")
+require("grid.hexgrid")
+environment = require("entity.environment")
+status = require("system.status")
+ui = require("ui.ui")
+pathfinding = require("grid.pathfinding")
+effects = require("system.effects")
+visual = require("system.visual_effects")
+config = require("core.config")
+local hex_utils = require("grid.hex_utils")
+local renderer = require("ui.renderer")
+local input = require("ui.input")
+local turnManager = require("core.turn_manager")
+local cell_rules = require("grid.cell_rules")
+menu = require("ui.menu")
+local objectives = require("system.objectives")
+global_abilities = require("system.global_abilities")
+shop = require("ui.shop")
+map_editor = require("editor.map_editor")
+shader_demo = require("ui.shader_demo")
+hex_demo = require("ui.hex_demo")
+pause_menu = require("ui.pause_menu")
+require("core.game")
+local commanders = require("system.commanders")
+local trains_mod = require("system.trains")
+
+-- Logging: enable here (or via _G.LOG_ENABLED).
+-- Categories: ai, combat, effects, entity, env, game, input, objectives,
+--            status, trains, turn, ui, main, map.
+_G.log = require("util.log")
+log.enabled = true
+log.level = "debug"
+
+-- Enable file logging via the NGTBS_LOG_FILE environment variable.
+-- This allows checking game loading without a window: set the path, run
+-- love, read the file. Does not affect normal launch.
+do
+    local logFile = os.getenv("NGTBS_LOG_FILE")
+    if logFile and logFile ~= "" then
+        log.enabled = true
+        log.file = logFile
+        -- clear file on start
+        local f = io.open(logFile, "w")
+        if f then f:close() end
+    end
+end
 
 pushAnimations = state.pushAnimations
 dpiScale = 1
@@ -35,85 +67,112 @@ testViewOffsetY = 0
 gamePhase = "menu"
 selectedMapPath = nil
 selectedSquad = nil
+selectedCommander = nil
 difficultyModifier = 1
+squadHpBonus = 0
+squadMoveBonus = 0
+squadArmorBonus = 0
 disableEnemySpawn = false
+unlimitedAbilities = false
 chaos = 0
 chaosMax = 5
+entityAt = {}
 unplacedAllies = {}
+isProgressionRun = false
+currentMapIndex = 1
+progressionShopOpened = false
+progressionOverlay = nil
+mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua", "maps/map4.lua"}
+unitUpgrades = {}  -- "Warrior" > { choices = {"dashToFlipChain"} }
+artifacts = {}  -- list of unlocked artifact IDs
+commanderArtifacts = {}  -- commander-specific artifact IDs
 placedAllies = {}
 deploySelectedIdx = nil
 allyPanelButtons = {}
 
+UPGRADE_CHOICES = {
+    Warrior = {
+        { id = "dashToFlipChain", name = "Dash>Flip", desc = "After Dash, can Flip the same target" },
+        { id = "flipToDashChain", name = "Flip>Dash", desc = "After Flip, can Dash the same target" },
+    },
+    Puncher = {
+        { id = "empowerAtStart", name = "Empowered Start", desc = "Start each map empowered" },
+        { id = "choosePushDir", name = "Windup", desc = "Choose push direction" },
+    },
+    Rogue = {
+        { id = "redirectShot", name = "Ricochet", desc = "Redirect shot to second target" },
+        { id = "pointBlankLethal", name = "Close Quarters", desc = "Point-blank shot is lethal" },
+    },
+}
+
+ARTIFACT_CHOICES = {
+    { id = "rootImmune", name = "Iron Will", desc = "All units immune to roots/slowing auras" },
+    { id = "deployAnywhere", name = "Scout", desc = "All units deploy on any terrain" },
+    { id = "armor", name = "Fortress", desc = "All units take -1 damage" },
+    { id = "moveSpeed", name = "Swift Boots", desc = "All units gain +1 move range" },
+    { id = "canMoveAfterAttack", name = "Hit & Run", desc = "All units move after attacking" },
+    { id = "phaseThroughEnemies", name = "Ghost Cloak", desc = "All units phase through enemies" },
+}
+
+-- Synchronization of globals -> state (renderer and gamestate methods read from state).
+-- Implementation is in gamestate.lua:GameState:syncFromGlobals().
+-- The goal of future migration: remove this function, accessing state.* directly.
 function syncState()
-    state.entities = entities
-    state.hex = hex
-    state.terrainMap = terrainMap
-    state.turnState = turnState
-    state.turnCount = turnCount
-    state.maxTurns = maxTurns
-    state.gameActive = gameActive
-    state.win = win
-    state.loss = loss
-    state.selectedActor = selectedActor
-    state.selectedAttack = selectedAttack
-    state.attackMode = attackMode
-    state.flipTargetActor = flipTargetActor
-    state.vortexTargetCell = vortexTargetCell
-    state.pullHookTargetCell = pullHookTargetCell
-    state.attackButtons = attackButtons
-    state.sounds = sounds
-    state.actionHistory = actionHistory
-    state.maxUndoCount = maxUndoCount
-    state.restartButton = restartButton
-    state.endTurnButton = endTurnButton
-    state.undoButton = undoButton
-    state.decayAppliedForTurnLimit = decayAppliedForTurnLimit
-    state.decayMessageTimer = decayMessageTimer
-    state.fireAppliedForTurnLimit = fireAppliedForTurnLimit
-    state.pushAnimations = pushAnimations
-    state.dpiScale = dpiScale
-    state.difficultyModifier = difficultyModifier
-    state.disableEnemySpawn = disableEnemySpawn
-    state.showEnemyOrder = showEnemyOrder
-    state.chaos = chaos
-    state.chaosMax = chaosMax
+    state:syncFromGlobals()
+end
+
+function handleProgressionOverlayClick(x, y)
+    local w = logicalW
+    local btnW, btnH = 240, 50
+    local btnX = w/2 - btnW/2
+    local btnY = logicalH/2 + 60
+
+    if progressionOverlay == "complete" then
+        if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
+            progressionOverlay = nil
+            isProgressionRun = false
+            currentMapIndex = 1
+            gamePhase = "menu"
+        end
+    end
 end
 
 function love.load()
     dpiScale = love.window.getDPIScale()
-    sti = require 'libraries/sti'
+    logicalW = love.graphics.getWidth() / dpiScale
+    logicalH = love.graphics.getHeight() / dpiScale
     maxTurns = 5
     environment.loadUnitSprites()
+    local icon_cache = require("ui.icon_cache")
+    icon_cache.loadAll()
 
-    restartButton = {
-        x = 270, y = 0, width = 110, height = 30,
-        text = "Restart Game", isHovered = false
-    }
     endTurnButton = {
-        x = 140, y = 0, width = 110, height = 30,
-        text = "End Turn", isHovered = false,
+        isHovered = false,
         holdTimer = 0, isHeld = false,
     }
+    undoButton = {
+        x = 10, y = 0, width = 120, height = 30,
+        isHeld = false, holdTimer = 0,
+    }
 
-    sounds = {}
-    sounds.undo = love.audio.newSource("sounds/hover.wav", "static")
-    sounds.undo:setVolume(0.4)
-    sounds.turn = love.audio.newSource("sounds/hover.wav", "static")
-    sounds.turn:setVolume(0.3)
-    sounds.attack = love.audio.newSource("sounds/blip.wav", "static")
-    sounds.attack:setVolume(0.5)
-    sounds.collision = love.audio.newSource("sounds/blip.wav", "static")
-    sounds.collision:setVolume(0.6)
+    sounds = require("system.sounds")
+    sounds.init()
 
     showEnemyOrder = false
     gamePhase = "menu"
+
+    -- Initialize global turnState (previously relied on confirmDeploy/
+    -- skipDeploy block in restartGame, which caused crashes on autostart).
 end
 
 function getDrawCoords(q, r)
     local x, y = hex:hexToPixel(q, r)
     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r]
-    if terrain == "water" or terrain == "underwater_mines" then
+    if terrain == "water" then
         y = y + config.WATER_Y_OFFSET
+    end
+    if testViewActive and q == hex.centerQ and r == hex.centerR then
+        y = y + testViewOffsetY
     end
     return x, y
 end
@@ -123,48 +182,99 @@ end
 function love.mousepressed(x, y, button)
     if button ~= 1 then return end
     local lx, ly = x / dpiScale, y / dpiScale
+    if pause_menu.isOpen then
+        pause_menu.mousepressed(lx, ly)
+        return
+    end
+    if shop.isOpen then
+        shop.mousepressed(lx, ly)
+        return
+    end
+    if progressionOverlay then
+        handleProgressionOverlayClick(lx, ly)
+        return
+    end
     if gamePhase == "menu" then
         menu.mousepressed(lx, ly)
+    elseif gamePhase == "editor" then
+        map_editor.mousepressed(lx, ly, button)
+    elseif gamePhase == "shaderDemo" then
+        shader_demo.mousepressed(lx, ly)
+    elseif gamePhase == "hexDemo" then
+        hex_demo.mousepressed(lx, ly)
     else
         input.mousepressed(lx, ly, button)
     end
 end
 
 function love.mousereleased(x, y, button)
-    input.mousereleased(x / dpiScale, y / dpiScale, button)
+    if gamePhase == "hexDemo" then
+        hex_demo.mousereleased(x / dpiScale, y / dpiScale)
+    elseif gamePhase == "editor" then
+        map_editor.mousereleased(x / dpiScale, y / dpiScale, button)
+    else
+        input.mousereleased(x / dpiScale, y / dpiScale, button)
+    end
+end
+
+function love.mousemoved(x, y)
+    if gamePhase == "editor" then
+        map_editor.mousemoved(x / dpiScale, y / dpiScale)
+    end
 end
 
 function isPositionOccupied(q, r, movingEntity)
-    if not hex:isActiveHex(q, r) then
-        return true
-    end
-    if terrainMap and terrainMap[q] and terrainMap[q][r] == "water" then
-        if movingEntity and (movingEntity.waterWalker or movingEntity.flying) then
-            -- ok
-        else
-            return true
-        end
-    end
+    -- Delegates to cell_rules.isOccupied (with water and phaseThroughEnemies).
+    return cell_rules.isOccupied(q, r, movingEntity)
+end
+
+-- Returns 3 push direction choices for choosePushDir (Puncher lvl3)
+-- Uses cube coordinate rotation (+-60)
+function getPushDirChoices(stepX, stepY, stepZ)
+    -- Rotate +60 clockwise: (x,y,z) -> (-z, -x, -y)
+    local cw = {x = -stepZ, y = -stepX, z = -stepY}
+    -- Rotate -60 counter-clockwise: (x,y,z) -> (-y, -z, -x)
+    local ccw = {x = -stepY, y = -stepZ, z = -stepX}
+    return {ccw, {x = stepX, y = stepY, z = stepZ}, cw}
+end
+
+local cellDuplicateWarnings = {}
+
+function clearCellDuplicateWarnings()
+    cellDuplicateWarnings = {}
+end
+
+function rebuildEntityIndex()
+    entityAt = {}
     for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
-            if not (e:isCharacter() and e.isPlayable == movingEntity.isPlayable) then
-                return true
+        if e.q and e.r then
+            local key = e.q .. "," .. e.r
+            local existing = entityAt[key]
+            if existing then
+                local warnKey = key .. "|" .. tostring(existing.name or existing) .. "|" .. tostring(e.name or e)
+                if not cellDuplicateWarnings[warnKey] then
+                    cellDuplicateWarnings[warnKey] = true
+                    log.errorf("debug", "CELL DUPLICATE: %s and %s both at (%d,%d)!", tostring(existing.name or existing), tostring(e.name or e), e.q, e.r)
+                end
             end
+            entityAt[key] = e
         end
     end
-    return false
+    if ui then ui._moveRangeCacheKey = nil end
 end
 
 function getEntityAtHex(q, r)
-    for _, e in ipairs(entities) do
-        if e.q == q and e.r == r then
-            return e
-        end
-    end
-    return nil
+    return entityAt[q .. "," .. r]
 end
 
 function love.update(dt)
+    if pause_menu.isOpen then return end
+    shop.update(dt)
+    if gamePhase == "editor" then
+        map_editor.dpiScale = dpiScale
+        map_editor.update(dt)
+        return
+    end
     if gamePhase == "deploy" then
         local mx, my = love.mouse.getPosition()
         mx = mx / dpiScale
@@ -191,21 +301,27 @@ function love.update(dt)
     end
 
     combat.updatePushAnimations(dt, hex)
+    rebuildEntityIndex()
     if decayMessageTimer > 0 then
         decayMessageTimer = decayMessageTimer - dt
     end
 
-    if endTurnButton.isHeld then
-        endTurnButton.holdTimer = endTurnButton.holdTimer + dt
-        if endTurnButton.holdTimer >= 0.7 then
-            endTurnButton.isHeld = false
-            endTurnButton.holdTimer = 0
-            endTurn()
+    -- Hold-to-confirm for buttons (common logic)
+    local function updateHoldButton(btn, onTrigger)
+        if btn.isHeld then
+            btn.holdTimer = (btn.holdTimer or 0) + dt
+            if btn.holdTimer >= config.HOLD_TIME then
+                btn.isHeld = false
+                btn.holdTimer = 0
+                onTrigger()
+            end
         end
     end
+    updateHoldButton(endTurnButton, endTurn)
+    updateHoldButton(undoButton, function() end)
 
     if testViewActive then
-        testViewOffsetY = math.sin(love.timer.getTime() * 1.5) * 60
+        testViewOffsetY = (1 - math.abs((love.timer.getTime() * 3) % 2 - 1)) * 30
     end
 
     if screenShake.timer > 0 then
@@ -214,6 +330,11 @@ function love.update(dt)
 
     turnManager.update(dt)
     objectives.update(entities)
+
+    if isProgressionRun and win and gameActive == false and not shop.isOpen and not progressionOverlay and not progressionShopOpened then
+        progressionShopOpened = true
+        shop.openForProgression()
+    end
 
     local mx, my = love.mouse.getPosition()
     mx = mx / dpiScale
@@ -226,17 +347,30 @@ function love.update(dt)
     end
 
     undoButton = undoButton or {}
-    local bottomY = logicalH - 65
-    undoButton.isHovered = (mx >= 10 and mx <= 120 and my >= bottomY and my <= bottomY + 30)
-    endTurnButton.isHovered = (mx >= endTurnButton.x and mx <= endTurnButton.x + endTurnButton.width and
-                               my >= endTurnButton.y and my <= endTurnButton.y + endTurnButton.height)
+    local btnH = 50
+    local margin = 10
+    local gap = 10
+    local thirdW = math.floor((logicalW - margin * 2 - gap * 2) / 3)
+    local btnY = logicalH - btnH - 10
+
+    local undoX = margin + thirdW + gap
+    undoButton.isHovered = (mx >= undoX and mx <= undoX + thirdW and my >= btnY and my <= btnY + btnH)
+
+    local endX = margin + (thirdW + gap) * 2
+    endTurnButton.isHovered = (mx >= endX and mx <= endX + thirdW and my >= btnY and my <= btnY + btnH)
+    if undoButton.isHovered or endTurnButton.isHovered then
+        sounds.hover(dt)
+    end
 end
 
 function love.resize(w, h)
     dpiScale = love.window.getDPIScale()
     logicalW = w / dpiScale
     logicalH = h / dpiScale
-    if hex then
+    if gamePhase == "editor" and map_editor.hex then
+        map_editor.hex:centerOnScreen(logicalW, logicalH)
+        map_editor.hex.offsetX = map_editor.hex.offsetX - 200
+    elseif hex then
         hex:centerOnScreen(logicalW, logicalH)
     end
 end
@@ -246,12 +380,15 @@ function love.draw()
     love.graphics.scale(dpiScale)
     logicalW = love.graphics.getWidth() / dpiScale
     logicalH = love.graphics.getHeight() / dpiScale
-    local bottomY = logicalH - 65
-    restartButton.y = bottomY
-    endTurnButton.y = bottomY
 
     if gamePhase == "menu" then
         menu.draw()
+    elseif gamePhase == "editor" then
+        map_editor.draw()
+    elseif gamePhase == "shaderDemo" then
+        shader_demo.draw()
+    elseif gamePhase == "hexDemo" then
+        hex_demo.draw()
     elseif gamePhase == "deploy" then
         syncState()
         renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
@@ -266,6 +403,9 @@ function love.draw()
         renderer.draw(state)
     end
 
+    shop.draw()
+    pause_menu.draw()
+
     love.graphics.pop()
 end
 
@@ -276,12 +416,19 @@ function getEnemyAttackOrder(entities, turnState)
     if turnState.phase == "enemy_attack" then
         queue = turnState.enemyAttackQueue or {}
     else
+        local priority = {}
+        local waterWalkers = {}
+        local normal = {}
         for _, e in ipairs(entities) do
             if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 then
-                table.insert(queue, e)
+                local tbl = e.attacksFirst and priority or (e.waterWalker and waterWalkers or normal)
+                table.insert(tbl, e)
             end
         end
-        local trains_mod = require("trains")
+        for _, e in ipairs(priority) do table.insert(queue, e) end
+        for _, e in ipairs(waterWalkers) do table.insert(queue, e) end
+        for _, e in ipairs(normal) do table.insert(queue, e) end
+
         local trainGroups = trains_mod.getTrainGroups()
         for _, group in pairs(trainGroups) do
             if group.active and group.cars and #group.cars > 0 then
@@ -300,45 +447,46 @@ function getEnemyAttackOrder(entities, turnState)
 end
 
 function isCellPassable(q, r, movingEntity)
-    if not hex:isActiveHex(q, r) then return false end
-    local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-    if terrain == "water" then
-        if movingEntity and (movingEntity.waterWalker or movingEntity.flying) then
-            -- ok
-        else
-            return false
-        end
-    end
-    if terrain == "underwater_mines" then
-        return false
-    end
-    if movingEntity and movingEntity.flying then
-        return true
-    end
-    for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
-            if not (e:isCharacter() and e.isPlayable == movingEntity.isPlayable) then
-                return false
-            end
-        end
-    end
-    return true
+    return cell_rules.isPassable(q, r, movingEntity)
 end
 
 function isCellOccupiedForStop(q, r, movingEntity)
-    if not hex:isActiveHex(q, r) then return true end
-    for _, e in ipairs(entities) do
-        if e ~= movingEntity and e.q == q and e.r == r and not e.isHazard then
-            return true
-        end
-    end
-    return false
+    return cell_rules.isOccupiedForStop(q, r, movingEntity)
 end
 
 function love.keypressed(key)
+    if pause_menu.isOpen then
+        pause_menu.keypressed(key)
+        return
+    end
+    if key == "f5" and gameActive then
+        win = true
+        gameActive = false
+        log.warn("main", "AUTO WIN (debug)")
+        syncState()
+        return
+    end
     if gamePhase == "menu" then
         menu.keypressed(key)
+    elseif gamePhase == "editor" then
+        map_editor.keypressed(key)
+    elseif gamePhase == "shaderDemo" then
+        shader_demo.keypressed(key)
+    elseif gamePhase == "hexDemo" then
+        hex_demo.keypressed(key)
     else
         input.keypressed(key)
     end
+end
+
+function love.keyreleased(key)
+    input.keyreleased(key)
+end
+
+function love.wheelmoved(dx, dy)
+    if gamePhase ~= "playing" then return end
+    local mx, my = love.mouse.getPosition()
+    mx = mx / dpiScale
+    my = my / dpiScale
+    input.wheelmoved(mx, my, dy, state)
 end
