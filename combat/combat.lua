@@ -1950,13 +1950,19 @@ function combat.flushPushAnimations()
                 table.insert(callbacks, { fn = anim.onComplete, obj = anim.obj })
             end
         end
+        local globalCb = pushAnimations.globalCallback
         pushAnimations.queue = {}
         pushAnimations.active = false
         pushAnimations.globalCallback = nil
         for _, cb in ipairs(callbacks) do
             cb.fn(cb.obj)
         end
-        if #pushAnimations.queue == 0 then break end
+        -- onComplete callbacks may have queued follow-up animations (e.g. Pull Hook).
+        -- If nothing new was queued, fire the global callback; otherwise flush the new animations too.
+        if #pushAnimations.queue == 0 then
+            if globalCb then globalCb() end
+            break
+        end
     end
     pushAnimations.queue = {}
     pushAnimations.active = false

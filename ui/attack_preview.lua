@@ -589,7 +589,13 @@ handlers["Vortex Strike"] = function(p, attacker, attack, hoverQ, hoverR, hex, e
         local chosen = _G.vortexTargetCell
         for _, dc in ipairs(dests) do
             if not chosen or (dc.q == chosen.q and dc.r == chosen.r) then
-                preview.applyPush(p, target, hoverQ, hoverR, dc.q, dc.r, hex, entities)
+                -- Remove the target from the collision-test list: it leaves its source cell,
+                -- so it should not block other pushes (none here, but consistent with Wide Vortex).
+                local collisionEntities = {}
+                for _, e in ipairs(entities) do
+                    if e ~= target then table.insert(collisionEntities, e) end
+                end
+                preview.applyPush(p, target, hoverQ, hoverR, dc.q, dc.r, hex, collisionEntities)
                 preview.addOverlay(p, dc.q, dc.r, "push_dest")
             end
         end
@@ -614,7 +620,6 @@ handlers["Wide Vortex"] = function(p, attacker, attack, hoverQ, hoverR, hex, ent
 
     for _, dc in ipairs(dests) do
         if not chosen or (dc.q == chosen.q and dc.r == chosen.r) then
-            preview.applyPush(p, target, hoverQ, hoverR, dc.q, dc.r, hex, entities)
             preview.addOverlay(p, dc.q, dc.r, "push_dest")
 
             -- Secondary target B pushed one step further around attacker.
@@ -625,8 +630,47 @@ handlers["Wide Vortex"] = function(p, attacker, attack, hoverQ, hoverR, hex, ent
                 b2q, b2r = hex_utils.cubeToAxial(ax + stepY, ay + stepZ, az + stepX)
             end
             local occupantB = getEntity(dc.q, dc.r, entities)
-            if occupantB and occupantB ~= target and occupantB:isCharacter() and occupantB.health > 0 then
-                preview.applyPush(p, occupantB, dc.q, dc.r, b2q, b2r, hex, entities)
+
+            -- Both target A and occupant B move simultaneously, so remove them from
+            -- the collision-test entity list. Otherwise A would see B as an obstacle.
+            local bothMove = occupantB and occupantB ~= target and occupantB:isCharacter()
+                and occupantB.health > 0 and occupantB.isPushable ~= false and not occupantB.isHazard
+            local collisionEntities = entities
+            if bothMove then
+                collisionEntities = {}
+                for _, e in ipairs(entities) do
+                    if e ~= target and e ~= occupantB then
+                        table.insert(collisionEntities, e)
+                    end
+                end
+            end
+
+            preview.markPushed(p, target, dc.q, dc.r)
+            preview.addPushArrow(p, hoverQ, hoverR, dc.q, dc.r)
+            local colA = preview.predictCollision(target, hoverQ, hoverR, dc.q, dc.r, hex, collisionEntities)
+            if colA.type then
+                preview.addCollisionHint(p, hoverQ, hoverR, dc.q, dc.r, colA.type, target, colA.occupant, colA.reason)
+            end
+            if colA.damage > 0 then
+                preview.addCollisionDamage(p, target, preview.calculateEffectiveCollisionDamage(target))
+            end
+            if colA.occupantDmg > 0 and colA.occupant then
+                preview.addCollisionDamage(p, colA.occupant, preview.calculateEffectiveCollisionDamage(colA.occupant))
+            end
+
+            if bothMove then
+                preview.markPushed(p, occupantB, b2q, b2r)
+                preview.addPushArrow(p, dc.q, dc.r, b2q, b2r)
+                local colB = preview.predictCollision(occupantB, dc.q, dc.r, b2q, b2r, hex, collisionEntities)
+                if colB.type then
+                    preview.addCollisionHint(p, dc.q, dc.r, b2q, b2r, colB.type, occupantB, colB.occupant, colB.reason)
+                end
+                if colB.damage > 0 then
+                    preview.addCollisionDamage(p, occupantB, preview.calculateEffectiveCollisionDamage(occupantB))
+                end
+                if colB.occupantDmg > 0 and colB.occupant then
+                    preview.addCollisionDamage(p, colB.occupant, preview.calculateEffectiveCollisionDamage(colB.occupant))
+                end
             end
         end
     end
@@ -708,7 +752,7 @@ handlers["Electric Hook"] = function(p, attacker, attack, hoverQ, hoverR, hex, e
     end
 end
 
--- Pull Hook: no damage, pull target one step closer.
+-- Pull Hook: no damage, attacker moves to chosen cell then pulls target one step closer.
 handlers["Pull Hook"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     local hookTarget = _G.pullHookTargetCell and getEntity(_G.pullHookTargetCell.q, _G.pullHookTargetCell.r, entities)
     if not hookTarget then return end

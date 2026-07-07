@@ -859,7 +859,7 @@ end
                 ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
             end
         else
-            -- Second click phase: show move cells and pull destination
+            -- Second click phase: show move cells for attacker and pull destination.
             local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, pullHookTargetCell.q, pullHookTargetCell.r, hex)
             if stepX then
                 local moveCells = attack:getPullHookMoveCells(attacker, stepX, stepY, stepZ, pullHookTargetCell.q, pullHookTargetCell.r, hex, entities)
@@ -875,7 +875,7 @@ end
                     love.graphics.setLineWidth(1)
                     if c.q == hoverQ and c.r == hoverR then
                         hoverIsMoveCell = true
-                        -- Show where target will be pulled
+                        -- Show where target will be pulled after attacker moves here
                         local pullQ, pullR = hex_utils.applyCubeStep(c.q, c.r, stepX, stepY, stepZ)
                         if hex:isActiveHex(pullQ, pullR) then
                             local px, py = getDrawCoords(pullQ, pullR)
@@ -887,7 +887,7 @@ end
                             ui.drawPushArrow(cx, cy, px, py, nil, nil, nil, nil, c.q, c.r, pullQ, pullR)
                         end
                     end
-                    -- Mark attacker's own cell with a special indicator
+                    -- Mark attacker's own cell with a special indicator (stay in place)
                     if c.q == attacker.q and c.r == attacker.r then
                         love.graphics.setColor(1, 1, 1, 0.5)
                         love.graphics.circle("line", cx, cy, hex.radius * 0.2)

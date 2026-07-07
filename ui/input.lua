@@ -299,17 +299,16 @@ end
                     if isValid then
                         attackMode = false
                         selectedAttack = nil
-    
                     end
                 end
-            pullHookTargetCell = nil
-                else
-                    local target = selectedAttack:getLineTarget(selectedActor, tq, tr, hex, entities)
-                    if target then
-                        pullHookTargetCell = {q = target.q, r = target.r, entity = target.entity}
-                    end
+                pullHookTargetCell = nil
+            else
+                local target = selectedAttack:getLineTarget(selectedActor, tq, tr, hex, entities)
+                if target then
+                    pullHookTargetCell = {q = target.q, r = target.r, entity = target.entity}
                 end
-                return
+            end
+            return
             elseif (selectedAttack.name == "Heavy Punch" or selectedAttack.name == "Empower Punch") and selectedActor.choosePushDir then
             if pushDirTargetCell then
                 -- Second click: choose push direction cell
