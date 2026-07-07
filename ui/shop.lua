@@ -8,6 +8,8 @@ local log = require("util.log")
 shop.isOpen = false
 shop.autoOpened = false
 shop.categories = {}
+shop.allowedCategory = nil
+shop.bothObjectivesCompleted = false
 
 local function buildUnitCategory()
     local cat = { title = "UNIT UPGRADES", slots = {}, taken = false }
@@ -34,13 +36,14 @@ local function buildUnitCategory()
     end
     local unitsSeen = {}
     local selected = {}
+    local maxSlots = shop.bothObjectivesCompleted and 5 or 4
     for _, item in ipairs(available) do
         if not unitsSeen[item.unitName] then unitsSeen[item.unitName] = 0 end
         if unitsSeen[item.unitName] < 2 then
             table.insert(selected, item)
             unitsSeen[item.unitName] = unitsSeen[item.unitName] + 1
         end
-        if #selected >= 4 then break end
+        if #selected >= maxSlots then break end
     end
     for _, item in ipairs(selected) do
         table.insert(cat.slots, {
@@ -80,7 +83,7 @@ local function buildGenericCategory()
         local j = love.math.random(1, i)
         available[i], available[j] = available[j], available[i]
     end
-    for i = 1, math.min(3, #available) do
+    for i = 1, math.min(shop.bothObjectivesCompleted and 4 or 3, #available) do
         local item = available[i]
         table.insert(cat.slots, {
             type = "generic",
@@ -107,7 +110,7 @@ local function buildSpellCategory()
         local j = love.math.random(1, i)
         available[i], available[j] = available[j], available[i]
     end
-    for i = 1, math.min(3, #available) do
+    for i = 1, math.min(shop.bothObjectivesCompleted and 4 or 3, #available) do
         local name = available[i]
         table.insert(cat.slots, {
             type = "spell",
@@ -149,31 +152,50 @@ local function buildCommanderCategory()
 end
 
 local function ensureCategories()
-    if not shop.categories.unit then
+    local key = shop.allowedCategory or "unit"
+    if not shop.categories[key] then
         shop.reroll()
     end
 end
 
 function shop.reroll()
-    shop.categories = {
-        unit = buildUnitCategory(),
-        generic = buildGenericCategory(),
-        spell = buildSpellCategory(),
-        commander = buildCommanderCategory(),
-    }
-    log.debugf("shop", "Rerolled: unit=%d generic=%d spell=%d commander=%d",
-        #shop.categories.unit.slots, #shop.categories.generic.slots,
-        #shop.categories.spell.slots, #shop.categories.commander.slots)
+    if shop.allowedCategory then
+        local builders = {
+            unit = buildUnitCategory,
+            generic = buildGenericCategory,
+            spell = buildSpellCategory,
+            commander = buildCommanderCategory,
+        }
+        local builder = builders[shop.allowedCategory]
+        shop.categories = { [shop.allowedCategory] = builder and builder() or { title = "", slots = {}, taken = false } }
+        log.debugf("shop", "Rerolled (progression %s): %d slots", shop.allowedCategory, #shop.categories[shop.allowedCategory].slots)
+    else
+        shop.categories = {
+            unit = buildUnitCategory(),
+            generic = buildGenericCategory(),
+            spell = buildSpellCategory(),
+            commander = buildCommanderCategory(),
+        }
+        log.debugf("shop", "Rerolled: unit=%d generic=%d spell=%d commander=%d",
+            #shop.categories.unit.slots, #shop.categories.generic.slots,
+            #shop.categories.spell.slots, #shop.categories.commander.slots)
+    end
 end
 
 function shop.open()
     shop.autoOpened = false
+    shop.allowedCategory = nil
+    shop.bothObjectivesCompleted = false
     shop.reroll()
     shop.isOpen = true
 end
 
-function shop.openForProgression()
+function shop.openForProgression(bothObjectivesCompleted)
     shop.autoOpened = true
+    shop.bothObjectivesCompleted = bothObjectivesCompleted or false
+    local mapIdx = _G.currentMapIndex or 1
+    local catMap = { [1] = "spell", [2] = "unit", [3] = "generic" }
+    shop.allowedCategory = catMap[mapIdx]
     shop.reroll()
     shop.isOpen = true
 end
@@ -187,19 +209,23 @@ local function applyTake(slot, catKey)
             local data = (_G.unitUpgrades or {})[unitName] or { choices = {} }
             table.insert(data.choices, choiceId)
             _G.unitUpgrades[unitName] = data
+            table.insert(_G.progressionChoices, { type = "unit", name = slot.name })
             log.infof("shop", "Upgrade applied: %s -> %s", unitName, choiceId)
         end
     elseif slot.type == "generic" then
         _G.genericUpgrades = _G.genericUpgrades or {}
         table.insert(_G.genericUpgrades, slot.id)
+        table.insert(_G.progressionChoices, { type = "generic", name = slot.name })
         log.infof("shop", "Generic upgrade applied: %s", slot.id)
     elseif slot.type == "spell" then
         if _G.global_abilities then
             _G.global_abilities.unlocked[slot.id] = true
+            table.insert(_G.progressionChoices, { type = "spell", name = slot.name })
             log.infof("shop", "Spell unlocked: %s", slot.id)
         end
     elseif slot.type == "commander" then
         table.insert(_G.commanderArtifacts, slot.id)
+        table.insert(_G.progressionChoices, { type = "commander", name = slot.name })
         if slot.apply then slot.apply() end
         log.infof("shop", "Commander upgrade applied: %s", slot.name)
     end
@@ -209,11 +235,37 @@ end
 function shop.update(dt)
 end
 
+local function getContentHeight()
+    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "unit", "generic", "spell", "commander" }
+    local h = 45
+    for _, catKey in ipairs(catOrder) do
+        local cat = shop.categories[catKey]
+        if not cat then goto continue end
+        h = h + 22
+        if #cat.slots == 0 then
+            h = h + 24
+        elseif catKey == "unit" then
+            local rows = math.ceil(#cat.slots / 2)
+            h = h + rows * 78 + 8
+        else
+            h = h + #cat.slots * 40 + 8
+        end
+        ::continue::
+    end
+    if shop.autoOpened then
+        h = h + 10
+    else
+        h = h + 5 + 36 + 15
+    end
+    return h
+end
+
 local function getLayout(w, h)
     local panelW = 560
-    local panelH = math.min(h - 60, 700)
+    local contentH = getContentHeight()
+    local panelH = contentH + 15
     local panelX = w / 2 - panelW / 2
-    local panelY = 30
+    local panelY = h / 2 - panelH / 2
     local contentX = panelX + 20
     local contentW = panelW - 40
     local y = panelY + 45
@@ -250,7 +302,7 @@ function shop.draw()
     love.graphics.setFont(fonts.get(16))
     love.graphics.printf("X", closeX, closeY + 4, 28, "center")
 
-    local catOrder = { "unit", "generic", "spell", "commander" }
+    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "unit", "generic", "spell", "commander" }
     local catColors = {
         unit = {0.8, 0.8, 0.4},
         generic = {0.5, 0.9, 0.5},
@@ -375,30 +427,32 @@ function shop.draw()
         ::continue::
     end
 
-    local btnAreaW = 280
-    local btnH = 36
-    local btnY = y + 5
-    local rW = 130
-    local rX = contentX
-    local rHover = mx >= rX and mx <= rX + rW and my >= btnY and my <= btnY + btnH
-    love.graphics.setColor(rHover and 0.3 or 0.18, rHover and 0.2 or 0.12, rHover and 0.4 or 0.25, 0.9)
-    love.graphics.rectangle("fill", rX, btnY, rW, btnH, 6)
-    love.graphics.setColor(0.6, 0.5, 0.9, rHover and 0.9 or 0.6)
-    love.graphics.rectangle("line", rX, btnY, rW, btnH, 6)
-    love.graphics.setColor(0.7, 0.6, 1.0, rHover and 1 or 0.7)
-    love.graphics.setFont(fonts.get(12))
-    love.graphics.printf("Reroll", rX, btnY + 10, rW, "center")
+    if not shop.autoOpened then
+        local btnAreaW = 280
+        local btnH = 36
+        local btnY = y + 5
+        local rW = 130
+        local rX = contentX + (btnAreaW - rW) / 2
+        local rHover = mx >= rX and mx <= rX + rW and my >= btnY and my <= btnY + btnH
+        love.graphics.setColor(rHover and 0.3 or 0.18, rHover and 0.2 or 0.12, rHover and 0.4 or 0.25, 0.9)
+        love.graphics.rectangle("fill", rX, btnY, rW, btnH, 6)
+        love.graphics.setColor(0.6, 0.5, 0.9, rHover and 0.9 or 0.6)
+        love.graphics.rectangle("line", rX, btnY, rW, btnH, 6)
+        love.graphics.setColor(0.7, 0.6, 1.0, rHover and 1 or 0.7)
+        love.graphics.setFont(fonts.get(12))
+        love.graphics.printf("Reroll", rX, btnY + 10, rW, "center")
 
-    local dW = 130
-    local dX = contentX + btnAreaW - dW
-    local dHover = mx >= dX and mx <= dX + dW and my >= btnY and my <= btnY + btnH
-    love.graphics.setColor(dHover and 0.2 or 0.12, dHover and 0.5 or 0.3, dHover and 0.25 or 0.15, 0.9)
-    love.graphics.rectangle("fill", dX, btnY, dW, btnH, 6)
-    love.graphics.setColor(0.3, 0.9, 0.4, dHover and 0.9 or 0.6)
-    love.graphics.rectangle("line", dX, btnY, dW, btnH, 6)
-    love.graphics.setColor(0.3, 0.9, 0.4, dHover and 1 or 0.7)
-    love.graphics.setFont(fonts.get(12))
-    love.graphics.printf("Done", dX, btnY + 10, dW, "center")
+        local dW = 130
+        local dX = contentX + (btnAreaW + dW) / 2
+        local dHover = mx >= dX and mx <= dX + dW and my >= btnY and my <= btnY + btnH
+        love.graphics.setColor(dHover and 0.2 or 0.12, dHover and 0.5 or 0.3, dHover and 0.25 or 0.15, 0.9)
+        love.graphics.rectangle("fill", dX, btnY, dW, btnH, 6)
+        love.graphics.setColor(0.3, 0.9, 0.4, dHover and 0.9 or 0.6)
+        love.graphics.rectangle("line", dX, btnY, dW, btnH, 6)
+        love.graphics.setColor(0.3, 0.9, 0.4, dHover and 1 or 0.7)
+        love.graphics.setFont(fonts.get(12))
+        love.graphics.printf("Done", dX, btnY + 10, dW, "center")
+    end
 end
 
 local function finishProgression()
@@ -430,7 +484,7 @@ function shop.mousepressed(x, y)
         return true
     end
 
-    local catOrder = { "unit", "generic", "spell", "commander" }
+    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "unit", "generic", "spell", "commander" }
     local y = startY
     for _, catKey in ipairs(catOrder) do
         local cat = shop.categories[catKey]
@@ -454,6 +508,11 @@ function shop.mousepressed(x, y)
                     if mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH then
                         slot.taken = true
                         applyTake(slot, catKey)
+                        if shop.autoOpened then
+                            shop.isOpen = false
+                            shop.autoOpened = false
+                            finishProgression()
+                        end
                         return true
                     end
                 end
@@ -471,6 +530,11 @@ function shop.mousepressed(x, y)
                     if mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH then
                         slot.taken = true
                         applyTake(slot, catKey)
+                        if shop.autoOpened then
+                            shop.isOpen = false
+                            shop.autoOpened = false
+                            finishProgression()
+                        end
                         return true
                     end
                 end
@@ -481,25 +545,23 @@ function shop.mousepressed(x, y)
         ::continue::
     end
 
-    local btnAreaW = 280
-    local btnH = 36
-    local btnY = y + 5
-    local rW = 130
-    local rX = contentX
-    if mx >= rX and mx <= rX + rW and my >= btnY and my <= btnY + btnH then
-        shop.reroll()
-        return true
-    end
-
-    local dW = 130
-    local dX = contentX + btnAreaW - dW
-    if mx >= dX and mx <= dX + dW and my >= btnY and my <= btnY + btnH then
-        shop.isOpen = false
-        if shop.autoOpened then
-            shop.autoOpened = false
-            finishProgression()
+    if not shop.autoOpened then
+        local btnAreaW = 280
+        local btnH = 36
+        local btnY = y + 5
+        local rW = 130
+        local rX = contentX + (btnAreaW - rW) / 2
+        if mx >= rX and mx <= rX + rW and my >= btnY and my <= btnY + btnH then
+            shop.reroll()
+            return true
         end
-        return true
+
+        local dW = 130
+        local dX = contentX + (btnAreaW + dW) / 2
+        if mx >= dX and mx <= dX + dW and my >= btnY and my <= btnY + btnH then
+            shop.isOpen = false
+            return true
+        end
     end
 
     return true

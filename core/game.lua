@@ -149,12 +149,16 @@ function restartGame(mapPath)
     hex.hoverQ = -1
     hex.hoverR = -1
 
-    global_abilities.initWithCommander(selectedCommander)
+    if not isProgressionRun then
+        global_abilities.initWithCommander(selectedCommander)
+    end
     global_abilities.reset()
     _G.squadHpBonus = 0
     _G.squadMoveBonus = 0
     _G.squadArmorBonus = 0
-    _G.genericUpgrades = {}
+    if not isProgressionRun then
+        _G.genericUpgrades = {}
+    end
     dpiScale = love.window.getDPIScale()
 
     flipTargetActor = nil

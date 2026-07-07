@@ -26,7 +26,7 @@ global_abilities.abilityUsedThisTurn = false
 global_abilities.scrollOffset = 0
 global_abilities.maxVisibleItems = 3
 
-global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability"}
+global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability", "Vortex"}
 
 global_abilities.unlocked = {}
 
@@ -95,6 +95,7 @@ function global_abilities.spendAbility(ab)
         ["Unearth"] = "unearth",
         ["Mind Control"] = "mind_control",
         ["Accelerate Decay"] = "accelerate_decay",
+        ["Vortex"] = "vortex_ability",
     }
     local soundName = abilitySounds[ab.name]
     if soundName then sounds.play(soundName) end
@@ -2249,6 +2250,278 @@ function InvulnerabilityAbility:drawButton(mx, my, state)
     })
 end
 
+-- ============================================================
+-- VORTEX helper: rotate all units around a center cell
+-- ============================================================
+local function rotateAroundCenter(centerQ, centerR, unitQ, unitR, clockwise)
+    local cx, cy, cz = hex_utils.axialToCube(centerQ, centerR)
+    local ux, uy, uz = hex_utils.axialToCube(unitQ, unitR)
+    local dx, dy, dz = ux - cx, uy - cy, uz - cz
+    local ndx, ndy, ndz = hex_utils.rotateCubeDir(dx, dy, dz, clockwise)
+    return hex_utils.cubeToAxial(cx + ndx, cy + ndy, cz + ndz)
+end
+
+local function determineRotationDirection(centerQ, centerR, clickQ, clickR)
+    local cx, cy, _ = hex_utils.axialToCube(centerQ, centerR)
+    local px, py, _ = hex_utils.axialToCube(clickQ, clickR)
+    local dx, dy = px - cx, py - cy
+    return dx > 0 or (dx == 0 and dy < 0)
+end
+
+local function getVortexMoves(centerQ, centerR, radius, clockwise, hex, entities)
+    local moving = {}
+    for _, e in ipairs(entities) do
+        if e.health > 0 and e.isPushable then
+            local dist = hex_utils.getDistance(centerQ, centerR, e.q, e.r)
+            if dist > 0 and dist <= radius then
+                local nq, nr = rotateAroundCenter(centerQ, centerR, e.q, e.r, clockwise)
+                table.insert(moving, {entity = e, fromQ = e.q, fromR = e.r, toQ = nq, toR = nr, blocked = false})
+            end
+        end
+    end
+
+    local staticSet = {}
+    for _, e in ipairs(entities) do
+        if e.health > 0 then
+            local isMoving = false
+            for _, m in ipairs(moving) do
+                if m.entity == e then isMoving = true; break end
+            end
+            if not isMoving then
+                staticSet[e.q .. "," .. e.r] = e
+            end
+        end
+    end
+
+    -- Iteratively mark moves as blocked if their destination is occupied by static entities
+    -- or by another rotating unit that cannot leave (blocked). Rotating units that can leave
+    -- do not block each other because they all move simultaneously.
+    local changed = true
+    while changed do
+        changed = false
+        for i, m in ipairs(moving) do
+            if not m.blocked then
+                local destKey = m.toQ .. "," .. m.toR
+                if not hex:isActiveHex(m.toQ, m.toR) or staticSet[destKey] then
+                    m.blocked = true
+                    changed = true
+                else
+                    for j, m2 in ipairs(moving) do
+                        if i ~= j then
+                            if m.toQ == m2.toQ and m.toR == m2.toR and m2.blocked then
+                                m.blocked = true
+                                changed = true
+                                break
+                            end
+                            if m.toQ == m2.fromQ and m.toR == m2.fromR and m2.blocked then
+                                m.blocked = true
+                                changed = true
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local moves = {}
+    for _, m in ipairs(moving) do
+        if m.blocked then
+            table.insert(moves, {entity = m.entity, fromQ = m.fromQ, fromR = m.fromR, toQ = m.fromQ, toR = m.fromR, blocked = true})
+        else
+            table.insert(moves, {entity = m.entity, fromQ = m.fromQ, fromR = m.fromR, toQ = m.toQ, toR = m.toR, blocked = false})
+        end
+    end
+    return moves
+end
+
+local function buildVortexCollisionEntities(entities, moves)
+    local movingSet = {}
+    for _, m in ipairs(moves) do
+        movingSet[m.entity] = m.blocked
+    end
+    local collisionEntities = {}
+    for _, e in ipairs(entities) do
+        if e.health > 0 then
+            local blocked = movingSet[e]
+            if blocked == nil or blocked then
+                table.insert(collisionEntities, e)
+            end
+        end
+    end
+    return collisionEntities
+end
+
+local function executeVortex(self, centerQ, centerR, radius, clockwise, hex, entities, sounds, onComplete)
+    local moves = getVortexMoves(centerQ, centerR, radius, clockwise, hex, entities)
+    local collisionEntities = buildVortexCollisionEntities(entities, moves)
+
+    for _, m in ipairs(moves) do
+        if not m.blocked then
+            local col = attack_preview.predictCollision(m.entity, m.fromQ, m.fromR, m.toQ, m.toR, hex, collisionEntities)
+            if col.type then
+                combat.addCollisionBounceAnimation(m.entity, m.fromQ, m.fromR, m.toQ, m.toR, hex, collisionEntities, sounds, col.occupant)
+            else
+                combat.addDirectPushAnimation(m.entity, m.fromQ, m.fromR, m.toQ, m.toR)
+            end
+        else
+            combat.addCollisionBounceAnimation(m.entity, m.fromQ, m.fromR, m.fromQ, m.fromR, hex, collisionEntities, sounds, nil)
+        end
+    end
+    combat.startPushAnimations(hex, function()
+        global_abilities.spendAbility(self)
+        if onComplete then onComplete(true) end
+        if _G.checkGameEnd then _G.checkGameEnd() end
+    end)
+end
+
+-- ============================================================
+-- VORTEX (2 mana): rotate all units radius 1
+-- ============================================================
+local VortexAbility = {}
+VortexAbility.__index = VortexAbility
+
+function VortexAbility.new()
+    local self = {
+        name = "Vortex",
+        manaCost = 2,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+        phase = nil,
+        center = nil,
+    }
+    return setmetatable(self, VortexAbility)
+end
+
+function VortexAbility:reset()
+    self.hasBeenUsed = false
+    self.phase = nil
+    self.center = nil
+end
+
+function VortexAbility:onActivate(state)
+    self.phase = "select_center"
+    self.center = nil
+    log.info("abilities", "Click on a hex to set the vortex center, or press ESC to cancel")
+end
+
+function VortexAbility:onDeactivate(state)
+    self.phase = nil
+    self.center = nil
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+
+function VortexAbility:onClickHex(q, r, hex, state)
+    if self.phase == "select_center" then
+        self.center = {q = q, r = r}
+        self.phase = "select_direction"
+        log.info("abilities", "Click on a hex to choose rotation direction (right=CW, left=CCW)")
+        return true
+    end
+    if self.phase == "select_direction" then
+        if q == self.center.q and r == self.center.r then
+            log.info("abilities", "Click on a different hex to choose rotation direction")
+            return true
+        end
+        local clockwise = determineRotationDirection(self.center.q, self.center.r, q, r)
+        clearSelectedActor()
+        undo.snapshot()
+        executeVortex(self, self.center.q, self.center.r, 1, clockwise, hex, state.entities, state.sounds, function()
+            log.infof("abilities", "Vortex: rotated %s!", clockwise and "clockwise" or "counter-clockwise")
+        end)
+        restoreSelectedActor()
+        global_abilities.activeAbility = nil
+        self.phase = nil
+        self.center = nil
+        return true
+    end
+    return false
+end
+
+function VortexAbility:collectOverlays(hex, cellOverlays, state)
+    if self.phase == "select_center" then
+        if hex.hoverQ >= 0 and hex.hoverR >= 0 and hex:isActiveHex(hex.hoverQ, hex.hoverR) then
+            local key = hex.hoverQ .. "," .. hex.hoverR
+            cellOverlays[key] = {fill = {0.3, 0.6, 0.9, 0.3}, line = {0.3, 0.6, 0.9, 0.7}}
+            local neighbors = hex:getNeighbors(hex.hoverQ, hex.hoverR)
+            for _, n in ipairs(neighbors) do
+                if hex:isActiveHex(n.q, n.r) then
+                    local nk = n.q .. "," .. n.r
+                    cellOverlays[nk] = {fill = {0.3, 0.6, 0.9, 0.15}, line = {0.3, 0.6, 0.9, 0.4}}
+                end
+            end
+        end
+    elseif self.phase == "select_direction" and self.center then
+        local ckey = self.center.q .. "," .. self.center.r
+        cellOverlays[ckey] = {fill = {0.3, 0.6, 0.9, 0.4}, line = {0.3, 0.6, 0.9, 0.8}}
+        local hq, hr = hex.hoverQ, hex.hoverR
+        if hq < 0 or hr < 0 then return end
+        if hq == self.center.q and hr == self.center.r then return end
+        local clockwise = determineRotationDirection(self.center.q, self.center.r, hq, hr)
+        local moves = getVortexMoves(self.center.q, self.center.r, 1, clockwise, hex, state.entities)
+        for _, m in ipairs(moves) do
+            local key = m.toQ .. "," .. m.toR
+            if not m.blocked then
+                cellOverlays[key] = {fill = {0.2, 0.8, 0.4, 0.4}, line = {0.2, 0.8, 0.4, 0.8}}
+            else
+                local fkey = m.fromQ .. "," .. m.fromR
+                cellOverlays[fkey] = {fill = {0.8, 0.2, 0.2, 0.3}, line = {0.8, 0.2, 0.2, 0.6}}
+            end
+        end
+    end
+end
+
+function VortexAbility:drawPreview(hex, state)
+    if self.phase ~= "select_direction" or not self.center then return end
+    local hq, hr = hex.hoverQ, hex.hoverR
+    if hq < 0 or hr < 0 then return end
+    if hq == self.center.q and hr == self.center.r then return end
+    local clockwise = determineRotationDirection(self.center.q, self.center.r, hq, hr)
+    local moves = getVortexMoves(self.center.q, self.center.r, 1, clockwise, hex, state.entities)
+    local collisionEntities = buildVortexCollisionEntities(state.entities, moves)
+
+    local p = attack_preview.new()
+    for _, m in ipairs(moves) do
+        if not m.blocked then
+            attack_preview.addPushArrow(p, m.fromQ, m.fromR, m.toQ, m.toR)
+            local col = attack_preview.predictCollision(m.entity, m.fromQ, m.fromR, m.toQ, m.toR, hex, collisionEntities)
+            if col.type then
+                attack_preview.addCollisionHint(p, m.fromQ, m.fromR, m.toQ, m.toR, col.type, m.entity, col.occupant, col.reason)
+            end
+            if col.damage > 0 then
+                attack_preview.addCollisionDamage(p, m.entity, attack_preview.calculateEffectiveCollisionDamage(m.entity))
+            end
+            if col.occupantDmg > 0 and col.occupant then
+                attack_preview.addCollisionDamage(p, col.occupant, attack_preview.calculateEffectiveCollisionDamage(col.occupant))
+            end
+        else
+            attack_preview.addCollisionHint(p, m.fromQ, m.fromR, m.fromQ, m.fromR, "collision_no_damage", m.entity, nil, "blocked")
+        end
+    end
+
+    local arrows = attack_preview.buildPushArrows(p, hex)
+    ui.drawPreviewPushArrows(arrows)
+    local icons = attack_preview.buildIcons(p, hex)
+    ui.drawPreviewIcons(hex, icons)
+end
+
+function VortexAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.3, 0.6, 0.9},
+        label = "Vortex",
+        activeLabel = self.phase == "select_direction" and "Choose direction" or "Select center",
+        tooltipH = 80,
+        tooltipTitle = "Vortex",
+        tooltipLines = {
+            "Rotate all units 60 deg around",
+            "a center cell. Right side = CW,",
+            "left side = CCW. Radius: 1.",
+        },
+    })
+end
+
 -- Register all abilities
 global_abilities.register(HealAbility.new())
 global_abilities.register(ExtraMoveAbility.new())
@@ -2264,5 +2537,6 @@ global_abilities.register(JumpingStrikeAbility.new())
 global_abilities.register(StasisOverloadAbility.new())
 global_abilities.register(ChainLightningAbility.new())
 global_abilities.register(InvulnerabilityAbility.new())
+global_abilities.register(VortexAbility.new())
 
 return global_abilities

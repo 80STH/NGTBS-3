@@ -426,6 +426,9 @@ function menu.mousepressed(x, y)
                 artifacts = {}
                 commanderArtifacts = {}
                 genericUpgrades = {}
+                progressionChoices = {}
+                chaosSurplus = 0
+                chaosScaleBonus = 0
                 isProgressionRun = true
                 currentMapIndex = 1
                 progressionShopOpened = false

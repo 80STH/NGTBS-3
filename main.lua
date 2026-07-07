@@ -73,6 +73,8 @@ disableEnemySpawn = false
 unlimitedAbilities = false
 chaos = 0
 chaosMax = 5
+chaosSurplus = 0
+chaosScaleBonus = 0
 entityAt = {}
 unplacedAllies = {}
 isProgressionRun = false
@@ -80,6 +82,7 @@ currentMapIndex = 1
 progressionShopOpened = false
 progressionOverlay = nil
 mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua", "maps/map4.lua"}
+progressionChoices = {}
 unitUpgrades = {}  -- "Warrior" > { choices = {"dashToFlipChain"} }
 artifacts = {}  -- list of unlocked artifact IDs
 commanderArtifacts = {}  -- commander-specific artifact IDs
@@ -111,11 +114,47 @@ ARTIFACT_CHOICES = {
     { id = "phaseThroughEnemies", name = "Ghost Cloak", desc = "All units phase through enemies" },
 }
 
+function processLevelVictory()
+    objectives.checkOnVictory(entities)
+    
+    local completedSecondary = 0
+    local totalSecondary = #objectives.getList()
+    log.infof("game", "processLevelVictory: totalSecondary=%d, chaos=%d", totalSecondary, chaos)
+    for _, obj in ipairs(objectives.getList()) do
+        local state = objectives.getState(obj.id)
+        log.infof("game", "  objective %s: state=%s", obj.id, state)
+        if state == "completed" then
+            completedSecondary = completedSecondary + 1
+        end
+    end
+    log.infof("game", "  completedSecondary=%d", completedSecondary)
+    
+    local totalReduction = completedSecondary + 1
+    local actualReduction = math.min(chaos, totalReduction)
+    chaos = chaos - actualReduction
+    
+    local surplusReduction = totalReduction - actualReduction
+    if surplusReduction > 0 then
+        chaosSurplus = chaosSurplus + surplusReduction
+        local scaleIncrease = math.floor(chaosSurplus / 3)
+        chaosScaleBonus = math.min(2, scaleIncrease)
+    end
+    
+    log.infof("game", "  after: chaos=%d, chaosSurplus=%d, chaosScaleBonus=%d", chaos, chaosSurplus, chaosScaleBonus)
+    
+    if chaosSurplus >= 9 then
+        progressionOverlay = "complete"
+        return false
+    end
+    
+    return completedSecondary == totalSecondary and totalSecondary > 0
+end
+
 function handleProgressionOverlayClick(x, y)
     local w = logicalW
     local btnW, btnH = 240, 50
     local btnX = w/2 - btnW/2
-    local btnY = logicalH/2 + 60
+    local btnY = logicalH/2 + 100
 
     if progressionOverlay == "complete" then
         if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
@@ -312,7 +351,10 @@ function love.update(dt)
 
     if isProgressionRun and win and gameActive == false and not shop.isOpen and not progressionOverlay and not progressionShopOpened then
         progressionShopOpened = true
-        shop.openForProgression()
+        local bothObjectivesCompleted = processLevelVictory()
+        if progressionOverlay ~= "complete" then
+            shop.openForProgression(bothObjectivesCompleted)
+        end
     end
 
     local mx, my = love.mouse.getPosition()

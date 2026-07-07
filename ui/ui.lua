@@ -2288,24 +2288,28 @@ end
 
 function ui.drawChaosBar(mx, my)
     local chaosVal = _G.chaos or 0
-    local chaosMaxVal = _G.chaosMax or 5
+    local chaosMaxVal = (_G.chaosMax or 5) + (_G.chaosScaleBonus or 0)
+    local surplus = _G.chaosSurplus or 0
 
     local cellW = 30
     local cellH = 14
     local gap = 3
     local pad = 4
-    local barX = 10
-    local barY = 10
     local totalW = (cellW + gap) * chaosMaxVal + pad * 2
-
-    -- Label
+    
     if not smallFont then smallFont = fonts.get(12) end
     love.graphics.setFont(smallFont)
+    local labelW = smallFont:getWidth("Chaos")
+    
+    local barX = 10 + labelW + 8
+    local barY = 10
+
+    -- Label (on the left)
     love.graphics.setColor(0.9, 0.6, 0.8, 1)
-    love.graphics.print("Chaos", barX, barY)
+    love.graphics.print("Chaos", 10, barY + 4)
 
     -- Background
-    local bgY = barY + 16
+    local bgY = barY
     local bgH = cellH + pad * 2
     love.graphics.setColor(0.08, 0.08, 0.15, 0.85)
     love.graphics.rectangle("fill", barX, bgY, totalW, bgH, 4)
@@ -2329,12 +2333,20 @@ function ui.drawChaosBar(mx, my)
         love.graphics.rectangle("line", cx, cy, cellW, cellH, 2)
     end
 
+    -- Surplus indicator
+    if surplus > 0 then
+        local surplusX = barX + totalW + 8
+        love.graphics.setColor(0.6, 0.9, 0.6, 0.9)
+        love.graphics.setFont(fonts.get(10))
+        love.graphics.print("+" .. surplus, surplusX, barY + 6)
+    end
+
     -- Tooltip on hover
     if mx >= barX and mx <= barX + totalW and my >= bgY and my <= bgY + bgH then
         local ttW = 200
         local ttH = 110
         local ttx = barX
-        local tty = bgY + bgH + 6
+        local tty = bgY + bgH + 12
         love.graphics.setColor(0.1, 0.1, 0.2, 0.92)
         love.graphics.rectangle("fill", ttx, tty, ttW, ttH, 5)
         love.graphics.setColor(0.6, 0.4, 0.7, 0.8)

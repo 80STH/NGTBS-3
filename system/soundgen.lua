@@ -398,5 +398,6 @@ soundgen.accelerate_decay = function()
         return makeSoundData(s)
     end)
 end
+soundgen.vortex_ability = function() return sweepSound("vortex_ability", 300, 900, 0.2, 0.35) end
 
 return soundgen

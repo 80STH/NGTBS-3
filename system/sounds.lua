@@ -69,6 +69,7 @@ local generators = {
     unearth = soundgen.unearth,
     mind_control = soundgen.mind_control,
     accelerate_decay = soundgen.accelerate_decay,
+    vortex_ability = soundgen.vortex_ability,
 }
 
 -- Custom volume per sound type (multiplied by master volume)

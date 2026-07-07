@@ -674,10 +674,39 @@ function drawProgressionComplete(w, h)
 
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(fonts.get(26))
-    love.graphics.printf("PROGRESSION TEST", 0, h/2 - 90, w, "center")
+    love.graphics.printf("PROGRESSION TEST", 0, h/2 - 140, w, "center")
     love.graphics.setFont(fonts.get(32))
     love.graphics.setColor(0.4, 1, 0.4, 1)
-    love.graphics.printf("COMPLETE!", 0, h/2 - 40, w, "center")
+    love.graphics.printf("COMPLETE!", 0, h/2 - 100, w, "center")
+
+    local surplus = _G.chaosSurplus or 0
+    if surplus >= 9 then
+        love.graphics.setFont(fonts.get(14))
+        love.graphics.setColor(0.6, 0.9, 0.6, 1)
+        love.graphics.printf("Perfect victory! Surplus: " .. surplus, 0, h/2 - 60, w, "center")
+    end
+
+    local choices = progressionChoices or {}
+    if #choices > 0 then
+        love.graphics.setFont(fonts.get(14))
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        local startY = surplus >= 9 and h/2 - 30 or h/2 - 50
+        love.graphics.printf("Upgrades chosen:", 0, startY, w, "center")
+
+        local typeLabels = { spell = "Spell", unit = "Unit", generic = "Generic", commander = "Commander" }
+        local typeColors = { spell = {0.8, 0.5, 1.0}, unit = {0.8, 0.8, 0.4}, generic = {0.5, 0.9, 0.5}, commander = {0.4, 0.8, 1.0} }
+        local listStartY = startY + 25
+        local lineH = 20
+        for i, ch in ipairs(choices) do
+            local c = typeColors[ch.type] or {1, 1, 1}
+            love.graphics.setColor(c[1], c[2], c[3], 0.9)
+            love.graphics.setFont(fonts.get(11))
+            love.graphics.print("[" .. (typeLabels[ch.type] or ch.type) .. "]", w/2 - 180, listStartY + (i-1) * lineH)
+            love.graphics.setColor(1, 1, 1, 0.9)
+            love.graphics.setFont(fonts.get(12))
+            love.graphics.print(ch.name, w/2 - 100, listStartY + (i-1) * lineH)
+        end
+    end
 
     local mx, my = love.mouse.getPosition()
     mx = mx / dpiScale
@@ -685,7 +714,7 @@ function drawProgressionComplete(w, h)
 
     local btnW, btnH = 240, 50
     local btnX = w/2 - btnW/2
-    local btnY = h/2 + 50
+    local btnY = h/2 + 100
     local btnHover = mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH
 
     love.graphics.setFont(fonts.get(16))
