@@ -1309,8 +1309,9 @@ function combat.PullHookAttack:execute(attacker, targetQ, targetR, hex, entities
         combat.addDirectPushAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
         combat.startPushAnimations(hex, function()
             local pullQ, pullR = hex_utils.applyCubeStep(moveQ, moveR, stepX, stepY, stepZ)
-            if hex:isActiveHex(pullQ, pullR) and not combat.getEntityAtHex(pullQ, pullR, entities) then
-                combat.addDirectPushAnimation(targetEntity, hookTarget.q, hookTarget.r, pullQ, pullR)
+            local occupant = combat.getEntityAtHex(pullQ, pullR, entities)
+            if hex:isActiveHex(pullQ, pullR) and (not occupant or occupant == targetEntity) then
+                combat.addDirectPushAnimation(targetEntity, targetEntity.q, targetEntity.r, pullQ, pullR)
                 combat.startPushAnimations(hex)
             end
         end)
@@ -1961,7 +1962,10 @@ function combat.flushPushAnimations()
         -- If nothing new was queued, fire the global callback; otherwise flush the new animations too.
         if #pushAnimations.queue == 0 then
             if globalCb then globalCb() end
-            break
+            -- Check again if globalCb queued new animations
+            if #pushAnimations.queue == 0 then
+                break
+            end
         end
     end
     pushAnimations.queue = {}
