@@ -347,7 +347,7 @@ function menu.draw()
     love.graphics.rectangle("fill", cb.x, cb.y, cb.w, cb.h, 3)
     love.graphics.setColor(cbHover and 0.5 or 0.35, cbHover and 0.5 or 0.35, cbHover and 0.7 or 0.5, 0.8)
     love.graphics.rectangle("line", cb.x, cb.y, cb.w, cb.h, 3)
-    if disableEnemySpawn then
+    if spawnAllUnits then
         love.graphics.setColor(0.3, 0.8, 0.3, 1)
         love.graphics.setLineWidth(2)
         love.graphics.line(cb.x + 3, cb.y + cb.h/2, cb.x + cb.h/2, cb.y + cb.h - 3)
@@ -356,7 +356,7 @@ function menu.draw()
     end
     love.graphics.setColor(1, 1, 1, 0.8)
     love.graphics.setFont(l.tinyFont)
-    love.graphics.printf("Disable Enemy Spawn", l.cbLabelX, l.cbLabelY + 1, 160, "left")
+    love.graphics.printf("Spawn All Units", l.cbLabelX, l.cbLabelY + 1, 160, "left")
 
     local cb2 = l.cb2
     local cb2Hover = mx >= cb2.x and mx <= cb2.x + 180 and my >= cb2.y and my <= cb2.y + cb2.h
@@ -453,7 +453,7 @@ function menu.mousepressed(x, y)
     -- Checkboxes
     local cb = l.cb
     if x >= cb.x and x <= cb.x + 180 and y >= cb.y and y <= cb.y + cb.h then
-        disableEnemySpawn = not disableEnemySpawn
+        spawnAllUnits = not spawnAllUnits
         return true
     end
     local cb2 = l.cb2

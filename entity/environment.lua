@@ -922,7 +922,7 @@ end
 -- Create random enemy (from pool)
 function environment.createRandomEnemy(q, r)
     local types
-    if isProgressionRun then
+    if isProgressionRun or not _G.spawnAllUnits then
         types = { "Ghost", "Zombie", "Lich" }
     else
         types = { "Ghost", "Zombie", "Lich", "Brute", "Lancer", "BogShaman", "Raider", "Dervish", "Crusher" }

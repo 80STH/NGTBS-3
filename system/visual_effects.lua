@@ -148,22 +148,59 @@ elseif e.type == "line" then
  elseif e.type == "lightning" then
     visual_shaders.drawLightning(e.x, e.y, t, 1.0)
 
-elseif e.type == "ground_slam" then
-    local t = e.timer / e.duration
-    local alpha = 1 - t
-    local sink = 8 * math.sin(t * math.pi)
-    local verts = e.hex:drawHexagon(e.x, e.y + sink, e.hex.radius)
-    -- Compressed dark hex
-    love.graphics.setColor(0.3, 0.2, 0.1, alpha * 0.4)
-    love.graphics.polygon("fill", verts)
-    -- Pulsating outline
-    local pulse = 8 * math.sin(t * math.pi)
-    local pulseVerts = e.hex:drawHexagon(e.x, e.y, e.hex.radius + pulse)
-    love.graphics.setColor(0.9, 0.6, 0.2, alpha * 0.6)
-    love.graphics.setLineWidth(2)
-    love.graphics.polygon("line", pulseVerts)
-    love.graphics.setLineWidth(1)
-end
+ elseif e.type == "ground_slam" then
+     local t = e.timer / e.duration
+     local alpha = 1 - t
+     local sink = 8 * math.sin(t * math.pi)
+     local verts = e.hex:drawHexagon(e.x, e.y + sink, e.hex.radius)
+     -- Compressed dark hex
+     love.graphics.setColor(0.3, 0.2, 0.1, alpha * 0.4)
+     love.graphics.polygon("fill", verts)
+     -- Pulsating outline
+     local pulse = 8 * math.sin(t * math.pi)
+     local pulseVerts = e.hex:drawHexagon(e.x, e.y, e.hex.radius + pulse)
+     love.graphics.setColor(0.9, 0.6, 0.2, alpha * 0.6)
+     love.graphics.setLineWidth(2)
+     love.graphics.polygon("line", pulseVerts)
+     love.graphics.setLineWidth(1)
+
+ elseif e.type == "flying_remains" then
+     local t = e.timer / e.duration
+     local riseY = e.y - t * e.y
+     local alpha = 1 - t * 0.5
+     local scale = 1 - t * 0.6
+     love.graphics.setColor(e.color[1], e.color[2], e.color[3], alpha)
+     if e.sprite then
+         local sw, sh = e.sprite:getDimensions()
+         love.graphics.draw(e.sprite, e.x, riseY, t * math.pi * 2, 6 * scale, 6 * scale, sw/2, sh/2)
+     else
+         love.graphics.circle("fill", e.x, riseY, 14 * scale)
+     end
+     love.graphics.setColor(1, 0.6, 0.2, alpha * 0.5)
+     for i = 1, 5 do
+         local trail = t - i * 0.05
+         if trail > 0 then
+             local ty = e.y - trail * e.y
+             love.graphics.circle("fill", e.x, ty, 6 * (1 - trail))
+         end
+     end
+
+  elseif e.type == "falling_remains" then
+      local t = e.timer / e.duration
+      local startY = -50
+      local fallY = startY + t * (e.y - startY)
+      local alpha = 0.8 + 0.2 * t
+      local scale = 0.4 + 0.6 * t
+      love.graphics.setColor(0.8, 0.2, 0.1, alpha)
+      love.graphics.circle("fill", e.x, fallY, 14 * scale)
+      love.graphics.setColor(1, 0.5, 0.2, alpha * 0.6)
+      love.graphics.circle("line", e.x, fallY, 18 * scale)
+      if t > 0.9 then
+          local impactT = (t - 0.9) / 0.1
+          love.graphics.setColor(1, 0.3, 0.1, (1 - impactT) * 0.8)
+          love.graphics.circle("fill", e.x, e.y, 25 * impactT)
+      end
+    end
     end
     love.graphics.setColor(1, 1, 1, 1)
 end
@@ -254,6 +291,24 @@ function visual.addLightning(x, y, duration)
         type = "lightning",
         x = x, y = y,
         timer = 0, duration = duration or 0.3
+    })
+end
+
+function visual.addFlyingRemains(x, y, sprite, color)
+    table.insert(visual.effects, {
+        type = "flying_remains",
+        x = x, y = y,
+        sprite = sprite,
+        color = color or {0.8, 0.2, 0.1, 1},
+        timer = 0, duration = 1.2
+    })
+end
+
+function visual.addFallingRemains(x, y)
+    table.insert(visual.effects, {
+        type = "falling_remains",
+        x = x, y = y,
+        timer = 0, duration = 0.6
     })
 end
 

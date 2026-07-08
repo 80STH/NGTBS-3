@@ -492,29 +492,23 @@ function processDigSites()
 
     local readyDigs = status.decrementDigTimers()
     for _, dig in ipairs(readyDigs) do
-        local canSpawn = not (state and state.disableEnemySpawn)
-        if canSpawn then
-            local occupied = false
-            for _, e in ipairs(entities) do
-                if e.q == dig.q and e.r == dig.r then
-                    occupied = true
-                    break
-                end
+        local occupied = false
+        for _, e in ipairs(entities) do
+            if e.q == dig.q and e.r == dig.r then
+                occupied = true
+                break
             end
-            local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
-            if not occupied and terrain ~= "water" and terrain ~= "railway" and not status.hasNegativeHexStatus(dig.q, dig.r) then
-                local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
-                table.insert(entities, newEnemy)
-                local x, y = hex:hexToPixel(dig.q, dig.r)
-                visual.addEffect(x, y, "dig", 0.5)
-                sounds.play("dig")
-                log.infof("game", "A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r)
-            else
-                log.debugf("game", "Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r)
-                _G.objective_digBlocks = (_G.objective_digBlocks or 0) + 1
-            end
+        end
+        local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
+        if not occupied and terrain ~= "water" and terrain ~= "railway" and not status.hasNegativeHexStatus(dig.q, dig.r) then
+            local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
+            table.insert(entities, newEnemy)
+            local x, y = hex:hexToPixel(dig.q, dig.r)
+            visual.addEffect(x, y, "dig", 0.5)
+            sounds.play("dig")
+            log.infof("game", "A %s digs out at (%d,%d)!", newEnemy.name, dig.q, dig.r)
         else
-            log.debugf("game", "Dig site at (%d,%d) suppressed by disableEnemySpawn", dig.q, dig.r)
+            log.debugf("game", "Dig site at (%d,%d) blocked, no spawn", dig.q, dig.r)
             _G.objective_digBlocks = (_G.objective_digBlocks or 0) + 1
         end
         status.removeDigSite(dig.q, dig.r)
@@ -530,19 +524,17 @@ function processDigSites()
             aliveEnemies = aliveEnemies + 1
         end
     end
-    if not (state and state.disableEnemySpawn) then
-        local spawnLimit = 6
-        local needed = spawnLimit - aliveEnemies
-        if needed > 0 then
-            local spots = findRandomEmptyCells(needed, function(q, r)
-                return status.hasDigSite(q, r) or status.hasNegativeHexStatus(q, r)
-            end, 4)
-            local digTypes = { "Ghost", "Zombie", "Lich" }
-            for _, spot in ipairs(spots) do
-                local spawnType = digTypes[love.math.random(1, #digTypes)]
-                status.setDigSite(spot.q, spot.r, 1, spawnType)
-                log.debugf("game", "New dig site at (%d,%d) -> %s", spot.q, spot.r, spawnType)
-            end
+    local spawnLimit = 6
+    local needed = spawnLimit - aliveEnemies
+    if needed > 0 then
+        local spots = findRandomEmptyCells(needed, function(q, r)
+            return status.hasDigSite(q, r) or status.hasNegativeHexStatus(q, r)
+        end, 4)
+        local digTypes = { "Ghost", "Zombie", "Lich" }
+        for _, spot in ipairs(spots) do
+            local spawnType = digTypes[love.math.random(1, #digTypes)]
+            status.setDigSite(spot.q, spot.r, 1, spawnType)
+            log.debugf("game", "New dig site at (%d,%d) -> %s", spot.q, spot.r, spawnType)
         end
     end
 end

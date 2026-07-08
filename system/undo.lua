@@ -30,6 +30,7 @@ function undo.snapshot()
         abilityUsedThisTurn = ga and ga.abilityUsedThisTurn or false,
         activeAbilityName = ga and ga.activeAbility and ga.activeAbility.name or nil,
         abilityStates = abilityStates,
+        pendingRemains = ga and ga.pendingRemains and {unpack(ga.pendingRemains)} or {},
         objectiveStates = objectives.saveState(),
         objectiveTracking = {
             enemiesKilled = _G.objective_enemiesKilled or 0,
@@ -55,6 +56,7 @@ function undo.snapshot()
     for _, e in ipairs(_G.entities) do
         local es = {
             ref = e,
+            name = e.name,
             q = e.q, r = e.r,
             health = e.health, maxHealth = e.maxHealth,
             attacksFirst = e.attacksFirst,
@@ -77,6 +79,8 @@ function undo.snapshot()
             summonTargetQ = e.summonTargetQ,
             summonTargetR = e.summonTargetR,
             indestructible = e.indestructible,
+            isCowardlyBeast = e.isCowardlyBeast,
+            attacks = e.attacks,
         }
         -- Copy statuses
         es.statuses = status.copyEntityStatuses(e)
@@ -123,6 +127,7 @@ function undo.restore(snap)
     local existingRefs = {}
     for _, es in ipairs(snap.entities) do
         if es.ref then
+            es.ref.name = es.name
             es.ref.q = es.q
             es.ref.r = es.r
             es.ref.currentDrawX = nil
@@ -149,6 +154,8 @@ function undo.restore(snap)
             es.ref.summonTargetQ = es.summonTargetQ
             es.ref.summonTargetR = es.summonTargetR
             es.ref.indestructible = es.indestructible
+            es.ref.isCowardlyBeast = es.isCowardlyBeast
+            es.ref.attacks = es.attacks
             -- Restore statuses
             status.setEntityStatuses(es.ref, es.statuses)
             existingRefs[es.ref] = true
@@ -233,6 +240,11 @@ function undo.restore(snap)
             ga.activeAbility = ga.registry[snap.activeAbilityName]
         else
             ga.activeAbility = nil
+        end
+        if snap.pendingRemains then
+            ga.pendingRemains = {unpack(snap.pendingRemains)}
+        else
+            ga.pendingRemains = {}
         end
     end
 

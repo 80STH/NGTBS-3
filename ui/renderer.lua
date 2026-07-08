@@ -125,6 +125,27 @@ function renderer.draw(state)
     drawHexGrid(state, cellOverlays)
     ui.drawPreparedAttackHealthBars(hex, state.entities)
     ui.drawDigSites(hex, status.getAllDigSites())
+
+    if global_abilities.hasPendingRemains() then
+        for _, remains in ipairs(global_abilities.pendingRemains) do
+            local rx, ry = getDrawCoords(remains.q, remains.r)
+            local verts = hex:drawInsetHexagon(rx, ry, hex.radius, 0.92)
+            local pulse = 0.6 + 0.4 * math.sin(t * 4)
+            love.graphics.setColor(0.9, 0.2, 0.1, 0.3 * pulse)
+            love.graphics.polygon("fill", verts)
+            love.graphics.setColor(0.9, 0.2, 0.1, 0.8 * pulse)
+            love.graphics.setLineWidth(3)
+            love.graphics.polygon("line", verts)
+            love.graphics.setLineWidth(1)
+            love.graphics.setColor(1, 0.4, 0.2, 0.9)
+            local arrowSize = hex.radius * 0.3
+            love.graphics.setLineWidth(2)
+            love.graphics.line(rx, ry - arrowSize * 2, rx, ry - arrowSize * 0.5)
+            love.graphics.line(rx - arrowSize * 0.4, ry - arrowSize * 1.2, rx, ry - arrowSize * 0.5, rx + arrowSize * 0.4, ry - arrowSize * 1.2)
+            love.graphics.setLineWidth(1)
+        end
+    end
+
     if lightningWarning and lightningTargetQ >= 0 and lightningTargetR >= 0 then
         local wx, wy = getDrawCoords(lightningTargetQ, lightningTargetR)
         local verts = hex:drawInsetHexagon(wx, wy, hex.radius, 0.92)

@@ -26,7 +26,7 @@ global_abilities.abilityUsedThisTurn = false
 global_abilities.scrollOffset = 0
 global_abilities.maxVisibleItems = 3
 
-global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability", "Vortex"}
+global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down"}
 
 global_abilities.unlocked = {}
 
@@ -105,6 +105,7 @@ function global_abilities.reset()
     global_abilities.activeAbility = nil
     global_abilities.mana = global_abilities.maxMana
     global_abilities.abilityUsedThisTurn = false
+    global_abilities.pendingRemains = {}
     for _, ab in pairs(global_abilities.registry) do
         if ab.reset then ab:reset() end
         ab.hasBeenUsed = false
@@ -157,6 +158,7 @@ function global_abilities.handleButtonClick(x, y, state)
                     end
                     global_abilities.activeAbility = ab
                     ab:onActivate(state)
+                    clearSelectedActor()
                     global_abilities.dropdownOpen = false
                 elseif not state.unlimitedAbilities and ab.hasBeenUsed then
                     log.infof("abilities", "%s has already been used this game!", ab.name)
@@ -2522,6 +2524,216 @@ function VortexAbility:drawButton(mx, my, state)
     })
 end
 
+-- ============================================================
+-- HEX: permanently transform an enemy into a cowardly beast
+-- ============================================================
+local HexAbility = {}
+HexAbility.__index = HexAbility
+
+function HexAbility.new()
+    local self = {
+        name = "Hex",
+        manaCost = 2,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }
+    return setmetatable(self, HexAbility)
+end
+
+function HexAbility:reset()
+    self.hasBeenUsed = false
+end
+
+function HexAbility:onActivate(state)
+    log.info("abilities", "Click on an enemy to transform it into a cowardly beast, or press ESC to cancel")
+end
+
+function HexAbility:onDeactivate(state)
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+
+function HexAbility:onClickHex(q, r, hex, state)
+    local target = nil
+    for _, e in ipairs(state.entities) do
+        if e.q == q and e.r == r and e.health > 0 and e:isCharacter() and not e.isPlayable then
+            target = e
+            break
+        end
+    end
+
+    if not target then
+        log.warn("abilities", "No valid enemy at this cell!")
+        return true
+    end
+
+    local originalName = target.name
+    target.attacks = {}
+    target.health = 1
+    target.maxHealth = 1
+    target.name = "CowardlyBeast"
+    target.isCowardlyBeast = true
+    target.hasPreparedAttack = false
+    target.attackDirection = nil
+    target.preparedTargetOffset = nil
+    target.preparedAttack = nil
+    target.preparedTargetQ = nil
+    target.preparedTargetR = nil
+    if target.rootedTarget then
+        status.removeFromEntity(target.rootedTarget, "rooted")
+        target.rootedTarget = nil
+    end
+
+    global_abilities.spendAbility(self)
+    undo.snapshot()
+    log.infof("abilities", "%s transformed into a cowardly beast!", originalName)
+    restoreSelectedActor()
+    global_abilities.activeAbility = nil
+    return true
+end
+
+function HexAbility:collectOverlays(hex, cellOverlays, state)
+    if hex.hoverQ < 0 or hex.hoverR < 0 then return end
+    for _, e in ipairs(state.entities) do
+        if e.q == hex.hoverQ and e.r == hex.hoverR and e.health > 0 and e:isCharacter() and not e.isPlayable then
+            local key = hex.hoverQ .. "," .. hex.hoverR
+            cellOverlays[key] = {fill = {0.6, 0.2, 0.8, 0.4}, line = {0.6, 0.2, 0.8, 0.8}}
+            break
+        end
+    end
+end
+
+function HexAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.6, 0.2, 0.8},
+        label = "Hex",
+        activeLabel = "Select enemy",
+        tooltipH = 80,
+        tooltipTitle = "Hex",
+        tooltipLines = {
+            "Transform an enemy into a",
+            "cowardly beast (1 HP, no",
+            "attacks, avoids players).",
+        },
+    })
+end
+
+-- ============================================================
+-- UPSIDE DOWN: kill a creature, remains fly up, fall at end of turn
+-- ============================================================
+local UpsideDownAbility = {}
+UpsideDownAbility.__index = UpsideDownAbility
+
+function UpsideDownAbility.new()
+    local self = {
+        name = "Upside Down",
+        manaCost = 2,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }
+    return setmetatable(self, UpsideDownAbility)
+end
+
+function UpsideDownAbility:reset()
+    self.hasBeenUsed = false
+end
+
+function UpsideDownAbility:onActivate(state)
+    log.info("abilities", "Click on a creature to launch it upward, or press ESC to cancel")
+end
+
+function UpsideDownAbility:onDeactivate(state)
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+
+function UpsideDownAbility:onClickHex(q, r, hex, state)
+    local target = nil
+    for _, e in ipairs(state.entities) do
+        if e.q == q and e.r == r and e.health > 0 and e:isCharacter() then
+            target = e
+            break
+        end
+    end
+
+    if not target then
+        log.warn("abilities", "No valid creature at this cell!")
+        return true
+    end
+
+    local x, y = getDrawCoords(q, r)
+    visual.addFlyingRemains(x, y, target.sprite, target.color)
+
+    target.health = 0
+    target:startDeath()
+
+    global_abilities.addPendingRemains(q, r)
+
+    global_abilities.spendAbility(self)
+    undo.snapshot()
+    log.infof("abilities", "%s launched upward! Remains will fall at end of turn.", tostring(target.name))
+    restoreSelectedActor()
+    global_abilities.activeAbility = nil
+    return true
+end
+
+function UpsideDownAbility:collectOverlays(hex, cellOverlays, state)
+    if hex.hoverQ < 0 or hex.hoverR < 0 then return end
+    for _, e in ipairs(state.entities) do
+        if e.q == hex.hoverQ and e.r == hex.hoverR and e.health > 0 and e:isCharacter() then
+            local key = hex.hoverQ .. "," .. hex.hoverR
+            cellOverlays[key] = {fill = {0.9, 0.3, 0.1, 0.4}, line = {0.9, 0.3, 0.1, 0.8}}
+            break
+        end
+    end
+end
+
+function UpsideDownAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.9, 0.3, 0.1},
+        label = "Upside Down",
+        activeLabel = "Select creature",
+        tooltipH = 96,
+        tooltipTitle = "Upside Down",
+        tooltipLines = {
+            "Kill a creature. Its remains",
+            "fly up and fall at end of turn,",
+            "dealing fatal damage to that cell.",
+        },
+    })
+end
+
+-- Pending remains system
+global_abilities.pendingRemains = {}
+
+function global_abilities.addPendingRemains(q, r)
+    table.insert(global_abilities.pendingRemains, {q = q, r = r})
+end
+
+function global_abilities.hasPendingRemains()
+    return #global_abilities.pendingRemains > 0
+end
+
+function global_abilities.processPendingRemains(entities, hex, sounds)
+    for _, remains in ipairs(global_abilities.pendingRemains) do
+        local x, y = getDrawCoords(remains.q, remains.r)
+        visual.addFallingRemains(x, y)
+
+        for _, e in ipairs(entities) do
+            if e.q == remains.q and e.r == remains.r and e.health > 0 then
+                e.health = 0
+                e:startDeath()
+                log.infof("abilities", "Remains fell on %s, dealing fatal damage!", tostring(e.name))
+            end
+        end
+    end
+    global_abilities.pendingRemains = {}
+end
+
+function global_abilities.resetPendingRemains()
+    global_abilities.pendingRemains = {}
+end
+
 -- Register all abilities
 global_abilities.register(HealAbility.new())
 global_abilities.register(ExtraMoveAbility.new())
@@ -2538,5 +2750,7 @@ global_abilities.register(StasisOverloadAbility.new())
 global_abilities.register(ChainLightningAbility.new())
 global_abilities.register(InvulnerabilityAbility.new())
 global_abilities.register(VortexAbility.new())
+global_abilities.register(HexAbility.new())
+global_abilities.register(UpsideDownAbility.new())
 
 return global_abilities

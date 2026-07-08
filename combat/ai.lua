@@ -484,6 +484,10 @@ function ai.moveAndPrepare(enemy, entities, hex)
         return "moving"
     end
 
+    if enemy.isCowardlyBeast then
+        return ai.moveCowardlyBeast(enemy, entities, hex)
+    end
+
     -- Summoning rod: does not move, picks a random empty cell
     if enemy.isSummoningRod then
         if enemy.summonCooldown and enemy.summonCooldown > 0 then
@@ -779,6 +783,50 @@ function ai.getLivingEnemies(entities)
         end
     end
     return enemies
+end
+
+function ai.moveCowardlyBeast(enemy, entities, hex)
+    local nearestAlly = nil
+    local nearestDist = math.huge
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and e.isPlayable and e.health > 0 then
+            local d = hex:getDistance(enemy.q, enemy.r, e.q, e.r)
+            if d < nearestDist then
+                nearestDist = d
+                nearestAlly = e
+            end
+        end
+    end
+    if not nearestAlly then return "failed" end
+
+    local neighbors = hex:getNeighbors(enemy.q, enemy.r)
+    local bestCell = nil
+    local bestDist = -math.huge
+    for _, nb in ipairs(neighbors) do
+        if hex:isActiveHex(nb.q, nb.r) then
+            local occupied = false
+            for _, e in ipairs(entities) do
+                if e ~= enemy and e.q == nb.q and e.r == nb.r and not e.isHazard and e.health > 0 then
+                    occupied = true
+                    break
+                end
+            end
+            if not occupied then
+                local d = hex:getDistance(nb.q, nb.r, nearestAlly.q, nearestAlly.r)
+                if d > bestDist then
+                    bestDist = d
+                    bestCell = nb
+                end
+            end
+        end
+    end
+
+    if bestCell then
+        if ai.moveToCell(enemy, bestCell.q, bestCell.r, hex, entities) then
+            return "moving"
+        end
+    end
+    return "failed"
 end
 
 function isCellDangerousForEntity(q, r, entity)

@@ -45,6 +45,11 @@ function turnManager.endPlayerTurn()
     effects.applyEndOfTurnEffects(entities, terrainMap)
     checkGameEnd()
 
+    if global_abilities.hasPendingRemains() then
+        global_abilities.processPendingRemains(entities, hex, sounds)
+        checkGameEnd()
+    end
+
     if turnCount >= maxTurns and not decayAppliedForTurnLimit then
         applyDecayToAllEnemies()
         decayAppliedForTurnLimit = true
