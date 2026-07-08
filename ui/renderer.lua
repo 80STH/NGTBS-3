@@ -714,8 +714,8 @@ function drawProgressionComplete(w, h)
         local startY = surplus >= 9 and h/2 - 30 or h/2 - 50
         love.graphics.printf("Upgrades chosen:", 0, startY, w, "center")
 
-        local typeLabels = { spell = "Spell", unit = "Unit", generic = "Generic", commander = "Commander" }
-        local typeColors = { spell = {0.8, 0.5, 1.0}, unit = {0.8, 0.8, 0.4}, generic = {0.5, 0.9, 0.5}, commander = {0.4, 0.8, 1.0} }
+        local typeLabels = { spell = "Spell", unit = "Unit", generic = "Generic", commander = "Commander", heroic = "Heroic" }
+        local typeColors = { spell = {0.8, 0.5, 1.0}, unit = {0.8, 0.8, 0.4}, generic = {0.5, 0.9, 0.5}, commander = {0.4, 0.8, 1.0}, heroic = {1.0, 0.6, 0.2} }
         local listStartY = startY + 25
         local lineH = 20
         for i, ch in ipairs(choices) do

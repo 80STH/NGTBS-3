@@ -28,6 +28,14 @@ global_abilities.maxVisibleItems = 3
 
 global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down"}
 
+global_abilities.heroicAbilities = {
+    ["Wind Torrent"] = true,
+    ["Accelerate Decay"] = true,
+    ["The Big One"] = true,
+    ["Stasis Overload"] = true,
+    ["Vortex"] = true,
+}
+
 global_abilities.unlocked = {}
 
 function global_abilities.setUnlocked(name)
