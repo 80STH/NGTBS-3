@@ -2535,6 +2535,40 @@ end
 -- ============================================================
 -- HEX: permanently transform an enemy into a cowardly beast
 -- ============================================================
+local function generateCowardlyBeastSprite()
+    local size = 16
+    local canvas = love.graphics.newCanvas(size, size)
+    canvas:setFilter("nearest", "nearest")
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear(0, 0, 0, 0)
+    -- Body (hunched, purple-beige)
+    love.graphics.setColor(0.5, 0.35, 0.55, 1)
+    love.graphics.ellipse("fill", 8, 11, 5, 4)
+    -- Head (slightly tilted, wide eyes)
+    love.graphics.setColor(0.55, 0.4, 0.5, 1)
+    love.graphics.circle("fill", 7, 7, 3)
+    -- Big scared eyes
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.rectangle("fill", 5, 6, 2, 2)
+    love.graphics.rectangle("fill", 9, 6, 2, 2)
+    love.graphics.setColor(0.1, 0.1, 0.1, 1)
+    love.graphics.rectangle("fill", 5, 7, 1, 1)
+    love.graphics.rectangle("fill", 9, 7, 1, 1)
+    -- Mouth (open, scared)
+    love.graphics.setColor(0.1, 0.05, 0.05, 1)
+    love.graphics.rectangle("fill", 6, 9, 2, 1)
+    -- Tiny arms covering
+    love.graphics.setColor(0.45, 0.3, 0.5, 1)
+    love.graphics.rectangle("fill", 3, 9, 2, 3)
+    love.graphics.rectangle("fill", 11, 9, 2, 3)
+    -- Legs
+    love.graphics.setColor(0.4, 0.28, 0.48, 1)
+    love.graphics.rectangle("fill", 5, 14, 2, 2)
+    love.graphics.rectangle("fill", 9, 14, 2, 2)
+    love.graphics.setCanvas()
+    return canvas
+end
+
 local HexAbility = {}
 HexAbility.__index = HexAbility
 
@@ -2576,11 +2610,14 @@ function HexAbility:onClickHex(q, r, hex, state)
     end
 
     local originalName = target.name
+    undo.snapshot()
     target.attacks = {}
     target.health = 1
     target.maxHealth = 1
     target.name = "CowardlyBeast"
     target.isCowardlyBeast = true
+    target.sprite = generateCowardlyBeastSprite()
+    target.color = nil
     target.hasPreparedAttack = false
     target.attackDirection = nil
     target.preparedTargetOffset = nil
@@ -2593,7 +2630,6 @@ function HexAbility:onClickHex(q, r, hex, state)
     end
 
     global_abilities.spendAbility(self)
-    undo.snapshot()
     log.infof("abilities", "%s transformed into a cowardly beast!", originalName)
     restoreSelectedActor()
     global_abilities.activeAbility = nil

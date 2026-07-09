@@ -71,6 +71,12 @@ function undo.snapshot()
             preparedAttack = e.preparedAttack,
             preparePos = e.preparePos,
             preparedTarget = e.preparedTarget,
+            attackDirection = e.attackDirection,
+            preparedTargetOffset = e.preparedTargetOffset,
+            preparedTargetQ = e.preparedTargetQ,
+            preparedTargetR = e.preparedTargetR,
+            preparePosCube = e.preparePosCube,
+            preparedTargetCube = e.preparedTargetCube,
             chainAttack = e.chainAttack,
             redirectPending = e.redirectPending,
             upgradeLevel = e.upgradeLevel,
@@ -80,6 +86,8 @@ function undo.snapshot()
             summonTargetR = e.summonTargetR,
             indestructible = e.indestructible,
             isCowardlyBeast = e.isCowardlyBeast,
+            sprite = e.sprite,
+            color = e.color,
             attacks = e.attacks,
         }
         -- Copy statuses
@@ -146,6 +154,12 @@ function undo.restore(snap)
             es.ref.preparedAttack = es.preparedAttack
             es.ref.preparePos = es.preparePos
             es.ref.preparedTarget = es.preparedTarget
+            es.ref.attackDirection = es.attackDirection
+            es.ref.preparedTargetOffset = es.preparedTargetOffset
+            es.ref.preparedTargetQ = es.preparedTargetQ
+            es.ref.preparedTargetR = es.preparedTargetR
+            es.ref.preparePosCube = es.preparePosCube
+            es.ref.preparedTargetCube = es.preparedTargetCube
             es.ref.chainAttack = es.chainAttack
             es.ref.redirectPending = es.redirectPending
             es.ref.upgradeLevel = es.upgradeLevel
@@ -155,6 +169,8 @@ function undo.restore(snap)
             es.ref.summonTargetR = es.summonTargetR
             es.ref.indestructible = es.indestructible
             es.ref.isCowardlyBeast = es.isCowardlyBeast
+            es.ref.sprite = es.sprite
+            es.ref.color = es.color
             es.ref.attacks = es.attacks
             -- Restore statuses
             status.setEntityStatuses(es.ref, es.statuses)
