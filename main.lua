@@ -28,6 +28,7 @@ global_abilities = require("system.global_abilities")
 shop = require("ui.shop")
 map_editor = require("editor.map_editor")
 pause_menu = require("ui.pause_menu")
+enemy_lab = require("ui.enemy_lab")
 require("core.game")
 local commanders = require("system.commanders")
 local trains_mod = require("system.trains")
@@ -227,6 +228,8 @@ function love.mousepressed(x, y, button)
         menu.mousepressed(lx, ly)
     elseif gamePhase == "editor" then
         map_editor.mousepressed(lx, ly, button)
+    elseif gamePhase == "enemy_lab" then
+        enemy_lab.mousepressed(lx, ly)
     else
         input.mousepressed(lx, ly, button)
     end
@@ -406,6 +409,8 @@ function love.draw()
         menu.draw()
     elseif gamePhase == "editor" then
         map_editor.draw()
+    elseif gamePhase == "enemy_lab" then
+        enemy_lab.draw()
     elseif gamePhase == "deploy" then
         renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
     else

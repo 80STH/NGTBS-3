@@ -108,6 +108,13 @@ function ai.getBestTargetForEnemy(enemy, entities, hex, selectedTargets)
     local bestScore = -math.huge
     local targets = ai.getAttackableTargets(entities)
 
+    local priorityOverride = nil
+    if enemy.targetPreference == "buildings" then
+        priorityOverride = {building = 15, player = 5}
+    elseif enemy.targetPreference == "units" then
+        priorityOverride = {building = 5, player = 15}
+    end
+
     for _, t in ipairs(targets) do
         local target = t.entity
         local dist = hex:getDistance(enemy.q, enemy.r, target.q, target.r)
@@ -137,7 +144,8 @@ function ai.getBestTargetForEnemy(enemy, entities, hex, selectedTargets)
 
         if not valid then goto continue end
 
-        local score = -dist * 2 + t.priority - (selectedTargets[target] or 0) * 3
+        local priority = priorityOverride and priorityOverride[t.type] or t.priority
+        local score = -dist * 2 + priority - (selectedTargets[target] or 0) * 3
         if t.health <= 2 then score = score + 15
         elseif t.health <= 3 then score = score + 5 end
         if t.type == "building" and t.health < t.entity.maxHealth then score = score + 8 end

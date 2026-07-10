@@ -98,6 +98,9 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     -- Rogue redirect: after Shoot, can fire again
     self.redirectPending = nil
     
+    -- AI target preference (for generated enemies)
+    self.targetPreference = nil  -- "buildings" | "units" | "indiscriminate" | nil
+    
     return self
 end
 
