@@ -598,8 +598,11 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
         if stepX then
             local firstTarget, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
             if firstTarget and targetHex then
-                local x, y = getDrawCoords(targetHex.q, targetHex.r)
-                if firstTarget:isBuilding() then
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, targetHex.q, targetHex.r, 0.6, 0.85, 1, 4, {{targetHex.q, targetHex.r}})
+            else
+                local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
+                if endCell then
+                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.6, 0.85, 1, 4, {{endCell.q, endCell.r}})
                 end
             end
         end
@@ -627,11 +630,6 @@ if attack.name == "Magic Bolt" then
             if target then
                 local toX, toY = getDrawCoords(hoverQ, hoverR)
                 local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
-                local midX = (fromX + toX) / 2
-                local midY = (fromY + toY) / 2
-                local ctrlX = midX
-                local ctrlY = midY - 60
-                ui.drawDottedArc(fromX, fromY, toX, toY, ctrlX, ctrlY, 5, 25, love.timer.getTime())
                 if target:isBuilding() or (target:isCharacter() and not target.isPlayable) then
                     local dmg = attack.damage or 1
                     if target:isBuilding() then
@@ -893,7 +891,7 @@ end
                 love.graphics.polygon("line", tv)
                 love.graphics.setLineWidth(1)
                 local fx, fy = getDrawCoords(attacker.q, attacker.r)
-                ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, target.q, target.r, 0.3, 0.8, 1, 4)
             end
         else
             -- Second click phase: show move cells for attacker and pull destination.
@@ -994,7 +992,7 @@ end
                     curQ, curR = nextQ, nextR
                 end
                 -- Dotted line from attacker to target
-                ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, hoverQ, hoverR, 0.3, 0.8, 1, 4)
             end
         end
         return
@@ -1060,34 +1058,17 @@ end
         if stepX then
             local firstTarget, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
             if firstTarget and targetHex then
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, targetHex.q, targetHex.r, 0.95, 0.2, 0.2, 4, {{targetHex.q, targetHex.r}})
                 local fromX, fromY = getDrawCoords(targetHex.q, targetHex.r)
-                local fx, fy = getDrawCoords(attacker.q, attacker.r)
-                ui.drawDottedLine(fx, fy, fromX, fromY, 4, 20, love.timer.getTime())
-                local totalDamage = attack.damage or 1
                 local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
                 local toX, toY = getDrawCoords(pushQ, pushR)
                 if firstTarget.isPushable ~= false then
                     ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, targetHex.q, targetHex.r, pushQ, pushR)
-                    local collisionDamage, reason, second = ui.checkCollisionDamage(firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities)
-                    if collisionDamage > 0 then
-                        totalDamage = totalDamage + collisionDamage
-                        if reason == "edge" then
-                        elseif second then
-                            local secX, secY = getDrawCoords(second.q, second.r)
-                            if reason == "collision_both" then
-                            else
-                            end
-                        end
-                    end
-                end
-                if firstTarget:isBuilding() then
                 end
             else
                 local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
                 if endCell then
-                    local fx, fy = getDrawCoords(attacker.q, attacker.r)
-                    local tx, ty = getDrawCoords(endCell.q, endCell.r)
-                    ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.95, 0.2, 0.2, 4, {{endCell.q, endCell.r}})
                 end
             end
         end
@@ -1098,70 +1079,31 @@ end
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
         if stepX then
             local firstTarget, firstHex, secondTarget, secondHex = attack:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-            local fx, fy = getDrawCoords(attacker.q, attacker.r)
-            if secondTarget then
-                local tx, ty = getDrawCoords(secondTarget.q, secondTarget.r)
-                ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
-            elseif firstTarget then
-                local tx, ty = getDrawCoords(firstTarget.q, firstTarget.r)
-                ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
-            end
+            local targets, lineEndQ, lineEndR = {}, nil, nil
             if firstTarget and firstHex then
-                local fromX, fromY = getDrawCoords(firstHex.q, firstHex.r)
-                local totalDamage = 0
-                if firstTarget.isPushable ~= false then
-                    local pushQ, pushR = hex_utils.applyCubeStep(firstHex.q, firstHex.r, stepX, stepY, stepZ)
-                    local toX, toY = getDrawCoords(pushQ, pushR)
-                    ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, firstHex.q, firstHex.r, pushQ, pushR)
-                    local collisionDamage, reason, second = ui.checkCollisionDamage(firstTarget, firstHex.q, firstHex.r, pushQ, pushR, hex, entities)
-                    if collisionDamage > 0 then
-                        totalDamage = totalDamage + collisionDamage
-                        if reason == "edge" then
-                        elseif second then
-                            local secX, secY = getDrawCoords(second.q, second.r)
-                            if reason == "collision_both" then
-                            else
-                            end
-                        end
-                    end
-                end
-                if totalDamage > 0 then
-                    if firstTarget:isBuilding() then
-                    end
-                end
+                table.insert(targets, {firstHex.q, firstHex.r})
+                lineEndQ, lineEndR = firstHex.q, firstHex.r
             end
             if secondTarget and secondHex then
-                local fromX, fromY = getDrawCoords(secondHex.q, secondHex.r)
-                local totalDamage = 1
-                if secondTarget.isPushable ~= false then
-                    local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
+                table.insert(targets, {secondHex.q, secondHex.r})
+                lineEndQ, lineEndR = secondHex.q, secondHex.r
+            end
+            if lineEndQ then
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, lineEndQ, lineEndR, 0.95, 0.2, 0.2, 4, targets)
+            end
+            for _, t in ipairs({{firstTarget, firstHex}, {secondTarget, secondHex}}) do
+                local tgt, tHex = t[1], t[2]
+                if tgt and tHex and tgt.isPushable ~= false then
+                    local pushQ, pushR = hex_utils.applyCubeStep(tHex.q, tHex.r, stepX, stepY, stepZ)
+                    local fromX, fromY = getDrawCoords(tHex.q, tHex.r)
                     local toX, toY = getDrawCoords(pushQ, pushR)
-                    ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, secondHex.q, secondHex.r, pushQ, pushR)
-                    local collisionDamage, reason, second = ui.checkCollisionDamage(secondTarget, secondHex.q, secondHex.r, pushQ, pushR, hex, entities)
-                    if collisionDamage > 0 then
-                        totalDamage = totalDamage + collisionDamage
-                        if reason == "edge" then
-                        elseif second then
-                            local secX, secY = getDrawCoords(second.q, second.r)
-                            if reason == "collision_both" then
-                            else
-                            end
-                        end
-                    end
-                end
-                if secondTarget:isBuilding() then
+                    ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, tHex.q, tHex.r, pushQ, pushR)
                 end
             end
             if not firstTarget then
                 local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
                 if endCell then
-                    local tx, ty = getDrawCoords(endCell.q, endCell.r)
-                    ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
-                    love.graphics.setColor(0.9, 0.7, 0.2, 0.5)
-                    love.graphics.setLineWidth(2)
-                    love.graphics.circle("line", tx, ty, hex.radius * 0.3)
-                    love.graphics.setLineWidth(1)
-                    love.graphics.setColor(1, 1, 1, 1)
+                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.95, 0.2, 0.2, 4, {{endCell.q, endCell.r}})
                 end
             end
         end
@@ -1190,9 +1132,8 @@ end
             end
             if firstTarget then
                 if attack.getLineDirection then
-                    local fx, fy = getDrawCoords(attacker.q, attacker.r)
-                    local tx, ty = getDrawCoords(firstTarget.q, firstTarget.r)
-                    ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
+                    local t = {{firstTarget.q, firstTarget.r}}
+                    ui.drawHexLineDots(hex, attacker.q, attacker.r, firstTarget.q, firstTarget.r, 0.95, 0.2, 0.2, 4, t)
                 end
                 previewData = {
                     {
@@ -1219,14 +1160,7 @@ end
                     end
                 end
             elseif pushCell.farthest or pushCell.edge then
-                local fx, fy = getDrawCoords(attacker.q, attacker.r)
-                local tx, ty = getDrawCoords(pushCell.q, pushCell.r)
-                ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
-                love.graphics.setColor(0.9, 0.7, 0.2, 0.5)
-                love.graphics.setLineWidth(2)
-                love.graphics.circle("line", tx, ty, hex.radius * 0.3)
-                love.graphics.setLineWidth(1)
-                love.graphics.setColor(1, 1, 1, 1)
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, pushCell.q, pushCell.r, 0.95, 0.2, 0.2, 4, {{pushCell.q, pushCell.r}})
             end
         end
     end
@@ -1257,14 +1191,7 @@ end
                     })
                 end
                 if not firstTarget and #pushCells > 0 and pushCells[1].farthest then
-                    local fx, fy = getDrawCoords(attacker.q, attacker.r)
-                    local tx, ty = getDrawCoords(pushCells[1].q, pushCells[1].r)
-                    ui.drawDottedLine(fx, fy, tx, ty, 4, 20, love.timer.getTime())
-                    love.graphics.setColor(0.9, 0.7, 0.2, 0.5)
-                    love.graphics.setLineWidth(2)
-                    love.graphics.circle("line", tx, ty, hex.radius * 0.3)
-                    love.graphics.setLineWidth(1)
-                    love.graphics.setColor(1, 1, 1, 1)
+                    ui.drawHexLineDots(hex, attacker.q, attacker.r, pushCells[1].q, pushCells[1].r, 0.95, 0.2, 0.2, 4, {{pushCells[1].q, pushCells[1].r}})
                 end
             end
         end
@@ -1278,11 +1205,6 @@ if attack.name == "Stone Throw" then
     -- Straight line check
     local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
     if not stepX then return end
-    local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
-    local centerX, centerY = getDrawCoords(hoverQ, hoverR)
-    local midX = (fromX + centerX) / 2
-    local midY = (fromY + centerY) / 2
-    ui.drawDottedArc(fromX, fromY, centerX, centerY, midX, midY - 50, 4, 20, love.timer.getTime())
     -- Damage, if there is a target
     local targetEntity = getEntityAtHex(hoverQ, hoverR, entities)
     if targetEntity and targetEntity.health > 0 then
@@ -2012,60 +1934,61 @@ function ui.drawDigSites(hex, digSites)
     end
 end
 -- ============================================================
--- Function for drawing dotted line (with shadow)
--- ============================================================
-function ui.drawDottedLine(x1, y1, x2, y2, dotRadius, step, time)
-    local dx = x2 - x1
-    local dy = y2 - y1
-    local length = math.sqrt(dx*dx + dy*dy)
-    if length < 0.1 then return end
-    local dirX = dx / length
-    local dirY = dy / length
-    local numDots = math.floor(length / step)
-    if numDots < 1 then numDots = 1 end
-    for i = 0, numDots do
-        local t = i / numDots
-        local px = x1 + dx * t
-        local py = y1 + dy * t
-        local pulse = 0.6 + 0.4 * math.sin(time * 8 + i)
-        local r = dotRadius * (0.7 + 0.3 * pulse)
-        local alpha = 0.85 * pulse
-        -- Shadow
-        love.graphics.setColor(0, 0, 0, 0.5 * alpha)
-        love.graphics.circle("fill", px + 2, py + 2, r)
-        -- Main dot
-        love.graphics.setColor(0.7, 0.3, 1, alpha)
-        love.graphics.circle("fill", px, py, r)
-        love.graphics.setColor(1, 0.8, 1, 0.9)
-        love.graphics.circle("line", px, py, r + 2)
-    end
+-- ponytail: straight-line aim hint. Walk hex-by-hex from attacker to end cell.
+-- On every non-target hex: a 3-dot cluster (the "line"). On every target cell:
+-- a single dot, always shown (including at point-blank).
+local function drawHexDot(px, py, r, alpha, cR, cG, cB)
+    love.graphics.setColor(0, 0, 0, 0.5 * alpha)
+    love.graphics.circle("fill", px + 2, py + 2, r)
+    love.graphics.setColor(cR, cG, cB, alpha)
+    love.graphics.circle("fill", px, py, r)
+    love.graphics.setColor(math.min(1, cR + 0.3), math.min(1, cG + 0.5), math.min(1, cB + 0.3), 0.9 * alpha)
+    love.graphics.circle("line", px, py, r + 2)
 end
-function ui.drawDottedArc(x1, y1, x2, y2, cx, cy, dotRadius, step, time)
-    local function bezier(t)
-        local mt = 1 - t
-        local x = mt*mt * x1 + 2*mt*t * cx + t*t * x2
-        local y = mt*mt * y1 + 2*mt*t * cy + t*t * y2
-        return x, y
+
+local function drawHexTriple(x, y, r, alpha, cR, cG, cB)
+    local k = r * 0.7
+    drawHexDot(x,            y - k,       r * 0.9, alpha, cR, cG, cB)
+    drawHexDot(x - k,        y + k * 0.5, r * 0.9, alpha, cR, cG, cB)
+    drawHexDot(x + k,        y + k * 0.5, r * 0.9, alpha, cR, cG, cB)
+end
+
+-- targetCells: optional list of {q,r} (target hexes). Each gets a single dot.
+-- end cell of the line is also a target by definition.
+function ui.drawHexLineDots(hex, fromQ, fromR, toQ, toR, cR, cG, cB, dotRadius, targetCells)
+    if not hex or not hex:isValidHex(fromQ, fromR) then return end
+    if not hex:isValidHex(toQ, toR) then return end
+    local time = love.timer.getTime()
+    local r = dotRadius or 4
+    cR = cR or 0.9; cG = cG or 0.2; cB = cB or 0.2
+
+    local function isTarget(q, r)
+        for _, t in ipairs(targetCells or {}) do
+            if t[1] == q and t[2] == r then return true end
+        end
+        return false
     end
-    -- Approximate arc length (rough estimate)
-    local mid1x, mid1y = bezier(0.5)
-    local len = math.sqrt((x2-x1)^2 + (y2-y1)^2) + math.sqrt((mid1x-cx)^2 + (mid1y-cy)^2)*0.5
-    local numDots = math.max(5, math.floor(len / step))
-    if numDots < 1 then numDots = 1 end
-    for i = 0, numDots do
-        local t = i / numDots
-        local px, py = bezier(t)
-        local pulse = 0.6 + 0.4 * math.sin(time * 8 + i)
-        local r = dotRadius * (0.7 + 0.3 * pulse)
-        local alpha = 0.85 * pulse
-        -- Shadow
-        love.graphics.setColor(0, 0, 0, 0.5 * alpha)
-        love.graphics.circle("fill", px + 2, py + 2, r)
-        -- Main dot
-        love.graphics.setColor(0.7, 0.2, 1, alpha)
-        love.graphics.circle("fill", px, py, r)
-        love.graphics.setColor(1, 0.5, 1, alpha * 0.9)
-        love.graphics.circle("line", px, py, r + 2)
+
+    local curQ, curR = fromQ, fromR
+    local safety = 64
+    while safety > 0 do
+        safety = safety - 1
+        local x, y = getDrawCoords(curQ, curR)
+        local pulse = 0.6 + 0.4 * math.sin(time * 8 + (curQ + curR) * 0.7)
+        local alpha = 0.9 * pulse
+        if curQ == toQ and curR == toR then
+            -- End cell is always a target: single dot.
+            drawHexDot(x, y, r, alpha, cR, cG, cB)
+            return
+        end
+        if isTarget(curQ, curR) then
+            drawHexDot(x, y, r, alpha, cR, cG, cB)
+        else
+            drawHexTriple(x, y, r, alpha, cR, cG, cB)
+        end
+        local nq, nr = hex_utils.axialStepToward(curQ, curR, toQ, toR)
+        if nq == curQ and nr == curR then return end
+        curQ, curR = nq, nr
     end
 end
 function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)

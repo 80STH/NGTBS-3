@@ -152,6 +152,36 @@ local suite = {
                 return true
             end,
         },
+        {
+            name = "axialStepToward reduces distance by exactly 1 each step",
+            fn = function()
+                hex_utils.setOrientation("pointy")
+                local cases = {
+                    {0, 0, 1, 0}, {0, 0, 2, 0}, {0, 0, 2, 1}, {0, 0, 1, -1},
+                    {0, 0, 0, 2}, {0, 0, 2, 2}, {0, 0, 3, -1}, {0, 0, 3, 0},
+                    {0, 0, -2, 1}, {0, 0, 0, -1}, {0, 0, -1, -1},
+                }
+                for _, t in ipairs(cases) do
+                    local nq, nr = hex_utils.axialStepToward(t[1], t[2], t[3], t[4])
+                    local dBefore = hex_utils.getDistance(t[1], t[2], t[3], t[4])
+                    local dAfter  = hex_utils.getDistance(nq, nr, t[3], t[4])
+                    if dBefore - dAfter ~= 1 then
+                        return false, string.format("(%d,%d)->(%d,%d) stepped to (%d,%d): dBefore=%s dAfter=%s",
+                            t[1], t[2], t[3], t[4], nq, nr, tostring(dBefore), tostring(dAfter))
+                    end
+                end
+                return true
+            end,
+        },
+        {
+            name = "axialStepToward from a cell to itself returns same cell",
+            fn = function()
+                hex_utils.setOrientation("pointy")
+                local q, r = hex_utils.axialStepToward(2, 3, 2, 3)
+                if q ~= 2 or r ~= 3 then return false, "expected (2,3)" end
+                return true
+            end,
+        },
     },
 }
 
