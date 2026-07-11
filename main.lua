@@ -228,7 +228,7 @@ function love.mousepressed(x, y, button)
         menu.mousepressed(lx, ly)
     elseif gamePhase == "editor" then
         map_editor.mousepressed(lx, ly, button)
-    elseif gamePhase == "enemy_lab" then
+    elseif gamePhase == "creature_lab" then
         enemy_lab.mousepressed(lx, ly)
     else
         input.mousepressed(lx, ly, button)
@@ -409,7 +409,7 @@ function love.draw()
         menu.draw()
     elseif gamePhase == "editor" then
         map_editor.draw()
-    elseif gamePhase == "enemy_lab" then
+    elseif gamePhase == "creature_lab" then
         enemy_lab.draw()
     elseif gamePhase == "deploy" then
         renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)

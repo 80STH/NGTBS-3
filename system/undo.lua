@@ -86,6 +86,7 @@ function undo.snapshot()
             summonTargetR = e.summonTargetR,
             indestructible = e.indestructible,
             isCowardlyBeast = e.isCowardlyBeast,
+            teleporting = e.teleporting,
             sprite = e.sprite,
             color = e.color,
             attacks = e.attacks,
@@ -169,6 +170,7 @@ function undo.restore(snap)
             es.ref.summonTargetR = es.summonTargetR
             es.ref.indestructible = es.indestructible
             es.ref.isCowardlyBeast = es.isCowardlyBeast
+            es.ref.teleporting = es.teleporting
             es.ref.sprite = es.sprite
             es.ref.color = es.color
             es.ref.attacks = es.attacks

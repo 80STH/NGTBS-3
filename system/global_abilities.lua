@@ -26,7 +26,7 @@ global_abilities.abilityUsedThisTurn = false
 global_abilities.scrollOffset = 0
 global_abilities.maxVisibleItems = 3
 
-global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down"}
+global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport"}
 
 global_abilities.heroicAbilities = {
     ["Wind Torrent"] = true,
@@ -2778,6 +2778,79 @@ function global_abilities.resetPendingRemains()
     global_abilities.pendingRemains = {}
 end
 
+-- ============================================================
+-- TELEPORT: grant chosen ally teleportation for the rest of the battle, 1 mana
+-- ============================================================
+local TeleportAbility = {}
+TeleportAbility.__index = TeleportAbility
+
+function TeleportAbility.new()
+    local self = {
+        name = "Teleport",
+        manaCost = 1,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }
+    return setmetatable(self, TeleportAbility)
+end
+
+function TeleportAbility:reset()
+    self.hasBeenUsed = false
+end
+
+function TeleportAbility:onActivate(state)
+    log.info("abilities", "Click on an ally to grant teleportation, or press ESC to cancel")
+end
+
+function TeleportAbility:onDeactivate(state)
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+
+function TeleportAbility:onClickHex(q, r, hex, state)
+    local target = nil
+    for _, e in ipairs(state.entities) do
+        if e.q == q and e.r == r and e.health > 0 and e:isCharacter() and e.isPlayable then
+            target = e
+            break
+        end
+    end
+    if not target then
+        log.warn("abilities", "No valid ally at this cell!")
+        return true
+    end
+    
+    if target.teleporting then
+        log.warn("abilities", "Ally already has teleportation!")
+        return true
+    end
+    
+    undo.snapshot()
+    target.teleporting = true
+    log.infof("abilities", "%s gained teleportation!", tostring(target.name))
+    
+    global_abilities.spendAbility(self)
+    restoreSelectedActor()
+    global_abilities.activeAbility = nil
+    return true
+end
+
+function TeleportAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.4, 0.7, 1.0},
+        label = "Teleport",
+        activeLabel = "Select ally",
+        tooltipH = 80,
+        tooltipTitle = "Teleport",
+        tooltipLines = {
+            "Grant an ally the ability",
+            "to teleport anywhere on",
+            "the map for the rest of",
+            "the battle.",
+        },
+    })
+end
+
 -- Register all abilities
 global_abilities.register(HealAbility.new())
 global_abilities.register(ExtraMoveAbility.new())
@@ -2796,5 +2869,6 @@ global_abilities.register(InvulnerabilityAbility.new())
 global_abilities.register(VortexAbility.new())
 global_abilities.register(HexAbility.new())
 global_abilities.register(UpsideDownAbility.new())
+global_abilities.register(TeleportAbility.new())
 
 return global_abilities

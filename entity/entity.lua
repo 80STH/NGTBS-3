@@ -57,6 +57,8 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     self.flying = false
     -- Hovering unit (doesn't sink in water, but considers obstacles)
     self.hovering = false
+    -- Teleporting unit (appears anywhere, avoids hazards)
+    self.teleporting = false
     -- Health cell size (protection from lethal damage, nil = no protection)
     self.healthCellSize = nil
     

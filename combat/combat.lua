@@ -2153,6 +2153,23 @@ function performMove(actor, targetQ, targetR)
         return false
     end
     if actor.q == targetQ and actor.r == targetR then return false end
+    
+    if actor.teleporting then
+        if cell_rules.isOccupiedForStop(targetQ, targetR, actor) then
+            log.debug("combat", "Cell occupied")
+            return false
+        end
+        undo.snapshot()
+        actor.hasMovedThisTurn = true
+        actor.q = targetQ
+        actor.r = targetR
+        if selectedActor == actor then
+            hex.selectedQ = actor.q
+            hex.selectedR = actor.r
+        end
+        return true
+    end
+    
     local distance = hex:getDistance(actor.q, actor.r, targetQ, targetR)
     local baseRange = actor.moveRange + (status.hasEntityStatus(actor, "empowered") and 1 or 0)
     if combat.isInSlowingAura then

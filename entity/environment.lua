@@ -948,14 +948,23 @@ function environment.createGeneratedEnemy(params, q, r)
         love.graphics.setLineWidth(2)
         love.graphics.circle("line", size/2, size/2, size/2 - 1)
         love.graphics.setLineWidth(1)
+    elseif params.mobility == "teleport" then
+        love.graphics.setColor(1, 1, 1, 0.5)
+        love.graphics.setLineWidth(1)
+        for i = 1, 3 do
+            love.graphics.circle("line", size/2, size/2, size/2 - 1 - i*2)
+        end
+        love.graphics.setLineWidth(1)
     end
     love.graphics.setCanvas()
     sprite = canvas
     
-    local entity = Entity.new(params.name, Entity.TYPES.CHARACTER, q, r, params.health, false, params.moveRange, sprite, nil, attacks)
+    local entity = Entity.new(params.name, Entity.TYPES.CHARACTER, q, r, params.health, false, params.moveRange == "infinite" and 999 or params.moveRange, sprite, nil, attacks)
     
     if params.mobility == "hovering" then
         entity.hovering = true
+    elseif params.mobility == "teleport" then
+        entity.teleporting = true
     end
     
     if params.aura == "slow" then

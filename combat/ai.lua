@@ -572,7 +572,45 @@ function ai.moveAndPrepare(enemy, entities, hex)
     end
 end
 
+function ai.performTeleportTowards(enemy, target, entities, hex)
+    local bestCell = nil
+    local bestDist = math.huge
+    
+    for _, cell in ipairs(hex._activeCells) do
+        local q, r = cell.q, cell.r
+        
+        local occupied = false
+        for _, e in ipairs(entities) do
+            if e ~= enemy and e.q == q and e.r == r and e.health > 0 and not e.isHazard then
+                occupied = true
+                break
+            end
+        end
+        if not occupied then
+            if not isCellDangerousForEntity(q, r, enemy) then
+                local dist = hex:getDistance(q, r, target.q, target.r)
+                if dist < bestDist then
+                    bestDist = dist
+                    bestCell = cell
+                end
+            end
+        end
+    end
+    
+    if bestCell then
+        enemy.q = bestCell.q
+        enemy.r = bestCell.r
+        enemy.movementFinished = true
+        return true
+    end
+    return false
+end
+
 function ai.performMoveTowards(enemy, target, entities, hex)
+    if enemy.teleporting then
+        return ai.performTeleportTowards(enemy, target, entities, hex)
+    end
+    
     local neighbors = hex:getNeighbors(target.q, target.r)
     local bestCell = nil
     local bestDist = math.huge
@@ -676,6 +714,7 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
 end
 
 function ai.getEffectiveMoveRange(enemy, hex, entities)
+    if enemy.teleporting then return math.huge end
     if status.hasEntityStatus(enemy, "rooted") and not enemy.rootImmune then
         return 0
     end

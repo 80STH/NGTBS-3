@@ -42,6 +42,7 @@ function ui.getHazardTexture()
 end
 -- Checks whether the actor can reach the cell (considering obstacles and path length)
 function ui.getEffectiveMoveRange(actor, entities, hex)
+    if actor.teleporting then return math.huge end
     if status and status.hasEntityStatus and status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
         return 0
     end
@@ -64,6 +65,13 @@ function ui.getEffectiveMoveRange(actor, entities, hex)
 end
 function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     if not hex:isActiveHex(targetQ, targetR) then return false end
+    
+    if actor.teleporting then
+        if cell_rules.isOccupiedForStop(targetQ, targetR, actor) then
+            return false
+        end
+        return true
+    end
     
     -- Water is impassable (except for flying/hovering)
     if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
@@ -98,6 +106,7 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then return end
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return end
     if not hex:isActiveHex(hoverQ, hoverR) then return end
+    if actor.teleporting then return end
     local effectiveRange = ui.getEffectiveMoveRange(actor, entities, hex)
     local dist = hex:getDistance(actor.q, actor.r, hoverQ, hoverR)
     if dist > effectiveRange then return end
@@ -1826,6 +1835,16 @@ function ui.drawEnemyMovementRange(hex, enemy, entities, terrainMap)
 end
 function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMap, hex)
     if not hex:isActiveHex(targetQ, targetR) then return false end
+    
+    if enemy.teleporting then
+        for _, e in ipairs(entities) do
+            if e ~= enemy and e.q == targetQ and e.r == targetR then
+                return false
+            end
+        end
+        return true
+    end
+    
     if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
         if not (enemy and (enemy.flying or enemy.hovering)) then
             return false
