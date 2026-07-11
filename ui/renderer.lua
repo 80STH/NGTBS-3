@@ -807,7 +807,9 @@ function drawHexGrid(state, cellOverlays)
         local insetVerts = hex:drawHexagon(cell.x, drawY + yOffset, hex.radius - 2)
 
         local isCurrentActor = state.selectedActor and state.selectedActor.q == cell.q and state.selectedActor.r == cell.r
+            and not state.selectedActor.isMoving
         local isSelected = (hex.selectedQ == cell.q and hex.selectedR == cell.r)
+            and not (state.selectedActor and state.selectedActor.isMoving)
         local isHovered = (hex.hoverQ == cell.q and hex.hoverR == cell.r)
 
         if isCurrentActor then

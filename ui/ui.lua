@@ -596,18 +596,6 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
     end
     -- Ghost Bolt
     if attack.name == "Ghost Bolt" then
-        local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
-        if stepX then
-            local firstTarget, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-            if firstTarget and targetHex then
-                ui.drawHexLineDots(hex, attacker.q, attacker.r, targetHex.q, targetHex.r, 0.95, 0.2, 0.2, 4, {{targetHex.q, targetHex.r}}, hoverQ, hoverR)
-            else
-                local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
-                if endCell then
-                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.95, 0.2, 0.2, 4, {{endCell.q, endCell.r}}, hoverQ, hoverR)
-                end
-            end
-        end
         return
     end
     -- Zombie Bite
@@ -1060,17 +1048,11 @@ end
         if stepX then
             local firstTarget, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
             if firstTarget and targetHex then
-                ui.drawHexLineDots(hex, attacker.q, attacker.r, targetHex.q, targetHex.r, 0.95, 0.2, 0.2, 4, {{targetHex.q, targetHex.r}}, hoverQ, hoverR)
                 local fromX, fromY = getDrawCoords(targetHex.q, targetHex.r)
                 local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
                 local toX, toY = getDrawCoords(pushQ, pushR)
                 if firstTarget.isPushable ~= false then
                     ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, targetHex.q, targetHex.r, pushQ, pushR)
-                end
-            else
-                local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
-                if endCell then
-                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.95, 0.2, 0.2, 4, {{endCell.q, endCell.r}}, hoverQ, hoverR)
                 end
             end
         end
@@ -1081,18 +1063,6 @@ end
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
         if stepX then
             local firstTarget, firstHex, secondTarget, secondHex = attack:findFirstTwoTargetsOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
-            local targets, lineEndQ, lineEndR = {}, nil, nil
-            if firstTarget and firstHex then
-                table.insert(targets, {firstHex.q, firstHex.r})
-                lineEndQ, lineEndR = firstHex.q, firstHex.r
-            end
-            if secondTarget and secondHex then
-                table.insert(targets, {secondHex.q, secondHex.r})
-                lineEndQ, lineEndR = secondHex.q, secondHex.r
-            end
-            if lineEndQ then
-                ui.drawHexLineDots(hex, attacker.q, attacker.r, lineEndQ, lineEndR, 0.95, 0.2, 0.2, 4, targets, hoverQ, hoverR)
-            end
             for _, t in ipairs({{firstTarget, firstHex}, {secondTarget, secondHex}}) do
                 local tgt, tHex = t[1], t[2]
                 if tgt and tHex and tgt.isPushable ~= false then
@@ -1100,12 +1070,6 @@ end
                     local fromX, fromY = getDrawCoords(tHex.q, tHex.r)
                     local toX, toY = getDrawCoords(pushQ, pushR)
                     ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, tHex.q, tHex.r, pushQ, pushR)
-                end
-            end
-            if not firstTarget then
-                local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
-                if endCell then
-                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.95, 0.2, 0.2, 4, {{endCell.q, endCell.r}}, hoverQ, hoverR)
                 end
             end
         end
@@ -1133,10 +1097,6 @@ end
                 firstTarget = getEntityAtHex(hoverQ, hoverR, entities)
             end
             if firstTarget then
-                if attack.getLineDirection then
-                    local t = {{firstTarget.q, firstTarget.r}}
-                    ui.drawHexLineDots(hex, attacker.q, attacker.r, firstTarget.q, firstTarget.r, 0.95, 0.2, 0.2, 4, t, hoverQ, hoverR)
-                end
                 previewData = {
                     {
                         target = firstTarget,
@@ -1161,8 +1121,6 @@ end
                         end
                     end
                 end
-            elseif pushCell.farthest or pushCell.edge then
-                ui.drawHexLineDots(hex, attacker.q, attacker.r, pushCell.q, pushCell.r, 0.95, 0.2, 0.2, 4, {{pushCell.q, pushCell.r}}, hoverQ, hoverR)
             end
         end
     end
@@ -1191,9 +1149,6 @@ end
                         pushTo = isPushable and pushCells[2] or nil,
                         attackDamage = 1,
                     })
-                end
-                if not firstTarget and #pushCells > 0 and pushCells[1].farthest then
-                    ui.drawHexLineDots(hex, attacker.q, attacker.r, pushCells[1].q, pushCells[1].r, 0.95, 0.2, 0.2, 4, {{pushCells[1].q, pushCells[1].r}}, hoverQ, hoverR)
                 end
             end
         end
@@ -1632,13 +1587,35 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
         return
     end
     if attack.visualType == "line" then
-        if not enemy.preparedTargetOffset then return end
-        local targetQ, targetR = hex_utils.applyCubeDiff(
-            enemy.q, enemy.r,
-            enemy.preparedTargetOffset.dx,
-            enemy.preparedTargetOffset.dy,
-            enemy.preparedTargetOffset.dz
-        )
+        local targetQ, targetR
+        if enemy.attackDirection then
+            local step = enemy.attackDirection
+            local curQ, curR = enemy.q, enemy.r
+            local lastQ, lastR = curQ, curR
+            while true do
+                local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
+                if not hex:isActiveHex(nextQ, nextR) then
+                    targetQ, targetR = lastQ, lastR
+                    break
+                end
+                local ent = combat.getEntityAtHex(nextQ, nextR, entities)
+                if ent and ent ~= enemy and ent.health > 0 then
+                    targetQ, targetR = nextQ, nextR
+                    break
+                end
+                lastQ, lastR = nextQ, nextR
+                curQ, curR = nextQ, nextR
+            end
+        elseif enemy.preparedTargetOffset then
+            targetQ, targetR = hex_utils.applyCubeDiff(
+                enemy.q, enemy.r,
+                enemy.preparedTargetOffset.dx,
+                enemy.preparedTargetOffset.dy,
+                enemy.preparedTargetOffset.dz
+            )
+        else
+            return
+        end
         local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
         local toX, toY = getDrawCoords(targetQ, targetR)
         if not fromX or not toX then return end
@@ -1672,9 +1649,33 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
             if hex:isActiveHex(targetQ, targetR) then
                 local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
                 local toX, toY = getDrawCoords(targetQ, targetR)
-                local pulse = 0.5 + 0.5 * math.sin(time * 8)
-                local alpha = 0.5 + 0.3 * pulse
-                ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.2, 0.2, alpha, enemy.q, enemy.r, targetQ, targetR)
+                local dx = toX - fromX
+                local dy = toY - fromY
+                local dist = math.sqrt(dx * dx + dy * dy)
+                if dist >= 1 then
+                    local nx = dx / dist
+                    local ny = dy / dist
+                    local perpX = -ny
+                    local perpY = nx
+                    local size = dist * 0.3
+                    local v1x, v1y = fromX, fromY
+                    local v2x, v2y = toX, toY
+                    local v3x, v3y = fromX + perpX * size, fromY + perpY * size
+                    local hovered = (hex.hoverQ == enemy.q and hex.hoverR == enemy.r)
+                    local alpha
+                    if hovered then
+                        local pulse = 0.5 + 0.5 * math.sin(time * 8)
+                        alpha = 0.5 + 0.3 * pulse
+                    else
+                        alpha = 0.5
+                    end
+                    love.graphics.setColor(1, 0.2, 0.2, alpha)
+                    love.graphics.polygon("fill", v1x, v1y, v2x, v2y, v3x, v3y)
+                    love.graphics.setColor(1, 0.2, 0.2, alpha * 1.2)
+                    love.graphics.setLineWidth(2)
+                    love.graphics.polygon("line", v1x, v1y, v2x, v2y, v3x, v3y)
+                    love.graphics.setLineWidth(1)
+                end
             end
         end
         return
