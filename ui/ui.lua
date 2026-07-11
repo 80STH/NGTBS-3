@@ -199,6 +199,34 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
     love.graphics.setColor(cr, cg, cb, ca)
     love.graphics.polygon("fill", tipX, tipY, lx, ly, rx, ry)
 end
+function ui.drawVerticalArrow(x, y, direction, r, g, b, alpha)
+    local sz = 38
+    local hw = 12
+    local cr, cg, cb = r or 1, g or 0.25, b or 0.25
+    local ca = alpha or 0.9
+    local dy = direction == "up" and -1 or 1
+    local tipY = y + dy * sz * 0.5
+    local baseY = y - dy * sz * 0.5
+    love.graphics.setColor(0, 0, 0, ca * 0.4)
+    love.graphics.setLineWidth(5)
+    love.graphics.line(x + 2, baseY + 2, x + 2, tipY + 2)
+    love.graphics.setColor(cr, cg, cb, ca)
+    love.graphics.setLineWidth(3)
+    love.graphics.line(x, baseY, x, tipY)
+    love.graphics.setLineWidth(1)
+    local lx, ly = x - hw, tipY - dy * hw
+    local rx, ry = x + hw, tipY - dy * hw
+    love.graphics.setColor(0, 0, 0, ca * 0.4)
+    love.graphics.polygon("fill", x + 2, tipY + 2, lx + 2, ly + 2, rx + 2, ry + 2)
+    love.graphics.setColor(cr, cg, cb, ca)
+    love.graphics.polygon("fill", x, tipY, lx, ly, rx, ry)
+end
+function ui.drawRedCircleWithShadow(x, y, radius)
+    love.graphics.setColor(0, 0, 0, 0.4)
+    love.graphics.circle("fill", x + 2, y + 4, radius)
+    love.graphics.setColor(0.85, 0.15, 0.15, 0.85)
+    love.graphics.circle("fill", x, y, radius)
+end
 local icon_cache = require("ui.icon_cache")
 
 function ui.willKillTarget(target, attacker, baseDamage, directionIndex, dist)
@@ -1639,7 +1667,6 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
     local fromR = enemy.preparedFromR or enemy.r
     local fromX, fromY = getDrawCoords(fromQ, fromR)
     if not fromX then return end
-    -- TrainShunt: locomotive shows direction of movement
     if attack.name == "TrainShunt" then
         if enemy.preparedTargetOffset then
             local targetQ, targetR = hex_utils.applyCubeDiff(
@@ -1657,55 +1684,80 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
         end
         return
     end
-    -- Ghost Bolt: first target on the line
-if attack.name == "Ghost Bolt" then
-    if enemy.attackDirection then
-        local step = enemy.attackDirection
-        local curQ, curR = enemy.q, enemy.r
-        local lastValidQ, lastValidR = curQ, curR
-        -- Go along the line until an inactive cell
-        while true do
-            local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
-            if not hex:isActiveHex(nextQ, nextR) then
-                break  -- reached an inactive cell (out of hexagon bounds)
+    if attack.visualType == "arc" then
+        if enemy.preparedTargetOffset then
+            local targetQ, targetR = hex_utils.applyCubeDiff(
+                enemy.q, enemy.r,
+                enemy.preparedTargetOffset.dx,
+                enemy.preparedTargetOffset.dy,
+                enemy.preparedTargetOffset.dz
+            )
+            if hex:isActiveHex(targetQ, targetR) then
+                local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+                local toX, toY = getDrawCoords(targetQ, targetR)
+                local angle = math.atan2(toY - fromY, toX - fromX)
+                local edgeOffset = hex.radius * 0.7
+                local startX = fromX + math.cos(angle) * edgeOffset
+                local startY = fromY + math.sin(angle) * edgeOffset
+                local endX = toX - math.cos(angle) * edgeOffset
+                local endY = toY - math.sin(angle) * edgeOffset
+                ui.drawVerticalArrow(startX, startY, "up", 0.7, 0.2, 1, 0.9)
+                ui.drawVerticalArrow(endX, endY, "down", 0.7, 0.2, 1, 0.9)
             end
-            -- Check if there is a living target (first encountered)
-            local ent = getEntityAtHex(nextQ, nextR, entities)
-            if ent and ent ~= enemy and ent.health > 0 then
-                lastValidQ, lastValidR = nextQ, nextR
-                break
+        end
+        return
+    end
+    if attack.visualType == "line" then
+        if enemy.attackDirection then
+            local step = enemy.attackDirection
+            local smallRadius = hex.radius * 0.1
+            local targetQ, targetR = enemy.q, enemy.r
+            if enemy.preparedTargetOffset then
+                targetQ, targetR = hex_utils.applyCubeDiff(
+                    enemy.q, enemy.r,
+                    enemy.preparedTargetOffset.dx,
+                    enemy.preparedTargetOffset.dy,
+                    enemy.preparedTargetOffset.dz
+                )
             end
-            lastValidQ, lastValidR = nextQ, nextR
-            curQ, curR = nextQ, nextR
+            local px1, py1 = getDrawCoords(enemy.q, enemy.r)
+            local testQ2, testR2 = hex_utils.applyCubeStep(enemy.q, enemy.r, step.dx, step.dy, step.dz)
+            local px2, py2 = getDrawCoords(testQ2, testR2)
+            local angle = 0
+            local dist = hex.radius
+            if px1 and px2 then
+                angle = math.atan2(py2 - py1, px2 - px1)
+                dist = math.sqrt((px2 - px1)^2 + (py2 - py1)^2)
+            end
+            local offset = dist / 3
+            if px1 then
+                ui.drawRedCircleWithShadow(px1, py1, smallRadius)
+            end
+            local curQ, curR = enemy.q, enemy.r
+            local steps = 0
+            local maxSteps = 100
+            while steps < maxSteps do
+                local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
+                if not hex:isActiveHex(nextQ, nextR) then break end
+                local cx, cy = getDrawCoords(nextQ, nextR)
+                if cx then
+                    if nextQ == targetQ and nextR == targetR then
+                        ui.drawRedCircleWithShadow(cx, cy, smallRadius)
+                    else
+                        for i = -1, 1 do
+                            local ox = math.cos(angle) * offset * i
+                            local oy = math.sin(angle) * offset * i
+                            ui.drawRedCircleWithShadow(cx + ox, cy + oy, smallRadius)
+                        end
+                    end
+                end
+                curQ, curR = nextQ, nextR
+                if curQ == targetQ and curR == targetR then break end
+                steps = steps + 1
+            end
         end
-        -- If there is at least one cell not matching the enemy's position
-        if (lastValidQ ~= enemy.q or lastValidR ~= enemy.r) then
-            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
-            local toX, toY = getDrawCoords(lastValidQ, lastValidR)
-            ui.drawDottedLine(fromX, fromY, toX, toY, 6, 25, time)
-        end
+        return
     end
-    return
-end
-if attack.name == "Magic Bolt" then
-    if enemy.preparedTargetOffset then
-        local targetQ, targetR = hex_utils.applyCubeDiff(
-            enemy.q, enemy.r,
-            enemy.preparedTargetOffset.dx,
-            enemy.preparedTargetOffset.dy,
-            enemy.preparedTargetOffset.dz
-        )
-        if hex:isActiveHex(targetQ, targetR) then
-            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
-            local toX, toY = getDrawCoords(targetQ, targetR)
-            local midX = (fromX + toX) / 2
-            local midY = (fromY + toY) / 2
-            ui.drawDottedArc(fromX, fromY, toX, toY, midX, midY - 60, 6, 25, time)
-        end
-    end
-    return
-end
-    -- ===== Bite (Zombie) =====
     if attack.name == "Bite" then
         if enemy.preparedTargetOffset then
             local targetQ, targetR = hex_utils.applyCubeDiff(
@@ -1724,7 +1776,6 @@ end
         end
         return
     end
-    -- Generic method for attacks with getAffectedCells (Bash, Cleave, Lunge, etc.)
     if attack.getAffectedCells and enemy.preparedTargetOffset then
         local targetQ, targetR = hex_utils.applyCubeDiff(
             enemy.q, enemy.r,
@@ -1733,7 +1784,6 @@ end
             enemy.preparedTargetOffset.dz
         )
         if hex:isActiveHex(targetQ, targetR) then
-            -- Show line from enemy to target
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
             local pulse = 0.5 + 0.5 * math.sin(time * 8)
@@ -1741,18 +1791,6 @@ end
             ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.2, 0.2, alpha, enemy.q, enemy.r, targetQ, targetR)
         end
         return
-    end
-    -- For attacks with direction (Dash, Shoot, Piercing) вЂ“ use direction
-    if enemy.attackDirection then
-        local step = enemy.attackDirection
-        local targetQ, targetR = hex_utils.applyCubeStep(enemy.q, enemy.r, step.dx, step.dy, step.dz)
-        if hex:isValidHex(targetQ, targetR) then
-            local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
-            local toX, toY = getDrawCoords(targetQ, targetR)
-            local pulse = 0.5 + 0.5 * math.sin(time * 8)
-            local alpha = 0.5 + 0.3 * pulse
-            ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.2, 0.2, alpha, enemy.q, enemy.r, targetQ, targetR)
-        end
     end
 end
 -- Preview Wind Torrent: draws arrows from each movable object to its new position

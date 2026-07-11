@@ -24,6 +24,7 @@ function combat.Attack.new(name, description, range, damage, effects)
     self.range = range or 1
     self.damage = damage or 1
     self.effects = effects or {}
+    self.visualType = "melee"
     return self
 end
 
@@ -266,6 +267,7 @@ combat.DashAttack.__index = combat.DashAttack
 
 function combat.DashAttack.new()
     local self = combat.Attack.new("Dash", "Charge forward, stop before first entity", math.huge, 0, {})
+    self.visualType = "line"
     return setmetatable(self, combat.DashAttack)
 end
 
@@ -453,6 +455,7 @@ combat.LineShotAttack.__index = combat.LineShotAttack
 
 function combat.LineShotAttack.new(name, desc, range, damage)
     local self = combat.Attack.new(name, desc, range, damage, {})
+    self.visualType = "line"
     return setmetatable(self, combat.LineShotAttack)
 end
 
@@ -499,6 +502,7 @@ combat.PiercingShootAttack = setmetatable({}, combat.Attack)
 combat.PiercingShootAttack.__index = combat.PiercingShootAttack
 function combat.PiercingShootAttack.new(range)
     local self = combat.Attack.new("Piercing Shot", "Shoot through the first target (0 dmg, pushes) to hit the second (1 dmg, pushes)", range or 999, 0, {})
+    self.visualType = "line"
     return setmetatable(self, combat.PiercingShootAttack)
 end
 function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
@@ -727,6 +731,7 @@ combat.LichBoltAttack.__index = combat.LichBoltAttack
 function combat.LichBoltAttack.new(range)
     local self = combat.Attack.new("Magic Bolt", "Throw a bolt that hits any target in range, ignoring obstacles and line of sight", range or 5, 1, {})
     self.minRange = 2
+    self.visualType = "arc"
     return setmetatable(self, combat.LichBoltAttack)
 end
 
@@ -894,6 +899,7 @@ combat.GhostBoltAttack.__index = combat.GhostBoltAttack
 
 function combat.GhostBoltAttack.new()
     local self = combat.Attack.new("Ghost Bolt", "Piercing shot with unlimited range, hits first target", math.huge, 1, {})
+    self.visualType = "line"
     return setmetatable(self, combat.GhostBoltAttack)
 end
 
