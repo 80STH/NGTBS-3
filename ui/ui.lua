@@ -221,10 +221,12 @@ function ui.drawVerticalArrow(x, y, direction, r, g, b, alpha)
     love.graphics.setColor(cr, cg, cb, ca)
     love.graphics.polygon("fill", x, tipY, lx, ly, rx, ry)
 end
-function ui.drawRedCircleWithShadow(x, y, radius)
-    love.graphics.setColor(0, 0, 0, 0.4)
+function ui.drawRedCircleWithShadow(x, y, radius, alpha)
+    alpha = alpha or 0.85
+    local scale = alpha / 0.85
+    love.graphics.setColor(0, 0, 0, 0.4 * scale)
     love.graphics.circle("fill", x + 2, y + 4, radius)
-    love.graphics.setColor(0.85, 0.15, 0.15, 0.85)
+    love.graphics.setColor(0.85, 0.15, 0.15, alpha)
     love.graphics.circle("fill", x, y, radius)
 end
 local icon_cache = require("ui.icon_cache")
@@ -1630,53 +1632,32 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
         return
     end
     if attack.visualType == "line" then
-        if enemy.attackDirection then
-            local step = enemy.attackDirection
-            local smallRadius = hex.radius * 0.1
-            local targetQ, targetR = enemy.q, enemy.r
-            if enemy.preparedTargetOffset then
-                targetQ, targetR = hex_utils.applyCubeDiff(
-                    enemy.q, enemy.r,
-                    enemy.preparedTargetOffset.dx,
-                    enemy.preparedTargetOffset.dy,
-                    enemy.preparedTargetOffset.dz
-                )
-            end
-            local px1, py1 = getDrawCoords(enemy.q, enemy.r)
-            local testQ2, testR2 = hex_utils.applyCubeStep(enemy.q, enemy.r, step.dx, step.dy, step.dz)
-            local px2, py2 = getDrawCoords(testQ2, testR2)
-            local angle = 0
-            local dist = hex.radius
-            if px1 and px2 then
-                angle = math.atan2(py2 - py1, px2 - px1)
-                dist = math.sqrt((px2 - px1)^2 + (py2 - py1)^2)
-            end
-            local offset = dist / 3
-            if px1 then
-                ui.drawRedCircleWithShadow(px1, py1, smallRadius)
-            end
-            local curQ, curR = enemy.q, enemy.r
-            local steps = 0
-            local maxSteps = 100
-            while steps < maxSteps do
-                local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
-                if not hex:isActiveHex(nextQ, nextR) then break end
-                local cx, cy = getDrawCoords(nextQ, nextR)
-                if cx then
-                    if nextQ == targetQ and nextR == targetR then
-                        ui.drawRedCircleWithShadow(cx, cy, smallRadius)
-                    else
-                        for i = -1, 1 do
-                            local ox = math.cos(angle) * offset * i
-                            local oy = math.sin(angle) * offset * i
-                            ui.drawRedCircleWithShadow(cx + ox, cy + oy, smallRadius)
-                        end
-                    end
-                end
-                curQ, curR = nextQ, nextR
-                if curQ == targetQ and curR == targetR then break end
-                steps = steps + 1
-            end
+        if not enemy.preparedTargetOffset then return end
+        local targetQ, targetR = hex_utils.applyCubeDiff(
+            enemy.q, enemy.r,
+            enemy.preparedTargetOffset.dx,
+            enemy.preparedTargetOffset.dy,
+            enemy.preparedTargetOffset.dz
+        )
+        local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
+        local toX, toY = getDrawCoords(targetQ, targetR)
+        if not fromX or not toX then return end
+        local dx = toX - fromX
+        local dy = toY - fromY
+        local dist = math.sqrt(dx * dx + dy * dy)
+        if dist < 1 then return end
+        -- Blink when the cursor hovers the attacker
+        local hovered = (hex.hoverQ == enemy.q and hex.hoverR == enemy.r)
+        local alpha = 0.85
+        if hovered then
+            alpha = 0.15 + 0.7 * (0.5 + 0.5 * math.sin(time * 8))
+        end
+        local dotRadius = hex.radius * 0.12
+        local spacing = hex.radius * 0.4
+        local count = math.max(1, math.floor(dist / spacing))
+        for i = 0, count do
+            local t = i / count
+            ui.drawRedCircleWithShadow(fromX + dx * t, fromY + dy * t, dotRadius, alpha)
         end
         return
     end
