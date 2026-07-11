@@ -598,11 +598,11 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
         if stepX then
             local firstTarget, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
             if firstTarget and targetHex then
-                ui.drawHexLineDots(hex, attacker.q, attacker.r, targetHex.q, targetHex.r, 0.6, 0.85, 1, 4, {{targetHex.q, targetHex.r}})
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, targetHex.q, targetHex.r, 0.95, 0.2, 0.2, 4, {{targetHex.q, targetHex.r}}, hoverQ, hoverR)
             else
                 local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
                 if endCell then
-                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.6, 0.85, 1, 4, {{endCell.q, endCell.r}})
+                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.95, 0.2, 0.2, 4, {{endCell.q, endCell.r}}, hoverQ, hoverR)
                 end
             end
         end
@@ -891,7 +891,7 @@ end
                 love.graphics.polygon("line", tv)
                 love.graphics.setLineWidth(1)
                 local fx, fy = getDrawCoords(attacker.q, attacker.r)
-                ui.drawHexLineDots(hex, attacker.q, attacker.r, target.q, target.r, 0.3, 0.8, 1, 4)
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, target.q, target.r, 0.3, 0.8, 1, 4, nil, hoverQ, hoverR)
             end
         else
             -- Second click phase: show move cells for attacker and pull destination.
@@ -992,7 +992,7 @@ end
                     curQ, curR = nextQ, nextR
                 end
                 -- Dotted line from attacker to target
-                ui.drawHexLineDots(hex, attacker.q, attacker.r, hoverQ, hoverR, 0.3, 0.8, 1, 4)
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, hoverQ, hoverR, 0.3, 0.8, 1, 4, nil, hoverQ, hoverR)
             end
         end
         return
@@ -1058,7 +1058,7 @@ end
         if stepX then
             local firstTarget, targetHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
             if firstTarget and targetHex then
-                ui.drawHexLineDots(hex, attacker.q, attacker.r, targetHex.q, targetHex.r, 0.95, 0.2, 0.2, 4, {{targetHex.q, targetHex.r}})
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, targetHex.q, targetHex.r, 0.95, 0.2, 0.2, 4, {{targetHex.q, targetHex.r}}, hoverQ, hoverR)
                 local fromX, fromY = getDrawCoords(targetHex.q, targetHex.r)
                 local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
                 local toX, toY = getDrawCoords(pushQ, pushR)
@@ -1068,7 +1068,7 @@ end
             else
                 local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
                 if endCell then
-                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.95, 0.2, 0.2, 4, {{endCell.q, endCell.r}})
+                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.95, 0.2, 0.2, 4, {{endCell.q, endCell.r}}, hoverQ, hoverR)
                 end
             end
         end
@@ -1089,7 +1089,7 @@ end
                 lineEndQ, lineEndR = secondHex.q, secondHex.r
             end
             if lineEndQ then
-                ui.drawHexLineDots(hex, attacker.q, attacker.r, lineEndQ, lineEndR, 0.95, 0.2, 0.2, 4, targets)
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, lineEndQ, lineEndR, 0.95, 0.2, 0.2, 4, targets, hoverQ, hoverR)
             end
             for _, t in ipairs({{firstTarget, firstHex}, {secondTarget, secondHex}}) do
                 local tgt, tHex = t[1], t[2]
@@ -1103,7 +1103,7 @@ end
             if not firstTarget then
                 local endCell = combat.getFarthestActiveCellOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex)
                 if endCell then
-                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.95, 0.2, 0.2, 4, {{endCell.q, endCell.r}})
+                    ui.drawHexLineDots(hex, attacker.q, attacker.r, endCell.q, endCell.r, 0.95, 0.2, 0.2, 4, {{endCell.q, endCell.r}}, hoverQ, hoverR)
                 end
             end
         end
@@ -1133,7 +1133,7 @@ end
             if firstTarget then
                 if attack.getLineDirection then
                     local t = {{firstTarget.q, firstTarget.r}}
-                    ui.drawHexLineDots(hex, attacker.q, attacker.r, firstTarget.q, firstTarget.r, 0.95, 0.2, 0.2, 4, t)
+                    ui.drawHexLineDots(hex, attacker.q, attacker.r, firstTarget.q, firstTarget.r, 0.95, 0.2, 0.2, 4, t, hoverQ, hoverR)
                 end
                 previewData = {
                     {
@@ -1160,7 +1160,7 @@ end
                     end
                 end
             elseif pushCell.farthest or pushCell.edge then
-                ui.drawHexLineDots(hex, attacker.q, attacker.r, pushCell.q, pushCell.r, 0.95, 0.2, 0.2, 4, {{pushCell.q, pushCell.r}})
+                ui.drawHexLineDots(hex, attacker.q, attacker.r, pushCell.q, pushCell.r, 0.95, 0.2, 0.2, 4, {{pushCell.q, pushCell.r}}, hoverQ, hoverR)
             end
         end
     end
@@ -1191,7 +1191,7 @@ end
                     })
                 end
                 if not firstTarget and #pushCells > 0 and pushCells[1].farthest then
-                    ui.drawHexLineDots(hex, attacker.q, attacker.r, pushCells[1].q, pushCells[1].r, 0.95, 0.2, 0.2, 4, {{pushCells[1].q, pushCells[1].r}})
+                    ui.drawHexLineDots(hex, attacker.q, attacker.r, pushCells[1].q, pushCells[1].r, 0.95, 0.2, 0.2, 4, {{pushCells[1].q, pushCells[1].r}}, hoverQ, hoverR)
                 end
             end
         end
@@ -1933,36 +1933,17 @@ function ui.drawDigSites(hex, digSites)
         end
     end
 end
--- ============================================================
--- ponytail: straight-line aim hint. Walk hex-by-hex from attacker to end cell.
--- On every non-target hex: a 3-dot cluster (the "line"). On every target cell:
--- a single dot, always shown (including at point-blank).
-local function drawHexDot(px, py, r, alpha, cR, cG, cB)
-    love.graphics.setColor(0, 0, 0, 0.5 * alpha)
-    love.graphics.circle("fill", px + 2, py + 2, r)
-    love.graphics.setColor(cR, cG, cB, alpha)
-    love.graphics.circle("fill", px, py, r)
-    love.graphics.setColor(math.min(1, cR + 0.3), math.min(1, cG + 0.5), math.min(1, cB + 0.3), 0.9 * alpha)
-    love.graphics.circle("line", px, py, r + 2)
-end
-
-local function drawHexTriple(x, y, r, alpha, cR, cG, cB)
-    local k = r * 0.7
-    drawHexDot(x,            y - k,       r * 0.9, alpha, cR, cG, cB)
-    drawHexDot(x - k,        y + k * 0.5, r * 0.9, alpha, cR, cG, cB)
-    drawHexDot(x + k,        y + k * 0.5, r * 0.9, alpha, cR, cG, cB)
-end
-
--- targetCells: optional list of {q,r} (target hexes). Each gets a single dot.
--- end cell of the line is also a target by definition.
-function ui.drawHexLineDots(hex, fromQ, fromR, toQ, toR, cR, cG, cB, dotRadius, targetCells)
+-- ponytail: straight-line aim hint. Red dots with shadow on each hex.
+-- Dots blink when cursor is on target hex.
+function ui.drawHexLineDots(hex, fromQ, fromR, toQ, toR, cR, cG, cB, dotRadius, targetCells, hoverQ, hoverR)
     if not hex or not hex:isValidHex(fromQ, fromR) then return end
     if not hex:isValidHex(toQ, toR) then return end
     local time = love.timer.getTime()
-    local r = dotRadius or 4
-    cR = cR or 0.9; cG = cG or 0.2; cB = cB or 0.2
+    local r = dotRadius or 5
 
+    local isHoverOnTarget = hoverQ and hoverR and (hoverQ == toQ and hoverR == toR)
     local function isTarget(q, r)
+        if q == toQ and r == toR then return true end
         for _, t in ipairs(targetCells or {}) do
             if t[1] == q and t[2] == r then return true end
         end
@@ -1974,18 +1955,17 @@ function ui.drawHexLineDots(hex, fromQ, fromR, toQ, toR, cR, cG, cB, dotRadius, 
     while safety > 0 do
         safety = safety - 1
         local x, y = getDrawCoords(curQ, curR)
-        local pulse = 0.6 + 0.4 * math.sin(time * 8 + (curQ + curR) * 0.7)
-        local alpha = 0.9 * pulse
-        if curQ == toQ and curR == toR then
-            -- End cell is always a target: single dot.
-            drawHexDot(x, y, r, alpha, cR, cG, cB)
-            return
-        end
-        if isTarget(curQ, curR) then
-            drawHexDot(x, y, r, alpha, cR, cG, cB)
+        local alpha
+        if isHoverOnTarget then
+            alpha = 0.3 + 0.7 * math.abs(math.sin(time * 10))
         else
-            drawHexTriple(x, y, r, alpha, cR, cG, cB)
+            alpha = 0.6 + 0.4 * math.sin(time * 4)
         end
+        love.graphics.setColor(0, 0, 0, 0.45 * alpha)
+        love.graphics.circle("fill", x + 2, y + 3, r)
+        love.graphics.setColor(cR or 0.95, cG or 0.2, cB or 0.2, alpha)
+        love.graphics.circle("fill", x, y, r)
+        if curQ == toQ and curR == toR then return end
         local nq, nr = hex_utils.axialStepToward(curQ, curR, toQ, toR)
         if nq == curQ and nr == curR then return end
         curQ, curR = nq, nr
