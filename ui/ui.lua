@@ -1657,10 +1657,15 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
                     local ny = dy / dist
                     local perpX = -ny
                     local perpY = nx
-                    local size = dist * 0.3
-                    local v1x, v1y = fromX, fromY
-                    local v2x, v2y = toX, toY
-                    local v3x, v3y = fromX + perpX * size, fromY + perpY * size
+                    local size = dist * 0.25
+                    -- Arrow: tip at target, base shifted toward target (center offset)
+                    local v1x, v1y = toX, toY
+                    local baseX = fromX + nx * (dist * 0.6)
+                    local baseY = fromY + ny * (dist * 0.6)
+                    local backLen = size * 0.8
+                    local fwdLen = size * 0.3
+                    local v2x, v2y = baseX - nx * backLen + perpX * size, baseY - ny * backLen + perpY * size
+                    local v3x, v3y = baseX - nx * backLen - perpX * size, baseY - ny * backLen - perpY * size
                     local hovered = (hex.hoverQ == enemy.q and hex.hoverR == enemy.r)
                     local alpha
                     if hovered then
