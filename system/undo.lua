@@ -90,6 +90,7 @@ function undo.snapshot()
             sprite = e.sprite,
             color = e.color,
             attacks = e.attacks,
+            moveRange = e.moveRange,
         }
         -- Copy statuses
         es.statuses = status.copyEntityStatuses(e)
@@ -174,6 +175,7 @@ function undo.restore(snap)
             es.ref.sprite = es.sprite
             es.ref.color = es.color
             es.ref.attacks = es.attacks
+            es.ref.moveRange = es.moveRange
             -- Restore statuses
             status.setEntityStatuses(es.ref, es.statuses)
             existingRefs[es.ref] = true

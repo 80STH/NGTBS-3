@@ -26,7 +26,7 @@ global_abilities.abilityUsedThisTurn = false
 global_abilities.scrollOffset = 0
 global_abilities.maxVisibleItems = 3
 
-global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport"}
+global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport", "Speed Boost"}
 
 global_abilities.heroicAbilities = {
     ["Wind Torrent"] = true,
@@ -2851,6 +2851,78 @@ function TeleportAbility:drawButton(mx, my, state)
     })
 end
 
+-- ============================================================
+-- SPEED BOOST
+-- ============================================================
+local SpeedBoostAbility = {}
+SpeedBoostAbility.__index = SpeedBoostAbility
+
+function SpeedBoostAbility.new()
+    local self = {
+        name = "Speed Boost",
+        manaCost = 0,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }
+    return setmetatable(self, SpeedBoostAbility)
+end
+
+function SpeedBoostAbility:reset()
+    self.hasBeenUsed = false
+end
+
+function SpeedBoostAbility:onActivate(state)
+    log.info("abilities", "Click on an ally to boost their speed, or press ESC to cancel")
+end
+
+function SpeedBoostAbility:onDeactivate(state)
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+
+function SpeedBoostAbility:onClickHex(q, r, hex, state)
+    local target = nil
+    for _, e in ipairs(state.entities) do
+        if e.q == q and e.r == r then
+            target = e
+            break
+        end
+    end
+
+    if not target or not target.isPlayable then
+        log.warn("abilities", "No valid ally at this cell!")
+        return true
+    end
+    if target.health <= 0 and not status.hasEntityStatus(target, "stasis") then
+        log.warn("abilities", "Cannot target dead units!")
+        return true
+    end
+
+    undo.snapshot()
+    target.moveRange = (target.moveRange or 1) + 1
+    log.infof("abilities", "%s movement speed increased to %d!", tostring(target.name), target.moveRange)
+    
+    global_abilities.spendAbility(self)
+    restoreSelectedActor()
+    global_abilities.activeAbility = nil
+    return true
+end
+
+function SpeedBoostAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.9, 0.9, 0.2},
+        label = "Speed Boost",
+        activeLabel = "Select ally",
+        tooltipH = 80,
+        tooltipTitle = "Speed Boost",
+        tooltipLines = {
+            "Increase an ally's movement",
+            "speed by 1 for the rest of",
+            "the battle. Free ability.",
+        },
+    })
+end
+
 -- Register all abilities
 global_abilities.register(HealAbility.new())
 global_abilities.register(ExtraMoveAbility.new())
@@ -2870,5 +2942,6 @@ global_abilities.register(VortexAbility.new())
 global_abilities.register(HexAbility.new())
 global_abilities.register(UpsideDownAbility.new())
 global_abilities.register(TeleportAbility.new())
+global_abilities.register(SpeedBoostAbility.new())
 
 return global_abilities

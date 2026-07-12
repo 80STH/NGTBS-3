@@ -806,6 +806,7 @@ combat.PowerLichBoltAttack.__index = combat.PowerLichBoltAttack
 function combat.PowerLichBoltAttack.new(range)
     local self = combat.Attack.new("Power Bolt", "Lethal bolt hitting target and 3 cells in front", range or 5, 99, {})
     self.minRange = 2
+    self.visualType = "arc"
     return setmetatable(self, combat.PowerLichBoltAttack)
 end
 
