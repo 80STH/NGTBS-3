@@ -118,7 +118,7 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
         function(q, r) return not cell_rules.isPassable(q, r, actor) end, hex,
         function(q, r) local e = getEntityAtHex(q, r); return e and e ~= actor and not e.isHazard end)
     if not path or #path == 0 then return end
-    -- Draw line and silhouette (as before)
+    -- Draw line
     local points = {}
     local startX, startY = getDrawCoords(actor.q, actor.r)
     table.insert(points, {x = startX, y = startY})
@@ -132,16 +132,24 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
         love.graphics.line(points[i].x, points[i].y, points[i+1].x, points[i+1].y)
     end
     local targetX, targetY = points[#points].x, points[#points].y
-    local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
-    local alpha = 0.3 + 0.4 * pulse
+    -- Draw transparent silhouette at origin (no blinking)
     if actor.sprite then
-        love.graphics.setColor(1, 1, 1, alpha)
+        love.graphics.setColor(1, 1, 1, 0.5)
         local sw, sh = actor.sprite:getDimensions()
-        local scale = 5.9  -- slightly smaller than original
-        love.graphics.draw(actor.sprite, targetX, targetY, 0, scale, scale, sw/2, sh/2)
-        love.graphics.setColor(1, 1, 1, 1)
+        local scale = 5.9
+        love.graphics.draw(actor.sprite, startX, startY, 0, scale, scale, sw/2, sh/2)
     else
-        love.graphics.setColor(0.2, 0.8, 0.2, alpha)
+        love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
+        love.graphics.circle("fill", startX, startY, hex.radius * 0.5)
+    end
+    -- Draw unit at target (opaque)
+    if actor.sprite then
+        love.graphics.setColor(1, 1, 1, 1)
+        local sw, sh = actor.sprite:getDimensions()
+        local scale = 6
+        love.graphics.draw(actor.sprite, targetX, targetY, 0, scale, scale, sw/2, sh/2)
+    else
+        love.graphics.setColor(0.2, 0.8, 0.2, 1)
         love.graphics.circle("fill", targetX, targetY, hex.radius * 0.5)
     end
     local vertices = hex:drawHexagon(targetX, targetY, hex.radius)
@@ -155,7 +163,7 @@ function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
     return col.damage, col.reason, col.occupant
 end
 -- Draw push arrow (with offset from centers)
-function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, toQ, toR)
+function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, toQ, toR, scale)
     local isLowTerrain = function(q, r) local t = terrainMap and terrainMap[q] and terrainMap[q][r]; return t == "water" end
     if fromQ ~= nil and isLowTerrain(fromQ, fromR) then
         fromY = fromY - config.WATER_Y_OFFSET
@@ -164,8 +172,9 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
         toY = toY - config.WATER_Y_OFFSET
     end
     local angle = math.atan2(toY - fromY, toX - fromX)
-    local arrowSize = 16
-    local lineWidth = 3
+    local s = scale or 1
+    local arrowSize = 8 * s
+    local lineWidth = 2 * s
     local radius = hex.radius
     local offset = radius * 0.3
     local startX = fromX + math.cos(angle) * offset
@@ -177,9 +186,10 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
     local cb = b or 0.2
     local ca = alpha or 0.9
     -- Shadow
+    local shadowOff = 2 * s
     love.graphics.setColor(0, 0, 0, ca * 0.35)
-    love.graphics.setLineWidth(lineWidth + 2)
-    love.graphics.line(startX + 2, startY + 2, endX + 2, endY + 2)
+    love.graphics.setLineWidth(lineWidth + 2 * s)
+    love.graphics.line(startX + shadowOff, startY + shadowOff, endX + shadowOff, endY + shadowOff)
     -- Arrow (line)
     love.graphics.setColor(cr, cg, cb, ca)
     love.graphics.setLineWidth(lineWidth)
@@ -195,7 +205,7 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
     local tipX = endX + math.cos(angle) * headLen
     local tipY = endY + math.sin(angle) * headLen
     love.graphics.setColor(0, 0, 0, ca * 0.35)
-    love.graphics.polygon("fill", tipX + 1, tipY + 1, lx + 1, ly + 1, rx + 1, ry + 1)
+    love.graphics.polygon("fill", tipX + shadowOff * 0.5, tipY + shadowOff * 0.5, lx + shadowOff * 0.5, ly + shadowOff * 0.5, rx + shadowOff * 0.5, ry + shadowOff * 0.5)
     love.graphics.setColor(cr, cg, cb, ca)
     love.graphics.polygon("fill", tipX, tipY, lx, ly, rx, ry)
 end
@@ -403,14 +413,30 @@ function ui.collectPreparedAttackOverlays(hex, entities, out)
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.preparedAttack then
             local attack = e.preparedAttack
-            if attack.getAffectedCells and e.preparedTargetOffset then
-                local targetQ, targetR = hex_utils.applyCubeDiff(
-                    e.q, e.r,
-                    e.preparedTargetOffset.dx,
-                    e.preparedTargetOffset.dy,
-                    e.preparedTargetOffset.dz
-                )
-                if hex:isActiveHex(targetQ, targetR) then
+            if attack.getAffectedCells then
+                local targetQ, targetR
+                if attack.visualType == "line" and e.attackDirection then
+                    local step = e.attackDirection
+                    local curQ, curR = e.q, e.r
+                    while true do
+                        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, step.dx, step.dy, step.dz)
+                        if not hex:isActiveHex(nextQ, nextR) then break end
+                        local ent = getEntityAtHex(nextQ, nextR, entities)
+                        if ent and ent ~= e and ent.health > 0 then
+                            targetQ, targetR = nextQ, nextR
+                            break
+                        end
+                        curQ, curR = nextQ, nextR
+                    end
+                elseif e.preparedTargetOffset then
+                    targetQ, targetR = hex_utils.applyCubeDiff(
+                        e.q, e.r,
+                        e.preparedTargetOffset.dx,
+                        e.preparedTargetOffset.dy,
+                        e.preparedTargetOffset.dz
+                    )
+                end
+                if targetQ and targetR and hex:isActiveHex(targetQ, targetR) then
                     local cells = attack:getAffectedCells(e, targetQ, targetR, hex, entities)
                     for _, c in ipairs(cells) do
                         local key = c.q .. "," .. c.r
@@ -1370,106 +1396,33 @@ function ui.getEffectiveStatuses(entity)
     return statuses
 end
 function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
-    local bgColor = {0.1, 0.1, 0.2, 0.9}
-    local borderColor = {0.8, 0.8, 0.8, 1}
-    if entity:isBuilding() then
-        bgColor = {0.15, 0.15, 0.15, 0.9}
-        borderColor = {1, 1, 1, 1}
-    elseif entity.isPlayable then
-        bgColor = {0.1, 0.2, 0.1, 0.9}
-        borderColor = {0.4, 0.9, 0.4, 1}
-    else
-        bgColor = {0.2, 0.1, 0.1, 0.9}
-        borderColor = {0.9, 0.4, 0.4, 1}
-    end
+    local bgColor = {0.15, 0.15, 0.15, 0.9}
+    local borderColor = {1, 1, 1, 1}
     local font = love.graphics.getFont()
     local pad = 8
     local margin = 10
-    -- Statuses
-    local statusDescriptions = {
-        fire = { name = "Fire", color = {1, 0.5, 0}, desc = "Burns for 1 damage at end of turn. Extinguished by water." },
-        acid = { name = "Acid", color = {0.3, 0.9, 0.3}, desc = "Any damage is instantly lethal." },
-        decay = { name = "Decay", color = {0.7, 0.2, 0.8}, desc = "Takes 1 damage per move and at end of turn." },
-        dig_site = { name = "Undermined", color = {0.8, 0.6, 0.2}, desc = "Standing on a dig site вЂ” enemy may spawn here!" },
-        empowered = { name = "Empowered", color = {1, 0.9, 0.2}, desc = "Move +1, damage +1." },
-        fatal_damage = { name = "Fatal Damage", color = {1, 0.5, 0.5}, desc = "Next attack is lethal (one-time)." },
-        rooted = { name = "Rooted", color = {0.6, 0.8, 0.2}, desc = "Immobilized by a Zombie вЂ” cannot move until the Zombie is displaced." },
-        wounded = { name = "Wounded", color = {1, 0.4, 0.2}, desc = "Health below max. Move range reduced by 1." },
-
-    }
-    local statuses = ui.getEffectiveStatuses(entity)
-    local function wrappedLines(text, maxW)
-        local lines = {}
-        for word in text:gmatch("%S+") do
-            if #lines == 0 then
-                table.insert(lines, word)
-            else
-                local candidate = lines[#lines] .. " " .. word
-                if font:getWidth(candidate) <= maxW then
-                    lines[#lines] = candidate
-                else
-                    table.insert(lines, word)
-                end
-            end
-        end
-        return lines
-    end
-    -- Collect content
     local lines = {}
-    -- Name
-    if not entity.indestructible then
-        table.insert(lines, { text = entity.name, color = {1,1,1} })
+    table.insert(lines, { text = entity.name, color = {1,1,1} })
+    if entity:isBuilding() then
+        table.insert(lines, { text = "Building", color = {0.7, 0.7, 0.7} })
     else
-        table.insert(lines, { text = entity.name, color = {1,1,1} })
+        table.insert(lines, { text = "Obstacle", color = {0.7, 0.7, 0.7} })
     end
-    -- Movement range
-    local baseMove = entity.moveRange or 0
-    local effMove = ui.getEffectiveMoveRange(entity, entities, hex)
-    if effMove > baseMove then
-        table.insert(lines, { text = "Move: " .. baseMove .. " -> " .. effMove, color = {1, 0.9, 0.2} })
+    if entity.indestructible then
+        table.insert(lines, { text = "Indestructible", color = {0.6, 0.9, 1} })
     else
-        table.insert(lines, { text = "Move: " .. baseMove, color = {0.8, 0.8, 0.8} })
+        table.insert(lines, { text = "HP: " .. entity.health .. "/" .. entity.maxHealth, color = {1, 0.4, 0.4} })
     end
-    -- Terrain
-    local terrain = "grass"
-    if terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] then
-        terrain = terrainMap[entity.q][entity.r]
-    end
-    table.insert(lines, { text = "Terrain: " .. terrain, color = {0.9, 0.9, 0.7} })
-    -- Directional entity (MountainSlope etc.)
     if entity.direction then
         table.insert(lines, { text = "Directional barrier", color = {0.4, 0.9, 0.4} })
         table.insert(lines, { text = "Green = safe push, Red = damaging", color = {0.8, 0.8, 0.7} })
-        if entity.health and not entity.indestructible then
-            table.insert(lines, { text = "Takes damage from red side", color = {0.9, 0.5, 0.5} })
-        end
     end
-    -- Enemy attack
-    local attackText = nil
-    if not entity.isPlayable and entity.attacks and #entity.attacks > 0 then
-        attackText = entity.attacks[1]
+    if entity.lethalCollision then
+        table.insert(lines, { text = "Lethal collision", color = {1, 0.3, 0.3} })
     end
-    if attackText then
-        table.insert(lines, { text = attackText.name, color = {0.9, 0.6, 0.3} })
-        table.insert(lines, { text = attackText.description, color = {0.8, 0.8, 0.7} })
+    if entity.isHazard then
+        table.insert(lines, { text = "Hazard zone", color = {1, 0.5, 0} })
     end
-    -- Summoning rod: summon info
-    if entity.isSummoningRod and entity.hasPreparedAttack and entity.summonTargetQ and entity.summonType then
-        table.insert(lines, { text = string.format("Summon: %s at (%d,%d)", entity.summonType, entity.summonTargetQ, entity.summonTargetR), color = {1, 0.6, 0.2} })
-    end
-    -- Prepared attack
-    if entity.hasPreparedAttack and entity.preparePosCube and entity.preparedTargetCube then
-        local curX, curY, curZ = hex_utils.axialToCube(entity.q, entity.r)
-        local deltaX = curX - entity.preparePosCube.x
-        local deltaY = curY - entity.preparePosCube.y
-        local deltaZ = curZ - entity.preparePosCube.z
-        local targetX = entity.preparedTargetCube.x + deltaX
-        local targetY = entity.preparedTargetCube.y + deltaY
-        local targetZ = entity.preparedTargetCube.z + deltaZ
-        local targetQ, targetR = hex_utils.cubeToAxial(targetX, targetY, targetZ)
-        table.insert(lines, { text = string.format("Prepares: (%d,%d) -> (%d,%d) for 1 dmg", entity.q, entity.r, targetQ, targetR), color = {1, 0.5, 0} })
-    end
-    -- Calculate width (max line) + statuses
     local minWidth = 180
     local maxWidth = 320
     local contentWidth = minWidth
@@ -1478,54 +1431,18 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
         if w > contentWidth then contentWidth = w end
     end
     contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
-    local wrapWidth = contentWidth - pad * 2 - 16
-    -- Calculate height
-    local topY = pad
-    local lineH = 16
-    for _, l in ipairs(lines) do
-        topY = topY + lineH
-    end
-    if #lines > 0 then topY = topY + 4 end
-    local statusY = topY
-    if #statuses > 0 then
-        topY = topY + 4
-        for _, st in ipairs(statuses) do
-            local info = statusDescriptions[st] or { name = st, color = {1,1,1}, desc = "" }
-            local wl = wrappedLines(info.desc, wrapWidth)
-            topY = topY + 14 + #wl * lineH + 4
-        end
-    end
-    local panelHeight = topY + pad
+    local panelHeight = pad + #lines * 16 + pad
     local px = logicalW - contentWidth - margin
     local py = margin
     love.graphics.setColor(bgColor)
     love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
     love.graphics.setColor(borderColor)
     love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 8)
-    -- Draw content
     local curY = py + pad
     for _, l in ipairs(lines) do
         love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
         love.graphics.print(l.text, px + pad, curY)
-        curY = curY + lineH
-    end
-    if #lines > 0 then curY = curY + 4 end
-    -- Statuses
-    if #statuses > 0 then
-        love.graphics.setColor(1, 0.8, 0.4, 1)
-        love.graphics.print("Status Effects:", px + pad, py + statusY)
-        local curY = py + statusY + 20
-        for _, st in ipairs(statuses) do
-            local info = statusDescriptions[st] or { name = st, color = {1,1,1}, desc = "" }
-            love.graphics.setColor(info.color[1], info.color[2], info.color[3], 1)
-            love.graphics.print(info.name, px + pad + 4, curY)
-            love.graphics.setColor(0.8, 0.8, 0.8, 1)
-            local wl = wrappedLines(info.desc, wrapWidth)
-            for li, w in ipairs(wl) do
-                love.graphics.print(w, px + pad + 8, curY + 14 + (li - 1) * lineH)
-            end
-            curY = curY + 14 + #wl * lineH + 4
-        end
+        curY = curY + 16
     end
 end
 function ui.drawTerrainOnlyTooltip(terrain, x, y)
@@ -1697,7 +1614,7 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
             local toX, toY = getDrawCoords(targetQ, targetR)
             local pulse = 0.5 + 0.5 * math.sin(time * 8)
             local alpha = 0.5 + 0.3 * pulse
-            ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.2, 0.2, alpha, enemy.q, enemy.r, targetQ, targetR)
+            ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.2, 0.2, alpha, enemy.q, enemy.r, targetQ, targetR, 0.55)
         end
         return
     end
@@ -1722,24 +1639,48 @@ function ui.drawCellTooltip(q, r, terrain, hex)
         end
     end
     local lightningWarningHere = lightningWarning and lightningTargetQ == q and lightningTargetR == r
-    -- Collect content strings
+    local upperTerrain = _G.upperTerrainMap and _G.upperTerrainMap[q] and _G.upperTerrainMap[q][r]
+    local effectDescriptions = {
+        fire = { name = "Fire", color = {1, 0.5, 0}, desc = "Burns for 1 damage at end of turn. Extinguished by water." },
+        acid = { name = "Acid", color = {0.3, 0.9, 0.3}, desc = "Any damage is instantly lethal." },
+        decay = { name = "Decay", color = {0.7, 0.2, 0.8}, desc = "Takes 1 damage per move and at end of turn." },
+    }
     local content = {}
-    table.insert(content, { text = "Terrain: " .. terrain, color = {1,1,1} })
+    local hasSpecial = false
+    if terrain == "water" then
+        table.insert(content, { text = "Water", color = {0.4, 0.7, 1} })
+        hasSpecial = true
+    elseif terrain == "lava" then
+        table.insert(content, { text = "Lava", color = {1, 0.4, 0.2} })
+        hasSpecial = true
+    end
     if #statuses > 0 then
-        local iconMap = { fire = "Fire", acid = "Acid" }
         for _, st in ipairs(statuses) do
-            table.insert(content, { text = "  " .. (iconMap[st] or st), color = {1, 0.9, 0.6} })
+            local info = effectDescriptions[st]
+            if info then
+                table.insert(content, { text = info.name, color = info.color })
+                table.insert(content, { text = "  " .. info.desc, color = {0.8, 0.8, 0.8} })
+                hasSpecial = true
+            end
         end
+    end
+    if upperTerrain then
+        local upperName = upperTerrain:gsub("_", " "):gsub("^%l", string.upper)
+        table.insert(content, { text = upperName, color = {0.7, 0.7, 0.7} })
+        hasSpecial = true
     end
     if hasDig and digInfo then
         table.insert(content, { text = "Dig Site (" .. (digInfo.spawnType or "?") .. ")", color = {0.8, 0.6, 0.2} })
         table.insert(content, { text = "  in " .. digInfo.timer .. " turn(s), age " .. digInfo.age .. "/3", color = {1, 0.9, 0.5} })
+        hasSpecial = true
     end
     if lightningWarningHere then
         table.insert(content, { text = "! Lightning target !", color = {1, 0.9, 0.2} })
+        hasSpecial = true
     end
-    if #content == 0 then return end
-    -- Width
+    if not hasSpecial then
+        table.insert(content, { text = "Ground Tile", color = {0.7, 0.7, 0.7} })
+    end
     local minWidth = 160
     local maxWidth = 280
     local contentWidth = minWidth
@@ -1748,7 +1689,6 @@ function ui.drawCellTooltip(q, r, terrain, hex)
         if w > contentWidth then contentWidth = w end
     end
     contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
-    -- Height
     local panelHeight = pad + #content * 16 + pad
     local px = logicalW - contentWidth - margin
     local py = margin
@@ -2173,6 +2113,76 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
         return
     end
 end
+function ui.drawSelectedStats(actor, entities, hex)
+    if not actor or not actor:isCharacter() then return end
+    local font = love.graphics.getFont()
+    local pad = 8
+    local lineH = 16
+    local margin = 10
+    local lines = {}
+    local nameColor = actor.isPlayable and {0.4, 0.9, 0.4} or {0.9, 0.4, 0.4}
+    table.insert(lines, { text = actor.name, color = nameColor })
+    if actor.hasActedThisTurn then
+        table.insert(lines, { text = "(acted this turn)", color = {0.6, 0.6, 0.6} })
+    end
+    table.insert(lines, { text = "HP: " .. actor.health .. "/" .. actor.maxHealth, color = {1, 0.4, 0.4} })
+    local baseMove = actor.moveRange or 0
+    local effMove = ui.getEffectiveMoveRange(actor, entities, hex)
+    if effMove ~= baseMove then
+        table.insert(lines, { text = "Move: " .. baseMove .. " (eff: " .. effMove .. ")", color = {1, 0.9, 0.2} })
+    else
+        table.insert(lines, { text = "Move: " .. baseMove, color = {0.8, 0.8, 0.8} })
+    end
+    local flags = {}
+    if actor.flying then table.insert(flags, "Flying") end
+    if actor.hovering then table.insert(flags, "Hovering") end
+    if actor.teleporting then table.insert(flags, "Teleporting") end
+    if actor.waterWalker then table.insert(flags, "Water Walker") end
+    if actor.indestructible then table.insert(flags, "Indestructible") end
+    if actor.canMoveAfterAttack then table.insert(flags, "Move after attack") end
+    if #flags > 0 then
+        table.insert(lines, { text = table.concat(flags, ", "), color = {0.6, 0.9, 1} })
+    end
+    local statusDescriptions = {
+        fire = { name = "Fire", color = {1, 0.5, 0}, desc = "Burns 1 dmg at end of turn" },
+        acid = { name = "Acid", color = {0.3, 0.9, 0.3}, desc = "Any damage is lethal" },
+        decay = { name = "Decay", color = {0.7, 0.2, 0.8}, desc = "1 dmg per move and at end of turn" },
+        empowered = { name = "Empowered", color = {1, 0.9, 0.2}, desc = "Move +1, damage +1" },
+        rooted = { name = "Rooted", color = {0.6, 0.8, 0.2}, desc = "Cannot move" },
+        wounded = { name = "Wounded", color = {1, 0.4, 0.2}, desc = "Move range -1" },
+        fatal_damage = { name = "Fatal Damage", color = {1, 0.5, 0.5}, desc = "Next attack is lethal" },
+        stasis = { name = "Stasis", color = {0.3, 0.5, 1}, desc = "Frozen in time" },
+    }
+    local statuses = ui.getEffectiveStatuses(actor)
+    if #statuses > 0 then
+        table.insert(lines, { text = "Status Effects:", color = {1, 0.8, 0.4} })
+        for _, st in ipairs(statuses) do
+            local info = statusDescriptions[st] or { name = st, color = {1,1,1}, desc = "" }
+            table.insert(lines, { text = "  " .. info.name .. ": " .. info.desc, color = info.color })
+        end
+    end
+    local minWidth = 200
+    local maxWidth = 320
+    local contentWidth = minWidth
+    for _, l in ipairs(lines) do
+        local w = font:getWidth(l.text)
+        if w > contentWidth then contentWidth = w end
+    end
+    contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
+    local panelHeight = pad + #lines * lineH + pad
+    local px = margin
+    local py = margin
+    love.graphics.setColor(0.1, 0.15, 0.1, 0.9)
+    love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
+    love.graphics.setColor(nameColor[1], nameColor[2], nameColor[3], 1)
+    love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 8)
+    local curY = py + pad
+    for _, l in ipairs(lines) do
+        love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
+        love.graphics.print(l.text, px + pad, curY)
+        curY = curY + lineH
+    end
+end
 function ui.drawAllyPanel(mx, my, entities, selectedActor)
     allyPanelButtons = {}
     local allies = {}
@@ -2245,15 +2255,9 @@ function ui.drawChaosBar(mx, my)
     local totalW = (cellW + gap) * chaosMaxVal + pad * 2
     
     if not smallFont then smallFont = fonts.get(12) end
-    love.graphics.setFont(smallFont)
-    local labelW = smallFont:getWidth("Chaos")
     
-    local barX = 10 + labelW + 8
+    local barX = math.floor((logicalW - totalW) / 2)
     local barY = 10
-
-    -- Label (on the left)
-    love.graphics.setColor(0.9, 0.6, 0.8, 1)
-    love.graphics.print("Chaos", 10, barY + 4)
 
     -- Background
     local bgY = barY

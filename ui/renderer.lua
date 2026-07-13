@@ -279,9 +279,6 @@ function renderer.draw(state)
         end
     end
     for _, entity in ipairs(state.entities) do
-        if (entity:isCharacter() and not entity.isPlayable or entity.isTrainAttack) and entity.hasPreparedAttack and entity.health > 0 then
-            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
-        end
         -- Highlighting of summoning rod target cell
         if entity.isSummoningRod and entity.hasPreparedAttack and entity.summonTargetQ and entity.summonTargetR then
             local sx, sy = getDrawCoords(entity.summonTargetQ, entity.summonTargetR)
@@ -296,6 +293,11 @@ function renderer.draw(state)
         end
     end
     drawAllEntities(state)
+    for _, entity in ipairs(state.entities) do
+        if (entity:isCharacter() and not entity.isPlayable or entity.isTrainAttack) and entity.hasPreparedAttack and entity.health > 0 then
+            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
+        end
+    end
     ui.drawPreviewIcons(hex, previewIcons)
     ui.drawPreviewPushArrows(previewPushArrows)
     visual.draw()
@@ -378,11 +380,9 @@ function renderer.draw(state)
     global_abilities.drawPreview(hex, state)
 
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
-    ui.drawAllyPanel(mx, my, state.entities, state.selectedActor)
     if state.selectedActor then
-        love.graphics.print("Selected: " .. state.selectedActor.name .. (state.selectedActor.hasActedThisTurn and " (acted)" or ""), 10, 45)
+        ui.drawSelectedStats(state.selectedActor, state.entities, hex)
     end
-    love.graphics.print("Left click: Move / Attack (after selecting attack)", 10, 65)
 
     local showOrder = hoverOrder or state.showEnemyOrder or love.keyboard.isDown("o")
     if showOrder then
@@ -438,7 +438,7 @@ function renderer.draw(state)
 
     if hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
-        if hoverEntity and hoverEntity.health > 0 then
+        if hoverEntity and hoverEntity.health > 0 and (hoverEntity:isObstacle() or (hoverEntity:isBuilding() and hoverEntity.moveRange == 0)) then
             ui.drawEntityTooltip(hoverEntity, state.terrainMap, hex, state.entities)
         elseif hex:isActiveHex(hex.hoverQ, hex.hoverR) then
             local terrain = state.terrainMap and state.terrainMap[hex.hoverQ] and state.terrainMap[hex.hoverQ][hex.hoverR] or "grass"
@@ -974,9 +974,6 @@ function drawEntity(entity, state)
     if entity.sprite then
         local sw, sh = entity.sprite:getDimensions()
         local baseScale = 6
-        if state.selectedActor == entity and entity:isCharacter() then
-            baseScale = 6 + math.sin(entity.pulse) * 0.2
-        end
         if entity:isObstacle() or entity:isBuilding() then
             baseScale = 5
         end
@@ -1002,6 +999,31 @@ function drawEntity(entity, state)
             end
         end
         love.graphics.draw(entity.sprite, x, drawY, spriteRotation, finalScale, finalScale, sw/2, sh/2)
+
+        -- Outline for selected entity (4-pass sprite outline)
+        if state.selectedActor == entity and not entity.isDying then
+            local outlineR, outlineG, outlineB
+            if entity.isPlayable then
+                outlineR, outlineG, outlineB = 0.3, 0.9, 0.3
+            elseif entity:isCharacter() then
+                outlineR, outlineG, outlineB = 0.9, 0.3, 0.3
+            else
+                outlineR, outlineG, outlineB = 1, 1, 1
+            end
+            local off = 4
+            local sw2, sh2 = entity.sprite:getDimensions()
+            love.graphics.setColor(outlineR, outlineG, outlineB, 0.9)
+            love.graphics.draw(entity.sprite, x - off, drawY, spriteRotation, finalScale, finalScale, sw2/2, sh2/2)
+            love.graphics.draw(entity.sprite, x + off, drawY, spriteRotation, finalScale, finalScale, sw2/2, sh2/2)
+            love.graphics.draw(entity.sprite, x, drawY - off, spriteRotation, finalScale, finalScale, sw2/2, sh2/2)
+            love.graphics.draw(entity.sprite, x, drawY + off, spriteRotation, finalScale, finalScale, sw2/2, sh2/2)
+            love.graphics.draw(entity.sprite, x - off, drawY - off, spriteRotation, finalScale, finalScale, sw2/2, sh2/2)
+            love.graphics.draw(entity.sprite, x + off, drawY - off, spriteRotation, finalScale, finalScale, sw2/2, sh2/2)
+            love.graphics.draw(entity.sprite, x - off, drawY + off, spriteRotation, finalScale, finalScale, sw2/2, sh2/2)
+            love.graphics.draw(entity.sprite, x + off, drawY + off, spriteRotation, finalScale, finalScale, sw2/2, sh2/2)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.draw(entity.sprite, x, drawY, spriteRotation, finalScale, finalScale, sw/2, sh/2)
+        end
 
         -- Cracks on damaged buildings (not indestructible ones)
         if entity:isBuilding() and entity.health > 0 and entity.health < entity.maxHealth and not entity.indestructible then
@@ -1046,16 +1068,6 @@ function drawEntity(entity, state)
     end
 
     drawActionIndicator(entity, x, y)
-
-    if state.selectedActor == entity and entity:isCharacter() then
-        if inStasis then
-            love.graphics.setColor(0.4, 0.6, 1, 0.8)
-        elseif not entity.isDying then
-            love.graphics.setColor(1, 1, 0, 0.8)
-        end
-        love.graphics.circle("line", x, y, 22)
-        love.graphics.setColor(1, 1, 1, 1)
-    end
 end
 
 function drawAllEntities(state)

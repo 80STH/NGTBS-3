@@ -174,17 +174,16 @@ return function(ui)
         if not selectedActor or selectedActor.hasActedThisTurn then return end
         if #attackButtons == 0 then return end
 
-        local btnH, btnY = layout()
-        local panelX = 10
-        local btnW = 145
-        local abH = 28
-        local btnGap = 32
-        local totalAttackH = #attackButtons * abH + (#attackButtons - 1) * (btnGap - abH)
-        local btnStartY = btnY - 10 - totalAttackH
+        local btnH, btnY, margin, gap, thirdW = layout()
+        local btnW = thirdW
+        local abH = btnH
+        local btnGap = gap
+        local startX = margin
+        local btnStartY = btnY - btnH - 10
 
         if selectedActor.chainAttack then
             love.graphics.setColor(1, 0.8, 0.2, 1)
-            love.graphics.print("Chain: " .. selectedActor.chainAttack, panelX, btnStartY - 16)
+            love.graphics.print("Chain: " .. selectedActor.chainAttack, startX, btnStartY - 16)
         end
 
         local descY = btnStartY - (selectedActor.chainAttack and 32 or 16)
@@ -209,23 +208,26 @@ return function(ui)
                     end
                 end
                 for i, line in ipairs(lines) do
-                    love.graphics.print(line, panelX, descY + (i - 1) * 16)
+                    love.graphics.print(line, startX, descY + (i - 1) * 16)
                 end
                 break
             end
         end
 
         for i, btn in ipairs(attackButtons) do
-            btn.x = panelX
-            btn.y = btnStartY + (i - 1) * btnGap
+            btn.x = startX + (i - 1) * (btnW + btnGap)
+            btn.y = btnStartY
             btn.width = btnW
             btn.height = abH
             local isSelected = (selectedAttack == btn.attack and attackMode)
             love.graphics.setColor(isSelected and 0.9 or 0.3, 0.7, 0.3, 0.8)
             love.graphics.rectangle("fill", btn.x, btn.y, btn.width, btn.height, 5)
             love.graphics.setColor(1, 1, 1, 1)
+            local old = love.graphics.getFont()
+            love.graphics.setFont(buttonFont)
             local prefix = i .. "."
-            love.graphics.print(prefix .. " " .. btn.name .. (isSelected and " ✓" or ""), btn.x + 5, btn.y + 8)
+            love.graphics.printf(prefix .. " " .. btn.name .. (isSelected and " ✓" or ""), btn.x, btn.y + 10, btnW, "center")
+            love.graphics.setFont(old)
         end
     end
 

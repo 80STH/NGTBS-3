@@ -81,9 +81,13 @@ function global_abilities.getDisplayOrder(state)
 end
 
 local function getDropdownHeader()
-    local w = 145
-    local x = logicalW - w - 10
-    return { x = x, y = logicalH - 310, w = w, h = 26 }
+    local btnH = 50
+    local margin = 10
+    local gap = 10
+    local thirdW = math.floor((logicalW - margin * 2 - gap * 2) / 3)
+    local x = logicalW - thirdW - margin
+    local y = logicalH - btnH - 10 - btnH - 10
+    return { x = x, y = y, w = thirdW, h = btnH }
 end
 
 function global_abilities.register(obj)
@@ -124,7 +128,7 @@ local itemH = 28
 
 local function getAbilityItemRect(index)
     local h = getDropdownHeader()
-    local itemY = h.y + h.h + (index - global_abilities.scrollOffset - 1) * itemH
+    local itemY = h.y - (index - global_abilities.scrollOffset) * itemH
     return h.x, itemY, h.w, itemH
 end
 
@@ -241,16 +245,17 @@ function global_abilities.drawButtons(mx, my, state)
     local oldFont = love.graphics.getFont()
     love.graphics.setFont(buttonFont)
     love.graphics.setColor(1, 1, 1, 1)
-    local icon = global_abilities.dropdownOpen and "▼" or "▶"
-    love.graphics.printf("Abilities " .. icon .. " [" .. global_abilities.mana .. "/" .. global_abilities.maxMana .. "]", h.x, h.y + 7, h.w, "center")
+    local icon = global_abilities.dropdownOpen and "▲" or "▶"
+    love.graphics.printf("Abilities " .. icon .. " [" .. global_abilities.mana .. "/" .. global_abilities.maxMana .. "]", h.x, h.y + 10, h.w, "center")
     love.graphics.setFont(oldFont)
 
     if not global_abilities.dropdownOpen then return end
 
-    -- Items visible area clip
+    -- Items visible area clip (opens upward)
     local displayOrder = global_abilities.getDisplayOrder(state)
-    local itemAreaY = h.y + h.h
-    local itemAreaH = global_abilities.maxVisibleItems * itemH
+    local visibleCount = math.min(#displayOrder, global_abilities.maxVisibleItems)
+    local itemAreaH = visibleCount * itemH
+    local itemAreaY = h.y - itemAreaH
     love.graphics.setScissor(h.x, itemAreaY, h.w, itemAreaH)
 
     local scrollStart = global_abilities.scrollOffset + 1
