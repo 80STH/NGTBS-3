@@ -225,6 +225,8 @@ function ai.prepareAttackForEnemy(enemy, entities, hex, selectedTargets)
 end
 
 function ai.executePreparedAttack(enemy, entities, hex, sounds)
+    local combat = require("combat.combat")
+    return combat.withDeferredDeaths(function()
     if not enemy.hasPreparedAttack or enemy.health <= 0 then return false end
     local attack = enemy.preparedAttack
     if not attack then return false end
@@ -456,6 +458,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
     enemy.preparedTargetOffset = nil
     enemy.preparedAttack = nil
     return true
+    end)
 end
 -- Distance to the nearest target
 function ai.getDistanceToNearestTarget(enemy, entities, hex)

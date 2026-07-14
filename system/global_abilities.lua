@@ -1008,6 +1008,7 @@ function WindTorrent:drawButton(mx, my, state)
 end
 
 function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds, terrainMap, onComplete)
+    return combat.withDeferredDeaths(function()
     if self.hasBeenUsed then
         if onComplete then onComplete(false, "Already used") end
         return false
@@ -1051,27 +1052,50 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
 
         local fromKey = obj.q .. "," .. obj.r
         if occupied[fromKey] and occupied[fromKey] ~= obj then
-            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, obj.q, obj.r, hex, entities, sounds, occupied[fromKey])
+            local blocker = occupied[fromKey]
+            combat.applyCollisionDamage(obj, blocker, sounds)
+            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, obj.q, obj.r, hex, entities, sounds, blocker)
             occupied[fromKey] = obj
             goto continue
         end
 
-        local newQ, newR = hex_utils.applyCubeDiff(obj.q, obj.r, step.dx, step.dy, step.dz)
+        local oldQ, oldR = obj.q, obj.r
+        local newQ, newR = hex_utils.applyCubeDiff(oldQ, oldR, step.dx, step.dy, step.dz)
         if not hex:isActiveHex(newQ, newR) then
-            combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, nil)
+            if obj:isCharacter() then
+                obj.health = obj.health - 1
+                if sounds then sounds.play("collision") end
+                if obj.health <= 0 then obj:startDeath() end
+            end
+            local fx, fy = getDrawCoords(oldQ, oldR)
+            visual.addEffect(fx, fy, "slam")
+            combat.addCollisionBounceAnimation(obj, oldQ, oldR, newQ, newR, hex, entities, sounds, nil)
             occupied[fromKey] = obj
         else
             local immovableKey = newQ .. "," .. newR
             if immovableMap[immovableKey] then
-                combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, immovableMap[immovableKey])
+                local obstacle = immovableMap[immovableKey]
+                combat.applyCollisionDamage(obj, obstacle, sounds)
+                combat.addCollisionBounceAnimation(obj, oldQ, oldR, newQ, newR, hex, entities, sounds, obstacle)
                 occupied[fromKey] = obj
             else
                 local targetOcc = occupied[newQ .. "," .. newR]
                 if targetOcc then
-                    combat.addCollisionBounceAnimation(obj, obj.q, obj.r, newQ, newR, hex, entities, sounds, targetOcc)
+                    combat.applyCollisionDamage(obj, targetOcc, sounds)
+                    combat.addCollisionBounceAnimation(obj, oldQ, oldR, newQ, newR, hex, entities, sounds, targetOcc)
                     occupied[fromKey] = obj
                 else
-                    combat.addDirectPushAnimation(obj, obj.q, obj.r, newQ, newR)
+                    obj.q = newQ
+                    obj.r = newR
+                    if obj.rootedTarget then
+                        status.removeFromEntity(obj.rootedTarget, "rooted")
+                        obj.rootedTarget = nil
+                    end
+                    if terrainMap then
+                        local died = effects.applyAllCellEffects(obj, newQ, newR, terrainMap, entities)
+                        if died then obj:startDeath() end
+                    end
+                    combat.addDirectPushAnimation(obj, oldQ, oldR, newQ, newR)
                     occupied[newQ .. "," .. newR] = obj
                 end
             end
@@ -1086,6 +1110,7 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
         if _G.checkGameEnd then _G.checkGameEnd() end
     end)
     return true
+    end)
 end
 
 -- ============================================================
@@ -2369,6 +2394,7 @@ local function buildVortexCollisionEntities(entities, moves)
 end
 
 local function executeVortex(self, centerQ, centerR, radius, clockwise, hex, entities, sounds, onComplete)
+    return combat.withDeferredDeaths(function()
     local moves = getVortexMoves(centerQ, centerR, radius, clockwise, hex, entities)
     local collisionEntities = buildVortexCollisionEntities(entities, moves)
 
@@ -2376,9 +2402,32 @@ local function executeVortex(self, centerQ, centerR, radius, clockwise, hex, ent
         if not m.blocked then
             local col = attack_preview.predictCollision(m.entity, m.fromQ, m.fromR, m.toQ, m.toR, hex, collisionEntities)
             if col.type then
+                if col.reason == "edge" then
+                    local entity = m.entity
+                    if entity:isCharacter() then
+                        entity.health = entity.health - 1
+                        if sounds then sounds.play("collision") end
+                        if entity.health <= 0 then entity:startDeath() end
+                    end
+                    local fx, fy = getDrawCoords(m.fromQ, m.fromR)
+                    visual.addEffect(fx, fy, "slam")
+                elseif col.occupant then
+                    combat.applyCollisionDamage(m.entity, col.occupant, sounds)
+                end
                 combat.addCollisionBounceAnimation(m.entity, m.fromQ, m.fromR, m.toQ, m.toR, hex, collisionEntities, sounds, col.occupant)
             else
-                combat.addDirectPushAnimation(m.entity, m.fromQ, m.fromR, m.toQ, m.toR)
+                local entity = m.entity
+                entity.q = m.toQ
+                entity.r = m.toR
+                if entity.rootedTarget then
+                    status.removeFromEntity(entity.rootedTarget, "rooted")
+                    entity.rootedTarget = nil
+                end
+                if terrainMap then
+                    local died = effects.applyAllCellEffects(entity, m.toQ, m.toR, terrainMap, collisionEntities)
+                    if died then entity:startDeath() end
+                end
+                combat.addDirectPushAnimation(entity, m.fromQ, m.fromR, m.toQ, m.toR)
             end
         else
             combat.addCollisionBounceAnimation(m.entity, m.fromQ, m.fromR, m.fromQ, m.fromR, hex, collisionEntities, sounds, nil)
@@ -2388,6 +2437,7 @@ local function executeVortex(self, centerQ, centerR, radius, clockwise, hex, ent
         global_abilities.spendAbility(self)
         if onComplete then onComplete(true) end
         if _G.checkGameEnd then _G.checkGameEnd() end
+    end)
     end)
 end
 

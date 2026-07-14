@@ -11,6 +11,10 @@ local sprites = require("util.sprites")
 local hex_utils = require("grid.hex_utils")
 local cell_rules = require("grid.cell_rules")
 local env = require("entity.environment")
+local push_animator = require("combat.push_animator")
+
+-- Global alias for legacy code that reads pushAnimations.queue / .active
+pushAnimations = push_animator
 -- ============================================================
 -- BASE ATTACK CLASS
 -- ============================================================
@@ -98,6 +102,34 @@ function combat.Attack:findFirstTwoTargetsOnLine(startQ, startR, stepX, stepY, s
     return firstTarget, firstHex, secondTarget, secondHex
 end
 
+-- Local helpers: resolve push logic immediately, animate separately.
+local function applyCollisionDamage(pushed, obstacle, sounds)
+    if not obstacle or obstacle.noCollisionDamage then return end
+    if pushed.health and pushed.health > 0 then
+        local wasDestroyed = pushed:takeDamage(1)
+        if wasDestroyed then pushed:startDeath() end
+    end
+    if obstacle.health and obstacle.health > 0 and obstacle.isPushable ~= false then
+        local wasDestroyed = obstacle:takeDamage(1)
+        if wasDestroyed then obstacle:startDeath() end
+    end
+    if sounds then sounds.play("collision") end
+end
+combat.applyCollisionDamage = applyCollisionDamage
+
+local function finalizeMove(entity, toQ, toR)
+    entity.q = toQ
+    entity.r = toR
+    if entity.rootedTarget then
+        status.removeFromEntity(entity.rootedTarget, "rooted")
+        entity.rootedTarget = nil
+    end
+    if terrainMap then
+        local died = effects.applyAllCellEffects(entity, toQ, toR, terrainMap, entities)
+        if died then entity:startDeath() end
+    end
+end
+
 -- Push in direction (with animation)
 function combat.Attack:pushTargetInDirection(target, fromQ, fromR, stepX, stepY, stepZ, hex, entities, sounds, onComplete)
     local pushQ, pushR = hex_utils.applyCubeStep(fromQ, fromR, stepX, stepY, stepZ)
@@ -110,7 +142,6 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         return
     end
 
-    -- Check cell occupancy
     local occupant = combat.getEntityAtHex(toQ, toR, entities)
     if occupant and occupant ~= target then
         -- SharpReefs / lethal collision: instant death
@@ -118,6 +149,8 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
             target.health = 0
             target:startDeath()
             log.infof("combat", "%s is pushed into %s! Instant death!", target.name, occupant.name)
+            if sounds then sounds.play("collision") end
+            combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant, true)
             if onComplete then onComplete(false) end
             return
         end
@@ -130,24 +163,23 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         -- Directional entity (MountainSlope) — side check
         if occupant.direction then
             local safe = hex_utils.isPushFromSafeSide(occupant, fromQ, fromR)
-            if safe then
-                -- Safe side: bounce without damage
-                combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant, true)
-            else
-                -- Dangerous side: bounce with damage
-                combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant)
+            combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant, safe)
+            if not safe then
+                applyCollisionDamage(target, occupant, sounds)
             end
             if onComplete then onComplete(false) end
             return
         end
-        -- Deep water — free pass, effect applies after movement
+        -- Deep water / hazard — move into the cell
         if occupant.isHazard then
+            finalizeMove(target, toQ, toR)
             combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
                 if onComplete then onComplete(true) end
             end)
             return
         end
         -- Collision → bounce + damage
+        applyCollisionDamage(target, occupant, sounds)
         combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant)
         if onComplete then onComplete(false) end
         return
@@ -158,7 +190,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
         if target:isCharacter() then
             target.health = target.health - 1
             log.infof("combat", "%s is slammed against the edge! Takes 1 damage!", target.name)
-            sounds.play("collision")
+            if sounds then sounds.play("collision") end
             if target.health <= 0 then
                 target:startDeath()
             end
@@ -170,6 +202,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
     end
 
     -- Successful movement (without collision)
+    finalizeMove(target, toQ, toR)
     combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
         if onComplete then onComplete(true) end
     end)
@@ -346,18 +379,11 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     attack_effects.dash(attacker, firstTarget, fxEndQ, fxEndR, hex)
 
     if firstTarget and targetHex and firstTarget.isPushable then
-        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-        local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
-        local isEdge = not hex:isActiveHex(pushQ, pushR)
-        if isEdge or occupant then
-            combat.addCollisionBounceAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities, sounds, occupant)
-        else
-            combat.addPushAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR)
-        end
+        self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
     end
 
     if shouldMove then
-        combat.addPushAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
+        combat.moveEntityWithAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
     end
 
     combat.startPushAnimations(hex)
@@ -433,7 +459,7 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     end
     -- Movement
     attack_effects.flip(attacker, targetActor, destQ, destR, hex)
-    combat.addPushAnimation(targetActor, targetQ, targetR, destQ, destR)
+    combat.moveEntityWithAnimation(targetActor, targetQ, targetR, destQ, destR)
     combat.startPushAnimations(hex)
     -- Deal 1 damage
     self:dealDamageToTarget(targetActor, attacker, 1, entities, sounds, nil)
@@ -526,13 +552,6 @@ function combat.PiercingShootAttack:execute(attacker, targetQ, targetR, hex, ent
     if secondTarget and secondTarget.isPushable ~= false and secondHex then
         local pushQ, pushR = hex_utils.applyCubeStep(secondHex.q, secondHex.r, stepX, stepY, stepZ)
         self:pushTargetToHex(secondTarget, secondHex.q, secondHex.r, pushQ, pushR, hex, entities, sounds)
-        local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
-        if hex:isActiveHex(pushQ, pushR) and not occupant then
-            secondTarget.q = pushQ
-            secondTarget.r = pushR
-            secondTarget.currentDrawX = nil
-            secondTarget.currentDrawY = nil
-        end
     end
     if firstTarget.isPushable ~= false then
         self:pushTargetInDirection(firstTarget, firstHex.q, firstHex.r, stepX, stepY, stepZ, hex, entities, sounds)
@@ -1164,9 +1183,10 @@ function combat.VortexStrikeAttack:execute(attacker, targetQ, targetR, hex, enti
     if target.isPushable ~= false then
         local occupant = combat.getEntityAtHex(destCell.q, destCell.r, entities)
         if occupant then
+            applyCollisionDamage(target, occupant, sounds)
             combat.addCollisionBounceAnimation(target, targetQ, targetR, destCell.q, destCell.r, hex, entities, sounds, occupant)
         else
-            combat.addPushAnimation(target, targetQ, targetR, destCell.q, destCell.r)
+            combat.moveEntityWithAnimation(target, targetQ, targetR, destCell.q, destCell.r)
         end
         combat.startPushAnimations(hex)
     end
@@ -1214,8 +1234,9 @@ function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entiti
         local occupantB = combat.getEntityAtHex(destQ, destR, entities)
         if occupantB then
             if occupantB.isHazard then
-                combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
+                combat.moveEntityWithAnimation(targetA, targetQ, targetR, destQ, destR)
             elseif occupantB.isPushable == false then
+                applyCollisionDamage(targetA, occupantB, sounds)
                 combat.addCollisionBounceAnimation(targetA, targetQ, targetR, destQ, destR, hex, entities, sounds, occupantB)
             else
                 local b2q, b2r
@@ -1225,16 +1246,20 @@ function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entiti
                     b2q, b2r = hex_utils.cubeToAxial(ax + dy, ay + dz, az + dx)
                 end
                 if hex:isActiveHex(b2q, b2r) and not combat.getEntityAtHex(b2q, b2r, entities) then
-                    combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
-                    combat.addPushAnimation(occupantB, destQ, destR, b2q, b2r)
+                    combat.moveEntityWithAnimation(targetA, targetQ, targetR, destQ, destR)
+                    combat.moveEntityWithAnimation(occupantB, destQ, destR, b2q, b2r)
                 else
+                    applyCollisionDamage(targetA, occupantB, sounds)
                     combat.addCollisionBounceAnimation(targetA, targetQ, targetR, destQ, destR, hex, entities, sounds, occupantB)
                     local occupantAtB2 = hex:isActiveHex(b2q, b2r) and combat.getEntityAtHex(b2q, b2r, entities) or nil
+                    if occupantAtB2 then
+                        applyCollisionDamage(occupantB, occupantAtB2, sounds)
+                    end
                     combat.addCollisionBounceAnimation(occupantB, destQ, destR, b2q, b2r, hex, entities, sounds, occupantAtB2)
                 end
             end
         else
-            combat.addPushAnimation(targetA, targetQ, targetR, destQ, destR)
+            combat.moveEntityWithAnimation(targetA, targetQ, targetR, destQ, destR)
         end
         combat.startPushAnimations(hex)
     end
@@ -1308,17 +1333,17 @@ function combat.PullHookAttack:execute(attacker, targetQ, targetR, hex, entities
         -- Attacker stays in place, pull target directly
         local pullQ, pullR = hex_utils.applyCubeStep(moveQ, moveR, stepX, stepY, stepZ)
         if hex:isActiveHex(pullQ, pullR) and not combat.getEntityAtHex(pullQ, pullR, entities) then
-            combat.addDirectPushAnimation(targetEntity, hookTarget.q, hookTarget.r, pullQ, pullR)
+            combat.moveEntityWithAnimation(targetEntity, hookTarget.q, hookTarget.r, pullQ, pullR)
             combat.startPushAnimations(hex)
         end
     else
         -- Animate attacker moving to selected cell, then pull target
-        combat.addDirectPushAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
+        combat.moveEntityWithAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
         combat.startPushAnimations(hex, function()
             local pullQ, pullR = hex_utils.applyCubeStep(moveQ, moveR, stepX, stepY, stepZ)
             local occupant = combat.getEntityAtHex(pullQ, pullR, entities)
             if hex:isActiveHex(pullQ, pullR) and (not occupant or occupant == targetEntity) then
-                combat.addDirectPushAnimation(targetEntity, targetEntity.q, targetEntity.r, pullQ, pullR)
+                combat.moveEntityWithAnimation(targetEntity, targetEntity.q, targetEntity.r, pullQ, pullR)
                 combat.startPushAnimations(hex)
             end
         end)
@@ -1735,250 +1760,97 @@ function combat.isInSlowingAura(entity, entities, hex)
 end
 
 -- ============================================================
--- ANIMATION QUEUE
+-- ANIMATION QUEUE (pure visuals, handled by combat.push_animator)
 -- ============================================================
-pushAnimations = { queue = {}, active = false }
+
+-- Thin wrappers around push_animator for backward compatibility.
+-- Callers are responsible for applying game logic BEFORE queuing animations.
 
 function combat.addPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
-
-    -- Add wind effect from start cell to destination cell
     local startX, startY = getDrawCoords(fromQ, fromR)
     local endX, endY = getDrawCoords(toQ, toR)
     visual.addPushEffect(startX, startY, endX, endY, 0.25)
-
-    table.insert(pushAnimations.queue, {
-        obj = obj, fromQ = fromQ, fromR = fromR, toQ = toQ, toR = toR,
-        startX = 0, startY = 0, endX = 0, endY = 0, timer = 0, duration = 0.2,
-        isMoving = false,
-        onComplete = function(pushedObj)
-            -- Check if target cell is free (skip hazard zones)
-            local occupant = combat.getEntityAtHex(toQ, toR, entities)
-            if occupant and occupant ~= pushedObj and occupant.health > 0 and not occupant.isHazard then
-                -- Lethal collision: instant death
-                if occupant.lethalCollision then
-                    pushedObj.health = 0
-                    pushedObj:startDeath()
-                    log.infof("combat", "%s collides with %s! Instant death!", pushedObj.name, occupant.name)
-                    sounds.play("collision")
-                    return
-                end
-                -- Collision: damage to pushed unit, immovable targets take no damage
-                if pushedObj.health and pushedObj.health > 0 then
-                    pushedObj.health = pushedObj.health - 1
-                    log.infof("combat", "%s collides with %s! %s takes 1 damage!", pushedObj.name, occupant.name, pushedObj.name)
-                    sounds.play("collision")
-                end
-                if occupant.health and occupant.isPushable ~= false then
-                    occupant.health = occupant.health - 1
-                    if occupant.health <= 0 then
-                        occupant:startDeath()
-                    end
-                end
-                if pushedObj.health <= 0 then
-                    pushedObj:startDeath()
-                end
-                -- Don't move object, stays in place
-                if pushedObj.health <= 0 then
-                    -- If died, don't apply cell effects
-                else
-                    -- Apply cell effects (fire, water) at original position
-                    if terrainMap then
-                        effects.applyAllCellEffects(pushedObj, fromQ, fromR, terrainMap, entities)
-                    end
-                end
-            else
-                -- Cell is free – perform movement
-                pushedObj.q = toQ
-                pushedObj.r = toR
-                -- If zombie was pushed — remove rooted from its target
-                if pushedObj.rootedTarget then
-                    status.removeFromEntity(pushedObj.rootedTarget, "rooted")
-                    pushedObj.rootedTarget = nil
-                end
-                -- Apply cell effects after movement
-                if pushedObj and terrainMap then
-                    local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities)
-                    if died then
-                        pushedObj:startDeath()
-                    end
-                end
-            end
-            if onComplete then onComplete(pushedObj) end
-        end
-    })
+    push_animator.addMove(obj, fromQ, fromR, toQ, toR, onComplete)
 end
 
--- Movement animation without collision checks (for abilities where collisions are pre-processed, e.g. Wind Torrent)
-function combat.addDirectPushAnimation(obj, fromQ, fromR, toQ, toR)
+function combat.addDirectPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
     local startX, startY = getDrawCoords(fromQ, fromR)
     local endX, endY = getDrawCoords(toQ, toR)
     visual.addPushEffect(startX, startY, endX, endY, 0.25)
-    table.insert(pushAnimations.queue, {
-        obj = obj, fromQ = fromQ, fromR = fromR, toQ = toQ, toR = toR,
-        startX = 0, startY = 0, endX = 0, endY = 0, timer = 0, duration = 0.2,
-        isMoving = false,
-        onComplete = function(pushedObj)
-            pushedObj.q = toQ
-            pushedObj.r = toR
-            if pushedObj.rootedTarget then
-                status.removeFromEntity(pushedObj.rootedTarget, "rooted")
-                pushedObj.rootedTarget = nil
-            end
-            if terrainMap then
-                local died = effects.applyAllCellEffects(pushedObj, toQ, toR, terrainMap, entities)
-                if died then pushedObj:startDeath() end
-            end
-        end
-    })
+    push_animator.addMove(obj, fromQ, fromR, toQ, toR, onComplete)
+end
+
+-- Apply immediate move logic and queue a move animation.
+function combat.moveEntityWithAnimation(entity, fromQ, fromR, toQ, toR, onComplete)
+    entity.q = toQ
+    entity.r = toR
+    if entity.rootedTarget then
+        status.removeFromEntity(entity.rootedTarget, "rooted")
+        entity.rootedTarget = nil
+    end
+    if terrainMap then
+        local died = effects.applyAllCellEffects(entity, toQ, toR, terrainMap, entities)
+        if died then entity:startDeath() end
+    end
+    combat.addPushAnimation(entity, fromQ, fromR, toQ, toR, onComplete)
 end
 
 function combat.startPushAnimations(hex, callback)
-    if #pushAnimations.queue == 0 then if callback then callback() end; return end
-    pushAnimations.active = true
-    pushAnimations.globalCallback = function()
-        if callback then callback() end
-        -- Here apply effects to all objects that participated in animations
-        for _, anim in ipairs(pushAnimations.queue) do
-            if anim.obj then
-                -- but queue is already cleared? Better to store list of moved objects
-            end
-        end
-    end
-    combat.initNextPushAnimation(hex)
-end
-
-function combat.initNextPushAnimation(hex)
-    if #pushAnimations.queue == 0 then
-        pushAnimations.active = false
-        if pushAnimations.globalCallback then
-            pushAnimations.globalCallback()
-            pushAnimations.globalCallback = nil
-        end
-        return
-    end
-    for _, anim in ipairs(pushAnimations.queue) do
-        if not anim.isMoving then
-            if not anim.isShake then
-                anim.startX, anim.startY = getDrawCoords(anim.fromQ, anim.fromR)
-                anim.endX, anim.endY = getDrawCoords(anim.toQ, anim.toR)
-            end
-            anim.timer = 0
-            anim.isMoving = true
-        end
-    end
+    push_animator.start(callback)
 end
 
 function combat.updatePushAnimations(dt, hex)
-    if not pushAnimations.active or #pushAnimations.queue == 0 then return end
-    local allDone = true
-    local queue = pushAnimations.queue
-    local i = 1
-    while i <= #queue do
-        local anim = queue[i]
-        if anim and anim.isMoving then
-            anim.timer = anim.timer + dt
-            local t = math.min(1, anim.timer / anim.duration)
-
-            local ease
-            if anim.bounceBack then
-                local peak = 0.7
-                if t <= 0.5 then
-                    ease = t / 0.5 * peak
-                else
-                    ease = peak * (1 - (t - 0.5) / 0.5)
-                end
-            else
-                ease = t < 0.5 and 2 * t * t or 1 - math.pow(-2 * t + 2, 2) / 2
-            end
-
-            if anim.isShake then
-                local x, y = getDrawCoords(anim.obj.q, anim.obj.r)
-                anim.obj.currentDrawX = x + anim.offsetX * (1 - ease)
-                anim.obj.currentDrawY = y + anim.offsetY * (1 - ease)
-            else
-                local x = anim.startX + (anim.endX - anim.startX) * ease
-                local y = anim.startY + (anim.endY - anim.startY) * ease
-                anim.obj.currentDrawX = x
-                anim.obj.currentDrawY = y
-            end
-
-            if anim.bounceBack and anim.onPeak and t >= 0.8 and not anim._peakFired then
-                anim._peakFired = true
-                anim.onPeak(anim.obj)
-            end
-
-            if t >= 1 then
-                if anim.isShake then
-                    anim.obj.currentDrawX = nil
-                    anim.obj.currentDrawY = nil
-                elseif anim.bounceBack then
-                    anim.obj.q = anim.fromQ
-                    anim.obj.r = anim.fromR
-                    anim.obj.currentDrawX = nil
-                    anim.obj.currentDrawY = nil
-                else
-                    anim.obj.q = anim.toQ
-                    anim.obj.r = anim.toR
-                    anim.obj.currentDrawX = nil
-                    anim.obj.currentDrawY = nil
-                end
-                if anim.onComplete then anim.onComplete(anim.obj) end
-                queue[i] = queue[#queue]
-                queue[#queue] = nil
-            else
-                allDone = false
-                i = i + 1
-            end
-        end
-    end
-    if #pushAnimations.queue == 0 and allDone then
-        pushAnimations.active = false
-        if pushAnimations.globalCallback then
-            pushAnimations.globalCallback()
-            pushAnimations.globalCallback = nil
-        end
-    end
+    push_animator.update(dt)
 end
 
 function combat.flushPushAnimations()
-    for i = 1, 2 do
-        for _, anim in ipairs(pushAnimations.queue) do
-            if anim.obj and anim.toQ and anim.toR then
-                if not anim.bounceBack then
-                    anim.obj.q = anim.toQ
-                    anim.obj.r = anim.toR
-                end
-                anim.obj.currentDrawX = nil
-                anim.obj.currentDrawY = nil
-            end
-        end
-        local callbacks = {}
-        for _, anim in ipairs(pushAnimations.queue) do
-            if anim.onComplete then
-                table.insert(callbacks, { fn = anim.onComplete, obj = anim.obj })
-            end
-        end
-        local globalCb = pushAnimations.globalCallback
-        pushAnimations.queue = {}
-        pushAnimations.active = false
-        pushAnimations.globalCallback = nil
-        for _, cb in ipairs(callbacks) do
-            cb.fn(cb.obj)
-        end
-        -- onComplete callbacks may have queued follow-up animations (e.g. Pull Hook).
-        -- If nothing new was queued, fire the global callback; otherwise flush the new animations too.
-        if #pushAnimations.queue == 0 then
-            if globalCb then globalCb() end
-            -- Check again if globalCb queued new animations
-            if #pushAnimations.queue == 0 then
-                break
-            end
+    push_animator.flush()
+end
+
+-- ============================================================
+-- DEFERRED DEATHS (wait for push animations to finish)
+-- ============================================================
+combat.pendingDeaths = {}
+
+function combat.deferDeath(entity)
+    if not entity then return end
+    for _, e in ipairs(combat.pendingDeaths) do
+        if e == entity then return end
+    end
+    table.insert(combat.pendingDeaths, entity)
+end
+
+function combat._processPendingDeaths()
+    for _, entity in ipairs(combat.pendingDeaths) do
+        if entity.health and entity.health <= 0 and not entity.isDying then
+            entity:startDeath()
         end
     end
-    pushAnimations.queue = {}
-    pushAnimations.active = false
-    pushAnimations.globalCallback = nil
+    combat.pendingDeaths = {}
 end
+
+function combat.clearPendingDeaths()
+    combat.pendingDeaths = {}
+end
+
+-- Temporarily redirect Entity.startDeath into pendingDeaths while fn runs.
+-- If no push animations were queued, deaths are processed immediately.
+function combat.withDeferredDeaths(fn)
+    local Entity = require("entity.entity")
+    local oldStartDeath = Entity.startDeath
+    Entity.startDeath = function(self)
+        combat.deferDeath(self)
+    end
+    local ok, result = pcall(function() return {fn()} end)
+    Entity.startDeath = oldStartDeath
+    if not push_animator.isActive() then
+        combat._processPendingDeaths()
+    end
+    if not ok then error(result) end
+    return unpack(result)
+end
+
+push_animator.onQueueEmpty = combat._processPendingDeaths
 
 -- ============================================================
 -- HELPER FUNCTIONS (common)
@@ -2049,90 +1921,23 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
 end
 
 function combat.addBounceAnimation(obj, fromQ, fromR, toQ, toR, duration, onPeak)
-    table.insert(pushAnimations.queue, {
-        obj = obj,
-        fromQ = fromQ, fromR = fromR,
-        toQ = toQ, toR = toR,
-        bounceBack = true,
-        startX = 0, startY = 0,
-        endX = 0, endY = 0,
-        timer = 0,
-        duration = duration or 0.2,
-        isMoving = false,
-        onPeak = onPeak,
-        onComplete = function() end
-    })
+    -- duration and onPeak are no longer used; kept in signature for compatibility.
+    push_animator.addBounce(obj, fromQ, fromR, toQ, toR)
 end
 
 function combat.addShakeAnimation(obj, q, r)
     local offsetX = (math.random() - 0.5) * 10
     local offsetY = (math.random() - 0.5) * 10
-    table.insert(pushAnimations.queue, {
-        obj = obj,
-        isShake = true,
-        offsetX = offsetX,
-        offsetY = offsetY,
-        timer = 0,
-        duration = 0.1,
-        startX = 0, startY = 0,
-        onComplete = function() end
-    })
+    push_animator.addShake(obj, offsetX, offsetY, 0.1)
 end
 
+-- withEntity/skipDamage are kept in the signature for caller convenience but
+-- damage must be applied by the caller before calling this function.
 function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, entities, sounds, withEntity, skipDamage)
-    -- Collision effect at target cell (visual, no damage)
     local x, y = getDrawCoords(toQ, toR)
     visual.addEffect(x, y, "collision", 0.3)
-    sounds.play("collision")
-
-    -- Delayed damage application after animation
-    local function applyDamage()
-        if skipDamage then return end
-        -- Directional entity: safe side — no damage
-        if withEntity and withEntity.direction then
-            local safe = hex_utils.isPushFromSafeSide(withEntity, fromQ, fromR)
-            if safe then return end
-        end
-        local damage = 1
-        if obj.health and obj.health > 0 then
-            if not (withEntity and withEntity.noCollisionDamage) then
-                local wasDestroyed = obj:takeDamage(damage)
-                if wasDestroyed then
-                    obj:startDeath()
-                end
-            end
-        end
-        if withEntity and withEntity.health and withEntity.health > 0 then
-            if not withEntity.noCollisionDamage then
-                local wasDestroyed = withEntity:takeDamage(damage)
-                if wasDestroyed then
-                    withEntity:startDeath()
-                end
-            end
-        end
-    end
-
-    -- Bounce animation (incomplete movement forward and back)
-    local startX, startY = getDrawCoords(fromQ, fromR)
-    local endX, endY = getDrawCoords(toQ, toR)
-    table.insert(pushAnimations.queue, {
-        obj = obj,
-        fromQ = fromQ, fromR = fromR,
-        toQ = toQ, toR = toR,
-        bounceBack = true,
-        startX = startX, startY = startY,
-        endX = endX, endY = endY,
-        timer = 0,
-        duration = 0.35,
-        isMoving = false,
-        onComplete = function(pushedObj)
-            -- Damage is applied only after animation completes
-            applyDamage()
-            if pushedObj.health <= 0 then
-                pushedObj:startDeath()
-            end
-        end
-    })
+    if sounds then sounds.play("collision") end
+    push_animator.addBounce(obj, fromQ, fromR, toQ, toR)
 end
 
 -- ============================================================
@@ -2319,13 +2124,13 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
     end
 
     log.debug("combat", "Executing attack...")
-    local success, message = attack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local success, message
+    combat.withDeferredDeaths(function()
+        success, message = attack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    end)
     log.debug("combat", "Attack result:", success, message)
 
     if success then
-        if pushAnimations.active then
-            combat.flushPushAnimations()
-        end
         undo.snapshot()
         local endTurn = true
 
@@ -2426,9 +2231,13 @@ function combat.RampageAttack:execute(attacker, targetQ, targetR, hex, entities,
             if e and e:isCharacter() and e.health > 0 and e.isPushable ~= false and not e.isPlayable then
                 local pushQ, pushR = hex_utils.applyCubeStep(sideQ, sideR, side[1], side[2], side[3])
                 if hex:isActiveHex(pushQ, pushR) and not combat.getEntityAtHex(pushQ, pushR, entities) then
-                    combat.addPushAnimation(e, sideQ, sideR, pushQ, pushR)
+                    combat.moveEntityWithAnimation(e, sideQ, sideR, pushQ, pushR)
                 else
-                    combat.addCollisionBounceAnimation(e, sideQ, sideR, pushQ, pushR, hex, entities, sounds, combat.getEntityAtHex(pushQ, pushR, entities))
+                    local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
+                    if occupant then
+                        applyCollisionDamage(e, occupant, sounds)
+                    end
+                    combat.addCollisionBounceAnimation(e, sideQ, sideR, pushQ, pushR, hex, entities, sounds, occupant)
                 end
             end
         end
@@ -2450,19 +2259,12 @@ function combat.RampageAttack:execute(attacker, targetQ, targetR, hex, entities,
 
     -- Push the target (before dealing damage, so target is still alive)
     if firstTarget and targetHex and firstTarget.isPushable ~= false then
-        local pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
-        local occupant = combat.getEntityAtHex(pushQ, pushR, entities)
-        local isEdge = not hex:isActiveHex(pushQ, pushR)
-        if isEdge or occupant then
-            combat.addCollisionBounceAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR, hex, entities, sounds, occupant)
-        else
-            combat.addPushAnimation(firstTarget, targetHex.q, targetHex.r, pushQ, pushR)
-        end
+        self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
     end
 
     -- Move attacker
     if shouldMove then
-        combat.addPushAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
+        combat.moveEntityWithAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
     end
 
     combat.startPushAnimations(hex)
@@ -2594,8 +2396,8 @@ function combat.PhaseShiftAttack:execute(attacker, targetQ, targetR, hex, entiti
     local allyOldQ, allyOldR = ally.q, ally.r
 
     -- Swap: attacker goes to landing near ally, ally goes to attacker's old spot
-    combat.addDirectPushAnimation(attacker, attackerOldQ, attackerOldR, landingQ, landingR)
-    combat.addDirectPushAnimation(ally, allyOldQ, allyOldR, attackerOldQ, attackerOldR)
+    combat.moveEntityWithAnimation(attacker, attackerOldQ, attackerOldR, landingQ, landingR)
+    combat.moveEntityWithAnimation(ally, allyOldQ, allyOldR, attackerOldQ, attackerOldR)
     combat.startPushAnimations(hex)
 
     -- Visual effect on both
@@ -2884,15 +2686,25 @@ function combat.MightyThrowAttack:execute(attacker, targetQ, targetR, hex, entit
 
     attack_effects.mightyThrow(attacker, thrownTarget, struckTarget, impactQ, impactR, hex)
 
-    combat.addPushAnimation(thrownTarget, targetQ, targetR, impactQ, impactR)
+    local impactOccupant = combat.getEntityAtHex(impactQ, impactR, entities)
+    if impactOccupant and impactOccupant ~= thrownTarget then
+        applyCollisionDamage(thrownTarget, impactOccupant, sounds)
+        combat.addCollisionBounceAnimation(thrownTarget, targetQ, targetR, impactQ, impactR, hex, entities, sounds, impactOccupant)
+    else
+        combat.moveEntityWithAnimation(thrownTarget, targetQ, targetR, impactQ, impactR)
+    end
 
     if struckTarget and struckHex then
         local sideQ, sideR, sideX, sideY, sideZ = self:getSidePushCell(struckHex.q, struckHex.r, stepX, stepY, stepZ, hex, entities)
         if sideQ and sideR then
-            combat.addPushAnimation(struckTarget, struckHex.q, struckHex.r, sideQ, sideR)
+            combat.moveEntityWithAnimation(struckTarget, struckHex.q, struckHex.r, sideQ, sideR)
         else
             local bounceQ, bounceR = hex_utils.applyCubeStep(struckHex.q, struckHex.r, -stepY, -stepZ, -stepX)
-            combat.addCollisionBounceAnimation(struckTarget, struckHex.q, struckHex.r, bounceQ, bounceR, hex, entities, sounds, combat.getEntityAtHex(bounceQ, bounceR, entities))
+            local occupant = combat.getEntityAtHex(bounceQ, bounceR, entities)
+            if occupant then
+                applyCollisionDamage(struckTarget, occupant, sounds)
+            end
+            combat.addCollisionBounceAnimation(struckTarget, struckHex.q, struckHex.r, bounceQ, bounceR, hex, entities, sounds, occupant)
         end
     end
 

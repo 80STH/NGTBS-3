@@ -170,7 +170,8 @@ function restartGame(mapPath)
     selectedAttack = nil
     attackButtons = {}
     undo.clear()
-    pushAnimations = { queue = {}, active = false }
+    if pushAnimations and pushAnimations.clear then pushAnimations.clear() end
+    if combat and combat.clearPendingDeaths then combat.clearPendingDeaths() end
     visual.effects = {}
     decayMessageTimer = 0
 

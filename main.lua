@@ -54,7 +54,7 @@ do
     end
 end
 
-pushAnimations = nil
+pushAnimations = require("combat.push_animator")
 dpiScale = 1
 logicalW = 0
 logicalH = 0

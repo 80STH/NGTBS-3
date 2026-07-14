@@ -132,6 +132,9 @@ function undo.restore(snap)
         pushAnimations.active = false
         pushAnimations.globalCallback = nil
     end
+    if combat and combat.clearPendingDeaths then
+        combat.clearPendingDeaths()
+    end
 
     -- Restore entity data
     local existingRefs = {}
