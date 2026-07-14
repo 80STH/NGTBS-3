@@ -2114,13 +2114,21 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
     end
 end
 function ui.drawSelectedStats(actor, entities, hex)
-    if not actor or not actor:isCharacter() then return end
+    if not actor then return end
+    if not actor:isCharacter() and not (actor:isBuilding() and actor.moveRange > 0) then return end
     local font = love.graphics.getFont()
     local pad = 8
     local lineH = 16
     local margin = 10
     local lines = {}
-    local nameColor = actor.isPlayable and {0.4, 0.9, 0.4} or {0.9, 0.4, 0.4}
+    local nameColor
+    if actor.isPlayable then
+        nameColor = {0.4, 0.9, 0.4}
+    elseif actor:isCharacter() then
+        nameColor = {0.9, 0.4, 0.4}
+    else
+        nameColor = {1, 1, 1}
+    end
     table.insert(lines, { text = actor.name, color = nameColor })
     if actor.hasActedThisTurn then
         table.insert(lines, { text = "(acted this turn)", color = {0.6, 0.6, 0.6} })

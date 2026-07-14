@@ -1881,11 +1881,11 @@ function combat.updatePushAnimations(dt, hex)
 
             local ease
             if anim.bounceBack then
-                local forwardT = math.min(1, t * 1.25)
-                ease = forwardT
-                if t > 0.8 then
-                    local backT = (t - 0.8) / 0.2
-                    ease = 1 - backT
+                local peak = 0.7
+                if t <= 0.5 then
+                    ease = t / 0.5 * peak
+                else
+                    ease = peak * (1 - (t - 0.5) / 0.5)
                 end
             else
                 ease = t < 0.5 and 2 * t * t or 1 - math.pow(-2 * t + 2, 2) / 2
@@ -2112,7 +2112,7 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
         end
     end
 
-    -- Bounce animation (movement 80% of the way and back)
+    -- Bounce animation (incomplete movement forward and back)
     local startX, startY = getDrawCoords(fromQ, fromR)
     local endX, endY = getDrawCoords(toQ, toR)
     table.insert(pushAnimations.queue, {
@@ -2123,7 +2123,7 @@ function combat.addCollisionBounceAnimation(obj, fromQ, fromR, toQ, toR, hex, en
         startX = startX, startY = startY,
         endX = endX, endY = endY,
         timer = 0,
-        duration = 0.2,
+        duration = 0.35,
         isMoving = false,
         onComplete = function(pushedObj)
             -- Damage is applied only after animation completes
