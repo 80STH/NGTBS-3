@@ -660,7 +660,7 @@ function objectives.update(entities)
                 _G.loss = true
                 _G.gameActive = false
                 log.warn("objectives", "DEFEAT: Power Lich has slain a hero!")
-            elseif state == "completed" then
+            elseif state == "completed" and decayApplied then
                 _G.win = true
                 _G.gameActive = false
                 log.warn("objectives", "VICTORY: Power Lich has been destroyed!")

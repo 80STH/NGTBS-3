@@ -350,13 +350,6 @@ function checkGameEnd()
         log.info("game", "VICTORY: All enemies defeated after turn limit!")
         return
     end
-
-    if turnCount >= maxTurns and not anyEnemy then
-        win = true
-        gameActive = false
-        objectives.checkOnVictory(entities)
-        log.info("game", "VICTORY: Turn limit reached and all enemies defeated!")
-    end
 end
 
 function applyDecayToAllEnemies()

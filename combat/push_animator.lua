@@ -32,8 +32,13 @@ function push_animator._initNext()
     for _, anim in ipairs(push_animator.queue) do
         if not anim.isMoving then
             if anim.type ~= "shake" then
-                anim.startX, anim.startY = getDrawCoords(anim.fromQ, anim.fromR)
-                anim.endX, anim.endY = getDrawCoords(anim.toQ, anim.toR)
+                if anim.fromX then
+                    anim.startX, anim.startY = anim.fromX, anim.fromY
+                    anim.endX, anim.endY = anim.toX, anim.toY
+                else
+                    anim.startX, anim.startY = getDrawCoords(anim.fromQ, anim.fromR)
+                    anim.endX, anim.endY = getDrawCoords(anim.toQ, anim.toR)
+                end
             end
             anim.timer = 0
             anim.isMoving = true
@@ -48,6 +53,21 @@ function push_animator.addMove(obj, fromQ, fromR, toQ, toR, onComplete)
         fromQ = fromQ, fromR = fromR,
         toQ = toQ, toR = toR,
         duration = 0.2,
+        timer = 0,
+        isMoving = false,
+        onComplete = onComplete,
+    })
+end
+
+-- Pixel-space move: caller supplies exact start/end screen coordinates.
+-- Useful for partial lunges where the logical cell differs from the visual endpoint.
+function push_animator.addCustomMove(obj, fromX, fromY, toX, toY, duration, onComplete)
+    table.insert(push_animator.queue, {
+        obj = obj,
+        type = "move",
+        fromX = fromX, fromY = fromY,
+        toX = toX, toY = toY,
+        duration = duration or 0.2,
         timer = 0,
         isMoving = false,
         onComplete = onComplete,

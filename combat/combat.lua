@@ -378,19 +378,50 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     end
     attack_effects.dash(attacker, firstTarget, fxEndQ, fxEndR, hex)
 
-    if firstTarget and targetHex and firstTarget.isPushable then
-        self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
-    end
+    local attackerOldQ, attackerOldR = attacker.q, attacker.r
 
+    -- Apply logical move immediately
     if shouldMove then
-        combat.moveEntityWithAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
+        attacker.q = moveQ
+        attacker.r = moveR
+        if attacker.rootedTarget then
+            status.removeFromEntity(attacker.rootedTarget, "rooted")
+            attacker.rootedTarget = nil
+        end
+        if terrainMap then
+            local died = effects.applyAllCellEffects(attacker, moveQ, moveR, terrainMap, entities)
+            if died then combat.deferDeath(attacker) end
+        end
     end
 
-    combat.startPushAnimations(hex)
-
-    if firstTarget then
-        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
+    -- Visual dash: attacker lunges toward the target but stops short,
+    -- so it looks like a collision rather than landing cleanly on the target cell.
+    local logicalEndQ = shouldMove and moveQ or attackerOldQ
+    local logicalEndR = shouldMove and moveR or attackerOldR
+    local fromX, fromY = getDrawCoords(attackerOldQ, attackerOldR)
+    local logicalEndX, logicalEndY = getDrawCoords(logicalEndQ, logicalEndR)
+    local targetX, targetY
+    if firstTarget and targetHex then
+        targetX, targetY = getDrawCoords(targetHex.q, targetHex.r)
+    else
+        targetX, targetY = logicalEndX, logicalEndY
     end
+    local lungeFrac = (firstTarget and targetHex) and 0.65 or 1.0
+    local visX = logicalEndX + (targetX - logicalEndX) * lungeFrac
+    local visY = logicalEndY + (targetY - logicalEndY) * lungeFrac
+
+    push_animator.addCustomMove(attacker, fromX, fromY, visX, visY, 0.2, function()
+        combat.withDeferredDeaths(function()
+            if firstTarget and firstTarget.health > 0 then
+                self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
+            end
+            if firstTarget and firstTarget.health > 0 and targetHex and firstTarget.isPushable then
+                self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+            end
+        end)
+        combat.startPushAnimations(hex)
+    end)
+    push_animator.start()
 
     attacker.hasActedThisTurn = true
     return true
