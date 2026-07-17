@@ -216,6 +216,13 @@ function love.mousepressed(x, y, button)
         pause_menu.mousepressed(lx, ly)
         return
     end
+    if gamePhase == "playing" and gameActive then
+        local pb = ui.getPauseBtnRect()
+        if lx >= pb.x and lx <= pb.x + pb.w and ly >= pb.y and ly <= pb.y + pb.h then
+            pause_menu.open()
+            return
+        end
+    end
     if shop.isOpen then
         shop.mousepressed(lx, ly)
         return
@@ -371,17 +378,11 @@ function love.update(dt)
     end
 
     undoButton = undoButton or {}
-    local btnH = 50
-    local margin = 10
-    local gap = 10
-    local thirdW = math.floor((logicalW - margin * 2 - gap * 2) / 3)
-    local btnY = logicalH - btnH - 10
+    local ur = ui.getRightBtnRect(2) -- Undo
+    undoButton.isHovered = (mx >= ur.x and mx <= ur.x + ur.w and my >= ur.y and my <= ur.y + ur.h)
 
-    local undoX = margin + thirdW + gap
-    undoButton.isHovered = (mx >= undoX and mx <= undoX + thirdW and my >= btnY and my <= btnY + btnH)
-
-    local endX = margin + (thirdW + gap) * 2
-    endTurnButton.isHovered = (mx >= endX and mx <= endX + thirdW and my >= btnY and my <= btnY + btnH)
+    local er = ui.getRightBtnRect(1) -- End Turn
+    endTurnButton.isHovered = (mx >= er.x and mx <= er.x + er.w and my >= er.y and my <= er.y + er.h)
     if undoButton.isHovered or endTurnButton.isHovered then
         sounds.hover(dt)
     end
@@ -492,8 +493,4 @@ end
 
 function love.wheelmoved(dx, dy)
     if gamePhase ~= "playing" then return end
-    local mx, my = love.mouse.getPosition()
-    mx = mx / dpiScale
-    my = my / dpiScale
-    global_abilities.handleWheelMoved(mx, my, dy, state)
 end

@@ -14,17 +14,16 @@ local visual = require("system.visual_effects")
 local log = require("util.log")
 local undo = require("system.undo")
 local fonts = require("util.fonts")
+local icon_cache = require("ui.icon_cache")
 
 local global_abilities = {}
 
 global_abilities.registry = {}
 global_abilities.activeAbility = nil
-global_abilities.dropdownOpen = false
+global_abilities.showPanel = false
 global_abilities.mana = 3
 global_abilities.maxMana = 3
 global_abilities.abilityUsedThisTurn = false
-global_abilities.scrollOffset = 0
-global_abilities.maxVisibleItems = 3
 
 global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport", "Speed Boost"}
 
@@ -80,16 +79,6 @@ function global_abilities.getDisplayOrder(state)
     return result
 end
 
-local function getDropdownHeader()
-    local btnH = 50
-    local margin = 10
-    local gap = 10
-    local thirdW = math.floor((logicalW - margin * 2 - gap * 2) / 3)
-    local x = logicalW - thirdW - margin
-    local y = logicalH - btnH - 10 - btnH - 10
-    return { x = x, y = y, w = thirdW, h = btnH }
-end
-
 function global_abilities.register(obj)
     global_abilities.registry[obj.name] = obj
 end
@@ -115,6 +104,7 @@ end
 
 function global_abilities.reset()
     global_abilities.activeAbility = nil
+    global_abilities.showPanel = false
     global_abilities.mana = global_abilities.maxMana
     global_abilities.abilityUsedThisTurn = false
     global_abilities.pendingRemains = {}
@@ -124,80 +114,27 @@ function global_abilities.reset()
     end
 end
 
-local itemH = 28
-
-local function getAbilityItemRect(index)
-    local h = getDropdownHeader()
-    local itemY = h.y - (index - global_abilities.scrollOffset) * itemH
-    return h.x, itemY, h.w, itemH
-end
-
-function global_abilities.handleButtonClick(x, y, state)
-    local h = getDropdownHeader()
-    if x >= h.x and x <= h.x + h.w and y >= h.y and y <= h.y + h.h then
-        global_abilities.dropdownOpen = not global_abilities.dropdownOpen
-        if global_abilities.dropdownOpen then
-            global_abilities.scrollOffset = 0
-        end
-        return true
-    end
-    if not global_abilities.dropdownOpen then return false end
+function global_abilities.handleAbilityButtonClick(x, y, state)
     local displayOrder = global_abilities.getDisplayOrder(state)
-    local scrollStart = global_abilities.scrollOffset + 1
-    local scrollEnd = math.min(#displayOrder, global_abilities.scrollOffset + global_abilities.maxVisibleItems)
-    for i = scrollStart, scrollEnd do
-        local name = displayOrder[i]
+    for _, name in ipairs(displayOrder) do
         local ab = global_abilities.registry[name]
         if ab then
-            local ix, iy, iw, ih = getAbilityItemRect(i)
-            if x >= ix and x <= ix + iw and y >= iy and y <= iy + ih then
-            if state.turnState.phase == "player" and not (state.selectedActor and state.selectedActor.isMoving) then
+            local bx, by, bw, bh = ab.button.x, ab.button.y, ab.button.width, ab.button.height
+            if bw and x >= bx and x <= bx + bw and y >= by and y <= by + bh then
+                if state.turnState.phase == "player" and not (state.selectedActor and state.selectedActor.isMoving) then
                     local unlimited = state.unlimitedAbilities
-                    if not unlimited and ab.hasBeenUsed then
-                        log.infof("abilities", "%s has already been used this game!", ab.name)
-                        return true
-                    end
-                    if not unlimited and global_abilities.abilityUsedThisTurn then
-                        log.info("abilities", "Already used an ability this turn!")
-                        return true
-                    end
-                    if not unlimited and global_abilities.mana < ab.manaCost then
-                        log.infof("abilities", "%s costs %s mana, only %s left!", ab.name, ab.manaCost, global_abilities.mana)
-                        return true
-                    end
+                    if not unlimited and ab.hasBeenUsed then return true end
+                    if not unlimited and global_abilities.abilityUsedThisTurn then return true end
+                    if not unlimited and global_abilities.mana < ab.manaCost then return true end
                     if global_abilities.activeAbility then
                         global_abilities.activeAbility:onDeactivate(state)
                     end
                     global_abilities.activeAbility = ab
                     ab:onActivate(state)
                     clearSelectedActor()
-                    global_abilities.dropdownOpen = false
-                elseif not state.unlimitedAbilities and ab.hasBeenUsed then
-                    log.infof("abilities", "%s has already been used this game!", ab.name)
-                elseif state.turnState.phase ~= "player" then
-                    log.info("abilities", "Can only use abilities during your turn!")
                 end
                 return true
             end
-        end
-    end
-    return false
-end
-
-function global_abilities.handleWheelMoved(x, y, scrollY, state)
-    if not global_abilities.dropdownOpen then return false end
-    local h = getDropdownHeader()
-    local itemAreaY = h.y + h.h
-    local itemAreaH = global_abilities.maxVisibleItems * itemH
-    if x >= h.x and x <= h.x + h.w and y >= itemAreaY and y <= itemAreaY + itemAreaH then
-        local displayOrder = global_abilities.getDisplayOrder(state)
-        local maxScroll = math.max(0, #displayOrder - global_abilities.maxVisibleItems)
-        if scrollY > 0 then
-            global_abilities.scrollOffset = math.max(0, global_abilities.scrollOffset - 1)
-            return true
-        elseif scrollY < 0 then
-            global_abilities.scrollOffset = math.min(maxScroll, global_abilities.scrollOffset + 1)
-            return true
         end
     end
     return false
@@ -233,104 +170,13 @@ function global_abilities.drawPreview(hex, state)
 end
 
 function global_abilities.drawButtons(mx, my, state)
-    local h = getDropdownHeader()
-    local buttonFont = fonts.get(11)
-
-    -- Header
-    local isHover = mx and my and mx >= h.x and mx <= h.x + h.w and my >= h.y and my <= h.y + h.h
-    love.graphics.setColor(0.25, 0.25, 0.35, 0.95)
-    love.graphics.rectangle("fill", h.x, h.y, h.w, h.h, 4)
-    love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.rectangle("line", h.x, h.y, h.w, h.h, 4)
-    local oldFont = love.graphics.getFont()
-    love.graphics.setFont(buttonFont)
-    love.graphics.setColor(1, 1, 1, 1)
-    local icon = global_abilities.dropdownOpen and "▲" or "▶"
-    love.graphics.printf("Abilities " .. icon .. " [" .. global_abilities.mana .. "/" .. global_abilities.maxMana .. "]", h.x, h.y + 10, h.w, "center")
-    love.graphics.setFont(oldFont)
-
-    if not global_abilities.dropdownOpen then return end
-
-    -- Items visible area clip (opens upward)
-    local displayOrder = global_abilities.getDisplayOrder(state)
-    local visibleCount = math.min(#displayOrder, global_abilities.maxVisibleItems)
-    local itemAreaH = visibleCount * itemH
-    local itemAreaY = h.y - itemAreaH
-    love.graphics.setScissor(h.x, itemAreaY, h.w, itemAreaH)
-
-    local scrollStart = global_abilities.scrollOffset + 1
-    local scrollEnd = math.min(#displayOrder, global_abilities.scrollOffset + global_abilities.maxVisibleItems)
-    for i = scrollStart, scrollEnd do
-        local name = displayOrder[i]
-        local ab = global_abilities.registry[name]
-        if ab then
-            local ix, iy, iw, ih = getAbilityItemRect(i)
-            ab.button.x = ix + 2
-            ab.button.y = iy + 2
-            ab.button.width = iw - 4
-            ab.button.height = ih - 4
-            ab:drawButton(mx, my, state)
-        end
-    end
-
-    -- Scroll indicators
-    if global_abilities.scrollOffset > 0 then
-        love.graphics.setColor(1, 1, 1, 0.5)
-        love.graphics.print("▲", h.x + h.w - 16, itemAreaY + 2)
-    end
-    if #displayOrder > global_abilities.scrollOffset + global_abilities.maxVisibleItems then
-        love.graphics.setColor(1, 1, 1, 0.5)
-        love.graphics.print("▼", h.x + h.w - 16, itemAreaY + itemAreaH - 18)
-    end
-
-    love.graphics.setScissor()
-    love.graphics.setColor(1, 1, 1, 1)
+    -- ability buttons are now drawn by ui.drawAbilityButtons(state)
 end
 
 
 
 function global_abilities.drawAbilityButton(self, mx, my, state, cfg)
-    local isActive = (global_abilities.activeAbility == self)
-    local enoughMana = global_abilities.mana >= self.manaCost
-    local unlimited = state.unlimitedAbilities
-    local available = (state.turnState.phase == "player" and (unlimited or (not self.hasBeenUsed and not global_abilities.abilityUsedThisTurn and enoughMana)))
-    local x, y, w, h = self.button.x, self.button.y, self.button.width, self.button.height
-    local buttonFont = fonts.get(11)
-    local logicalW = love.graphics.getWidth()
-
-    local cr, cg, cb = cfg.color[1], cfg.color[2], cfg.color[3]
-    love.graphics.setColor(available and cr or 0.5, available and cg or 0.5, available and cb or 0.5, isActive and 0.5 or 0.8)
-    love.graphics.rectangle("fill", x, y, w, h, 5)
-    love.graphics.setColor(1, 1, 1, 1)
-    local old = love.graphics.getFont()
-    love.graphics.setFont(buttonFont)
-    local label = (isActive and cfg.activeLabel or cfg.label)
-    love.graphics.printf(label, x + 4, y + 9, w - 28, "left")
-    -- Mana cost badge
-    love.graphics.setColor(1, 1, 1, enoughMana and 1 or 0.4)
-    love.graphics.print("[" .. self.manaCost .. "]", x + w - 26, y + 9)
-    love.graphics.setFont(old)
-
-    local isHover = mx and my and mx >= x and mx <= x + w and my >= y and my <= y + h
-    if isHover then
-        local usedText = self.hasBeenUsed and " (used)" or ""
-        local manaText = " Cost: " .. self.manaCost .. " mana"
-        local tooltipW = 260
-        local tx, ty = x + w + 6, y
-        if tx + tooltipW > logicalW - 10 then tx = x - tooltipW - 6 end
-        if ty + cfg.tooltipH > logicalH - 10 then ty = logicalH - cfg.tooltipH - 10 end
-        love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
-        love.graphics.rectangle("fill", tx, ty, tooltipW, cfg.tooltipH, 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        love.graphics.rectangle("line", tx, ty, tooltipW, cfg.tooltipH, 6)
-        love.graphics.setColor(1, 1, 0.6, 1)
-        love.graphics.print(cfg.tooltipTitle .. usedText .. manaText, tx + 8, ty + 6)
-        love.graphics.setColor(0.8, 0.8, 0.8, 1)
-        for i, line in ipairs(cfg.tooltipLines) do
-            love.graphics.print(line, tx + 8, ty + 20 + (i - 1) * 16)
-        end
-        love.graphics.setColor(1, 1, 1, 1)
-    end
+    self._cfg = cfg
 end
 
 -- ============================================================

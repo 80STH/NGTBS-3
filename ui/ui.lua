@@ -1433,7 +1433,7 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
     contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
     local panelHeight = pad + #lines * 16 + pad
     local px = logicalW - contentWidth - margin
-    local py = margin
+    local py = 46
     love.graphics.setColor(bgColor)
     love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
     love.graphics.setColor(borderColor)
@@ -1691,7 +1691,7 @@ function ui.drawCellTooltip(q, r, terrain, hex)
     contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
     local panelHeight = pad + #content * 16 + pad
     local px = logicalW - contentWidth - margin
-    local py = margin
+    local py = 46
     love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
     love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 5)
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
@@ -2133,13 +2133,13 @@ function ui.drawSelectedStats(actor, entities, hex)
     if actor.hasActedThisTurn then
         table.insert(lines, { text = "(acted this turn)", color = {0.6, 0.6, 0.6} })
     end
-    table.insert(lines, { text = "HP: " .. actor.health .. "/" .. actor.maxHealth, color = {1, 0.4, 0.4} })
+    table.insert(lines, { text = actor.health .. "/" .. actor.maxHealth, color = {1, 0.4, 0.4}, icon = "health", iconSize = 14 })
     local baseMove = actor.moveRange or 0
     local effMove = ui.getEffectiveMoveRange(actor, entities, hex)
     if effMove ~= baseMove then
-        table.insert(lines, { text = "Move: " .. baseMove .. " (eff: " .. effMove .. ")", color = {1, 0.9, 0.2} })
+        table.insert(lines, { text = baseMove .. " (eff: " .. effMove .. ")", color = {1, 0.9, 0.2}, icon = "move", iconSize = 14 })
     else
-        table.insert(lines, { text = "Move: " .. baseMove, color = {0.8, 0.8, 0.8} })
+        table.insert(lines, { text = baseMove, color = {0.8, 0.8, 0.8}, icon = "move", iconSize = 14 })
     end
     local flags = {}
     if actor.flying then table.insert(flags, "Flying") end
@@ -2176,18 +2176,69 @@ function ui.drawSelectedStats(actor, entities, hex)
         local w = font:getWidth(l.text)
         if w > contentWidth then contentWidth = w end
     end
-    contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
+    contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2 + 18))
     local panelHeight = pad + #lines * lineH + pad
     local px = margin
-    local py = margin
+    local py = 46
     love.graphics.setColor(0.1, 0.15, 0.1, 0.9)
     love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
     love.graphics.setColor(nameColor[1], nameColor[2], nameColor[3], 1)
     love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 8)
     local curY = py + pad
     for _, l in ipairs(lines) do
+        local textX = px + pad
+        if l.icon then
+            icon_cache.drawSmall(l.icon, textX + (l.iconSize or 14) / 2, curY + lineH / 2, l.iconSize or 14)
+            textX = textX + 18
+        end
         love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
-        love.graphics.print(l.text, px + pad, curY)
+        love.graphics.print(l.text, textX, curY)
+        curY = curY + lineH
+    end
+end
+function ui.drawAbilityStats(ability)
+    if not ability or not ability._cfg then return end
+    local cfg = ability._cfg
+    local font = love.graphics.getFont()
+    local pad = 8
+    local lineH = 16
+    local margin = 10
+    local lines = {}
+    local nameColor = cfg.color
+    table.insert(lines, { text = ability.name, color = nameColor })
+    local abilIcon = icon_cache.keyForAbility(ability.name) or "abil_heal"
+    table.insert(lines, { text = "Mana: " .. ability.manaCost, color = {0.4, 0.6, 1}, icon = abilIcon, iconSize = 14 })
+    if ability.hasBeenUsed then
+        table.insert(lines, { text = "(already used)", color = {0.6, 0.6, 0.6} })
+    end
+    table.insert(lines, { text = "", color = {1,1,1} })
+    for _, descLine in ipairs(cfg.tooltipLines or {}) do
+        table.insert(lines, { text = descLine, color = {0.8, 0.8, 0.8} })
+    end
+    local minWidth = 200
+    local maxWidth = 320
+    local contentWidth = minWidth
+    for _, l in ipairs(lines) do
+        local w = font:getWidth(l.text)
+        if w > contentWidth then contentWidth = w end
+    end
+    contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2 + 18))
+    local panelHeight = pad + #lines * lineH + pad
+    local px = margin
+    local py = 46
+    love.graphics.setColor(0.1, 0.1, 0.2, 0.9)
+    love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
+    love.graphics.setColor(nameColor[1], nameColor[2], nameColor[3], 1)
+    love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 8)
+    local curY = py + pad
+    for _, l in ipairs(lines) do
+        local textX = px + pad
+        if l.icon then
+            icon_cache.drawSmall(l.icon, textX + (l.iconSize or 14) / 2, curY + lineH / 2, l.iconSize or 14)
+            textX = textX + 18
+        end
+        love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
+        love.graphics.print(l.text, textX, curY)
         curY = curY + lineH
     end
 end
@@ -2251,6 +2302,13 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
     end
 end
 
+local pauseBtnRect = { x = 0, y = 0, w = 36, h = 28 }
+
+function ui.getPauseBtnRect()
+    pauseBtnRect.x = logicalW - 46
+    return pauseBtnRect
+end
+
 function ui.drawChaosBar(mx, my)
     local chaosVal = _G.chaos or 0
     local chaosMaxVal = (_G.chaosMax or 5) + (_G.chaosScaleBonus or 0)
@@ -2261,24 +2319,26 @@ function ui.drawChaosBar(mx, my)
     local gap = 3
     local pad = 4
     local totalW = (cellW + gap) * chaosMaxVal + pad * 2
-    
+
     if not smallFont then smallFont = fonts.get(12) end
-    
-    local barX = math.floor((logicalW - totalW) / 2)
-    local barY = 10
 
-    -- Background
-    local bgY = barY
-    local bgH = cellH + pad * 2
+    local panelH = 36
+    love.graphics.setColor(0.06, 0.06, 0.12, 0.9)
+    love.graphics.rectangle("fill", 0, 0, logicalW, panelH)
+    love.graphics.setColor(0.3, 0.2, 0.4, 0.4)
+    love.graphics.line(0, panelH, logicalW, panelH)
+
+    local barX = 10
+    local barY = math.floor((panelH - (cellH + pad * 2)) / 2)
+
     love.graphics.setColor(0.08, 0.08, 0.15, 0.85)
-    love.graphics.rectangle("fill", barX, bgY, totalW, bgH, 4)
+    love.graphics.rectangle("fill", barX, barY, totalW, cellH + pad * 2, 4)
     love.graphics.setColor(0.3, 0.2, 0.4, 0.6)
-    love.graphics.rectangle("line", barX, bgY, totalW, bgH, 4)
+    love.graphics.rectangle("line", barX, barY, totalW, cellH + pad * 2, 4)
 
-    -- Cells (filled left to right)
     for i = 1, chaosMaxVal do
         local cx = barX + pad + (i - 1) * (cellW + gap)
-        local cy = bgY + pad
+        local cy = barY + pad
         local filled = i <= chaosVal
         if filled then
             local t = love.timer.getTime()
@@ -2292,7 +2352,6 @@ function ui.drawChaosBar(mx, my)
         love.graphics.rectangle("line", cx, cy, cellW, cellH, 2)
     end
 
-    -- Surplus indicator
     if surplus > 0 then
         local surplusX = barX + totalW + 8
         love.graphics.setColor(0.6, 0.9, 0.6, 0.9)
@@ -2300,12 +2359,66 @@ function ui.drawChaosBar(mx, my)
         love.graphics.print("+" .. surplus, surplusX, barY + 6)
     end
 
-    -- Tooltip on hover
-    if mx >= barX and mx <= barX + totalW and my >= bgY and my <= bgY + bgH then
+    local pb = ui.getPauseBtnRect()
+    local pbHover = mx >= pb.x and mx <= pb.x + pb.w and my >= pb.y and my <= pb.y + pb.h
+    local pbY = math.floor((panelH - pb.h) / 2)
+    pb.y = pbY
+
+    -- Mana display (left of pause button)
+    local manaVal = _G.global_abilities and global_abilities.mana or 0
+    local manaMaxVal = _G.global_abilities and global_abilities.maxMana or 3
+    local manaCellR = 7
+    local manaGap = 4
+    local manaW = manaMaxVal * (manaCellR * 2) + (manaMaxVal - 1) * manaGap + 6
+    local manaX = pb.x - manaW - 8
+    local manaCY = math.floor(panelH / 2)
+    local manaBgX = manaX - 4
+    local manaBgW = manaW + 8
+    love.graphics.setColor(0.08, 0.08, 0.18, 0.7)
+    love.graphics.rectangle("fill", manaBgX, 2, manaBgW, panelH - 4, 4)
+    for i = 1, manaMaxVal do
+        local mx2 = manaX + (i - 1) * (manaCellR * 2 + manaGap) + manaCellR
+        love.graphics.setColor(i <= manaVal and 0.3 or 0.1, i <= manaVal and 0.5 or 0.1, i <= manaVal and 0.9 or 0.1, 0.9)
+        love.graphics.circle("fill", mx2, manaCY, manaCellR)
+        if i <= manaVal then
+            love.graphics.setColor(0.5, 0.7, 1, 0.6)
+            love.graphics.circle("line", mx2, manaCY, manaCellR)
+        end
+    end
+
+    -- Mana tooltip on hover
+    if mx >= manaBgX and mx <= manaBgX + manaBgW and my >= 0 and my <= panelH then
+        local ttW = 160
+        local ttH = 52
+        local ttx = manaBgX + manaBgW / 2 - ttW / 2
+        local tty = panelH + 6
+        if ttx < 4 then ttx = 4 end
+        love.graphics.setColor(0.08, 0.08, 0.2, 0.92)
+        love.graphics.rectangle("fill", ttx, tty, ttW, ttH, 5)
+        love.graphics.setColor(0.4, 0.5, 0.8, 0.6)
+        love.graphics.rectangle("line", ttx, tty, ttW, ttH, 5)
+        love.graphics.setColor(0.5, 0.7, 1, 1)
+        love.graphics.setFont(smallFont)
+        love.graphics.print("Mana", ttx + 6, tty + 5)
+        love.graphics.setColor(0.8, 0.8, 0.8, 1)
+        love.graphics.print("Commander energy for abilities.", ttx + 6, tty + 22)
+        love.graphics.setColor(0.5, 0.7, 1, 1)
+        love.graphics.print(string.format("%d / %d available", manaVal, manaMaxVal), ttx + 6, tty + 38)
+    end
+
+    love.graphics.setColor(pbHover and 0.25 or 0.12, pbHover and 0.18 or 0.1, pbHover and 0.35 or 0.2, 0.9)
+    love.graphics.rectangle("fill", pb.x, pbY, pb.w, pb.h, 4)
+    love.graphics.setColor(0.5, 0.4, 0.6, pbHover and 0.9 or 0.5)
+    love.graphics.rectangle("line", pb.x, pbY, pb.w, pb.h, 4)
+    love.graphics.setColor(1, 1, 1, pbHover and 1 or 0.7)
+    love.graphics.setFont(fonts.get(16))
+    love.graphics.printf("II", pb.x, pbY + pb.h / 2 - 8, pb.w, "center")
+
+    if mx >= barX and mx <= barX + totalW and my >= barY and my <= barY + cellH + pad * 2 then
         local ttW = 200
         local ttH = 110
         local ttx = barX
-        local tty = bgY + bgH + 12
+        local tty = barY + cellH + pad * 2 + 12
         love.graphics.setColor(0.1, 0.1, 0.2, 0.92)
         love.graphics.rectangle("fill", ttx, tty, ttW, ttH, 5)
         love.graphics.setColor(0.6, 0.4, 0.7, 0.8)
@@ -2342,7 +2455,7 @@ function ui.drawLeaderHPBar(mx, my)
     if not leader then return end
 
     local barX = 10
-    local barY = 90
+    local barY = 46
     local barW = 150
     local barH = 18
     local cellW = 30

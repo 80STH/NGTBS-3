@@ -375,13 +375,16 @@ function renderer.draw(state)
     local hoverOrder = ui.drawEnemyOrderButton(mx, my)
     ui.drawUndoButton(undo.history, state.maxUndoCount, state.selectedActor)
     ui.drawEndTurnButton(state.turnState, state.entities, state.turnCount, state.maxTurns, state)
-    global_abilities.drawButtons(mx, my, state)
+    ui.drawAbilitiesToggleButton(state, mx, my)
+    ui.drawAbilityButtons(state)
 
     global_abilities.drawPreview(hex, state)
 
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
     if state.selectedActor then
         ui.drawSelectedStats(state.selectedActor, state.entities, hex)
+    elseif global_abilities.activeAbility then
+        ui.drawAbilityStats(global_abilities.activeAbility)
     end
 
     local showOrder = hoverOrder or state.showEnemyOrder or love.keyboard.isDown("o")

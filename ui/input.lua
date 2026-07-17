@@ -98,19 +98,28 @@ end
         return
     end
 
-    if global_abilities.handleButtonClick(x, y, state) then return end
+    if global_abilities.handleAbilityButtonClick(x, y, state) then return end
 
     if global_abilities.handleClick(x, y, state) then return end
 
-    local btnH = 50
-    local margin = 10
-    local gap = 10
-    local thirdW = math.floor((logicalW - margin * 2 - gap * 2) / 3)
-    local btnY = logicalH - btnH - 10
+    -- Abilities toggle (right column, top)
+    local ar = ui.getRightBtnRect(4)
+    if x >= ar.x and x <= ar.x + ar.w and y >= ar.y and y <= ar.y + ar.h then
+        global_abilities.showPanel = not global_abilities.showPanel
+        if global_abilities.showPanel then
+            if attackMode then attackMode = false; selectedAttack = nil end
+        else
+            if global_abilities.activeAbility then
+                global_abilities.activeAbility:onDeactivate(state)
+                global_abilities.activeAbility = nil
+            end
+        end
+        return
+    end
 
-    -- Undo button (middle third)
-    local undoX = margin + thirdW + gap
-    if x >= undoX and x <= undoX + thirdW and y >= btnY and y <= btnY + btnH then
+    -- Undo button (right column)
+    local ur = ui.getRightBtnRect(2)
+    if x >= ur.x and x <= ur.x + ur.w and y >= ur.y and y <= ur.y + ur.h then
         if #undo.history > 1 then
             undoButton.isHeld = true
             undoButton.holdTimer = 0
@@ -122,9 +131,9 @@ end
         return
     end
 
-    -- End turn button (right third)
-    local endX = margin + (thirdW + gap) * 2
-    if x >= endX and x <= endX + thirdW and y >= btnY and y <= btnY + btnH then
+    -- End turn button (right column)
+    local er = ui.getRightBtnRect(1)
+    if x >= er.x and x <= er.x + er.w and y >= er.y and y <= er.y + er.h then
         if turnState.phase == "player" then
             local hasActive = false
             for _, e in ipairs(entities) do
@@ -166,6 +175,7 @@ end
                 updateAttackButtons(selectedActor)
                 attackMode = false
                 selectedAttack = nil
+                global_abilities.showPanel = false
                 return
             end
         end
@@ -369,6 +379,7 @@ end
         updateAttackButtons(selectedActor)
         attackMode = false
         selectedAttack = nil
+        global_abilities.showPanel = false
         mightyThrowTarget = nil
         log.debugf("input", "Selected: %s%s", clicked.name, (clicked.hasActedThisTurn and " (acted)" or ""))
         return
