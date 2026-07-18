@@ -28,7 +28,6 @@ function undo.snapshot()
         chaos = _G.chaos or 0,
         abilityMana = ga and ga.mana or 0,
         abilityUsedThisTurn = ga and ga.abilityUsedThisTurn or false,
-        activeAbilityName = ga and ga.activeAbility and ga.activeAbility.name or nil,
         abilityStates = abilityStates,
         pendingRemains = ga and ga.pendingRemains and {unpack(ga.pendingRemains)} or {},
         objectiveStates = objectives.saveState(),
@@ -259,16 +258,11 @@ function undo.restore(snap)
         for name, ab in pairs(ga.registry) do
             ab.hasBeenUsed = snap.abilityStates[name] or false
         end
-        if snap.activeAbilityName and ga.registry[snap.activeAbilityName] then
-            ga.activeAbility = ga.registry[snap.activeAbilityName]
-        else
-            ga.activeAbility = nil
+        if ga.activeAbility then
+            ga.activeAbility:onDeactivate(_G.state or _G)
         end
-        if snap.pendingRemains then
-            ga.pendingRemains = {unpack(snap.pendingRemains)}
-        else
-            ga.pendingRemains = {}
-        end
+        ga.activeAbility = nil
+        ga.pendingRemains = snap.pendingRemains and {unpack(snap.pendingRemains)} or {}
     end
 
     -- Restore objective states

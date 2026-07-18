@@ -103,7 +103,7 @@ end
     if global_abilities.handleClick(x, y, state) then return end
 
     -- Abilities toggle (right column, top)
-    local ar = ui.getRightBtnRect(4)
+    local ar = ui.getRightBtnRect(3)
     if x >= ar.x and x <= ar.x + ar.w and y >= ar.y and y <= ar.y + ar.h then
         global_abilities.showPanel = not global_abilities.showPanel
         if global_abilities.showPanel then
@@ -118,7 +118,7 @@ end
     end
 
     -- Undo button (right column)
-    local ur = ui.getRightBtnRect(2)
+    local ur = ui.getRightBtnRect(1)
     if x >= ur.x and x <= ur.x + ur.w and y >= ur.y and y <= ur.y + ur.h then
         if #undo.history > 1 then
             undoButton.isHeld = true
@@ -131,8 +131,8 @@ end
         return
     end
 
-    -- End turn button (right column)
-    local er = ui.getRightBtnRect(1)
+    -- End turn button (bottom center)
+    local er = ui.getEndTurnRect()
     if x >= er.x and x <= er.x + er.w and y >= er.y and y <= er.y + er.h then
         if turnState.phase == "player" then
             local hasActive = false

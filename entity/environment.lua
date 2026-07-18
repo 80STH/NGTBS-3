@@ -3,7 +3,59 @@ local Entity = require("entity.entity")
 local config = require("core.config")
 local log = require("util.log")
 
--- ============================================================
+-- PNG sprite cache
+local spritePNG = {}
+local function loadSpritePNG(key)
+    if spritePNG[key] == nil then
+        local img = love.graphics.newImage("sprites/" .. key .. ".png")
+        img:setFilter("nearest", "nearest")
+        spritePNG[key] = img
+    end
+    return spritePNG[key]
+end
+
+local nameToSpriteKey = {
+    -- Buildings
+    SmallBuilding = "building_small",
+    BigBuilding = "building_big",
+    Tower = "building_tower",
+    Caravan = "building_caravan",
+    Blockpost = "building_blockpost",
+    TunnelEntrance = "building_tunnel_entrance",
+    TunnelExit = "building_tunnel_exit",
+    DestroyedTunnel = "building_tunnel_destroyed",
+    MountainHouse = "building_mountain_house",
+    SmallMountainHouse = "building_small_mountain_house",
+    RuinedMountainHouse = "building_ruined_mountain_house",
+    TrainCar = "train_car",
+    OccupiedTunnel = "occupied_tunnel",
+    -- Obstacles
+    SuperMountain = "obstacle_super_mountain",
+    WeakMountain = "obstacle_weak_mountain",
+    MountainSlope = "obstacle_mountain_slope",
+    SuperMountainSlope = "obstacle_super_mountain_slope",
+    SharpReefs = "obstacle_sharp_reefs",
+    -- Units
+    Warrior = "unit_warrior",
+    Puncher = "unit_puncher",
+    Rogue = "unit_rogue",
+    Summoner = "unit_summoner",
+    Divider = "unit_divider",
+    Summoned = "unit_summoned",
+    Divided = "unit_divided",
+    AttackTest = "unit_attack_test",
+    Colossus = "unit_colossus",
+    Keeper = "unit_keeper",
+    Provoker = "unit_provoker",
+    Zombie = "unit_zombie",
+    PoisonousZombie = "unit_zombie",
+    Ghost = "unit_ghost",
+    Lich = "unit_lich",
+    PowerLich = "unit_power_lich",
+    SummoningRod = "unit_rod",
+    -- Locomotive (special entity)
+    Locomotive = "locomotive",
+}
 -- CONTENT REGISTRY: attack sets and enemy types.
 -- Previously there were 19 get*Attacks() functions + long if/elseif
 -- in three places. Now — two tables.
@@ -209,6 +261,7 @@ local ENEMY_TYPES = {
 }
 
 local environment = {}
+environment.spriteKeyForName = nameToSpriteKey
 
 local gidToEntity = {
     [34] = { type = "character", name = "Warrior", isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "warrior" },
@@ -614,21 +667,18 @@ function environment.loadNativeMap(data)
                             if def.name == "Caravan" then
                                 entity.isPushable = true
                             end
-                            -- Generate sprite: custom for buildings/obstacles, colored circle for characters
+                            -- Generate sprite: PNG for known types, fallback circle
                             local spriteSize = 16
                             local canvas = nil
-                            if def.type == "building" or def.type == "obstacle" then
-                                canvas = generateCustomSprite(def.name, 12, 12)
+                            local key = nameToSpriteKey[def.name]
+                            if key then
+                                canvas = loadSpritePNG(key)
                             end
                             if not canvas then
                                 canvas = love.graphics.newCanvas(spriteSize, spriteSize)
                                 love.graphics.setCanvas(canvas)
                                 love.graphics.clear(0, 0, 0, 0)
-                                if def.isPlayable ~= nil then
-                                    love.graphics.setColor(def.isPlayable and {0.2, 0.6, 0.2, 1} or {0.8, 0.2, 0.2, 1})
-                                else
-                                    love.graphics.setColor(0.5, 0.5, 0.5, 1)
-                                end
+                                love.graphics.setColor(0.5, 0.5, 0.5, 1)
                                 love.graphics.circle("fill", spriteSize / 2, spriteSize / 2, spriteSize / 2 - 1)
                                 love.graphics.setCanvas()
                             end
@@ -724,32 +774,15 @@ local unitSpriteCache = sprites.raw()
 environment.unitSpriteCache = unitSpriteCache
 
 function environment.loadUnitSprites()
-    local imgPath = "maps/entities.png"
-    local imgInfo = love.filesystem.getInfo(imgPath)
-    if not imgInfo then
-        log.info("env", "No entities.png found, squad units will use fallback colors")
-        return
-    end
-    local img = love.graphics.newImage(imgPath)
-    local tw, th = 16, 16
-    local cols = 9
     local tileCount = 72
     local firstGid = 21
 
-    log.debug("env", "=== Loading entity sprites from entities.png ===")
+    log.debug("env", "=== Loading tile PNG sprites ===")
     for i = 0, tileCount - 1 do
         local gid = firstGid + i
-        local col = i % cols
-        local row = math.floor(i / cols)
-        local quad = love.graphics.newQuad(col * tw, row * th, tw, th, img:getWidth(), img:getHeight())
-        local canvas = love.graphics.newCanvas(tw, th)
-        canvas:setFilter("nearest", "nearest")
-        love.graphics.setCanvas(canvas)
-        love.graphics.clear(0, 0, 0, 0)
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.draw(img, quad, 0, 0)
-        love.graphics.setCanvas()
-        sprites.set(gid, canvas)
+        local key = "tile_" .. gid
+        local sprite = loadSpritePNG(key)
+        sprites.set(gid, sprite)
         local def = gidToEntity[gid]
         local name = def and def.name or "nil"
         log.debugf("env", "  [OK]   GID %3d -> %-20s", gid, name)
@@ -767,6 +800,10 @@ function environment.createSquadUnit(unitDef, q, r)
     }
     local gid = nameToGid[unitDef.name]
     local sprite = gid and unitSpriteCache[gid] or nil
+    if not sprite then
+        local key = nameToSpriteKey[unitDef.name]
+        sprite = key and loadSpritePNG(key)
+    end
 
     local colors = {
         Warrior = {0.8, 0.3, 0.2},
@@ -857,6 +894,10 @@ function environment.createEnemyByType(enemyType, q, r)
     }
     local gid = enemyTypeToGid[enemyType]
     local sprite = gid and environment.unitSpriteCache[gid]
+    if not sprite then
+        local key = nameToSpriteKey[enemyType]
+        sprite = key and loadSpritePNG(key)
+    end
     if not sprite then
         local size = 16
         local canvas = love.graphics.newCanvas(size, size)
@@ -977,6 +1018,8 @@ function environment.createGeneratedEnemy(params, q, r)
 end
 
 function environment.generateBuildingSprite(name, w, h)
+    local key = nameToSpriteKey[name]
+    if key then return loadSpritePNG(key) end
     return generateCustomSprite(name, w or 32, h or 32)
 end
 

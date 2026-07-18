@@ -1,16 +1,17 @@
 -- ui_buttons.lua
--- Right column: Abilities toggle, Order, Undo, End Turn (vertical stack)
+-- Right column: Abilities toggle, Order, Undo (vertical stack)
+-- Bottom center: End Turn
 -- Left column: Attacks OR Abilities (toggled)
 return function(ui)
     local fonts = require("util.fonts")
-    local buttonFont = fonts.get(11)
+    local buttonFont = fonts.get(14)
     local icon_cache = require("ui.icon_cache")
 
-    local rightCol = { x = 0, w = 160, btnH = 48, gap = 5, margin = 10 }
-    local leftCol  = { x = 10, w = 200, itemH = 36, gap = 5, margin = 10 }
+    local rightCol = { x = 0, w = 190, btnH = 56, gap = 6, margin = 10 }
+    local leftCol  = { x = 10, w = 190, itemH = 56, gap = 6, margin = 10 }
 
     function ui.getRightBtnRect(index)
-        -- index: 1=EndTurn, 2=Undo, 3=Order, 4=Abilities (bottom→top)
+        -- index: 1=Undo, 2=Order, 3=Abilities (bottom→top)
         local cb = rightCol
         cb.x = logicalW - cb.w - cb.margin
         local baseY = logicalH - cb.margin
@@ -19,6 +20,18 @@ return function(ui)
             y = baseY - cb.btnH * index - cb.gap * (index - 1),
             w = cb.w,
             h = cb.btnH,
+        }
+    end
+
+    ui.endTurnHoldTime = 0.7
+
+    function ui.getEndTurnRect()
+        local w, h = 220, 64
+        return {
+            x = math.floor((logicalW - w) / 2),
+            y = logicalH - h - 10,
+            w = w,
+            h = h,
         }
     end
 
@@ -36,7 +49,7 @@ return function(ui)
 
     -- ═══ Abilities Toggle Button (index 4, top of right column) ═══
     function ui.drawAbilitiesToggleButton(state, mouseX, mouseY)
-        local r = ui.getRightBtnRect(4)
+        local r = ui.getRightBtnRect(3)
         local isHover = mouseX and mouseX >= r.x and mouseX <= r.x + r.w and mouseY >= r.y and mouseY <= r.y + r.h
         local open = global_abilities.showPanel
 
@@ -46,28 +59,28 @@ return function(ui)
         love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 5)
 
         local iconKey = icon_cache.keyForAbility("Heal") or "abil_heal"
-        icon_cache.drawSmall(iconKey, r.x + 18, r.y + r.h / 2, 28)
+        icon_cache.drawSmall(iconKey, r.x + 20, r.y + r.h / 2, 36)
         love.graphics.setColor(1, 1, 1, 1)
         local old = love.graphics.getFont()
         love.graphics.setFont(buttonFont)
         local arrow = open and "▲" or "▼"
-        love.graphics.printf("Abilities " .. arrow, r.x + 34, r.y + r.h / 2 - 9, r.w - 34, "center")
+        love.graphics.printf("Abilities " .. arrow, r.x + 40, r.y + r.h / 2 - 10, r.w - 40, "center")
         love.graphics.setFont(old)
         love.graphics.setColor(1, 1, 1, 1)
     end
 
     -- ═══ Order Button (index 3) ═══
     function ui.drawEnemyOrderButton(mouseX, mouseY)
-        local r = ui.getRightBtnRect(3)
+        local r = ui.getRightBtnRect(2)
         local isHover = mouseX >= r.x and mouseX <= r.x + r.w and mouseY >= r.y and mouseY <= r.y + r.h
 
         love.graphics.setColor(isHover and 0.6 or 0.3, 0.4, 0.6, 0.8)
         love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 5)
-        icon_cache.drawSmall("btn_order", r.x + 18, r.y + r.h / 2, 28)
+        icon_cache.drawSmall("btn_order", r.x + 20, r.y + r.h / 2, 36)
         love.graphics.setColor(1, 1, 1, 1)
         local old = love.graphics.getFont()
         love.graphics.setFont(buttonFont)
-        love.graphics.printf("Order (O)", r.x + 34, r.y + r.h / 2 - 9, r.w - 34, "center")
+        love.graphics.printf("Order (O)", r.x + 40, r.y + r.h / 2 - 10, r.w - 40, "center")
         love.graphics.setFont(old)
 
         if isHover then
@@ -98,40 +111,36 @@ return function(ui)
         return isHover
     end
 
-    -- ═══ Undo Button (index 2) ═══
+    -- ═══ Undo Button (index 1) ═══
     function ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
         local canUndo = #undo.history > 1
         local count = #undo.history - 1
-        local r = ui.getRightBtnRect(2)
+        local r = ui.getRightBtnRect(1)
 
         love.graphics.setColor(canUndo and 0.2 or 0.5, 0.2, 0.8, 0.8)
         love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 5)
-        icon_cache.drawSmall("btn_undo", r.x + 18, r.y + r.h / 2, 28)
+        icon_cache.drawSmall("btn_undo", r.x + 20, r.y + r.h / 2, 36)
         love.graphics.setColor(1, 1, 1, 1)
         local old = love.graphics.getFont()
         love.graphics.setFont(buttonFont)
-        love.graphics.printf("Undo (U) [" .. count .. "]", r.x + 34, r.y + r.h / 2 - 9, r.w - 34, "center")
-        love.graphics.setFont(old)
-        if not canUndo then
-            love.graphics.setColor(0, 0, 0, 0.6)
-            love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 5)
-        end
+        love.graphics.printf("Undo (U) [" .. count .. "]", r.x + 40, r.y + r.h / 2 - 10, r.w - 40, "center")
+            love.graphics.setFont(old)
+            if not canUndo then
+                love.graphics.setColor(0, 0, 0, 0.6)
+                love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 5)
+            end
     end
 
-    -- ═══ End Turn Button (index 1) ═══
+    -- ═══ End Turn Button (bottom center) ═══
     function ui.drawEndTurnButton(turnState, entities, turnCount, maxTurns, state)
         local isPlayerTurn = (turnState.phase == "player")
         local btn = endTurnButton
         local isPressed = btn.isHeld
         local pressedOffset = isPressed and 2 or 0
-        local r = ui.getRightBtnRect(1)
+        local r = ui.getEndTurnRect()
 
-        local decayActive = turnCount >= maxTurns
-        local decayText = decayActive and "Decay!" or ("Decay: " .. (maxTurns - turnCount))
-
-        local shouldBlink = false
+        local hasActiveUnits = false
         if isPlayerTurn then
-            local hasActiveUnits = false
             for _, e in ipairs(entities) do
                 if e.isPlayable and e.health > 0 and not e.hasActedThisTurn
                     and not (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis")) then
@@ -139,22 +148,23 @@ return function(ui)
                     break
                 end
             end
-            local canUseAbility = false
-            if state and global_abilities then
-                for _, name in ipairs(global_abilities.getDisplayOrder(state)) do
-                    local ab = global_abilities.registry[name]
-                    if ab and not ab.hasBeenUsed and not global_abilities.abilityUsedThisTurn
-                        and global_abilities.mana >= ab.manaCost then
-                        canUseAbility = true
-                        break
-                    end
+        end
+        local canUseAbility = false
+        if isPlayerTurn and state and global_abilities then
+            for _, name in ipairs(global_abilities.getDisplayOrder(state)) do
+                local ab = global_abilities.registry[name]
+                if ab and not ab.hasBeenUsed and not global_abilities.abilityUsedThisTurn
+                    and global_abilities.mana >= ab.manaCost then
+                    canUseAbility = true
+                    break
                 end
             end
-            shouldBlink = not hasActiveUnits and not canUseAbility
         end
+        local nothingLeft = isPlayerTurn and not hasActiveUnits and not canUseAbility
+        ui.endTurnHoldTime = nothingLeft and 0.3 or 0.7
 
         local baseR, baseG, baseB = 0.8, 0.2, 0.2
-        if shouldBlink then
+        if nothingLeft then
             local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
             baseR = 0.2 + 0.6 * pulse
             baseG = 0.6 + 0.4 * pulse
@@ -165,29 +175,28 @@ return function(ui)
             baseR, baseG, baseB = 0.5, 0.2, 0.2
         end
 
-        love.graphics.setColor(baseR, baseG, baseB, 0.8)
-        love.graphics.rectangle("fill", r.x, r.y + pressedOffset, r.w, r.h - pressedOffset, 5)
+        love.graphics.setColor(baseR, baseG, baseB, 0.85)
+        love.graphics.rectangle("fill", r.x, r.y + pressedOffset, r.w, r.h - pressedOffset, 8)
 
         if isPressed then
-            local progress = math.min(btn.holdTimer / config.HOLD_TIME, 1)
+            local hTime = ui.endTurnHoldTime
+            local progress = math.min(btn.holdTimer / hTime, 1)
             love.graphics.setColor(0.9, 0.3, 0.2, 0.6)
-            love.graphics.rectangle("fill", r.x, r.y + pressedOffset, r.w * progress, r.h - pressedOffset, 5)
+            love.graphics.rectangle("fill", r.x, r.y + pressedOffset, r.w * progress, r.h - pressedOffset, 8)
         end
 
-        icon_cache.drawSmall("btn_end_turn", r.x + 18, r.y + r.h / 2 + pressedOffset, 28)
+        icon_cache.drawSmall("btn_end_turn", r.x + r.w / 2 - 70, r.y + r.h / 2 + pressedOffset, 40)
         love.graphics.setColor(1, 1, 1, 1)
         local old = love.graphics.getFont()
         love.graphics.setFont(buttonFont)
-        love.graphics.printf("End Turn (E)", r.x + 34, r.y + 9 + pressedOffset, r.w - 34, "center")
-        love.graphics.setColor(decayActive and 1 or 0.7, decayActive and 0.3 or 0.7, decayActive and 0.3 or 0.9, 1)
-        love.graphics.printf(decayText, r.x + 34, r.y + 27 + pressedOffset, r.w - 34, "center")
+        love.graphics.printf("End Turn (E)", r.x + r.w / 2 - 35, r.y + r.h / 2 - 10 + pressedOffset, r.w / 2, "left")
         love.graphics.setFont(old)
         if not isPlayerTurn then
             love.graphics.setColor(0, 0, 0, 0.6)
-            love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 5)
+            love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 8)
         end
 
-        if btn.isHovered and isPlayerTurn then
+        if btn.isHovered and isPlayerTurn and hasActiveUnits then
             local unitsLeft = {}
             for _, e in ipairs(entities) do
                 if e.isPlayable and e.health > 0 and not e.hasActedThisTurn
@@ -198,7 +207,7 @@ return function(ui)
             if #unitsLeft > 0 then
                 local names = table.concat(unitsLeft, ", ")
                 local ttW, ttH = 260, 48
-                local tx, ty = r.x - ttW - 6, r.y + r.h / 2 - ttH / 2
+                local tx, ty = r.x + r.w / 2 - ttW / 2, r.y - ttH - 6
                 love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
                 love.graphics.rectangle("fill", tx, ty, ttW, ttH, 6)
                 love.graphics.setColor(0.8, 0.8, 0.8, 1)
@@ -235,13 +244,13 @@ return function(ui)
 
             local iconKey = icon_cache.keyForAttack(btn.name)
             if iconKey then
-                icon_cache.drawSmall(iconKey, btn.x + 18, btn.y + leftCol.itemH / 2, 28)
+                icon_cache.drawSmall(iconKey, btn.x + 22, btn.y + leftCol.itemH / 2, 36)
             end
             love.graphics.setColor(1, 1, 1, 1)
             local old = love.graphics.getFont()
             love.graphics.setFont(buttonFont)
-            local prefix = i .. "."
-            love.graphics.printf(prefix .. " " .. btn.name .. (isSelected and " ✓" or ""), btn.x + 34, btn.y + leftCol.itemH / 2 - 9, leftCol.w - 34, "center")
+            local prefix = ""
+            love.graphics.printf(prefix .. btn.name .. (isSelected and " ✓" or ""), btn.x + 42, btn.y + leftCol.itemH / 2 - 10, leftCol.w - 42, "center")
             love.graphics.setFont(old)
         end
 
@@ -309,15 +318,15 @@ return function(ui)
             love.graphics.rectangle("fill", ri.x, ri.y, ri.w, ri.h, 5)
 
             local iconKey = icon_cache.keyForAbility(name) or "abil_heal"
-            icon_cache.drawSmall(iconKey, ri.x + 18, ri.y + ri.h / 2, 28)
+            icon_cache.drawSmall(iconKey, ri.x + 22, ri.y + ri.h / 2, 36)
 
             love.graphics.setColor(1, 1, 1, available and 1 or 0.5)
             local old = love.graphics.getFont()
             love.graphics.setFont(buttonFont)
             local label = (isActive and "[ " .. name .. " ]" or name)
-            love.graphics.printf(label, ri.x + 34, ri.y + ri.h / 2 - 9, ri.w - 55, "left")
+            love.graphics.printf(label, ri.x + 42, ri.y + ri.h / 2 - 10, ri.w - 65, "left")
             love.graphics.setColor(1, 1, 1, (global_abilities.mana >= ab.manaCost) and 1 or 0.4)
-            love.graphics.print("[" .. ab.manaCost .. "]", ri.x + ri.w - 30, ri.y + ri.h / 2 - 9)
+            love.graphics.print("[" .. ab.manaCost .. "]", ri.x + ri.w - 34, ri.y + ri.h / 2 - 10)
             love.graphics.setFont(old)
 
             -- Tooltip on hover

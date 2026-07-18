@@ -2118,9 +2118,8 @@ function ui.drawSelectedStats(actor, entities, hex)
     if not actor:isCharacter() and not (actor:isBuilding() and actor.moveRange > 0) then return end
     local font = love.graphics.getFont()
     local pad = 8
-    local lineH = 16
+    local lineH = 18
     local margin = 10
-    local lines = {}
     local nameColor
     if actor.isPlayable then
         nameColor = {0.4, 0.9, 0.4}
@@ -2129,79 +2128,77 @@ function ui.drawSelectedStats(actor, entities, hex)
     else
         nameColor = {1, 1, 1}
     end
-    table.insert(lines, { text = actor.name, color = nameColor })
-    if actor.hasActedThisTurn then
-        table.insert(lines, { text = "(acted this turn)", color = {0.6, 0.6, 0.6} })
-    end
-    table.insert(lines, { text = actor.health .. "/" .. actor.maxHealth, color = {1, 0.4, 0.4}, icon = "health", iconSize = 14 })
+
+    -- Name panel (compact, just name)
+    love.graphics.setFont(fonts.get(14))
+    local nameText = actor.name
+    if actor.hasActedThisTurn then nameText = nameText .. " (acted)" end
+    local nameW = font:getWidth(nameText) + pad * 4 + 24
+    local px, py = margin, 46
+    love.graphics.setColor(0.1, 0.15, 0.1, 0.9)
+    love.graphics.rectangle("fill", px, py, nameW, lineH + pad * 2, 8)
+    love.graphics.setColor(nameColor[1], nameColor[2], nameColor[3], 1)
+    love.graphics.rectangle("line", px, py, nameW, lineH + pad * 2, 8)
+    love.graphics.setColor(nameColor)
+    love.graphics.print(nameText, px + pad, py + pad)
+
+    -- Right-side info (single line, outside frame)
+    if not smallFont then smallFont = fonts.get(12) end
+    love.graphics.setFont(smallFont)
+
+    local statsParts = {}
+    -- HP
+    table.insert(statsParts, { icon = "health", text = actor.health .. "/" .. actor.maxHealth, color = {1, 0.4, 0.4} })
+    -- Move
     local baseMove = actor.moveRange or 0
     local effMove = ui.getEffectiveMoveRange(actor, entities, hex)
-    if effMove ~= baseMove then
-        table.insert(lines, { text = baseMove .. " (eff: " .. effMove .. ")", color = {1, 0.9, 0.2}, icon = "move", iconSize = 14 })
-    else
-        table.insert(lines, { text = baseMove, color = {0.8, 0.8, 0.8}, icon = "move", iconSize = 14 })
-    end
+    local moveText = effMove ~= baseMove and (baseMove .. ">" .. effMove) or tostring(baseMove)
+    table.insert(statsParts, { icon = "move", text = moveText, color = {0.8, 0.8, 0.8} })
+    -- Traits
     local flags = {}
     if actor.flying then table.insert(flags, "Flying") end
     if actor.hovering then table.insert(flags, "Hovering") end
     if actor.teleporting then table.insert(flags, "Teleporting") end
     if actor.waterWalker then table.insert(flags, "Water Walker") end
     if actor.indestructible then table.insert(flags, "Indestructible") end
-    if actor.canMoveAfterAttack then table.insert(flags, "Move after attack") end
+    if actor.canMoveAfterAttack then table.insert(flags, "Move+Atk") end
     if #flags > 0 then
-        table.insert(lines, { text = table.concat(flags, ", "), color = {0.6, 0.9, 1} })
+        table.insert(statsParts, { text = table.concat(flags, "/"), color = {0.6, 0.9, 1} })
     end
-    local statusDescriptions = {
-        fire = { name = "Fire", color = {1, 0.5, 0}, desc = "Burns 1 dmg at end of turn" },
-        acid = { name = "Acid", color = {0.3, 0.9, 0.3}, desc = "Any damage is lethal" },
-        decay = { name = "Decay", color = {0.7, 0.2, 0.8}, desc = "1 dmg per move and at end of turn" },
-        empowered = { name = "Empowered", color = {1, 0.9, 0.2}, desc = "Move +1, damage +1" },
-        rooted = { name = "Rooted", color = {0.6, 0.8, 0.2}, desc = "Cannot move" },
-        wounded = { name = "Wounded", color = {1, 0.4, 0.2}, desc = "Move range -1" },
-        fatal_damage = { name = "Fatal Damage", color = {1, 0.5, 0.5}, desc = "Next attack is lethal" },
-        stasis = { name = "Stasis", color = {0.3, 0.5, 1}, desc = "Frozen in time" },
-    }
-    local statuses = ui.getEffectiveStatuses(actor)
+    -- Statuses
+    local statuses = ui.getEffectiveStatuses(actor) or {}
     if #statuses > 0 then
-        table.insert(lines, { text = "Status Effects:", color = {1, 0.8, 0.4} })
+        local sn = {}
         for _, st in ipairs(statuses) do
-            local info = statusDescriptions[st] or { name = st, color = {1,1,1}, desc = "" }
-            table.insert(lines, { text = "  " .. info.name .. ": " .. info.desc, color = info.color })
+            sn[#sn + 1] = tostring(st):gsub("_", " "):gsub("^%l", string.upper)
         end
+        table.insert(statsParts, { text = table.concat(sn, "/"), color = {1, 0.8, 0.4} })
     end
-    local minWidth = 200
-    local maxWidth = 320
-    local contentWidth = minWidth
-    for _, l in ipairs(lines) do
-        local w = font:getWidth(l.text)
-        if w > contentWidth then contentWidth = w end
-    end
-    contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2 + 18))
-    local panelHeight = pad + #lines * lineH + pad
-    local px = margin
-    local py = 46
-    love.graphics.setColor(0.1, 0.15, 0.1, 0.9)
-    love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
-    love.graphics.setColor(nameColor[1], nameColor[2], nameColor[3], 1)
-    love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 8)
-    local curY = py + pad
-    for _, l in ipairs(lines) do
-        local textX = px + pad
-        if l.icon then
-            icon_cache.drawSmall(l.icon, textX + (l.iconSize or 14) / 2, curY + lineH / 2, l.iconSize or 14)
-            textX = textX + 18
+
+    local sep = "|"
+    local infoX = px + nameW + 6
+    local infoY = py + pad
+    local lx = infoX
+    for i, p in ipairs(statsParts) do
+        if p.icon then
+            icon_cache.drawSmall(p.icon, lx + 6, infoY + 8, 12)
+            lx = lx + 14
         end
-        love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
-        love.graphics.print(l.text, textX, curY)
-        curY = curY + lineH
+        love.graphics.setColor(p.color)
+        love.graphics.print(p.text, lx, infoY + 2)
+        lx = lx + love.graphics.getFont():getWidth(p.text)
+        if i < #statsParts then
+            love.graphics.setColor(0.4, 0.4, 0.5, 0.5)
+            love.graphics.print(sep, lx + 3, infoY + 2)
+            lx = lx + love.graphics.getFont():getWidth(sep) + 6
+        end
     end
 end
 function ui.drawAbilityStats(ability)
     if not ability or not ability._cfg then return end
     local cfg = ability._cfg
-    local font = love.graphics.getFont()
-    local pad = 8
-    local lineH = 16
+    local pad = 10
+    local lineH = 18
     local margin = 10
     local lines = {}
     local nameColor = cfg.color
@@ -2217,9 +2214,10 @@ function ui.drawAbilityStats(ability)
     end
     local minWidth = 200
     local maxWidth = 320
+    local f14 = fonts.get(14)
     local contentWidth = minWidth
     for _, l in ipairs(lines) do
-        local w = font:getWidth(l.text)
+        local w = f14:getWidth(l.text)
         if w > contentWidth then contentWidth = w end
     end
     contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2 + 18))
@@ -2230,6 +2228,7 @@ function ui.drawAbilityStats(ability)
     love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
     love.graphics.setColor(nameColor[1], nameColor[2], nameColor[3], 1)
     love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 8)
+    love.graphics.setFont(fonts.get(14))
     local curY = py + pad
     for _, l in ipairs(lines) do
         local textX = px + pad
@@ -2327,6 +2326,17 @@ function ui.drawChaosBar(mx, my)
     love.graphics.rectangle("fill", 0, 0, logicalW, panelH)
     love.graphics.setColor(0.3, 0.2, 0.4, 0.4)
     love.graphics.line(0, panelH, logicalW, panelH)
+
+    -- Decay timer (center)
+    local turnCount = _G.turnCount or 0
+    local maxTurns = _G.maxTurns or 5
+    local decayActive = turnCount >= maxTurns
+    if not smallFont then smallFont = fonts.get(12) end
+    love.graphics.setFont(smallFont)
+    local decayText = decayActive and "Decay!" or ("Decay: " .. (maxTurns - turnCount))
+    local decayW = love.graphics.getFont():getWidth(decayText)
+    love.graphics.setColor(decayActive and 1 or 0.7, decayActive and 0.3 or 0.7, decayActive and 0.3 or 0.9, 1)
+    love.graphics.print(decayText, math.floor((logicalW - decayW) / 2), math.floor((panelH - 14) / 2))
 
     local barX = 10
     local barY = math.floor((panelH - (cellH + pad * 2)) / 2)

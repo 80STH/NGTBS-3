@@ -335,18 +335,18 @@ function love.update(dt)
     end
 
     -- Hold-to-confirm for buttons (common logic)
-    local function updateHoldButton(btn, onTrigger)
+    local function updateHoldButton(btn, onTrigger, holdTime)
         if btn.isHeld then
             btn.holdTimer = (btn.holdTimer or 0) + dt
-            if btn.holdTimer >= config.HOLD_TIME then
+            if btn.holdTimer >= (holdTime or config.HOLD_TIME) then
                 btn.isHeld = false
                 btn.holdTimer = 0
                 onTrigger()
             end
         end
     end
-    updateHoldButton(endTurnButton, turnManager.endPlayerTurn)
-    updateHoldButton(undoButton, function() end)
+    updateHoldButton(endTurnButton, turnManager.endPlayerTurn, ui.endTurnHoldTime)
+    updateHoldButton(undoButton, function() end, config.HOLD_TIME)
 
     if testViewActive then
         testViewOffsetY = (1 - math.abs((love.timer.getTime() * 3) % 2 - 1)) * 30
@@ -378,10 +378,10 @@ function love.update(dt)
     end
 
     undoButton = undoButton or {}
-    local ur = ui.getRightBtnRect(2) -- Undo
+    local ur = ui.getRightBtnRect(1) -- Undo
     undoButton.isHovered = (mx >= ur.x and mx <= ur.x + ur.w and my >= ur.y and my <= ur.y + ur.h)
 
-    local er = ui.getRightBtnRect(1) -- End Turn
+    local er = ui.getEndTurnRect()
     endTurnButton.isHovered = (mx >= er.x and mx <= er.x + er.w and my >= er.y and my <= er.y + er.h)
     if undoButton.isHovered or endTurnButton.isHovered then
         sounds.hover(dt)
