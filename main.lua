@@ -55,6 +55,7 @@ do
 end
 
 pushAnimations = require("combat.push_animator")
+boundarySelected = nil
 resolutions = {
     { w = 800, h = 1280, label = "9:16" },
     { w = 720, h = 1520, label = "9:19" },
@@ -292,15 +293,12 @@ function rebuildEntityIndex()
             end
             entityAt[key] = e
         end
-        if e.q and e.r then
-            registerCell(e.q, e.r)
-        end
         if e.cells then
             for _, c in ipairs(e.cells) do
-                if c.q ~= e.q or c.r ~= e.r then
-                    registerCell(c.q, c.r)
-                end
+                registerCell(c.q, c.r)
             end
+        elseif e.q and e.r then
+            registerCell(e.q, e.r)
         end
     end
     if ui then ui._moveRangeCacheKey = nil end

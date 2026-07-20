@@ -777,6 +777,15 @@ function drawHexGrid(state, cellOverlays)
         table.sort(cells, function(a, b) return a.depth < b.depth end)
     end
 
+    local hoveredBoundaryEntity = nil
+    if hex.hoverQ >= 0 then
+        local he = getEntityAtHex(hex.hoverQ, hex.hoverR)
+        if he and he.cells and he:isObstacle() then
+            hoveredBoundaryEntity = he
+        end
+    end
+    local selectedBoundaryEntity = boundarySelected
+
     for _, cell in ipairs(cells) do
         local drawY = cell.y + (cell.testY or 0)
         local yOffset = (cell.terrain == "water") and state.config.WATER_Y_OFFSET or 0
@@ -815,7 +824,25 @@ function drawHexGrid(state, cellOverlays)
             and not (state.selectedActor and state.selectedActor.isMoving)
         local isHovered = (hex.hoverQ == cell.q and hex.hoverR == cell.r)
 
-        if isCurrentActor then
+        local cellEntity = getEntityAtHex(cell.q, cell.r)
+        local inGroup = cellEntity and cellEntity.cells and cellEntity:isObstacle()
+        local isHoveredGroup = inGroup and cellEntity == hoveredBoundaryEntity
+        local isSelectedGroup = inGroup and cellEntity == selectedBoundaryEntity
+
+        if isSelectedGroup or isHoveredGroup then
+            local r, g, b
+            if cellEntity.lethalCollision then r, g, b = 0.2, 0.55, 0.6
+            elseif cellEntity.noCollisionDamage then r, g, b = 0.45, 0.42, 0.4
+            else r, g, b = 0.55, 0.32, 0.12 end
+            local a = isSelectedGroup and 0.55 or 0.3
+            love.graphics.setColor(r, g, b, a)
+            love.graphics.polygon("fill", insetVerts)
+            love.graphics.setColor(r, g, b, 0.85)
+            love.graphics.setLineWidth(3)
+            love.graphics.polygon("line", insetVerts)
+        elseif inGroup then
+            -- boundary cell, no hex outline
+        elseif isCurrentActor then
             love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
             love.graphics.polygon("fill", insetVerts)
             love.graphics.setColor(0.2, 0.8, 0.2, 0.9)
@@ -828,7 +855,7 @@ function drawHexGrid(state, cellOverlays)
             love.graphics.setLineWidth(3)
             love.graphics.polygon("line", insetVerts)
         elseif isHovered then
-            local hoverEntity = getEntityAtHex(cell.q, cell.r)
+            local hoverEntity = cellEntity
             if hoverEntity and hoverEntity:isBuilding() then
                 love.graphics.setColor(1, 1, 1, 0.3)
                 love.graphics.polygon("fill", insetVerts)
@@ -845,7 +872,6 @@ function drawHexGrid(state, cellOverlays)
         end
 
         -- Directional entities: edge color marking (green = safe, red = dangerous)
-        local cellEntity = getEntityAtHex(cell.q, cell.r)
         if cellEntity and cellEntity.direction then
             local edgeVerts = hex:drawHexagon(cell.x, drawY + yOffset, hex.radius - 1)
             local edgeDirs = {
@@ -1001,20 +1027,17 @@ function drawEntity(entity, state)
                 end
             end
         end
-        love.graphics.draw(entity.sprite, x, drawY, spriteRotation, finalScale, finalScale, sw/2, sh/2)
-
-        -- Multi-cell entities: draw the sprite on every occupied cell
         if entity.cells then
             for _, c in ipairs(entity.cells) do
-                if c.q ~= entity.q or c.r ~= entity.r then
-                    local cx, cy = getDrawCoords(c.q, c.r)
-                    local cdrawY = cy
-                    if entity:isObstacle() or entity:isBuilding() then
-                        cdrawY = cy - 6
-                    end
-                    love.graphics.draw(entity.sprite, cx, cdrawY, spriteRotation, finalScale, finalScale, sw/2, sh/2)
+                local cx, cy = getDrawCoords(c.q, c.r)
+                local cdrawY = cy
+                if entity:isObstacle() or entity:isBuilding() then
+                    cdrawY = cy - 6
                 end
+                love.graphics.draw(entity.sprite, cx, cdrawY, spriteRotation, finalScale, finalScale, sw/2, sh/2)
             end
+        else
+            love.graphics.draw(entity.sprite, x, drawY, spriteRotation, finalScale, finalScale, sw/2, sh/2)
         end
 
         -- Outline for selected entity (4-pass sprite outline)

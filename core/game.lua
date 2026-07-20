@@ -57,6 +57,7 @@ function restartGame(mapPath)
 
     -- Guarantee a clean turnState on every restart.
     turnState = newTurnState()
+    boundarySelected = nil
 
     local hexStatuses
     local deployableAllies

@@ -375,6 +375,7 @@ end
     local inStasis = clicked and status and status.hasEntityStatus and status.hasEntityStatus(clicked, "stasis")
     if clicked and (clicked.health > 0 or inStasis) and (clicked:isCharacter() or (clicked:isBuilding() and clicked.moveRange > 0)) then
         selectedActor = clicked
+        boundarySelected = nil
         hex.selectedQ, hex.selectedR = tq, tr
         updateAttackButtons(selectedActor)
         attackMode = false
@@ -384,6 +385,20 @@ end
         log.debugf("input", "Selected: %s%s", clicked.name, (clicked.hasActedThisTurn and " (acted)" or ""))
         return
     end
+
+    if clicked and clicked.cells and clicked:isObstacle() and not clicked.isHazard then
+        boundarySelected = clicked
+        selectedActor = nil
+        hex.selectedQ, hex.selectedR = tq, tr
+        attackMode = false
+        selectedAttack = nil
+        global_abilities.showPanel = false
+        mightyThrowTarget = nil
+        log.debugf("input", "Boundary selected: %s", clicked.name)
+        return
+    end
+
+    boundarySelected = nil
 
     if selectedActor and not selectedActor.isMoving then
         local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(selectedActor, "rooted") and not selectedActor.rootImmune
