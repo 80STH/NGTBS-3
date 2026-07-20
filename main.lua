@@ -55,6 +55,11 @@ do
 end
 
 pushAnimations = require("combat.push_animator")
+resolutions = {
+    { w = 800, h = 1280, label = "9:16" },
+    { w = 720, h = 1520, label = "9:19" },
+}
+currentResIdx = 1
 dpiScale = 1
 logicalW = 0
 logicalH = 0
@@ -275,17 +280,27 @@ end
 function rebuildEntityIndex()
     entityAt = {}
     for _, e in ipairs(entities) do
-        if e.q and e.r then
-            local key = e.q .. "," .. e.r
+        local function registerCell(q, r)
+            local key = q .. "," .. r
             local existing = entityAt[key]
-            if existing then
+            if existing and existing ~= e then
                 local warnKey = key .. "|" .. tostring(existing.name or existing) .. "|" .. tostring(e.name or e)
                 if not cellDuplicateWarnings[warnKey] then
                     cellDuplicateWarnings[warnKey] = true
-                    log.errorf("debug", "CELL DUPLICATE: %s and %s both at (%d,%d)!", tostring(existing.name or existing), tostring(e.name or e), e.q, e.r)
+                    log.debugf("debug", "cell overlap: %s and %s both at (%d,%d)", tostring(existing.name or existing), tostring(e.name or e), q, r)
                 end
             end
             entityAt[key] = e
+        end
+        if e.q and e.r then
+            registerCell(e.q, e.r)
+        end
+        if e.cells then
+            for _, c in ipairs(e.cells) do
+                if c.q ~= e.q or c.r ~= e.r then
+                    registerCell(c.q, c.r)
+                end
+            end
         end
     end
     if ui then ui._moveRangeCacheKey = nil end
@@ -467,7 +482,26 @@ function getEnemyAttackOrder(entities, turnState)
     return order
 end
 
+function applyResolution(idx)
+    currentResIdx = idx
+    local r = resolutions[idx]
+    love.window.setMode(r.w, r.h, { highdpi = true, resizable = true })
+    log.infof("main", "Resolution: %s (%dx%d)", r.label, r.w, r.h)
+end
+
 function love.keypressed(key)
+    if key == "f6" then
+        local idx = currentResIdx - 1
+        if idx < 1 then idx = #resolutions end
+        applyResolution(idx)
+        return
+    end
+    if key == "f7" then
+        local idx = currentResIdx + 1
+        if idx > #resolutions then idx = 1 end
+        applyResolution(idx)
+        return
+    end
     if pause_menu.isOpen then
         pause_menu.keypressed(key)
         return

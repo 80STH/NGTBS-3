@@ -584,9 +584,20 @@ function ai.performTeleportTowards(enemy, target, entities, hex)
         
         local occupied = false
         for _, e in ipairs(entities) do
-            if e ~= enemy and e.q == q and e.r == r and e.health > 0 and not e.isHazard then
-                occupied = true
-                break
+            if e ~= enemy and e.health > 0 and not e.isHazard then
+                local occupies = (e.q == q and e.r == r)
+                if not occupies and e.cells then
+                    for _, c in ipairs(e.cells) do
+                        if c.q == q and c.r == r then
+                            occupies = true
+                            break
+                        end
+                    end
+                end
+                if occupies then
+                    occupied = true
+                    break
+                end
             end
         end
         if not occupied then
@@ -624,9 +635,20 @@ function ai.performMoveTowards(enemy, target, entities, hex)
         if hex:isValidHex(neighbor.q, neighbor.r) then
             local occupied = false
             for _, e in ipairs(entities) do
-                if e ~= enemy and e.q == neighbor.q and e.r == neighbor.r and not e.isHazard then
-                    occupied = true
-                    break
+                if e ~= enemy and not e.isHazard then
+                    local occupies = (e.q == neighbor.q and e.r == neighbor.r)
+                    if not occupies and e.cells then
+                        for _, c in ipairs(e.cells) do
+                            if c.q == neighbor.q and c.r == neighbor.r then
+                                occupies = true
+                                break
+                            end
+                        end
+                    end
+                    if occupies then
+                        occupied = true
+                        break
+                    end
                 end
             end
             if not occupied then
@@ -673,9 +695,20 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
         if hex:isValidHex(neighbor.q, neighbor.r) and hex:isActiveHex(neighbor.q, neighbor.r) then
             local occupied = false
             for _, e in ipairs(entities) do
-                if e ~= enemy and e.q == neighbor.q and e.r == neighbor.r and not e.isHazard then
-                    occupied = true
-                    break
+                if e ~= enemy and not e.isHazard then
+                    local occupies = (e.q == neighbor.q and e.r == neighbor.r)
+                    if not occupies and e.cells then
+                        for _, c in ipairs(e.cells) do
+                            if c.q == neighbor.q and c.r == neighbor.r then
+                                occupies = true
+                                break
+                            end
+                        end
+                    end
+                    if occupies then
+                        occupied = true
+                        break
+                    end
                 end
             end
             if not occupied then
@@ -737,8 +770,19 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
     if enemy.isMoving then return false end
     -- Destination cell: occupied by any entity (except isHazard)
     for _, e in ipairs(entities) do
-        if e ~= enemy and e.q == targetQ and e.r == targetR and not e.isHazard then
-            return false
+        if e ~= enemy and not e.isHazard then
+            local occupies = (e.q == targetQ and e.r == targetR)
+            if not occupies and e.cells then
+                for _, c in ipairs(e.cells) do
+                    if c.q == targetQ and c.r == targetR then
+                        occupies = true
+                        break
+                    end
+                end
+            end
+            if occupies then
+                return false
+            end
         end
     end
     local distance = hex:getDistance(enemy.q, enemy.r, targetQ, targetR)
@@ -753,7 +797,18 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
         isBlockedFn = function(q, r) return ai.isPositionOccupied(q, r, enemy, entities, hex) end
         isOccupiedFn = function(q, r)
             for _, e in ipairs(entities) do
-                if e ~= enemy and e.q == q and e.r == r and not e.isHazard then return true end
+                if e ~= enemy and not e.isHazard then
+                    local occupies = (e.q == q and e.r == r)
+                    if not occupies and e.cells then
+                        for _, c in ipairs(e.cells) do
+                            if c.q == q and c.r == r then
+                                occupies = true
+                                break
+                            end
+                        end
+                    end
+                    if occupies then return true end
+                end
             end
             return false
         end

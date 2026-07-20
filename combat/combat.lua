@@ -1889,6 +1889,11 @@ push_animator.onQueueEmpty = combat._processPendingDeaths
 function combat.getEntityAtHex(q, r, entities)
     for _, e in ipairs(entities) do
         if e.q == q and e.r == r then return e end
+        if e.cells then
+            for _, c in ipairs(e.cells) do
+                if c.q == q and c.r == r then return e end
+            end
+        end
     end
     return nil
 end

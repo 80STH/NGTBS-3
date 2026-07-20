@@ -140,7 +140,7 @@ local POINTY_DIRS_EVEN = {
 -- Reusable vertex buffer (avoids allocation per hex draw)
 local vertBuf = {}
 
-function HexGrid.new(radius, gridWidth, gridHeight, activeRadius, centerQ, centerR, orientation)
+function HexGrid.new(radius, gridWidth, gridHeight, activeRadius, centerQ, centerR, orientation, activeRows)
     local self = setmetatable({}, {__index = HexGrid})
     self.radius = radius
     self.orientation = orientation or "pointy"
@@ -149,6 +149,7 @@ function HexGrid.new(radius, gridWidth, gridHeight, activeRadius, centerQ, cente
     self.activeRadius = activeRadius or 5
     self.centerQ = centerQ or math.floor(gridWidth / 2)
     self.centerR = centerR or math.floor(gridHeight / 2)
+    self.activeRows = activeRows
 
     if self.orientation == "flat" then
         self.hexWidth = radius * 1.5
@@ -283,6 +284,11 @@ end
 
 function HexGrid:isActiveHex(q, r)
     if not self:isValidHex(q, r) then return false end
+    if self.activeRows then
+        local range = self.activeRows[r]
+        if not range then return false end
+        return q >= range[1] and q <= range[2]
+    end
     local x, y, z = hex_utils.axialToCube(q, r)
     local dist = (math.abs(x - self._centerCubeX) + math.abs(y - self._centerCubeY) + math.abs(z - self._centerCubeZ)) / 2
     return dist <= self.activeRadius

@@ -1003,6 +1003,20 @@ function drawEntity(entity, state)
         end
         love.graphics.draw(entity.sprite, x, drawY, spriteRotation, finalScale, finalScale, sw/2, sh/2)
 
+        -- Multi-cell entities: draw the sprite on every occupied cell
+        if entity.cells then
+            for _, c in ipairs(entity.cells) do
+                if c.q ~= entity.q or c.r ~= entity.r then
+                    local cx, cy = getDrawCoords(c.q, c.r)
+                    local cdrawY = cy
+                    if entity:isObstacle() or entity:isBuilding() then
+                        cdrawY = cy - 6
+                    end
+                    love.graphics.draw(entity.sprite, cx, cdrawY, spriteRotation, finalScale, finalScale, sw/2, sh/2)
+                end
+            end
+        end
+
         -- Outline for selected entity (4-pass sprite outline)
         if state.selectedActor == entity and not entity.isDying then
             local outlineR, outlineG, outlineB
@@ -1104,6 +1118,14 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
                         if e.q == q and e.r == r then
                             occupied = true
                             break
+                        end
+                        if e.cells then
+                            for _, c in ipairs(e.cells) do
+                                if c.q == q and c.r == r then
+                                    occupied = true
+                                    break
+                                end
+                            end
                         end
                     end
                     if not occupied then

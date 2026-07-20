@@ -1752,7 +1752,18 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
         isBlockedFn = function(q, r) return cell_rules.isOccupied(q, r, enemy, { entities = entities, hex = hex, allowPhaseThroughEnemies = false }) end
         isOccupiedFn = function(q, r)
             for _, e in ipairs(entities) do
-                if e ~= enemy and e.q == q and e.r == r and not e.isHazard then return true end
+                if e ~= enemy and not e.isHazard then
+                    local occupies = (e.q == q and e.r == r)
+                    if not occupies and e.cells then
+                        for _, c in ipairs(e.cells) do
+                            if c.q == q and c.r == r then
+                                occupies = true
+                                break
+                            end
+                        end
+                    end
+                    if occupies then return true end
+                end
             end
             return false
         end

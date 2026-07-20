@@ -76,7 +76,8 @@ function restartGame(mapPath)
         mapActiveRadius,
         mapCenterQ,
         mapCenterR,
-        orientation
+        orientation,
+        mapData and mapData.activeRows or nil
     )
     hex:centerOnScreen(love.graphics.getWidth() / dpiScale, love.graphics.getHeight() / dpiScale)
     hex.rotation = (orientation == "flat") and 0 or config.GRID_ROTATION_ANGLE
@@ -241,6 +242,14 @@ function restartGame(mapPath)
                             local occupied = false
                             for _, e in ipairs(entities) do
                                 if e.q == q and e.r == r then occupied = true; break end
+                                if e.cells then
+                                    for _, c in ipairs(e.cells) do
+                                        if c.q == q and c.r == r then
+                                            occupied = true
+                                            break
+                                        end
+                                    end
+                                end
                             end
                             if not occupied then
                                 idx = idx + 1
@@ -432,6 +441,14 @@ function findRandomEmptyCells(count, excludeFn, qMin)
                 local occupied = false
                 for _, e in ipairs(entities) do
                     if e.q == q and e.r == r then occupied = true; break end
+                    if e.cells then
+                        for _, c in ipairs(e.cells) do
+                            if c.q == q and c.r == r then
+                                occupied = true
+                                break
+                            end
+                        end
+                    end
                 end
                 if not occupied then
                     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"

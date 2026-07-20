@@ -70,14 +70,25 @@ function cell_rules.isPassable(q, r, mover, opts)
     end
 
     for _, e in ipairs(o.entities) do
-        if e ~= mover and e.q == q and e.r == r and not e.isHazard then
-            if not sameSide(e, mover, o.passableSide) then
-                -- phaseThroughEnemies: can pass through enemies (but not allies)
-                if o.allowPhaseThroughEnemies and mover and mover.phaseThroughEnemies
-                   and e:isCharacter() and not e.isPlayable then
-                    -- skip
-                else
-                    return false
+        if e ~= mover and not e.isHazard then
+            local occupies = (e.q == q and e.r == r)
+            if not occupies and e.cells then
+                for _, c in ipairs(e.cells) do
+                    if c.q == q and c.r == r then
+                        occupies = true
+                        break
+                    end
+                end
+            end
+            if occupies then
+                if not sameSide(e, mover, o.passableSide) then
+                    -- phaseThroughEnemies: can pass through enemies (but not allies)
+                    if o.allowPhaseThroughEnemies and mover and mover.phaseThroughEnemies
+                       and e:isCharacter() and not e.isPlayable then
+                        -- skip
+                    else
+                        return false
+                    end
                 end
             end
         end
@@ -91,8 +102,19 @@ function cell_rules.isOccupiedForStop(q, r, mover, opts)
     local hex = o.hex
     if not hex or not hex:isActiveHex(q, r) then return true end
     for _, e in ipairs(o.entities) do
-        if e ~= mover and e.q == q and e.r == r and not e.isHazard then
-            return true
+        if e ~= mover and not e.isHazard then
+            local occupies = (e.q == q and e.r == r)
+            if not occupies and e.cells then
+                for _, c in ipairs(e.cells) do
+                    if c.q == q and c.r == r then
+                        occupies = true
+                        break
+                    end
+                end
+            end
+            if occupies then
+                return true
+            end
         end
     end
     return false
@@ -117,13 +139,24 @@ function cell_rules.isOccupied(q, r, mover, opts)
     end
 
     for _, e in ipairs(o.entities) do
-        if e ~= mover and e.q == q and e.r == r and not e.isHazard then
-            if not sameSide(e, mover, o.passableSide) then
-                if o.allowPhaseThroughEnemies and mover and mover.phaseThroughEnemies
-                   and e:isCharacter() and not e.isPlayable then
-                    -- skip
-                else
-                    return true
+        if e ~= mover and not e.isHazard then
+            local occupies = (e.q == q and e.r == r)
+            if not occupies and e.cells then
+                for _, c in ipairs(e.cells) do
+                    if c.q == q and c.r == r then
+                        occupies = true
+                        break
+                    end
+                end
+            end
+            if occupies then
+                if not sameSide(e, mover, o.passableSide) then
+                    if o.allowPhaseThroughEnemies and mover and mover.phaseThroughEnemies
+                       and e:isCharacter() and not e.isPlayable then
+                        -- skip
+                    else
+                        return true
+                    end
                 end
             end
         end

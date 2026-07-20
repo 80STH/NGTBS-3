@@ -35,6 +35,9 @@ local nameToSpriteKey = {
     MountainSlope = "obstacle_mountain_slope",
     SuperMountainSlope = "obstacle_super_mountain_slope",
     SharpReefs = "obstacle_sharp_reefs",
+    MountainRange = "obstacle_mountain_range",
+    ReefRange = "obstacle_reef_range",
+    SlopeRange = "obstacle_slope_range",
     -- Units
     Warrior = "unit_warrior",
     Puncher = "unit_puncher",
@@ -281,6 +284,9 @@ local gidToEntity = {
     [15] = { type = "obstacle",  name = "MountainSlope", indestructible = true, noCollisionDamage = true },
     [16] = { type = "obstacle",  name = "SuperMountainSlope", indestructible = true, noCollisionDamage = true },
     [5]  = { type = "obstacle",  name = "SharpReefs", indestructible = true, lethalCollision = true },
+    [17] = { type = "obstacle",  name = "MountainRange", indestructible = true },
+    [18] = { type = "obstacle",  name = "ReefRange", indestructible = true, lethalCollision = true },
+    [19] = { type = "obstacle",  name = "SlopeRange", indestructible = true, noCollisionDamage = true },
     [12] = { type = "building",  name = "SmallBuilding", health = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2 },
     [6] = { type = "obstacle",  name = "WeakMountain",  health = 2, maxDamagePerHit = 1 },
@@ -532,6 +538,35 @@ local function generateCustomSprite(name, w, h)
         love.graphics.polygon("fill", w*0.85, 2, w*0.75, h-1, w, h-1)
         love.graphics.setColor(0.55, 0.65, 0.75)
         love.graphics.polygon("fill", w*0.6, 0, w*0.45, h-2, w*0.75, h-2)
+
+    elseif name == "MountainRange" then
+        love.graphics.setColor(0.4, 0.35, 0.3)
+        love.graphics.polygon("fill", 0, h, w*0.35, h*0.25, w*0.6, h)
+        love.graphics.setColor(0.5, 0.45, 0.4)
+        love.graphics.polygon("fill", w*0.35, h*0.25, w*0.65, h*0.55, w*0.5, h)
+        love.graphics.polygon("fill", w*0.6, h, w*0.85, h*0.35, w, h)
+        love.graphics.setColor(0.95, 0.95, 1)
+        love.graphics.polygon("fill", w*0.35-2, h*0.25, w*0.35, h*0.25, w*0.35, h*0.25+2)
+        love.graphics.setColor(0.3, 0.25, 0.2)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+
+    elseif name == "ReefRange" then
+        love.graphics.setColor(0.25, 0.4, 0.5)
+        love.graphics.rectangle("fill", 0, h-3, w, 3)
+        love.graphics.setColor(0.55, 0.65, 0.75)
+        love.graphics.polygon("fill", w*0.25, 0, w*0.05, h-1, w*0.2, h-1)
+        love.graphics.polygon("fill", w*0.55, 1, w*0.35, h-1, w*0.5, h-1)
+        love.graphics.polygon("fill", w*0.85, 2, w*0.65, h-1, w*0.8, h-1)
+        love.graphics.setColor(0.7, 0.8, 0.9)
+        love.graphics.polygon("fill", w*0.55, 0, w*0.4, h-2, w*0.7, h-2)
+
+    elseif name == "SlopeRange" then
+        love.graphics.setColor(0.5, 0.45, 0.4)
+        love.graphics.polygon("fill", 0, h, w*0.5, h*0.3, w, h)
+        love.graphics.setColor(0.6, 0.55, 0.5)
+        love.graphics.polygon("fill", 0, h, w*0.5, h*0.3, w*0.5, h)
+        love.graphics.setColor(0.4, 0.35, 0.3)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
     end
 
     love.graphics.setCanvas()
@@ -572,8 +607,8 @@ function environment.loadNativeMap(data)
         width, height,
         activeRadius,
         centerQ, centerR,
-        orientation
-    )
+        orientation,
+        data.activeRows)
 
     -- Load terrain
     if data.terrain then
@@ -611,7 +646,7 @@ function environment.loadNativeMap(data)
             if q and r then
                 q, r = tonumber(q), tonumber(r)
                 if tempHex:isActiveHex(q, r) then
-                    local entityName, entityDir = nil, nil
+                    local entityName, entityDir, entityCells = nil, nil, nil
                     if type(entityDataVal) == "table" then
                         entityName = entityDataVal.name or entityDataVal[1]
                         if entityDataVal.dir ~= nil then
@@ -619,6 +654,12 @@ function environment.loadNativeMap(data)
                             entityDir = dirs[entityDataVal.dir]
                         elseif entityDataVal.direction then
                             entityDir = entityDataVal.direction
+                        end
+                        if entityDataVal.cells then
+                            entityCells = {}
+                            for _, c in ipairs(entityDataVal.cells) do
+                                table.insert(entityCells, { q = c[1], r = c[2] })
+                            end
                         end
                     else
                         entityName = entityDataVal
@@ -683,6 +724,9 @@ function environment.loadNativeMap(data)
                                 love.graphics.setCanvas()
                             end
                             entity.sprite = canvas
+                            if entityCells then
+                                entity.cells = entityCells
+                            end
 
                             table.insert(entities, entity)
                             log.debugf("env", "Created %s at (%d,%d)", entity.name, q, r)
