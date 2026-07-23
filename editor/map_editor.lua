@@ -137,6 +137,29 @@ local function generateCustomSprite(name, w, h)
         love.graphics.polygon("fill", 1, 5, w/2, 1, w-1, 5)
         love.graphics.setColor(0.85, 0.8, 0.7)
         love.graphics.rectangle("fill", 4, 7, 2, 2)
+    elseif name == "MountainRange" then
+        love.graphics.setColor(0.4, 0.35, 0.3)
+        love.graphics.polygon("fill", 0, h, w*0.3, h*0.2, w*0.5, h)
+        love.graphics.setColor(0.5, 0.45, 0.4)
+        love.graphics.polygon("fill", w*0.5, h, w*0.85, h*0.3, w, h)
+        love.graphics.setColor(0.95, 0.95, 1)
+        love.graphics.polygon("fill", w*0.3-1, h*0.2, w*0.3+1, h*0.2, w*0.3, h*0.2+2)
+        love.graphics.setColor(0.3, 0.25, 0.2)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
+    elseif name == "ReefRange" then
+        love.graphics.setColor(0.25, 0.4, 0.5)
+        love.graphics.rectangle("fill", 0, h-3, w, 3)
+        love.graphics.setColor(0.55, 0.65, 0.75)
+        love.graphics.polygon("fill", w*0.25, 0, w*0.05, h-1, w*0.2, h-1)
+        love.graphics.polygon("fill", w*0.55, 1, w*0.35, h-1, w*0.5, h-1)
+        love.graphics.polygon("fill", w*0.85, 2, w*0.65, h-1, w*0.8, h-1)
+    elseif name == "SlopeRange" then
+        love.graphics.setColor(0.5, 0.45, 0.4)
+        love.graphics.polygon("fill", 0, h, w*0.5, h*0.3, w, h)
+        love.graphics.setColor(0.6, 0.55, 0.5)
+        love.graphics.polygon("fill", 0, h, w*0.5, h*0.3, w*0.5, h)
+        love.graphics.setColor(0.4, 0.35, 0.3)
+        love.graphics.rectangle("fill", 0, h-2, w, 2)
     end
 
     love.graphics.setCanvas()
@@ -167,10 +190,24 @@ local function buildEditorSpriteCache()
     end
 end
 
--- Editor grid: 11x11, center at (5,5), active radius 5
-local EDITOR_GRID_SIZE = 11
+-- Editor grid: 9x10, center at (4,4), active rows matching game maps
+local EDITOR_GRID_WIDTH = 9
+local EDITOR_GRID_HEIGHT = 10
 local EDITOR_RADIUS = 4
-local EDITOR_CENTER = 5
+local EDITOR_CENTER_Q = 4
+local EDITOR_CENTER_R = 4
+local EDITOR_ACTIVE_ROWS = {
+    [0] = {3, 5},
+    [1] = {1, 7},
+    [2] = {0, 8},
+    [3] = {0, 8},
+    [4] = {0, 8},
+    [5] = {0, 8},
+    [6] = {0, 8},
+    [7] = {0, 8},
+    [8] = {2, 6},
+    [9] = {4, 4},
+}
 
 -- Layer definitions
 editor.LAYER_TERRAIN = 1
@@ -294,14 +331,16 @@ function editor.init()
     hex_utils.setOrientation("flat")
     editor.hex = hexgrid.new(
         config.HEX_RADIUS,
-        EDITOR_GRID_SIZE, EDITOR_GRID_SIZE,
+        EDITOR_GRID_WIDTH, EDITOR_GRID_HEIGHT,
         EDITOR_RADIUS,
-        EDITOR_CENTER, EDITOR_CENTER,
-        "flat"
+        EDITOR_CENTER_Q, EDITOR_CENTER_R,
+        "flat",
+        EDITOR_ACTIVE_ROWS
     )
     editor.hex:centerOnScreen(love.graphics.getWidth() / (editor.dpiScale or 1), love.graphics.getHeight() / (editor.dpiScale or 1))
     -- Shift grid left to make room for palette
     editor.hex.offsetX = editor.hex.offsetX - 200
+    boundaryGroupCache = nil
 
     editor.terrainData = {}
     editor.entityData = {}
@@ -461,11 +500,11 @@ function editor.loadMap(data)
     editor.upperTerrainData = {}
 
     -- Use map's grid parameters (same as game does in restartGame)
-    local mapWidth = data.width or EDITOR_GRID_SIZE
-    local mapHeight = data.height or EDITOR_GRID_SIZE
+    local mapWidth = data.width or EDITOR_GRID_WIDTH
+    local mapHeight = data.height or EDITOR_GRID_HEIGHT
     local mapActiveRadius = data.activeRadius or EDITOR_RADIUS
-    local mapCenterQ = data.centerQ or math.floor(mapWidth / 2)
-    local mapCenterR = data.centerR or math.floor(mapHeight / 2)
+    local mapCenterQ = data.centerQ or EDITOR_CENTER_Q
+    local mapCenterR = data.centerR or EDITOR_CENTER_R
     local mapOrientation = data.orientation or "flat"
 
     hex_utils.setOrientation(mapOrientation)
@@ -474,8 +513,10 @@ function editor.loadMap(data)
         mapWidth, mapHeight,
         mapActiveRadius,
         mapCenterQ, mapCenterR,
-        mapOrientation
+        mapOrientation,
+        data.activeRows
     )
+    boundaryGroupCache = nil
     editor.hex:centerOnScreen(love.graphics.getWidth() / (editor.dpiScale or 1), love.graphics.getHeight() / (editor.dpiScale or 1))
     editor.hex.offsetX = editor.hex.offsetX - 200
 
@@ -535,6 +576,12 @@ function editor.getMapData()
         statuses = {},
         upper_terrain = {},
     }
+    if editor.hex.activeRows then
+        data.activeRows = {}
+        for r, range in pairs(editor.hex.activeRows) do
+            data.activeRows[r] = range
+        end
+    end
     for key, val in pairs(editor.terrainData) do
         data.terrain[key] = val
     end
@@ -575,6 +622,18 @@ function editor.saveMap()
     table.insert(lines, string.format("  centerR = %d,", data.centerR))
     table.insert(lines, string.format('  orientation = "%s",', data.orientation))
 
+    -- Active rows (custom active area shape)
+    if data.activeRows then
+        table.insert(lines, "  activeRows = {")
+        for r = 0, data.height - 1 do
+            local range = data.activeRows[r]
+            if range then
+                table.insert(lines, string.format("    [%d] = {%d, %d},", r, range[1], range[2]))
+            end
+        end
+        table.insert(lines, "  },")
+    end
+
     -- Terrain
     table.insert(lines, "  terrain = {")
     for key, val in pairs(data.terrain) do
@@ -585,7 +644,14 @@ function editor.saveMap()
     -- Entities
     table.insert(lines, "  entities = {")
     for key, val in pairs(data.entities) do
-        if type(val) == "table" then
+        if type(val) == "table" and val.cells then
+            local cellsStr = ""
+            for i, c in ipairs(val.cells) do
+                if i > 1 then cellsStr = cellsStr .. "," end
+                cellsStr = cellsStr .. string.format(" {%d, %d}", c[1], c[2])
+            end
+            table.insert(lines, string.format('    ["%s"] = { name = "%s", cells = {%s} },', key, val.name, cellsStr))
+        elseif type(val) == "table" then
             table.insert(lines, string.format('    ["%s"] = { name = "%s", dir = %d },', key, val.name, val.dir))
         else
             table.insert(lines, string.format('    ["%s"] = "%s",', key, val))
@@ -657,6 +723,112 @@ end
 -- PAINT HELPERS
 -- ============================================================
 
+-- Boundary group computation from activeRows
+local boundaryGroupCache = nil
+
+local function computeBoundaryGroups(hex)
+    if not hex.activeRows then return nil end
+
+    local active = {}
+    for r = 0, hex.gridHeight - 1 do
+        local range = hex.activeRows[r]
+        if range then
+            for q = range[1], range[2] do
+                active[q .. "," .. r] = true
+            end
+        end
+    end
+
+    local boundary = {}
+    for r = 0, hex.gridHeight - 1 do
+        local range = hex.activeRows[r]
+        if range then
+            for q = range[1], range[2] do
+                local isEdge = false
+                for _, nb in ipairs({{q-1,r},{q+1,r},{q,r-1},{q,r+1}}) do
+                    if not active[nb[1] .. "," .. nb[2]] then
+                        isEdge = true; break
+                    end
+                end
+                if isEdge then
+                    boundary[q .. "," .. r] = {q = q, r = r}
+                end
+            end
+        end
+    end
+
+    local visited = {}
+    local components = {}
+    for key, cell in pairs(boundary) do
+        if not visited[key] then
+            local comp = {}
+            local stack = {cell}
+            while #stack > 0 do
+                local cur = table.remove(stack)
+                local ck = cur.q .. "," .. cur.r
+                if not visited[ck] and boundary[ck] then
+                    visited[ck] = true
+                    table.insert(comp, cur)
+                    for _, nb in ipairs({{cur.q-1,cur.r},{cur.q+1,cur.r},{cur.q,cur.r-1},{cur.q,cur.r+1}}) do
+                        local nk = nb[1] .. "," .. nb[2]
+                        if boundary[nk] and not visited[nk] then
+                            table.insert(stack, {q = nb[1], r = nb[2]})
+                        end
+                    end
+                end
+            end
+            if #comp > 0 then
+                table.insert(components, comp)
+            end
+        end
+    end
+
+    local midQ = hex.gridWidth / 2
+    local midR = hex.gridHeight / 2
+    local named = {}
+
+    for _, comp in ipairs(components) do
+        local sumQ, sumR = 0, 0
+        for _, c in ipairs(comp) do sumQ = sumQ + c.q; sumR = sumR + c.r end
+        local avgQ, avgR = sumQ / #comp, sumR / #comp
+
+        local minQ, maxQ, minR, maxR = math.huge, -math.huge, math.huge, -math.huge
+        for _, c in ipairs(comp) do
+            if c.q < minQ then minQ = c.q end
+            if c.q > maxQ then maxQ = c.q end
+            if c.r < minR then minR = c.r end
+            if c.r > maxR then maxR = c.r end
+        end
+        local spanQ = maxQ - minQ
+        local spanR = maxR - minR
+
+        local groupName
+        if spanQ >= spanR then
+            groupName = avgR < midR and "top" or "bottom"
+        else
+            groupName = avgQ < midQ and "left" or "right"
+        end
+        named[groupName] = comp
+    end
+
+    return named
+end
+
+local function getBoundaryGroup(hex, q, r)
+    if not boundaryGroupCache then
+        boundaryGroupCache = computeBoundaryGroups(hex)
+    end
+    if not boundaryGroupCache then return nil end
+    for groupName, cells in pairs(boundaryGroupCache) do
+        for _, cell in ipairs(cells) do
+            if cell.q == q and cell.r == r then
+                return groupName, cells
+            end
+        end
+    end
+    return nil
+end
+
 local function key(q, r)
     return q .. "," .. r
 end
@@ -673,10 +845,39 @@ function editor.paintCell(q, r)
         end
     elseif editor.currentLayer == editor.LAYER_ENTITY then
         if editor.eraser then
-            editor.entityData[k] = nil
+            -- For boundary entities, erase all cells in the group
+            local ev = editor.entityData[k]
+            if type(ev) == "table" and ev.cells then
+                for _, c in ipairs(ev.cells) do
+                    editor.entityData[c[1] .. "," .. c[2]] = nil
+                end
+            else
+                editor.entityData[k] = nil
+            end
         else
             local name = (editor.customEntityName ~= "" and editor.customEntityName or editor.selectedEntity)
-            if isDirectionalEntity(name) then
+            -- Boundary entities: fill entire group
+            if name == "MountainRange" or name == "ReefRange" or name == "SlopeRange" then
+                local groupName, cells = getBoundaryGroup(editor.hex, q, r)
+                if groupName and cells then
+                    local cellsList = {}
+                    for _, cell in ipairs(cells) do
+                        table.insert(cellsList, {cell.q, cell.r})
+                    end
+                    local anchor = cellsList[1]
+                    editor.entityData[anchor[1] .. "," .. anchor[2]] = { name = name, cells = cellsList }
+                    -- Clear any existing entities on group cells (except anchor)
+                    for _, c in ipairs(cellsList) do
+                        local ck = c[1] .. "," .. c[2]
+                        if ck ~= anchor[1] .. "," .. anchor[2] then
+                            editor.entityData[ck] = nil
+                        end
+                    end
+                else
+                    editor.message = "No boundary group here"
+                    editor.messageTimer = 2
+                end
+            elseif isDirectionalEntity(name) then
                 editor.entityData[k] = { name = name, dir = editor.directionIndex }
             else
                 editor.entityData[k] = name
@@ -1167,61 +1368,70 @@ function editor.draw()
                 local entityVal = editor.entityData[k]
                 if entityVal then
                     local entityName, entityDir = nil, nil
+                    local isBoundary = false
                     if type(entityVal) == "table" then
                         entityName = entityVal.name
                         entityDir = entityVal.dir
+                        isBoundary = entityVal.cells ~= nil
                     else
                         entityName = entityVal
                     end
-                    local sprite = editorSpriteCache[entityName]
-                    local rot = 0
-                    if entityDir then
-                        rot = (entityDir - 1) * math.pi / 3
-                    end
-                    if sprite then
-                        local sw, sh = sprite:getDimensions()
-                        local scale = editor.hex.radius * 0.055
-                        love.graphics.setColor(1, 1, 1, 0.95)
-                        love.graphics.draw(sprite, x, y, rot, scale, scale, sw/2, sh/2)
-                    else
-                        local entCol = {0.8, 0.8, 0.8}
-                        for _, ep in ipairs(editor.entityPalette) do
-                            if ep.id == entityName then entCol = ep.color; break end
+
+                    local function drawEntitySprite(cx, cy, ename)
+                        local sprite = editorSpriteCache[ename]
+                        if sprite then
+                            local sw, sh = sprite:getDimensions()
+                            local scale = editor.hex.radius * 0.055
+                            love.graphics.setColor(1, 1, 1, 0.95)
+                            love.graphics.draw(sprite, cx, cy, 0, scale, scale, sw/2, sh/2)
+                        else
+                            local entCol = {0.8, 0.8, 0.8}
+                            for _, ep in ipairs(editor.entityPalette) do
+                                if ep.id == ename then entCol = ep.color; break end
+                            end
+                            love.graphics.setColor(entCol[1], entCol[2], entCol[3], 0.9)
+                            love.graphics.circle("fill", cx, cy, editor.hex.radius * 0.35)
+                            love.graphics.setColor(1, 1, 1, 1)
+                            love.graphics.setLineWidth(2)
+                            love.graphics.circle("line", cx, cy, editor.hex.radius * 0.35)
+                            local letter = ename:sub(1, 1)
+                            local font = love.graphics.getFont()
+                            local tw = font:getWidth(letter)
+                            love.graphics.setColor(1, 1, 1, 1)
+                            love.graphics.print(letter, cx - tw / 2, cy - 7)
                         end
-                        love.graphics.setColor(entCol[1], entCol[2], entCol[3], 0.9)
-                        love.graphics.circle("fill", x, y, editor.hex.radius * 0.35)
-                        love.graphics.setColor(1, 1, 1, 1)
-                        love.graphics.setLineWidth(2)
-                        love.graphics.circle("line", x, y, editor.hex.radius * 0.35)
-                        local letter = entityName:sub(1, 1)
-                        local font = love.graphics.getFont()
-                        local tw = font:getWidth(letter)
-                        love.graphics.setColor(1, 1, 1, 1)
-                        love.graphics.print(letter, x - tw / 2, y - 7)
                     end
-                    -- Direction arrow for directional entities
-                    if entityDir then
-                        local cubeDir = hex_utils.CUBE_DIRECTIONS[entityDir]
-                        local tq, tr = hex_utils.applyCubeDiff(q, r, cubeDir.dx, cubeDir.dy, cubeDir.dz)
-                        local tx, ty = getDrawCoordsEditor(editor.hex, tq, tr)
-                        local angle = math.atan2(ty - y, tx - x)
-                        local dist = editor.hex.radius * 0.55
-                        local tipX = x + math.cos(angle) * dist
-                        local tipY = y + math.sin(angle) * dist
-                        local baseX = x + math.cos(angle) * dist * 0.45
-                        local baseY = y + math.sin(angle) * dist * 0.45
-                        love.graphics.setColor(0.9, 0.25, 0.25, 0.7)
-                        love.graphics.setLineWidth(2)
-                        love.graphics.line(baseX, baseY, tipX, tipY)
-                        -- Arrow head
-                        local perp = angle + math.pi / 2
-                        local headSize = 4
-                        local hx1 = tipX - math.cos(angle) * headSize + math.cos(perp) * headSize * 0.5
-                        local hy1 = tipY - math.sin(angle) * headSize + math.sin(perp) * headSize * 0.5
-                        local hx2 = tipX - math.cos(angle) * headSize - math.cos(perp) * headSize * 0.5
-                        local hy2 = tipY - math.sin(angle) * headSize - math.sin(perp) * headSize * 0.5
-                        love.graphics.polygon("fill", tipX, tipY, hx1, hy1, hx2, hy2)
-                        love.graphics.setLineWidth(1)
+
+                    if isBoundary then
+                        for _, c in ipairs(entityVal.cells) do
+                            local cx, cy = getDrawCoordsEditor(editor.hex, c[1], c[2])
+                            drawEntitySprite(cx, cy, entityName)
+                        end
+                    else
+                        drawEntitySprite(x, y, entityName)
+                        -- Direction arrow for directional entities
+                        if entityDir then
+                            local cubeDir = hex_utils.CUBE_DIRECTIONS[entityDir]
+                            local tq, tr = hex_utils.applyCubeDiff(q, r, cubeDir.dx, cubeDir.dy, cubeDir.dz)
+                            local tx, ty = getDrawCoordsEditor(editor.hex, tq, tr)
+                            local angle = math.atan2(ty - y, tx - x)
+                            local dist = editor.hex.radius * 0.55
+                            local tipX = x + math.cos(angle) * dist
+                            local tipY = y + math.sin(angle) * dist
+                            local baseX = x + math.cos(angle) * dist * 0.45
+                            local baseY = y + math.sin(angle) * dist * 0.45
+                            love.graphics.setColor(0.9, 0.25, 0.25, 0.7)
+                            love.graphics.setLineWidth(2)
+                            love.graphics.line(baseX, baseY, tipX, tipY)
+                            local perp = angle + math.pi / 2
+                            local headSize = 4
+                            local hx1 = tipX - math.cos(angle) * headSize + math.cos(perp) * headSize * 0.5
+                            local hy1 = tipY - math.sin(angle) * headSize + math.sin(perp) * headSize * 0.5
+                            local hx2 = tipX - math.cos(angle) * headSize - math.cos(perp) * headSize * 0.5
+                            local hy2 = tipY - math.sin(angle) * headSize - math.sin(perp) * headSize * 0.5
+                            love.graphics.polygon("fill", tipX, tipY, hx1, hy1, hx2, hy2)
+                            love.graphics.setLineWidth(1)
+                        end
                     end
                 end
 

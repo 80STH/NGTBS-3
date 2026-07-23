@@ -20,9 +20,8 @@ function attack_effects.dash(attacker, target, targetQ, targetR, hex)
     visual.addDashEffect(fromX, fromY, toX, toY)
     -- Hit on target
     if target then
-        local x, y = getHexCenter(target, hex)
-        visual.addEffect(x, y, "hit", 0.3)
-        visual.addShockwave(x, y, 15)
+        visual.addEffect(toX, toY, "hit", 0.3)
+        visual.addShockwave(toX, toY, 15)
     end
 end
 
@@ -153,10 +152,9 @@ function attack_effects.rampage(attacker, target, targetQ, targetR, hex)
     local toX, toY = hex:hexToPixel(targetQ, targetR)
     visual.addDashEffect(fromX, fromY, toX, toY)
     if target then
-        local x, y = getHexCenter(target, hex)
-        visual.addEffect(x, y, "hit", 0.5)
-        visual.addShockwave(x, y, 25)
-        visual.addBloodSplat(x, y)
+        visual.addEffect(toX, toY, "hit", 0.5)
+        visual.addShockwave(toX, toY, 25)
+        visual.addBloodSplat(toX, toY)
     end
 end
 

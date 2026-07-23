@@ -389,14 +389,26 @@ end
 function HexGrid:centerOnScreen(screenWidth, screenHeight)
     self:invalidateSortedCells()
 
-    if self.orientation == "flat" then
-        self.centerPixelX = self.centerQ * self.hexWidth
-        self.centerPixelY = (self.centerR + (self.centerQ % 2) * 0.5) * self.hexHeight
-    else
-        self.centerPixelX = (self.centerQ + (self.centerR % 2) * 0.5) * self.hexWidth
-        self.centerPixelY = self.centerR * self.hexHeight
+    local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
+    for r = 0, self.gridHeight - 1 do
+        for q = 0, self.gridWidth - 1 do
+            local x, y
+            if self.orientation == "flat" then
+                x = q * self.hexWidth
+                y = (r + (q % 2) * 0.5) * self.hexHeight
+            else
+                x = (q + (r % 2) * 0.5) * self.hexWidth
+                y = r * self.hexHeight
+            end
+            if x - self.radius < minX then minX = x - self.radius end
+            if x + self.radius > maxX then maxX = x + self.radius end
+            if y - self.radius < minY then minY = y - self.radius end
+            if y + self.radius > maxY then maxY = y + self.radius end
+        end
     end
 
+    self.centerPixelX = (minX + maxX) / 2
+    self.centerPixelY = (minY + maxY) / 2
     self.offsetX = screenWidth / 2 - self.centerPixelX
     self.offsetY = screenHeight / 2 - self.centerPixelY
 end

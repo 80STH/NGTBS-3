@@ -830,14 +830,10 @@ function drawHexGrid(state, cellOverlays)
         local isSelectedGroup = inGroup and cellEntity == selectedBoundaryEntity
 
         if isSelectedGroup or isHoveredGroup then
-            local r, g, b
-            if cellEntity.lethalCollision then r, g, b = 0.2, 0.55, 0.6
-            elseif cellEntity.noCollisionDamage then r, g, b = 0.45, 0.42, 0.4
-            else r, g, b = 0.55, 0.32, 0.12 end
             local a = isSelectedGroup and 0.55 or 0.3
-            love.graphics.setColor(r, g, b, a)
+            love.graphics.setColor(0.4, 0.35, 0.25, a)
             love.graphics.polygon("fill", insetVerts)
-            love.graphics.setColor(r, g, b, 0.85)
+            love.graphics.setColor(0.4, 0.35, 0.25, 0.85)
             love.graphics.setLineWidth(3)
             love.graphics.polygon("line", insetVerts)
         elseif inGroup then
