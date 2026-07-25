@@ -710,9 +710,10 @@ function editor.saveMap()
     -- Elevation (highground/lowground per-cell overrides)
     if data.elevation and next(data.elevation) then
         table.insert(lines, "  elevation = {")
-        for key, val in pairs(data.elevation) do
-            table.insert(lines, string.format('    ["%s"] = "%s",', key, val))
-        end
+for key, val in pairs(data.elevation) do
+             local valStr = val and "true" or "false"
+             table.insert(lines, string.format('    ["%s"] = %s,', key, valStr))
+         end
         table.insert(lines, "  },")
     end
 
@@ -1809,10 +1810,8 @@ end
 function getDrawCoordsEditor(hex, q, r)
     local x, y = hex:hexToPixel(q, r)
     local elv = editor.elevationData[q .. "," .. r]
-    if elv == "high" then
-        y = y - 18
-    elseif elv == "low" then
-        y = y + config.WATER_Y_OFFSET
+    if elv then
+        y = y - 38
     end
     return x, y
 end
