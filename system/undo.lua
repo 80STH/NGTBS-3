@@ -50,6 +50,7 @@ function undo.snapshot()
         actionHistoryCount = #undo.history,
         maxTurns = _G.maxTurns,
         digSites = status.saveDigSites(),
+        graveyard = _G.graveyard and {unpack(_G.graveyard)} or {},
     }
     -- Save every entity's state
     for _, e in ipairs(_G.entities) do
@@ -218,6 +219,9 @@ function undo.restore(snap)
             status.hexStatuses[key] = copy
         end
     end
+
+    -- Restore graveyard
+    _G.graveyard = snap.graveyard and {unpack(snap.graveyard)} or {}
 
     -- Restore dig sites
     status.restoreDigSites(snap.digSites)

@@ -156,22 +156,26 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
          return
      end
 
-     if fromElev and not toElev then
-status.removeFromHex(toQ, toR, "frozen")
-        status.removeFromHex(toQ, toR, "stasis")
-         local fallKills = {}
+if fromElev and not toElev then
+         -- Kill units at destination (crushed by falling entity)
          for _, e in ipairs(entities) do
              if e.health and e.health > 0 and e.q == toQ and e.r == toR then
                  e.health = 0
                  e:startDeath()
-                 table.insert(fallKills, e)
              end
          end
-         log.infof("combat", "%s falls from highground to lowground! Units at destination are killed!", target.name)
+         -- Move falling entity to destination
+         finalizeMove(target, toQ, toR)
+         -- 1 damage from fall
+         if target.health and target.health > 0 then
+             target.health = target.health - 1
+             if target.health <= 0 then target:startDeath() end
+         end
+         log.infof("combat", "%s falls from highground! Takes 1 damage!", target.name)
          if sounds then sounds.play("collision") end
-         local fx, fy = getDrawCoords(toQ, toR)
-         visual.addEffect(fx, fy, "slam")
-         if onComplete then onComplete(false) end
+         combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
+             if onComplete then onComplete(true) end
+         end)
          return
      end
 
@@ -2020,15 +2024,11 @@ function performMove(actor, targetQ, targetR)
         return false
     end
     if actor.isMoving then return false end
-    if status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
-        log.infof("combat", "%s is rooted by a Zombie and cannot move!", actor.name)
-        return false
-    end
-    if status.hasEntityStatus(actor, "stasis") then
-        log.infof("combat", "%s is in stasis and cannot move!", actor.name)
-        return false
-    end
-    if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return false end
+if status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
+         log.infof("combat", "%s is rooted by a Zombie and cannot move!", actor.name)
+         return false
+     end
+     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return false end
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then
         log.debugf("combat", "%s has already moved this turn!", actor.name)
         return false
@@ -2173,11 +2173,7 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
         log.debug("combat", "Not a playable character")
         return false, "Not a playable character"
     end
-    if status.hasEntityStatus(attacker, "stasis") then
-        log.infof("combat", "%s is in stasis and cannot attack!", attacker.name)
-        return false, "Unit is in stasis"
-    end
-    if attacker.hasActedThisTurn then
+if attacker.hasActedThisTurn then
         log.debug("combat", "Already acted this turn")
         return false, "Already acted this turn"
     end
@@ -2388,13 +2384,7 @@ function combat.MendAttack:execute(attacker, targetQ, targetR, hex, entities, so
     local distance = hex:getDistance(attacker.q, attacker.r, colossus.q, colossus.r)
     if distance ~= 1 then return false, "Colossus must be adjacent!" end
 
-    -- Remove stasis and fully heal
-    local st = require("system.status")
-    if st.hasEntityStatus(colossus, "stasis") then
-        st.removeFromEntity(colossus, "stasis")
-        _G.stasisCount = math.max(0, (_G.stasisCount or 1) - 1)
-    end
-    colossus.health = colossus.maxHealth
+     colossus.health = colossus.maxHealth
 
     -- Visual
     local fx, fy = getDrawCoords(attacker.q, attacker.r)

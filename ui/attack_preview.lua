@@ -238,6 +238,40 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
         return result
     end
 
+    -- Highground push: low -> high = uphill block (1 damage, push stops)
+    local elevMap = _G.elevationMap
+    local fromElev = elevMap and elevMap[fromQ] and elevMap[fromQ][fromR]
+    local toElev = elevMap and elevMap[toQ] and elevMap[toQ][toR]
+    if not fromElev and toElev then
+        if entity:isCharacter() then
+            result.damage = 1
+            result.type = "collision_damage"
+            result.reason = "highground_block"
+        end
+        return result
+    end
+
+    -- Highground push: high -> low = fall (all units at destination die)
+    if fromElev and not toElev then
+        if entity:isCharacter() then
+            result.damage = 1
+            result.type = "collision_damage"
+            result.reason = "highground_fall"
+        end
+        -- All entities at destination are killed
+        result.occupantDmg = 99
+        result.occupant = nil
+        if entities then
+            for _, e in ipairs(entities) do
+                if e.health and e.health > 0 and e.q == toQ and e.r == toR and e ~= entity then
+                    result.occupant = e
+                    break
+                end
+            end
+        end
+        return result
+    end
+
     local occupant = getEntity(toQ, toR, entities)
     if occupant and occupant ~= entity then
         result.occupant = occupant
@@ -309,7 +343,14 @@ function preview.applyPush(p, entity, fromQ, fromR, toQ, toR, hex, entities)
     if col.damage > 0 then
         preview.addCollisionDamage(p, entity, preview.calculateEffectiveCollisionDamage(entity))
     end
-    if col.occupantDmg > 0 and col.occupant then
+    if col.reason == "highground_fall" and entities then
+        -- All units at destination die: show fatal on each
+        for _, e in ipairs(entities) do
+            if e.health and e.health > 0 and e.q == toQ and e.r == toR and e ~= entity then
+                preview.addCollisionDamage(p, e, e.health)
+            end
+        end
+    elseif col.occupantDmg > 0 and col.occupant then
         preview.addCollisionDamage(p, col.occupant, preview.calculateEffectiveCollisionDamage(col.occupant))
     end
 

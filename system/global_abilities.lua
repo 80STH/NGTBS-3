@@ -4,6 +4,7 @@
 -- All abilities are available simultaneously (not mutually exclusive in terms of usage,
 -- but only one can be in target selection mode).
 
+local Entity = require("entity.entity")
 local ui = require("ui.ui")
 local attack_preview = require("ui.attack_preview")
 local combat = require("combat.combat")
@@ -69,11 +70,24 @@ function global_abilities.initWithCommander(commanderName)
 end
 
 function global_abilities.getDisplayOrder(state)
+    global_abilities.syncGraveyardAbilities()
     local result = {}
     local unlimited = state and state.unlimitedAbilities
     for _, name in ipairs(global_abilities.abilityOrder) do
         if unlimited or global_abilities.unlocked[name] then
             table.insert(result, name)
+        end
+    end
+    -- Append dynamic graveyard buttons
+    for name, ab in pairs(global_abilities.registry) do
+        if getmetatable(ab) == RespawnAllyAbility then
+            local found = false
+            for _, n in ipairs(result) do
+                if n == name then found = true; break end
+            end
+            if not found then
+                table.insert(result, name)
+            end
         end
     end
     return result
@@ -108,6 +122,7 @@ function global_abilities.reset()
     global_abilities.mana = global_abilities.maxMana
     global_abilities.abilityUsedThisTurn = false
     global_abilities.pendingRemains = {}
+    global_abilities.clearGraveyardAbilities()
     for _, ab in pairs(global_abilities.registry) do
         if ab.reset then ab:reset() end
         ab.hasBeenUsed = false
@@ -2822,6 +2837,182 @@ function SpeedBoostAbility:drawButton(mx, my, state)
             "the battle. Free ability.",
         },
     })
+end
+
+-- ============================================================
+-- RESPAWN ALLY: per-ally ghost summon buttons
+-- ============================================================
+local RespawnAllyAbility = {}
+RespawnAllyAbility.__index = RespawnAllyAbility
+
+function RespawnAllyAbility.new(snapshot)
+    local self = {
+        name = "Respawn " .. snapshot.name,
+        displayName = "Respawn " .. snapshot.name,
+        manaCost = 1,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+        snapshot = snapshot,
+    }
+    return setmetatable(self, RespawnAllyAbility)
+end
+
+function RespawnAllyAbility:reset()
+    self.hasBeenUsed = false
+end
+
+function RespawnAllyAbility:onActivate(state)
+    log.infof("abilities", "Click an empty hex to summon %s's ghost, or press ESC to cancel", self.snapshot.name)
+end
+
+function RespawnAllyAbility:onDeactivate(state)
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+
+function RespawnAllyAbility:collectOverlays(hex, cellOverlays, state)
+    for _, ac in ipairs(hex._activeCells) do
+        local occupied = false
+        for _, e in ipairs(state.entities) do
+            if e.q == ac.q and e.r == ac.r and e.health > 0 then
+                occupied = true
+                break
+            end
+        end
+        if not occupied then
+            local terrain = state.terrainMap and state.terrainMap[ac.q] and state.terrainMap[ac.q][ac.r] or "grass"
+            if terrain ~= "water" then
+                table.insert(cellOverlays, { q = ac.q, r = ac.r, color = {0.4, 0.6, 1, 0.4}, label = "ghost" })
+            end
+        end
+    end
+end
+
+function RespawnAllyAbility:onClickHex(q, r, hex, state)
+    -- Check hex is empty
+    for _, e in ipairs(state.entities) do
+        if e.q == q and e.r == r and e.health > 0 then
+            log.warn("abilities", "That cell is occupied!")
+            return true
+        end
+    end
+
+    -- Check terrain is passable
+    local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
+    if terrain == "water" then
+        log.warn("abilities", "Cannot summon on water!")
+        return true
+    end
+
+    -- Remove snapshot from graveyard and unregister this button
+    local g = _G.graveyard
+    local snapshot = nil
+    if g then
+        for i, s in ipairs(g) do
+            if s == self.snapshot then
+                snapshot = table.remove(g, i)
+                break
+            end
+        end
+    end
+    if not snapshot then
+        log.warn("abilities", "This ally has already been respawned!")
+        global_abilities.activeAbility = nil
+        return true
+    end
+
+    global_abilities.registry[self.name] = nil
+
+    undo.snapshot()
+
+    local ghost = Entity.new(
+        snapshot.name .. " Ghost",
+        Entity.TYPES.CHARACTER,
+        q, r,
+        1, true,
+        snapshot.moveRange or 1,
+        snapshot.sprite,
+        snapshot.color and {snapshot.color[1], snapshot.color[2], snapshot.color[3], 0.7} or {0.5, 0.7, 1, 0.7},
+        {}
+    )
+    ghost.flying = snapshot.flying or false
+    ghost.hovering = snapshot.hovering or false
+    ghost.teleporting = snapshot.teleporting or false
+    ghost.waterWalker = snapshot.waterWalker or false
+    ghost.hasMovedThisTurn = false
+    ghost.hasActedThisTurn = false
+
+    table.insert(state.entities, ghost)
+
+    local x, y = hex:hexToPixel(q, r)
+    if visual and visual.addEffect then
+        visual.addEffect(x, y, "heal", 0.6)
+    end
+
+    log.infof("abilities", "%s's ghost summoned at (%d,%d)! Move range: %d", snapshot.name, q, r, ghost.moveRange)
+
+    global_abilities.spendAbility(self)
+    restoreSelectedActor()
+    global_abilities.activeAbility = nil
+    return true
+end
+
+function RespawnAllyAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.4, 0.6, 1},
+        label = self.displayName,
+        activeLabel = "Pick hex",
+        tooltipH = 80,
+        tooltipTitle = "Respawn " .. self.snapshot.name,
+        tooltipLines = {
+            "Summon a ghost of " .. self.snapshot.name .. ".",
+            "Inherits movement traits.",
+            "Spawns with 1 HP.",
+        },
+    })
+end
+
+-- Sync graveyard entries with registry buttons
+function global_abilities.syncGraveyardAbilities()
+    local g = _G.graveyard
+    if not g then return end
+
+    -- Remove buttons for entries no longer in graveyard
+    local toRemove = {}
+    for name, ab in pairs(global_abilities.registry) do
+        if getmetatable(ab) == RespawnAllyAbility then
+            local found = false
+            for _, s in ipairs(g) do
+                if s == ab.snapshot then found = true; break end
+            end
+            if not found then
+                table.insert(toRemove, name)
+            end
+        end
+    end
+    for _, name in ipairs(toRemove) do
+        global_abilities.registry[name] = nil
+    end
+
+    -- Add buttons for new graveyard entries
+    for _, snapshot in ipairs(g) do
+        local key = "Respawn " .. snapshot.name
+        if not global_abilities.registry[key] then
+            global_abilities.registry[key] = RespawnAllyAbility.new(snapshot)
+        end
+    end
+end
+
+function global_abilities.clearGraveyardAbilities()
+    local toRemove = {}
+    for name, ab in pairs(global_abilities.registry) do
+        if getmetatable(ab) == RespawnAllyAbility then
+            table.insert(toRemove, name)
+        end
+    end
+    for _, name in ipairs(toRemove) do
+        global_abilities.registry[name] = nil
+    end
 end
 
 -- Register all abilities

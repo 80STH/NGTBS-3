@@ -8,6 +8,8 @@ local trains = require("system.trains")
 local Entity = require("entity.entity")
 local log = require("util.log")
 
+_G.graveyard = {}
+
 local function newTurnState()
     return {
         phase = "enemy_prepare",
@@ -166,6 +168,7 @@ function restartGame(mapPath)
         global_abilities.initWithCommander(selectedCommander)
     end
     global_abilities.reset()
+    _G.graveyard = {}
     _G.squadHpBonus = 0
     _G.squadMoveBonus = 0
     _G.squadArmorBonus = 0
@@ -421,6 +424,19 @@ function updateDeathAnimations(dt)
 
                 -- Place upper_terrain rubble for destroyed buildings/obstacles
                 placeRubble(e)
+
+                if e.isPlayable and e:isCharacter() and e.health <= 0 then
+                    _G.graveyard = _G.graveyard or {}
+                    table.insert(_G.graveyard, {
+                        name = e.name, q = e.q, r = e.r,
+                        maxHealth = e.maxHealth, moveRange = e.moveRange,
+                        flying = e.flying, hovering = e.hovering,
+                        teleporting = e.teleporting, waterWalker = e.waterWalker,
+                        sprite = e.sprite, color = e.color,
+                        attacks = e.attacks, upgradeLevel = e.upgradeLevel,
+                    })
+                    log.infof("game", "Ally %s added to graveyard at (%d,%d)", e.name, e.q, e.r)
+                end
 
                 table.remove(entities, i)
             end

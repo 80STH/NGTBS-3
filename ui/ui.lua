@@ -46,9 +46,6 @@ function ui.getEffectiveMoveRange(actor, entities, hex)
     if status and status.hasEntityStatus and status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
         return 0
     end
-    if status and status.hasEntityStatus and status.hasEntityStatus(actor, "stasis") then
-        return 0
-    end
     local base = actor.moveRange or 0
     if status and status.hasEntityStatus and status.hasEntityStatus(actor, "empowered") then
         base = base + 1
@@ -2263,7 +2260,7 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
     allyPanelButtons = {}
     local allies = {}
     for _, e in ipairs(entities) do
-        if e:isCharacter() and e.isPlayable and e.health and (e.health > 0 or (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis"))) then
+        if e:isCharacter() and e.isPlayable and e.health and e.health > 0 then
             table.insert(allies, e)
         end
     end
@@ -2294,14 +2291,10 @@ function ui.drawAllyPanel(mx, my, entities, selectedActor)
         love.graphics.setLineWidth(1)
         love.graphics.rectangle("line", x, by, btnW, btnH, 4)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print(ally.name, x + 5, by + 2)
-        local inStasis = status and status.hasEntityStatus and status.hasEntityStatus(ally, "stasis")
-        local indX = x + btnW - 16
-        local indY = by + btnH / 2 - 1
-        if inStasis then
-            love.graphics.setColor(0.3, 0.5, 1, 1)
-            love.graphics.print("STS", indX - 12, indY - 2)
-        elseif ally.hasActedThisTurn then
+love.graphics.print(ally.name, x + 5, by + 2)
+         local indX = x + btnW - 16
+         local indY = by + btnH / 2 - 1
+         if ally.hasActedThisTurn then
             love.graphics.setColor(0.5, 0.5, 0.5, 1)
             love.graphics.print("вњ—", indX, indY - 2)
         elseif not ally.hasMovedThisTurn then
