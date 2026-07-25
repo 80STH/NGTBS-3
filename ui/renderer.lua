@@ -394,7 +394,7 @@ function renderer.draw(state)
         for _, e in ipairs(state.entities) do
             if e.attacksFirst and e.health > 0 then
                 num = num + 1
-                local x, y = hex:hexToPixel(e.q, e.r)
+                local x, y = getDrawCoords(e.q, e.r)
                 love.graphics.setColor(1, 0.4, 0.2, 0.9)
                 love.graphics.circle("fill", x + 15, y - 20, 12)
                 love.graphics.setColor(0, 0, 0, 1)
@@ -404,7 +404,7 @@ function renderer.draw(state)
         for _, e in ipairs(state.entities) do
             if e.waterWalker and not e.attacksFirst and e.health > 0 then
                 num = num + 1
-                local x, y = hex:hexToPixel(e.q, e.r)
+                local x, y = getDrawCoords(e.q, e.r)
                 love.graphics.setColor(1, 0.8, 0.2, 0.9)
                 love.graphics.circle("fill", x + 15, y - 20, 12)
                 love.graphics.setColor(0, 0, 0, 1)
@@ -416,7 +416,7 @@ function renderer.draw(state)
                 local n = orderMap[enemy]
                 if n then
                     num = num + 1
-                    local x, y = hex:hexToPixel(enemy.q, enemy.r)
+                    local x, y = getDrawCoords(enemy.q, enemy.r)
                     love.graphics.setColor(1, 0.8, 0.2, 0.9)
                     love.graphics.circle("fill", x + 15, y - 20, 12)
                     love.graphics.setColor(0, 0, 0, 1)
@@ -429,7 +429,7 @@ function renderer.draw(state)
                 local n = orderMap[e]
                 if n then
                     num = num + 1
-                    local x, y = hex:hexToPixel(e.q, e.r)
+                    local x, y = getDrawCoords(e.q, e.r)
                     love.graphics.setColor(1, 0.8, 0.2, 0.9)
                     love.graphics.circle("fill", x + 15, y - 20, 12)
                     love.graphics.setColor(0, 0, 0, 1)
@@ -761,7 +761,8 @@ function drawHexGrid(state, cellOverlays)
     local gridH = hex.gridHeight
     if not gridW or not gridH then return end
 
-    local baseCells = hex:getSortedCells(state.terrainMap, state.config.WATER_Y_OFFSET)
+    local baseCells = hex:getSortedCells(state.terrainMap, state.config.WATER_Y_OFFSET, state.elevationMap)
+
 
     -- Build frame-specific cells (add testView offset)
     local cells = {}
@@ -788,8 +789,8 @@ function drawHexGrid(state, cellOverlays)
 
     for _, cell in ipairs(cells) do
         local drawY = cell.y + (cell.testY or 0)
-        local yOffset = (cell.terrain == "water") and state.config.WATER_Y_OFFSET or 0
-        hex:drawTerrainHex(cell.q, cell.r, cell.terrain, cell.x, drawY)
+        local yOffset = hex:getCellYOffset(cell.q, cell.r, cell.terrain, state.config.WATER_Y_OFFSET, state.elevationMap)
+        hex:drawTerrainHex(cell.q, cell.r, cell.terrain, cell.x, drawY, state.elevationMap)
         local upperType = state.upperTerrainMap[cell.q] and state.upperTerrainMap[cell.q][cell.r]
         if upperType then
             hex:drawUpperTerrain(cell.q, cell.r, upperType, cell.x, drawY, yOffset)
@@ -916,12 +917,12 @@ function getEntityDrawPosition(entity, state)
 
                 if anim.isShake then
                     if anim.offsetX and anim.offsetY then
-                        local x, y = state.hex:hexToPixel(anim.obj.q, anim.obj.r)
+                        local x, y = getDrawCoords(anim.obj.q, anim.obj.r)
                         local curX = x + anim.offsetX * (1 - ease)
                         local curY = y + anim.offsetY * (1 - ease)
                         return curX, curY
                     else
-                        return state.hex:hexToPixel(entity.q, entity.r)
+                        return getDrawCoords(entity.q, entity.r)
                     end
                 else
                     if anim.startX and anim.endX then
@@ -929,7 +930,7 @@ function getEntityDrawPosition(entity, state)
                         local y = anim.startY + (anim.endY - anim.startY) * ease
                         return x, y
                     else
-                        return state.hex:hexToPixel(entity.q, entity.r)
+                        return getDrawCoords(entity.q, entity.r)
                     end
                 end
             end

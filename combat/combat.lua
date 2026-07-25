@@ -137,12 +137,45 @@ function combat.Attack:pushTargetInDirection(target, fromQ, fromR, stepX, stepY,
 end
 
 function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, entities, sounds, onComplete)
-    if target.isPushable == false then
-        if onComplete then onComplete(false) end
-        return
-    end
+     if target.isPushable == false then
+         if onComplete then onComplete(false) end
+         return
+     end
 
-    local occupant = combat.getEntityAtHex(toQ, toR, entities)
+     local fromElev = (elevationMap and elevationMap[fromQ] and elevationMap[fromQ][fromR]) == true
+     local toElev = (elevationMap and elevationMap[toQ] and elevationMap[toQ][toR]) == true
+
+     if not fromElev and toElev then
+         if target.health and target.health > 0 then
+             target.health = target.health - 1
+             log.infof("combat", "%s is pushed uphill to highground! Takes 1 damage!", target.name)
+             if sounds then sounds.play("collision") end
+             if target.health <= 0 then target:startDeath() end
+         end
+         if onComplete then onComplete(false) end
+         return
+     end
+
+     if fromElev and not toElev then
+status.removeFromHex(toQ, toR, "frozen")
+        status.removeFromHex(toQ, toR, "stasis")
+         local fallKills = {}
+         for _, e in ipairs(entities) do
+             if e.health and e.health > 0 and e.q == toQ and e.r == toR then
+                 e.health = 0
+                 e:startDeath()
+                 table.insert(fallKills, e)
+             end
+         end
+         log.infof("combat", "%s falls from highground to lowground! Units at destination are killed!", target.name)
+         if sounds then sounds.play("collision") end
+         local fx, fy = getDrawCoords(toQ, toR)
+         visual.addEffect(fx, fy, "slam")
+         if onComplete then onComplete(false) end
+         return
+     end
+
+     local occupant = combat.getEntityAtHex(toQ, toR, entities)
     if occupant and occupant ~= target then
         -- SharpReefs / lethal collision: instant death
         if occupant.lethalCollision then

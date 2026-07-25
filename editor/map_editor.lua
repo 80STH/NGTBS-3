@@ -277,13 +277,29 @@ editor.hex = nil
 editor.currentLayer = editor.LAYER_TERRAIN
 editor.selectedTerrain = "grass"
 editor.selectedEntity = "Warrior"
+editor.selectedUpperTerrain = "mountain_rubble"
 editor.selectedStatus = "fire"
 editor.eraser = false
-editor.directionIndex = 1
+editor.elevBrush = false
+editor.isDragging = false
+editor.lastPainted = nil
+editor.elevationData = {}
+editor.ELEV_NORMAL = nil
+editor.ELEV_HIGH = "high"
+editor.ELEV_LOW = "low"
+editor.elevMode = editor.ELEV_NORMAL
+editor.selectedEntity = "Warrior"
+editor.selectedStatus = "fire"
+editor.eraser = false
+    editor.elevBrush = false
+    editor.directionIndex = 1
 
 -- Map data (simple string-based tables)
-editor.terrainData = {}   -- terrainData["q,r"] = terrainId
-editor.entityData = {}    -- entityData["q,r"] = entityId
+    editor.terrainData = {}   -- terrainData["q,r"] = terrainId
+    editor.entityData = {}    -- entityData["q,r"] = entityId
+    editor.statusData = {}
+    editor.upperTerrainData = {}
+    editor.elevationData = {}
 editor.statusData = {}    -- statusData["q,r"] = { statusId, ... }
 editor.upperTerrainData = {}  -- upperTerrainData["q,r"] = upperTerrainId
 
@@ -346,6 +362,7 @@ function editor.init()
     editor.entityData = {}
     editor.statusData = {}
     editor.upperTerrainData = {}
+    editor.elevationData = {}
     editor.currentLayer = editor.LAYER_TERRAIN
     editor.selectedTerrain = "grass"
     editor.selectedStatus = "fire"
@@ -412,6 +429,8 @@ function editor.cleanup()
     editor.terrainData = {}
     editor.entityData = {}
     editor.statusData = {}
+    editor.upperTerrainData = {}
+    editor.elevationData = {}
     editor.customEntityName = ""
     editor.focusNameInput = false
     editor.undoStack = {}
@@ -423,8 +442,8 @@ end
 -- UNDO / REDO
 -- ============================================================
 
-local function deepCopyMap(t, e, s, u)
-    local tc, ec, sc, uc = {}, {}, {}, {}
+local function deepCopyMap(t, e, s, u, elv)
+    local tc, ec, sc, uc, elvC = {}, {}, {}, {}, {}
     for k, v in pairs(t) do tc[k] = v end
     for k, v in pairs(e) do
         if type(v) == "table" then
@@ -443,12 +462,13 @@ local function deepCopyMap(t, e, s, u)
         end
     end
     for k, v in pairs(u) do uc[k] = v end
-    return tc, ec, sc, uc
+    for k, v in pairs(elv) do elvC[k] = v end
+    return tc, ec, sc, uc, elvC
 end
 
 function editor.pushUndo()
-    local t, e, s, u = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData, editor.upperTerrainData)
-    table.insert(editor.undoStack, { terrain = t, entities = e, statuses = s, upperTerrain = u })
+    local t, e, s, u, elv = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData, editor.upperTerrainData, editor.elevationData)
+    table.insert(editor.undoStack, { terrain = t, entities = e, statuses = s, upperTerrain = u, elevation = elv })
     if #editor.undoStack > editor.maxUndo then
         table.remove(editor.undoStack, 1)
     end
@@ -461,15 +481,14 @@ function editor.undo()
         editor.messageTimer = 1.5
         return
     end
-    -- Save current state to redo
-    local t, e, s, u = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData, editor.upperTerrainData)
-    table.insert(editor.redoStack, { terrain = t, entities = e, statuses = s, upperTerrain = u })
-    -- Restore
+    local t, e, s, u, elv = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData, editor.upperTerrainData, editor.elevationData)
+    table.insert(editor.redoStack, { terrain = t, entities = e, statuses = s, upperTerrain = u, elevation = elv })
     local snap = table.remove(editor.undoStack)
     editor.terrainData = snap.terrain
     editor.entityData = snap.entities
     editor.statusData = snap.statuses
     editor.upperTerrainData = snap.upperTerrain or {}
+    editor.elevationData = snap.elevation or {}
 end
 
 function editor.redo()
@@ -478,15 +497,14 @@ function editor.redo()
         editor.messageTimer = 1.5
         return
     end
-    -- Save current state to undo
-    local t, e, s, u = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData, editor.upperTerrainData)
-    table.insert(editor.undoStack, { terrain = t, entities = e, statuses = s, upperTerrain = u })
-    -- Restore
+    local t, e, s, u, elv = deepCopyMap(editor.terrainData, editor.entityData, editor.statusData, editor.upperTerrainData, editor.elevationData)
+    table.insert(editor.undoStack, { terrain = t, entities = e, statuses = s, upperTerrain = u, elevation = elv })
     local snap = table.remove(editor.redoStack)
     editor.terrainData = snap.terrain
     editor.entityData = snap.entities
     editor.statusData = snap.statuses
     editor.upperTerrainData = snap.upperTerrain or {}
+    editor.elevationData = snap.elevation or {}
 end
 
 -- ============================================================
@@ -498,6 +516,7 @@ function editor.loadMap(data)
     editor.entityData = {}
     editor.statusData = {}
     editor.upperTerrainData = {}
+    editor.elevationData = {}
 
     -- Use map's grid parameters (same as game does in restartGame)
     local mapWidth = data.width or EDITOR_GRID_WIDTH
@@ -540,6 +559,11 @@ function editor.loadMap(data)
             editor.upperTerrainData[key] = val
         end
     end
+    if data.elevation then
+        for key, val in pairs(data.elevation) do
+            editor.elevationData[key] = val
+        end
+    end
 
     editor.objectivePrimary = nil
     editor.objectiveSecondaries = {}
@@ -575,6 +599,7 @@ function editor.getMapData()
         entities = {},
         statuses = {},
         upper_terrain = {},
+        elevation = {},
     }
     if editor.hex.activeRows then
         data.activeRows = {}
@@ -593,6 +618,9 @@ function editor.getMapData()
     end
     for key, val in pairs(editor.upperTerrainData) do
         data.upper_terrain[key] = val
+    end
+    for key, val in pairs(editor.elevationData) do
+        data.elevation[key] = val
     end
 
     data.objectives = {}
@@ -678,6 +706,15 @@ function editor.saveMap()
         table.insert(lines, string.format('    ["%s"] = "%s",', key, val))
     end
     table.insert(lines, "  },")
+
+    -- Elevation (highground/lowground per-cell overrides)
+    if data.elevation and next(data.elevation) then
+        table.insert(lines, "  elevation = {")
+        for key, val in pairs(data.elevation) do
+            table.insert(lines, string.format('    ["%s"] = "%s",', key, val))
+        end
+        table.insert(lines, "  },")
+    end
 
     -- Objectives
     local hasPrimary = data.objectives and data.objectives.primary
@@ -840,6 +877,16 @@ function editor.paintCell(q, r)
     if editor.currentLayer == editor.LAYER_TERRAIN then
         if editor.eraser then
             editor.terrainData[k] = "grass"
+            editor.elevationData[k] = nil
+        elseif editor.elevBrush then
+            local cur = editor.elevationData[k]
+            if cur then
+                editor.elevationData[k] = nil
+            else
+                editor.elevationData[k] = true
+            end
+        elseif editor.elevMode then
+            editor.elevationData[k] = editor.elevMode
         else
             editor.terrainData[k] = editor.selectedTerrain
         end
@@ -968,12 +1015,13 @@ function editor.getButtonRects()
     local btnH = PAL_BTN_H
     local btnX = px + 10
     local btnGap = 8
-    local baseY = lh - (btnH + btnGap) * 4 - 20
+    local baseY = lh - (btnH + btnGap) * 5 - 20
     return {
-        save   = { x = btnX, y = baseY,               w = btnW, h = btnH },
-        load   = { x = btnX, y = baseY + btnH + btnGap, w = btnW, h = btnH },
-        eraser = { x = btnX, y = baseY + (btnH + btnGap) * 2, w = btnW, h = btnH },
-        back   = { x = btnX, y = baseY + (btnH + btnGap) * 3, w = btnW, h = btnH },
+        save     = { x = btnX, y = baseY,               w = btnW, h = btnH },
+        load     = { x = btnX, y = baseY + btnH + btnGap, w = btnW, h = btnH },
+        eraser   = { x = btnX, y = baseY + (btnH + btnGap) * 2, w = btnW, h = btnH },
+        elevation = { x = btnX, y = baseY + (btnH + btnGap) * 3, w = btnW, h = btnH },
+        back     = { x = btnX, y = baseY + (btnH + btnGap) * 4, w = btnW, h = btnH },
     }
 end
 
@@ -990,6 +1038,7 @@ function editor.mousepressed(x, y, button)
             if x >= tab.x and x <= tab.x + tab.w and y >= tab.y and y <= tab.y + tab.h then
                 editor.currentLayer = i
                 editor.eraser = false
+                editor.elevBrush = false
                 editor.focusFileName = false
                 return
             end
@@ -1111,6 +1160,13 @@ function editor.mousepressed(x, y, button)
         end
         if x >= btns.eraser.x and x <= btns.eraser.x + btns.eraser.w and y >= btns.eraser.y and y <= btns.eraser.y + btns.eraser.h then
             editor.eraser = not editor.eraser
+            editor.elevBrush = false
+            return
+        end
+        if x >= btns.elevation.x and x <= btns.elevation.x + btns.elevation.w and y >= btns.elevation.y and y <= btns.elevation.y + btns.elevation.h then
+            editor.elevBrush = not editor.elevBrush
+            editor.eraser = false
+            editor.elevMode = editor.ELEV_NORMAL
             return
         end
 
@@ -1231,6 +1287,7 @@ function editor.keypressed(key)
             editor.terrainData = {}
             editor.entityData = {}
             editor.statusData = {}
+            editor.elevationData = {}
             for q = 0, editor.hex.gridWidth - 1 do
                 for r = 0, editor.hex.gridHeight - 1 do
                     if editor.hex and editor.hex:isActiveHex(q, r) then
@@ -1250,6 +1307,12 @@ function editor.keypressed(key)
     elseif key == "3" then editor.currentLayer = editor.LAYER_STATUS; editor.focusNameInput = false; editor.focusFileName = false
     elseif key == "4" then editor.currentLayer = editor.LAYER_UPPER_TERRAIN; editor.focusNameInput = false; editor.focusFileName = false
     elseif key == "e" then editor.eraser = not editor.eraser
+    elseif key == "g" and editor.currentLayer == editor.LAYER_TERRAIN then
+        editor.elevBrush = not editor.elevBrush
+        editor.elevMode = editor.ELEV_NORMAL
+        editor.eraser = false
+        editor.message = editor.elevBrush and "Highground ON" or "Highground OFF"
+        editor.messageTimer = 1.5
     elseif key == "r" then
         if editor.currentLayer == editor.LAYER_ENTITY then
             -- If hovering over a placed directional entity, rotate it in-place
@@ -1637,6 +1700,7 @@ function editor.draw()
     drawBtn(btns.save, "Save [Ctrl+S]", false)
     drawBtn(btns.load, "Load", false)
     drawBtn(btns.eraser, editor.eraser and "[ERASER ON]" or "Eraser [E]", editor.eraser)
+    drawBtn(btns.elevation, editor.elevBrush and "[HIGH ON]" or "Highground [G]", editor.elevBrush)
     drawBtn(btns.back, "Back [Esc]", false)
 
     -- File name input area
@@ -1673,6 +1737,9 @@ function editor.draw()
         if isDirectionalEntity(checkName) then
             toolText = toolText .. " | Dir: " .. editor.directionIndex .. " [R]"
         end
+    end
+if editor.currentLayer == editor.LAYER_TERRAIN and editor.elevBrush then
+         toolText = toolText .. " | Highground [g]"
     end
     love.graphics.print(toolText, px + 10, toolY)
 
@@ -1740,7 +1807,14 @@ end
 
 -- Helper: get draw coords using editor hex grid
 function getDrawCoordsEditor(hex, q, r)
-    return hex:hexToPixel(q, r)
+    local x, y = hex:hexToPixel(q, r)
+    local elv = editor.elevationData[q .. "," .. r]
+    if elv == "high" then
+        y = y - 18
+    elseif elv == "low" then
+        y = y + config.WATER_Y_OFFSET
+    end
+    return x, y
 end
 
 return editor

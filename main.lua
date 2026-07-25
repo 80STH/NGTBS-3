@@ -204,8 +204,15 @@ end
 function getDrawCoords(q, r)
     local x, y = hex:hexToPixel(q, r)
     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r]
-    if terrain == "water" then
+    local elv = state.elevationMap and state.elevationMap[q] and state.elevationMap[q][r]
+    if elv then
+        y = y - 38
+    elseif terrain == "water" then
         y = y + config.WATER_Y_OFFSET
+    elseif terrain == "water" then
+        y = y + config.WATER_Y_OFFSET
+    elseif terrain == "stone" then
+        y = y - 18
     end
     if testViewActive and q == hex.centerQ and r == hex.centerR then
         y = y + testViewOffsetY

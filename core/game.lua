@@ -66,6 +66,17 @@ function restartGame(mapPath)
     local mapData = love.filesystem.load(mapPath)()
     local mapActiveRadius, mapCenterQ, mapCenterR
     terrainMap, entities, width, height, hexStatuses, _, deployableAllies, orientation, upperTerrainMap = environment.loadNativeMap(mapData)
+    elevationMap = {}
+    if mapData and mapData.elevation then
+        for key, elv in pairs(mapData.elevation) do
+            local q, r = key:match("^(%d+),(%d+)$")
+            if q and r then
+                q, r = tonumber(q), tonumber(r)
+                if not elevationMap[q] then elevationMap[q] = {} end
+                elevationMap[q][r] = (elv == true or elv == "high")
+            end
+        end
+    end
     mapActiveRadius = mapData and mapData.activeRadius or config.ACTIVE_RADIUS
     mapCenterQ = mapData and mapData.centerQ or config.CENTER_Q or math.floor(width / 2)
     mapCenterR = mapData and mapData.centerR or config.CENTER_R or math.floor(height / 2)

@@ -164,12 +164,19 @@ function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
 end
 -- Draw push arrow (with offset from centers)
 function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, toQ, toR, scale)
-    local isLowTerrain = function(q, r) local t = terrainMap and terrainMap[q] and terrainMap[q][r]; return t == "water" end
-    if fromQ ~= nil and isLowTerrain(fromQ, fromR) then
-        fromY = fromY - config.WATER_Y_OFFSET
+    local getOffset = function(q, r)
+        local elv = state.elevationMap and state.elevationMap[q] and state.elevationMap[q][r]
+        if elv then return -38 end
+        local terrain = terrainMap and terrainMap[q] and terrainMap[q][r]
+        if terrain == "water" then return -config.WATER_Y_OFFSET
+        elseif terrain == "stone" then return 18 end
+        return 0
     end
-    if toQ ~= nil and isLowTerrain(toQ, toR) then
-        toY = toY - config.WATER_Y_OFFSET
+    if fromQ ~= nil then
+        fromY = fromY - getOffset(fromQ, fromR)
+    end
+    if toQ ~= nil then
+        toY = toY - getOffset(toQ, toR)
     end
     local angle = math.atan2(toY - fromY, toX - fromX)
     local s = scale or 1

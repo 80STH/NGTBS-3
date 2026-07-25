@@ -366,14 +366,14 @@ function HexGrid:drawInsetHexagon(x, y, radius, scale)
     return vertBuf
 end
 
-function HexGrid:getSortedCells(terrainMap, waterYOffset)
+function HexGrid:getSortedCells(terrainMap, waterYOffset, elevationMap)
     if self._sortedCells then return self._sortedCells end
     local cells = {}
     for _, ac in ipairs(self._activeCells) do
         local col, row = ac.q, ac.r
         local terrainType = terrainMap and terrainMap[col] and terrainMap[col][row] or "grass"
         local cellX, cellY = self:hexToPixel(col, row)
-        local yOffset = (terrainType == "water") and waterYOffset or 0
+        local yOffset = self:getCellYOffset(col, row, terrainType, waterYOffset, elevationMap)
         local depth = cellY + yOffset
         cells[#cells + 1] = { q = col, r = row, x = cellX, y = cellY, terrain = terrainType, depth = depth }
     end
@@ -381,6 +381,15 @@ function HexGrid:getSortedCells(terrainMap, waterYOffset)
     self._sortedCells = cells
     return cells
 end
+
+function HexGrid:getCellYOffset(q, r, terrainType, waterYOffset, elevationMap)
+     if elevationMap then
+         local elv = elevationMap[q] and elevationMap[q][r]
+         if elv then return -38 end
+     end
+     local isHighGround = terrainType == "stone"
+     return (terrainType == "water") and waterYOffset or (isHighGround and (waterYOffset + 6) or 0)
+ end
 
 function HexGrid:invalidateSortedCells()
     self._sortedCells = nil
@@ -413,17 +422,27 @@ function HexGrid:centerOnScreen(screenWidth, screenHeight)
     self.offsetY = screenHeight / 2 - self.centerPixelY
 end
 
-function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
-    local radius = self.radius
-    local extrude = 36
-    local waterExtrude = 18
-    local isLowTerrain = terrainType == "water"
-    local actualExtrude = isLowTerrain and waterExtrude or extrude
+function HexGrid:drawTerrainHex(q, r, terrainType, x, y, elevationMap)
+     local radius = self.radius
+     local extrude = 36
+     local waterExtrude = 18
+     local highGroundExtrude = 80
+     local isLowTerrain = terrainType == "water"
+     local isHighGround = terrainType == "stone"
+     if elevationMap then
+         local elv = elevationMap[q] and elevationMap[q][r]
+         if elv then
+             isHighGround = true
+         end
+     end
+     local actualExtrude = isLowTerrain and waterExtrude or (isHighGround and highGroundExtrude or extrude)
 
-    local yOffset = 0
-    if isLowTerrain then
-        yOffset = extrude - waterExtrude
-    end
+     local yOffset = 0
+     if isLowTerrain then
+         yOffset = extrude - waterExtrude
+     elseif isHighGround then
+         yOffset = extrude - highGroundExtrude + 6
+     end
 
     local topColor, sideColor, edgeColor
     if terrainType == "grass" then
@@ -506,7 +525,7 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y)
 		love.graphics.draw(sandMesh, x, y + yOffset)
 		love.graphics.setColor(1, 1, 1, 0.15)
 		love.graphics.polygon("fill", topVertices)
-	elseif terrainType == "grass" then
+	elseif terrainType == "grass" or terrainType == "dirt" or terrainType == "snow" or terrainType == "swamp" or terrainType == "railway" then
 		loadGrassTexture()
 		buildGrassMesh(radius)
 		grassMesh:setTexture(grassTexture)
