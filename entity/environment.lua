@@ -1019,30 +1019,7 @@ end
 -- Create generated enemy from params
 function environment.createGeneratedEnemy(params, q, r)
     local attacks = environment.getAttacks(params.attack.set)
-    local sprite = nil
-    
-    local size = 16
-    local canvas = love.graphics.newCanvas(size, size)
-    canvas:setFilter("nearest", "nearest")
-    love.graphics.setCanvas(canvas)
-    love.graphics.clear(0, 0, 0, 0)
-    love.graphics.setColor(params.color[1], params.color[2], params.color[3], 1)
-    love.graphics.circle("fill", size/2, size/2, size/2 - 1)
-    if params.mobility == "hovering" then
-        love.graphics.setColor(1, 1, 1, 0.3)
-        love.graphics.setLineWidth(2)
-        love.graphics.circle("line", size/2, size/2, size/2 - 1)
-        love.graphics.setLineWidth(1)
-    elseif params.mobility == "teleport" then
-        love.graphics.setColor(1, 1, 1, 0.5)
-        love.graphics.setLineWidth(1)
-        for i = 1, 3 do
-            love.graphics.circle("line", size/2, size/2, size/2 - 1 - i*2)
-        end
-        love.graphics.setLineWidth(1)
-    end
-    love.graphics.setCanvas()
-    sprite = canvas
+    local sprite = params._sprite or require("util.creature_sprite").build(params)
     
     local entity = Entity.new(params.name, Entity.TYPES.CHARACTER, q, r, params.health, false, params.moveRange == "infinite" and 999 or params.moveRange, sprite, nil, attacks)
     

@@ -1,22 +1,22 @@
 local enemy_generator = {}
 
-local HEALTH_COST = {1, 2, 4}
-local SPEED_COST = {1, 2, 3}
-local MOBILITY_COST = {walking = 0, hovering = 2, teleport = 10}
+local HEALTH_COST = {0, 4, 8}
+local SPEED_COST = {0, 1, 2}
+local MOBILITY_COST = {walking = 0, hovering = 1, teleport = 4}
 local AURA_COST = {none = 0, slow = 3}
 
 local ATTACKS = {
-    {name = "Ghost Bolt", set = "ghost", cost = 3, color = {0.7, 0.3, 1}},
-    {name = "Bite", set = "zombie", cost = 2, color = {0.3, 0.7, 0.2}},
-    {name = "Magic Bolt", set = "lich", cost = 3, color = {0.8, 0.2, 0.8}},
-    {name = "Bash", set = "brute", cost = 2, color = {0.6, 0.4, 0.2}},
-    {name = "Lunge", set = "lancer", cost = 2, color = {0.5, 0.5, 0.7}},
-    {name = "Cleave", set = "dervish", cost = 3, color = {0.8, 0.4, 0.3}},
+    {name = "Ghost Bolt", set = "ghost", cost = 2, color = {0.7, 0.3, 1}, melee = false},
+    {name = "Bite", set = "zombie", cost = 2, color = {0.3, 0.7, 0.2}, melee = true},
+    {name = "Magic Bolt", set = "lich", cost = 2, color = {0.8, 0.2, 0.8}, melee = false},
+    {name = "Bash", set = "brute", cost = 4, color = {0.6, 0.4, 0.2}, melee = true},
+    {name = "Lunge", set = "lancer", cost = 4, color = {0.5, 0.5, 0.7}, melee = true},
+    {name = "Cleave", set = "dervish", cost = 5, color = {0.8, 0.4, 0.3}, melee = true},
 }
 
 local AI_MODELS = {
-    {id = "buildings", name = "Siege", cost = 1},
-    {id = "units", name = "Hunter", cost = 1},
+    {id = "buildings", name = "Siege", cost = 0},
+    {id = "units", name = "Hunter", cost = 0},
     {id = "indiscriminate", name = "Chaos", cost = 0},
 }
 
@@ -56,8 +56,14 @@ function enemy_generator.generate(budget)
         params.moveRange = love.math.random(2, 4)
     end
     
-    params.attack = ATTACKS[love.math.random(#ATTACKS)]
     params.aura = love.math.random() < 0.2 and "slow" or "none"
+    if params.aura == "slow" then
+        local melee = {}
+        for _, a in ipairs(ATTACKS) do if a.melee then table.insert(melee, a) end end
+        params.attack = melee[love.math.random(#melee)]
+    else
+        params.attack = ATTACKS[love.math.random(#ATTACKS)]
+    end
     local aiModel = AI_MODELS[love.math.random(#AI_MODELS)]
     params.aiModel = aiModel.id
     

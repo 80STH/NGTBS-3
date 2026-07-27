@@ -2,6 +2,7 @@ local creature_lab = {}
 local enemy_generator = require("system.enemy_generator")
 local boss_generator = require("system.boss_generator")
 local fonts = require("util.fonts")
+local creature_sprite = require("util.creature_sprite")
 
 local currentCreature = nil
 local activeTab = "enemy"
@@ -12,6 +13,7 @@ local layout = {}
 function creature_lab.init()
     activeTab = "enemy"
     currentCreature = enemy_generator.generate(enemyBudget)
+    currentCreature._sprite = creature_sprite.build(currentCreature)
 end
 
 local function currentBudget()
@@ -28,6 +30,7 @@ local function generate()
     else
         currentCreature = boss_generator.generate(bossBudget)
     end
+    currentCreature._sprite = creature_sprite.build(currentCreature)
 end
 
 local function computeLayout(w, h)
@@ -87,23 +90,13 @@ local function drawCreatureCard(l, creature, gen)
     love.graphics.setColor(0.4, 0.4, 0.6, 0.6)
     love.graphics.rectangle("line", l.cx, l.cardY, l.contentW, l.cardH, 8)
     
-    local spriteSize = 64
+    local spriteScale = 4
+    local spriteSize = 16 * spriteScale
     local spriteX = l.cx + 20
     local spriteY = l.cardY + 20
-    love.graphics.setColor(creature.color[1], creature.color[2], creature.color[3], 1)
-    love.graphics.circle("fill", spriteX + spriteSize/2, spriteY + spriteSize/2, spriteSize/2)
-    if creature.mobility == "hovering" then
-        love.graphics.setColor(1, 1, 1, 0.4)
-        love.graphics.setLineWidth(3)
-        love.graphics.circle("line", spriteX + spriteSize/2, spriteY + spriteSize/2, spriteSize/2)
-        love.graphics.setLineWidth(1)
-    elseif creature.mobility == "teleport" then
-        love.graphics.setColor(1, 1, 1, 0.5)
-        love.graphics.setLineWidth(2)
-        for i = 1, 3 do
-            love.graphics.circle("line", spriteX + spriteSize/2, spriteY + spriteSize/2, spriteSize/2 - i*8)
-        end
-        love.graphics.setLineWidth(1)
+    if creature._sprite then
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(creature._sprite, spriteX, spriteY, 0, spriteScale, spriteScale)
     end
     
     local textX = spriteX + spriteSize + 20
