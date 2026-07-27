@@ -84,7 +84,7 @@ return function(ui)
         love.graphics.setFont(old)
 
         if isHover then
-            local ttW, ttH = 260, 150
+            local ttW, ttH = 260, 170
             local tx = logicalW - ttW - 10
             local ty = 46
             love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
@@ -95,13 +95,13 @@ return function(ui)
             love.graphics.print("Turn Order", tx + 8, ty + 6)
             love.graphics.setColor(0.8, 0.8, 0.8, 1)
             local orders = {
-                "1. Neutral NPCs move",
-                "2. Effects: fire & decay apply",
-                "   simultaneously to all units",
-                "3. Enemies attack in sequence",
-                "4. Dig sites damage simultaneously",
-                "5. Trains move (locomotive crushes",
-                "   anything in its path)",
+                "1. Caravans move",
+                "2. Enemies move & prepare attacks",
+                "3. Player turn",
+                "4. Enemies attack player/units",
+                "5. Enemies attack buildings",
+                "6. Debuffs: fire & decay apply",
+                "7. Dig sites damage & spawn",
             }
             for i, line in ipairs(orders) do
                 love.graphics.print(line, tx + 8, ty + 22 + (i - 1) * 16)

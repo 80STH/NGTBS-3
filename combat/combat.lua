@@ -109,7 +109,7 @@ local function applyCollisionDamage(pushed, obstacle, sounds)
         local wasDestroyed = pushed:takeDamage(1)
         if wasDestroyed then pushed:startDeath() end
     end
-    if obstacle.health and obstacle.health > 0 and obstacle.isPushable ~= false then
+    if obstacle.health and obstacle.health > 0 then
         local wasDestroyed = obstacle:takeDamage(1)
         if wasDestroyed then obstacle:startDeath() end
     end
@@ -149,9 +149,9 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
          if target.health and target.health > 0 then
              target.health = target.health - 1
              log.infof("combat", "%s is pushed uphill to highground! Takes 1 damage!", target.name)
-             if sounds then sounds.play("collision") end
              if target.health <= 0 then target:startDeath() end
          end
+         combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, nil)
          if onComplete then onComplete(false) end
          return
      end
@@ -173,9 +173,16 @@ if fromElev and not toElev then
          end
          log.infof("combat", "%s falls from highground! Takes 1 damage!", target.name)
          if sounds then sounds.play("collision") end
-         combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
-             if onComplete then onComplete(true) end
-         end)
+         -- Slide to the edge, then fall down
+         local fromX, fromY = getDrawCoords(fromQ, fromR)
+         local toX, toY = getDrawCoords(toQ, toR)
+         visual.addPushEffect(fromX, fromY, toX, fromY, 0.15)
+         push_animator.addCustomMove(target, fromX, fromY, toX, fromY, 0.15, function()
+             push_animator.addCustomMove(target, toX, fromY, toX, toY, 0.2, function()
+                 if onComplete then onComplete(true) end
+             end)
+             push_animator._initNext()
+         end, true)
          return
      end
 

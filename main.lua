@@ -31,7 +31,6 @@ pause_menu = require("ui.pause_menu")
 enemy_lab = require("ui.enemy_lab")
 require("core.game")
 local commanders = require("system.commanders")
-local trains_mod = require("system.trains")
 
 -- Logging: enable here (or via _G.LOG_ENABLED).
 -- Categories: ai, combat, effects, entity, env, game, input, objectives,
@@ -452,37 +451,21 @@ end
 
 function getEnemyAttackOrder(entities, turnState)
     local order = {}
-    local queue = {}
 
     if turnState.phase == "enemy_attack" then
-        queue = turnState.enemyAttackQueue or {}
-    else
-        local priority = {}
-        local waterWalkers = {}
-        local normal = {}
-        for _, e in ipairs(entities) do
-            if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 then
-                local tbl = e.attacksFirst and priority or (e.waterWalker and waterWalkers or normal)
-                table.insert(tbl, e)
+        for _, g in ipairs(turnState.enemyAttackQueue or {}) do
+            for _, e in ipairs(g.enemies) do
+                order[e] = g.groupIdx
             end
         end
-        for _, e in ipairs(priority) do table.insert(queue, e) end
-        for _, e in ipairs(waterWalkers) do table.insert(queue, e) end
-        for _, e in ipairs(normal) do table.insert(queue, e) end
-
-        local trainGroups = trains_mod.getTrainGroups()
-        for _, group in pairs(trainGroups) do
-            if group.active and group.cars and #group.cars > 0 then
-                local loco = group.cars[1]
-                if loco and loco.health and loco.health > 0 and not loco.isDying then
-                    table.insert(queue, loco)
-                end
-            end
-        end
+        return order
     end
 
-    for i, enemy in ipairs(queue) do
-        order[enemy] = i
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 then
+            local t = e._preparedTargetType or (e.targetPreference == "buildings" and "building" or "unit")
+            order[e] = t == "building" and 2 or 1
+        end
     end
     return order
 end

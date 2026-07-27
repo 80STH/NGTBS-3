@@ -219,8 +219,9 @@ function ai.prepareAttackForEnemy(enemy, entities, hex, selectedTargets)
         enemy.rootedTarget = bestTarget
     end
 
+    enemy._preparedTargetType = bestTarget:isBuilding() and "building" or "unit"
     debugPrint(string.format("%s prepared attack targeting %s (%s)", 
-               enemy.name, bestTarget.name, bestTarget:isBuilding() and "building" or "player"))
+               enemy.name, bestTarget.name, enemy._preparedTargetType))
     return true
 end
 
@@ -628,8 +629,6 @@ function ai.performMoveTowards(enemy, target, entities, hex)
     local neighbors = hex:getNeighbors(target.q, target.r)
     local bestCell = nil
     local bestDist = math.huge
-    local bestThreatenedCell = nil
-    local bestThreatenedDist = math.huge
 
     for _, neighbor in ipairs(neighbors) do
         if hex:isValidHex(neighbor.q, neighbor.r) then
@@ -655,13 +654,9 @@ function ai.performMoveTowards(enemy, target, entities, hex)
                 local distToEnemy = hex:getDistance(enemy.q, enemy.r, neighbor.q, neighbor.r)
                 local effRange = ai.getEffectiveMoveRange(enemy, hex, entities)
                 if distToEnemy <= effRange then
-                    if not isCellDangerousForEntity(neighbor.q, neighbor.r, enemy) then
-                        if isCellOnEnemyAttackLine(neighbor.q, neighbor.r, enemy, entities, hex) then
-                            if distToEnemy < bestThreatenedDist then
-                                bestThreatenedDist = distToEnemy
-                                bestThreatenedCell = neighbor
-                            end
-                        elseif distToEnemy < bestDist then
+                    if not isCellDangerousForEntity(neighbor.q, neighbor.r, enemy)
+                        and not isCellOnEnemyAttackLine(neighbor.q, neighbor.r, enemy, entities, hex) then
+                        if distToEnemy < bestDist then
                             bestDist = distToEnemy
                             bestCell = neighbor
                         end
@@ -674,10 +669,6 @@ function ai.performMoveTowards(enemy, target, entities, hex)
     if bestCell then
         return ai.moveToCell(enemy, bestCell.q, bestCell.r, hex, entities)
     end
-    if bestThreatenedCell then
-        debugPrint(enemy.name .. " forced to move into threatened cell (enemy line)")
-        return ai.moveToCell(enemy, bestThreatenedCell.q, bestThreatenedCell.r, hex, entities)
-    end
 
     return ai.moveStepTowards(enemy, target.q, target.r, hex, entities)
 end
@@ -686,8 +677,6 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
     local neighbors = hex:getNeighbors(enemy.q, enemy.r)
     local bestNeighbor = nil
     local bestDist = math.huge
-    local threatenedNeighbor = nil
-    local threatenedDist = math.huge
     local dangerousNeighbor = nil
     local dangerousDist = math.huge
 
@@ -713,22 +702,17 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
             end
             if not occupied then
                 local dist = hex:getDistance(neighbor.q, neighbor.r, targetQ, targetR)
-                if dist < bestDist or dist < threatenedDist or dist < dangerousDist then
-                    if not isCellDangerousForEntity(neighbor.q, neighbor.r, enemy) then
-                        if isCellOnEnemyAttackLine(neighbor.q, neighbor.r, enemy, entities, hex) then
-                            if dist < threatenedDist then
-                                threatenedDist = dist
-                                threatenedNeighbor = neighbor
-                            end
-                        elseif dist < bestDist then
+                if not isCellDangerousForEntity(neighbor.q, neighbor.r, enemy) then
+                    if not isCellOnEnemyAttackLine(neighbor.q, neighbor.r, enemy, entities, hex) then
+                        if dist < bestDist then
                             bestDist = dist
                             bestNeighbor = neighbor
                         end
-                    else
-                        if dist < dangerousDist then
-                            dangerousDist = dist
-                            dangerousNeighbor = neighbor
-                        end
+                    end
+                else
+                    if dist < dangerousDist then
+                        dangerousDist = dist
+                        dangerousNeighbor = neighbor
                     end
                 end
             end
@@ -737,10 +721,6 @@ function ai.moveStepTowards(enemy, targetQ, targetR, hex, entities)
 
     if bestNeighbor then
         return ai.moveToCell(enemy, bestNeighbor.q, bestNeighbor.r, hex, entities)
-    end
-    if threatenedNeighbor then
-        debugPrint(enemy.name .. " forced to move into threatened cell (enemy line)")
-        return ai.moveToCell(enemy, threatenedNeighbor.q, threatenedNeighbor.r, hex, entities)
     end
     if dangerousNeighbor then
         debugPrint(enemy.name .. " forced to move into dangerous cell (fire/acid)")
@@ -837,12 +817,14 @@ end
 function ai.startEnemyMove(enemy, hex)
     if enemy.currentPathIndex and enemy.currentPathIndex <= #enemy.path then
         local step = enemy.path[enemy.currentPathIndex]
-        enemy.isMoving = true
         enemy.timer = 0
         enemy.targetQ = step.q
         enemy.targetR = step.r
         enemy.startX, enemy.startY = getDrawCoords(enemy.q, enemy.r)
         enemy.endX, enemy.endY = getDrawCoords(step.q, step.r)
+        if not _G._batchMovePlanning then
+            enemy.isMoving = true
+        end
     else
         enemy.isMoving = false
         enemy.path = {}

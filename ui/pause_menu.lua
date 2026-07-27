@@ -3,11 +3,20 @@ local fonts = require("util.fonts")
 
 pause_menu.isOpen = false
 
+local function slowLabel()
+    return _G.slowMode and "Slow Attacks: ON" or "Slow Attacks: OFF"
+end
+
+local function slowColor()
+    return _G.slowMode and 0.6 or 0.3
+end
+
 local buttons = {
-    { key = "continue",  label = "Continue",      r = 0.2, g = 0.6, b = 0.3 },
-    { key = "restart",   label = "Restart Game",   r = 0.7, g = 0.5, b = 0.2 },
-    { key = "mainmenu",  label = "Main Menu",      r = 0.3, g = 0.5, b = 0.8 },
-    { key = "exit",      label = "Exit",           r = 0.7, g = 0.2, b = 0.2 },
+    { key = "continue",  label = "Continue",        r = 0.2, g = 0.6, b = 0.3 },
+    { key = "slowmode",  labelFn = slowLabel,       rFn = slowColor, g = 0.4, b = 0.7 },
+    { key = "restart",   label = "Restart Game",    r = 0.7, g = 0.5, b = 0.2 },
+    { key = "mainmenu",  label = "Main Menu",       r = 0.3, g = 0.5, b = 0.8 },
+    { key = "exit",      label = "Exit",            r = 0.7, g = 0.2, b = 0.2 },
 }
 
 local function getButtonRects(w, h)
@@ -18,10 +27,12 @@ local function getButtonRects(w, h)
     local startX = w / 2 - btnW / 2
     local rects = {}
     for i, btn in ipairs(buttons) do
+        local label = btn.labelFn and btn.labelFn() or btn.label
+        local r = btn.rFn and btn.rFn() or btn.r
         rects[i] = {
             key = btn.key,
-            label = btn.label,
-            r = btn.r, g = btn.g, b = btn.b,
+            label = label,
+            r = r, g = btn.g, b = btn.b,
             x = startX,
             y = startY + (i - 1) * (btnH + gap),
             w = btnW,
@@ -82,6 +93,8 @@ function pause_menu.mousepressed(x, y)
             if btn.key == "continue" then
                 pause_menu.close()
                 gamePhase = "playing"
+            elseif btn.key == "slowmode" then
+                _G.slowMode = not _G.slowMode
             elseif btn.key == "restart" then
                 pause_menu.close()
                 restartGame()

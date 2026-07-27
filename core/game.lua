@@ -14,7 +14,8 @@ local function newTurnState()
     return {
         phase = "enemy_prepare",
         enemyPrepareQueue = {},
-        currentPreparingEnemy = nil,
+        _batchMovePlanning = false,
+        _waitingForMoves = false,
         enemyAttackQueue = {},
         enemyAttackTimer = 0,
         delayBetweenAttacks = 0.4,
@@ -197,6 +198,7 @@ function restartGame(mapPath)
     gameActive = true
     win = false
     loss = false
+    _G.slowMode = false
     fireAppliedForTurnLimit = false
     decayAppliedForTurnLimit = false
     chaos = 0

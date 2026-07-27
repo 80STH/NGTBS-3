@@ -390,51 +390,14 @@ function renderer.draw(state)
     local showOrder = hoverOrder or state.showEnemyOrder or love.keyboard.isDown("o")
     if showOrder then
         local orderMap = getEnemyAttackOrder(state.entities, state.turnState)
-        local num = 0
-        for _, e in ipairs(state.entities) do
-            if e.attacksFirst and e.health > 0 then
-                num = num + 1
-                local x, y = getDrawCoords(e.q, e.r)
-                love.graphics.setColor(1, 0.4, 0.2, 0.9)
-                love.graphics.circle("fill", x + 15, y - 20, 12)
-                love.graphics.setColor(0, 0, 0, 1)
-                love.graphics.print(tostring(num), x + 11, y - 28)
-            end
-        end
-        for _, e in ipairs(state.entities) do
-            if e.waterWalker and not e.attacksFirst and e.health > 0 then
-                num = num + 1
-                local x, y = getDrawCoords(e.q, e.r)
+        for _, enemy in ipairs(state.entities) do
+            local n = orderMap[enemy]
+            if n and enemy.health > 0 then
+                local x, y = getDrawCoords(enemy.q, enemy.r)
                 love.graphics.setColor(1, 0.8, 0.2, 0.9)
                 love.graphics.circle("fill", x + 15, y - 20, 12)
                 love.graphics.setColor(0, 0, 0, 1)
-                love.graphics.print(tostring(num), x + 11, y - 28)
-            end
-        end
-        for _, enemy in ipairs(state.entities) do
-            if enemy:isCharacter() and not enemy.isPlayable and not enemy.attacksFirst and enemy.health > 0 then
-                local n = orderMap[enemy]
-                if n then
-                    num = num + 1
-                    local x, y = getDrawCoords(enemy.q, enemy.r)
-                    love.graphics.setColor(1, 0.8, 0.2, 0.9)
-                    love.graphics.circle("fill", x + 15, y - 20, 12)
-                    love.graphics.setColor(0, 0, 0, 1)
-                    love.graphics.print(tostring(num), x + 11, y - 28)
-                end
-            end
-        end
-        for _, e in ipairs(state.entities) do
-            if e.isTrainCar and e.health > 0 then
-                local n = orderMap[e]
-                if n then
-                    num = num + 1
-                    local x, y = getDrawCoords(e.q, e.r)
-                    love.graphics.setColor(1, 0.8, 0.2, 0.9)
-                    love.graphics.circle("fill", x + 15, y - 20, 12)
-                    love.graphics.setColor(0, 0, 0, 1)
-                    love.graphics.print(tostring(num), x + 11, y - 28)
-                end
+                love.graphics.print(tostring(n), x + 11, y - 28)
             end
         end
     end

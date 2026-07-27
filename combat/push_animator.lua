@@ -61,7 +61,7 @@ end
 
 -- Pixel-space move: caller supplies exact start/end screen coordinates.
 -- Useful for partial lunges where the logical cell differs from the visual endpoint.
-function push_animator.addCustomMove(obj, fromX, fromY, toX, toY, duration, onComplete)
+function push_animator.addCustomMove(obj, fromX, fromY, toX, toY, duration, onComplete, keepDrawPos)
     table.insert(push_animator.queue, {
         obj = obj,
         type = "move",
@@ -71,6 +71,7 @@ function push_animator.addCustomMove(obj, fromX, fromY, toX, toY, duration, onCo
         timer = 0,
         isMoving = false,
         onComplete = onComplete,
+        keepDrawPos = keepDrawPos or false,
     })
 end
 
@@ -132,8 +133,10 @@ function push_animator.update(dt)
             end
 
             if t >= 1 then
-                anim.obj.currentDrawX = nil
-                anim.obj.currentDrawY = nil
+                if not anim.keepDrawPos then
+                    anim.obj.currentDrawX = nil
+                    anim.obj.currentDrawY = nil
+                end
                 if anim.onComplete then anim.onComplete(anim.obj) end
                 queue[i] = queue[#queue]
                 queue[#queue] = nil

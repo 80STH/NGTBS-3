@@ -138,10 +138,11 @@ function trains.init(entities, terrainMap, hex)
         if targetIdx <= #path then
             local target = path[targetIdx]
             local dx, dy, dz = hex_utils.getCubeDiff(loco.q, loco.r, target.q, target.r)
-            loco.hasPreparedAttack = true
-            loco.isTrainAttack = true
-            loco.preparedAttack = { name = "TrainShunt", damage = 999, range = 1, minRange = 1 }
-            loco.preparedTargetOffset = { dx = dx, dy = dy, dz = dz }
+        loco.hasPreparedAttack = true
+        loco.isTrainAttack = true
+        loco._preparedTargetType = "unit"
+        loco.preparedAttack = { name = "TrainShunt", damage = 999, range = 1, minRange = 1 }
+        loco.preparedTargetOffset = { dx = dx, dy = dy, dz = dz }
         end
 
         log.debugf("trains", "Train group %d: %d cars, path %d cells, loco at idx %d", pi, #cars, #path, locoIdx)
