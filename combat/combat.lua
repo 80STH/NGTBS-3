@@ -173,12 +173,14 @@ if fromElev and not toElev then
          end
          log.infof("combat", "%s falls from highground! Takes 1 damage!", target.name)
          if sounds then sounds.play("collision") end
-         -- Slide to the edge, then fall down
+         -- Slide along the push direction, then fall down
          local fromX, fromY = getDrawCoords(fromQ, fromR)
          local toX, toY = getDrawCoords(toQ, toR)
-         visual.addPushEffect(fromX, fromY, toX, fromY, 0.15)
-         push_animator.addCustomMove(target, fromX, fromY, toX, fromY, 0.15, function()
-             push_animator.addCustomMove(target, toX, fromY, toX, toY, 0.2, function()
+         local slideX = toX
+         local slideY = fromY + (toY - fromY) * 0.4
+         visual.addPushEffect(fromX, fromY, slideX, slideY, 0.15)
+         push_animator.addCustomMove(target, fromX, fromY, slideX, slideY, 0.15, function()
+             push_animator.addCustomMove(target, slideX, slideY, toX, toY, 0.2, function()
                  if onComplete then onComplete(true) end
              end)
              push_animator._initNext()
