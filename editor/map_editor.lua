@@ -340,10 +340,222 @@ editor.secondaryObjectiveOptions = {
 }
 
 -- ============================================================
+-- MAP GENERATOR
+-- ============================================================
+
+function editor.generateMap()
+    if not editor.hex then return end
+    love.math.setRandomSeed(os.time())
+    local seed = love.math.random(1, 99999)
+    love.math.setRandomSeed(seed)
+
+    -- Clear all data
+    editor.terrainData = {}
+    editor.entityData = {}
+    editor.statusData = {}
+    editor.upperTerrainData = {}
+    editor.elevationData = {}
+
+    -- === Terrain: noise-based ===
+    local scale = 0.3
+    local waterThreshold = -0.35
+    local sandThreshold = -0.05
+    local stoneThreshold = 0.5
+
+    for q = 0, editor.hex.gridWidth - 1 do
+        for r = 0, editor.hex.gridHeight - 1 do
+            if editor.hex:isActiveHex(q, r) then
+                local key = q .. "," .. r
+                local n = love.math.noise(q * scale, r * scale, seed * 0.01)
+                if n < waterThreshold then
+                    editor.terrainData[key] = "water"
+                elseif n < sandThreshold then
+                    editor.terrainData[key] = "sand"
+                elseif n > stoneThreshold then
+                    editor.terrainData[key] = "stone"
+                else
+                    editor.terrainData[key] = "grass"
+                end
+            end
+        end
+    end
+
+    -- === Edge barriers (randomised) ===
+    -- Top: always MountainRange (the classic top wall)
+    local topCells = {{1,1}, {2,1}, {3,0}, {4,0}, {5,0}, {6,1}, {7,1}}
+    for _, c in ipairs(topCells) do
+        editor.entityData[c[1] .. "," .. c[2]] = nil
+    end
+    editor.entityData["4,0"] = { name = "MountainRange", cells = topCells }
+    for _, c in ipairs(topCells) do
+        editor.terrainData[c[1] .. "," .. c[2]] = "stone"
+    end
+
+    -- Left side: always full barrier, vary only the type
+    local leftCells = {}
+    for r = 2, 7 do leftCells[#leftCells + 1] = {0, r} end
+    local leftName = love.math.random() < 0.5 and "SlopeRange" or "MountainRange"
+    editor.entityData["0,4"] = { name = leftName, cells = leftCells }
+    for _, c in ipairs(leftCells) do
+        editor.terrainData[c[1] .. "," .. c[2]] = "stone"
+    end
+
+    -- Right side: same, independently randomised
+    local rightCells = {}
+    for r = 2, 7 do rightCells[#rightCells + 1] = {8, r} end
+    local rightName = love.math.random() < 0.5 and "SlopeRange" or "MountainRange"
+    editor.entityData["8,4"] = { name = rightName, cells = rightCells }
+    for _, c in ipairs(rightCells) do
+        editor.terrainData[c[1] .. "," .. c[2]] = "stone"
+    end
+
+    -- Bottom: ReefRange or SharpReefs (single-cell placement)
+    local bottomCells = {{1,7}, {2,8}, {3,8}, {4,9}, {5,8}, {6,8}, {7,7}}
+    local bottomName = love.math.random() < 0.4 and "SharpReefs" or "ReefRange"
+    if bottomName == "ReefRange" then
+        for _, c in ipairs(bottomCells) do
+            editor.entityData[c[1] .. "," .. c[2]] = nil
+        end
+        editor.entityData["4,9"] = { name = "ReefRange", cells = bottomCells }
+    else
+        -- SharpReefs: place single-cell obstacles
+        for _, c in ipairs(bottomCells) do
+            editor.entityData[c[1] .. "," .. c[2]] = "SharpReefs"
+        end
+    end
+    for _, c in ipairs(bottomCells) do
+        editor.terrainData[c[1] .. "," .. c[2]] = "stone"
+    end
+
+    -- === Elevation: organic cluster growing down from the top ===
+    if not editor.genSettings.noElevation then
+    -- Seed: all active cells at r=0..1 are guaranteed high ground.
+    local queue = {}
+    for q = 0, editor.hex.gridWidth - 1 do
+        for r0 = 0, 1 do
+            local key = q .. "," .. r0
+            if editor.hex:isActiveHex(q, r0) then
+                editor.elevationData[key] = true
+                if r0 == 1 then table.insert(queue, {q, 1}) end
+            end
+        end
+    end
+    -- Grow downward with random expansion
+    local sizes = {10, 20, 30}    -- small, medium, large
+    local targetCount = love.math.random(sizes[editor.genSettings.elevSize], sizes[editor.genSettings.elevSize] + 6)
+    local elevCount = #queue
+    local visited = {}
+    for _, c in ipairs(queue) do visited[c[1] .. "," .. c[2]] = true end
+    while elevCount < targetCount and #queue > 0 do
+        local idx = love.math.random(1, #queue)
+        local cur = queue[idx]
+        local neighbors = editor.hex:getNeighbors(cur[1], cur[2])
+        for i = #neighbors, 2, -1 do
+            local j = love.math.random(1, i)
+            neighbors[i], neighbors[j] = neighbors[j], neighbors[i]
+        end
+        local found = false
+        for _, nb in ipairs(neighbors) do
+            local nk = nb.q .. "," .. nb.r
+            if not visited[nk] and editor.hex:isActiveHex(nb.q, nb.r) and nb.r >= cur[2] then
+                local reject = ({0.4, 0.25, 0.1})[editor.genSettings.elevWidth] -- narrow=more gaps
+                if nb.r > cur[2] and love.math.random() < reject then
+                    -- skip this neighbor, try next
+                else
+                    editor.elevationData[nk] = true
+                    visited[nk] = true
+                    table.insert(queue, {nb.q, nb.r})
+                    elevCount = elevCount + 1
+                    found = true
+                    if elevCount >= targetCount then break end
+                end
+            end
+        end
+        if not found then table.remove(queue, idx) end
+    end
+    -- Cleanup: any cell with high-ground below it → also high ground
+    for q = 0, editor.hex.gridWidth - 1 do
+        for r = 0, editor.hex.gridHeight - 2 do
+            local key = q .. "," .. r
+            local belowKey = q .. "," .. (r + 1)
+            if not editor.elevationData[key] and editor.elevationData[belowKey] then
+                editor.elevationData[key] = true
+            end
+        end
+    end
+    -- Barrier cells near the top: always high ground (no low-ground corners)
+    for k, v in pairs(editor.entityData) do
+        if type(v) == "table" and v.cells then
+            for _, c in ipairs(v.cells) do
+                if c[2] <= 2 then
+                    editor.elevationData[c[1] .. "," .. c[2]] = true
+                end
+            end
+        end
+    end
+    end -- noElevation
+
+    -- === Buildings: 2-4 placed randomly on inner cells ===
+    local buildingCandidates = {}
+    for q = 0, editor.hex.gridWidth - 1 do
+        for r = 0, editor.hex.gridHeight - 1 do
+            local key = q .. "," .. r
+            if editor.hex:isActiveHex(q, r) and not editor.entityData[key]
+                and not editor.elevationData[key]
+                and editor.terrainData[key] ~= "water"
+                and editor.terrainData[key] ~= "stone" then
+                local n3 = love.math.noise(q * 0.6, r * 0.6, seed * 0.02 + 1)
+                if n3 > 0.3 then
+                    buildingCandidates[#buildingCandidates + 1] = {q = q, r = r, score = n3}
+                end
+            end
+        end
+    end
+    table.sort(buildingCandidates, function(a, b) return a.score > b.score end)
+    local numBuildings = love.math.random(2, 4)
+    local buildingTypes = { "SmallBuilding", "SmallBuilding", "BigBuilding", "BigBuilding", "Tower" }
+    for i = 1, math.min(numBuildings, #buildingCandidates) do
+        local c = buildingCandidates[i]
+        local bkey = c.q .. "," .. c.r
+        local bt = buildingTypes[love.math.random(1, #buildingTypes)]
+        editor.entityData[bkey] = bt
+    end
+
+    -- === Mountains: 2-5 WeakMountain on non-edge cells ===
+    local mountainCandidates = {}
+    for q = 0, editor.hex.gridWidth - 1 do
+        for r = 0, editor.hex.gridHeight - 1 do
+            local key = q .. "," .. r
+            if editor.hex:isActiveHex(q, r) and not editor.entityData[key]
+                and editor.terrainData[key] ~= "water"
+                and editor.terrainData[key] ~= "stone" then
+                local n4 = love.math.noise(q * 0.7 + 5, r * 0.7 + 5, seed * 0.02 + 2)
+                if n4 > 0.45 then
+                    mountainCandidates[#mountainCandidates + 1] = {q = q, r = r, score = n4}
+                end
+            end
+        end
+    end
+    table.sort(mountainCandidates, function(a, b) return a.score > b.score end)
+    local numMountains = love.math.random(2, 5)
+    for i = 1, math.min(numMountains, #mountainCandidates) do
+        local c = mountainCandidates[i]
+        local mkey = c.q .. "," .. c.r
+        editor.entityData[mkey] = "WeakMountain"
+    end
+
+    editor.fileName = "generated_" .. seed
+    editor.message = "Map generated (seed " .. seed .. ")"
+    editor.messageTimer = 3
+    log.info("editor", "Generated map with seed " .. seed)
+end
+
+-- ============================================================
 -- INIT / CLEANUP
 -- ============================================================
 
 function editor.init()
+    love.window.maximize()
     hex_utils.setOrientation("flat")
     editor.hex = hexgrid.new(
         config.HEX_RADIUS,
@@ -355,7 +567,7 @@ function editor.init()
     )
     editor.hex:centerOnScreen(love.graphics.getWidth() / (editor.dpiScale or 1), love.graphics.getHeight() / (editor.dpiScale or 1))
     -- Shift grid left to make room for palette
-    editor.hex.offsetX = editor.hex.offsetX - 200
+    editor.hex.offsetX = editor.hex.offsetX - 210
     boundaryGroupCache = nil
 
     editor.terrainData = {}
@@ -375,6 +587,12 @@ function editor.init()
     editor.objectiveSecondaries = {}
     editor.customEntityName = ""
     editor.active = true
+    editor.genSettingsOpen = false
+    editor.genSettings = {
+        noElevation = false,
+        elevSize = 2,     -- 1=small, 2=medium, 3=large
+        elevWidth = 2,    -- 1=narrow, 2=medium, 3=wide
+    }
 
     -- Dynamic entity palette from environment.lua
     local env = require("entity.environment")
@@ -961,15 +1179,15 @@ end
 -- Palette layout constants
 local PAL_X = 0
 local PAL_W = 0
-local PAL_BTN_H = 40
-local PAL_TILE_SIZE = 68
-local PAL_TILE_GAP = 6
-local PAL_COLS = 4
+local PAL_BTN_H = 56
+local PAL_TILE_SIZE = 90
+local PAL_TILE_GAP = 8
+local PAL_COLS = 3
 
 function editor.getPaletteRect()
     local lw = love.graphics.getWidth() / (editor.dpiScale or 1)
     local lh = love.graphics.getHeight() / (editor.dpiScale or 1)
-    PAL_W = 400
+    PAL_W = 420
     PAL_X = lw - PAL_W
     return PAL_X, 0, PAL_W, lh
 end
@@ -1016,18 +1234,41 @@ function editor.getButtonRects()
     local btnH = PAL_BTN_H
     local btnX = px + 10
     local btnGap = 8
-    local baseY = lh - (btnH + btnGap) * 5 - 20
+    local baseY = lh - (btnH + btnGap) * 6 - 20
     return {
         save     = { x = btnX, y = baseY,               w = btnW, h = btnH },
         load     = { x = btnX, y = baseY + btnH + btnGap, w = btnW, h = btnH },
         eraser   = { x = btnX, y = baseY + (btnH + btnGap) * 2, w = btnW, h = btnH },
         elevation = { x = btnX, y = baseY + (btnH + btnGap) * 3, w = btnW, h = btnH },
-        back     = { x = btnX, y = baseY + (btnH + btnGap) * 4, w = btnW, h = btnH },
+        generate = { x = btnX, y = baseY + (btnH + btnGap) * 4, w = btnW, h = btnH },
+        back     = { x = btnX, y = baseY + (btnH + btnGap) * 5, w = btnW, h = btnH },
     }
 end
 
 function editor.mousepressed(x, y, button)
     if button ~= 1 then return end
+
+    -- Gen settings clicks (top-left, before palette)
+    local eg2 = editor._gsElevToggle
+    if eg2 and x >= eg2.x and x <= eg2.x + eg2.w and y >= eg2.y and y <= eg2.y + eg2.h then
+        editor.genSettings.noElevation = not editor.genSettings.noElevation
+        return
+    end
+    for i = 1, 3 do
+        local r2 = (editor._gsSizeRects or {})[i]
+        if r2 and x >= r2.x and x <= r2.x + r2.w and y >= r2.y and y <= r2.y + r2.h then
+            editor.genSettings.elevSize = i
+            return
+        end
+    end
+    for i = 1, 3 do
+        local r3 = (editor._gsWidthRects or {})[i]
+        if r3 and x >= r3.x and x <= r3.x + r3.w and y >= r3.y and y <= r3.y + r3.h then
+            editor.genSettings.elevWidth = i
+            return
+        end
+    end
+
     local px, py, pw, ph = editor.getPaletteRect()
 
     -- Check palette area
@@ -1170,6 +1411,11 @@ function editor.mousepressed(x, y, button)
             editor.elevMode = editor.ELEV_NORMAL
             return
         end
+        if x >= btns.generate.x and x <= btns.generate.x + btns.generate.w and y >= btns.generate.y and y <= btns.generate.y + btns.generate.h then
+            editor.pushUndo()
+            editor.generateMap()
+            return
+        end
 
         -- File name input click
         local nameY = btns.save.y - 40
@@ -1299,6 +1545,9 @@ function editor.keypressed(key)
             editor.fileName = "custom_map"
             editor.message = "New map created"
             editor.messageTimer = 2
+        elseif key == "g" then
+            editor.pushUndo()
+            editor.generateMap()
         end
         return
     end
@@ -1421,6 +1670,17 @@ function editor.draw()
                 love.graphics.setLineWidth(1)
                 love.graphics.polygon("line", verts)
 
+                -- Elevation indicator: up-arrow triangle on high ground
+                if editor.elevationData[k] then
+                    local sz = editor.hex.radius * 0.3
+                    love.graphics.setColor(0.2, 0.15, 0.1, 0.35)
+                    love.graphics.polygon("fill", x, y - sz, x - sz * 0.55, y + sz * 0.35, x + sz * 0.55, y + sz * 0.35)
+                    love.graphics.setColor(0.7, 0.5, 0.2, 0.7)
+                    love.graphics.setLineWidth(1.5)
+                    love.graphics.polygon("line", x, y - sz, x - sz * 0.55, y + sz * 0.35, x + sz * 0.55, y + sz * 0.35)
+                    love.graphics.setLineWidth(1)
+                end
+
                 -- Upper terrain indicator
                 local upperType = editor.upperTerrainData[k]
                 if upperType then
@@ -1428,7 +1688,37 @@ function editor.draw()
                     editor.hex:drawUpperTerrain(q, r, upperType, x, y, 0)
                 end
 
-                -- Entity indicator
+                -- Status indicator
+                local statuses = editor.statusData[k]
+                if statuses and #statuses > 0 then
+                    for si, st in ipairs(statuses) do
+                        local stCol = {1, 1, 1}
+                        for _, sp in ipairs(editor.statusPalette) do
+                            if sp.id == st then stCol = sp.color; break end
+                        end
+                        local ox = (si - 1) * 10 - (#statuses - 1) * 5
+                        love.graphics.setColor(stCol[1], stCol[2], stCol[3], 0.85)
+                        love.graphics.circle("fill", x + ox, y + editor.hex.radius * 0.4, 4)
+                    end
+                end
+
+                -- Hover highlight
+                if editor.hex.hoverQ == q and editor.hex.hoverR == r then
+                    love.graphics.setColor(1, 1, 1, 0.3)
+                    local hverts = editor.hex:drawHexagon(x, y, editor.hex.radius - 2)
+                    love.graphics.polygon("fill", hverts)
+                end
+            end
+        end
+    end
+
+    -- Second pass: draw entities on top of terrain
+    local drawnMultiCell = {}
+    for q = 0, editor.hex.gridWidth - 1 do
+        for r = 0, editor.hex.gridHeight - 1 do
+            if editor.hex:isActiveHex(q, r) then
+                local x, y = getDrawCoordsEditor(editor.hex, q, r)
+                local k = q .. "," .. r
                 local entityVal = editor.entityData[k]
                 if entityVal then
                     local entityName, entityDir = nil, nil
@@ -1467,13 +1757,15 @@ function editor.draw()
                     end
 
                     if isBoundary then
-                        for _, c in ipairs(entityVal.cells) do
-                            local cx, cy = getDrawCoordsEditor(editor.hex, c[1], c[2])
-                            drawEntitySprite(cx, cy, entityName)
+                        if not drawnMultiCell[k] then
+                            drawnMultiCell[k] = true
+                            for _, c in ipairs(entityVal.cells) do
+                                local cx, cy = getDrawCoordsEditor(editor.hex, c[1], c[2])
+                                drawEntitySprite(cx, cy, entityName)
+                            end
                         end
                     else
                         drawEntitySprite(x, y, entityName)
-                        -- Direction arrow for directional entities
                         if entityDir then
                             local cubeDir = hex_utils.CUBE_DIRECTIONS[entityDir]
                             local tq, tr = hex_utils.applyCubeDiff(q, r, cubeDir.dx, cubeDir.dy, cubeDir.dz)
@@ -1498,27 +1790,6 @@ function editor.draw()
                         end
                     end
                 end
-
-                -- Status indicator
-                local statuses = editor.statusData[k]
-                if statuses and #statuses > 0 then
-                    for si, st in ipairs(statuses) do
-                        local stCol = {1, 1, 1}
-                        for _, sp in ipairs(editor.statusPalette) do
-                            if sp.id == st then stCol = sp.color; break end
-                        end
-                        local ox = (si - 1) * 10 - (#statuses - 1) * 5
-                        love.graphics.setColor(stCol[1], stCol[2], stCol[3], 0.85)
-                        love.graphics.circle("fill", x + ox, y + editor.hex.radius * 0.4, 4)
-                    end
-                end
-
-                -- Hover highlight
-                if editor.hex.hoverQ == q and editor.hex.hoverR == r then
-                    love.graphics.setColor(1, 1, 1, 0.3)
-                    local hverts = editor.hex:drawHexagon(x, y, editor.hex.radius - 2)
-                    love.graphics.polygon("fill", hverts)
-                end
             end
         end
     end
@@ -1533,6 +1804,66 @@ function editor.draw()
                 love.graphics.print(q .. "," .. r, x - 12, y + editor.hex.radius * 0.5)
             end
         end
+    end
+
+    -- ===== CELL TOOLTIP =====
+    if editor.hex and editor.hex.hoverQ >= 0 and editor.hex.hoverR >= 0 then
+        local hq, hr = editor.hex.hoverQ, editor.hex.hoverR
+        local hk = hq .. "," .. hr
+        local terrain = editor.terrainData[hk] or "~"
+        local elev = editor.elevationData[hk] and "HIGH" or "LOW"
+        local lines = {
+            string.format("Cell (%d, %d)", hq, hr),
+            "Terrain: " .. terrain,
+            "Elevation: " .. elev,
+        }
+        local ev = editor.entityData[hk]
+        if ev then
+            local ename = type(ev) == "table" and ev.name or ev
+            local extra = ""
+            if type(ev) == "table" and ev.cells then extra = " [boundary]" end
+            if type(ev) == "table" and ev.dir then extra = " [dir=" .. ev.dir .. "]" end
+            lines[#lines + 1] = "Entity: " .. ename .. extra
+        end
+        local st = editor.statusData[hk]
+        if st and #st > 0 then
+            lines[#lines + 1] = "Status: " .. table.concat(st, ", ")
+        end
+        local ut = editor.upperTerrainData[hk]
+        if ut then
+            lines[#lines + 1] = "Upper: " .. ut
+        end
+        editor.tooltipFont = editor.tooltipFont or love.graphics.newFont(24)
+        local font = editor.tooltipFont
+        local prevFont = love.graphics.getFont()
+        love.graphics.setFont(font)
+        local pad = 14
+        local lineH = font:getHeight() + 6
+        local maxW = 0
+        for _, l in ipairs(lines) do
+            local w = font:getWidth(l)
+            if w > maxW then maxW = w end
+        end
+        local tw, th = maxW + pad * 2, #lines * lineH + pad * 2
+        local tx = 14
+        local ty = love.graphics.getHeight() / (editor.dpiScale or 1) - th - 14
+        love.graphics.setColor(0.08, 0.08, 0.14, 0.92)
+        love.graphics.rectangle("fill", tx, ty, tw, th, 6)
+        love.graphics.setColor(0.4, 0.4, 0.5, 1)
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", tx, ty, tw, th, 6)
+        for i, l in ipairs(lines) do
+            local ly = ty + pad + (i - 1) * lineH
+            if l:find("HIGH") then
+                love.graphics.setColor(1, 0.75, 0.3, 1)
+            elseif l:find("LOW") then
+                love.graphics.setColor(0.5, 0.6, 0.7, 1)
+            else
+                love.graphics.setColor(0.9, 0.9, 0.9, 1)
+            end
+            love.graphics.print(l, tx + pad, ly)
+        end
+        love.graphics.setFont(prevFont)
     end
 
     -- ===== PALETTE PANEL =====
@@ -1702,7 +2033,58 @@ function editor.draw()
     drawBtn(btns.load, "Load", false)
     drawBtn(btns.eraser, editor.eraser and "[ERASER ON]" or "Eraser [E]", editor.eraser)
     drawBtn(btns.elevation, editor.elevBrush and "[HIGH ON]" or "Highground [G]", editor.elevBrush)
+    drawBtn(btns.generate, "Generate [Ctrl+G]", false)
     drawBtn(btns.back, "Back [Esc]", false)
+
+    -- ===== GEN SETTINGS (top-left) =====
+    local gs = editor.genSettings
+    local gx, gy = 10, 10
+    love.graphics.setColor(0.08, 0.08, 0.14, 0.9)
+    love.graphics.rectangle("fill", gx, gy, 300, 170, 6)
+    love.graphics.setColor(0.4, 0.4, 0.5, 1)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", gx, gy, 300, 170, 6)
+    local font = love.graphics.getFont()
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print("Generation [Ctrl+G]", gx + 10, gy + 8)
+    -- Elevation toggle
+    local elevOn = not gs.noElevation
+    love.graphics.setColor(elevOn and 0.25 or 0.12, elevOn and 0.45 or 0.12, elevOn and 0.25 or 0.12, 0.9)
+    love.graphics.rectangle("fill", gx + 10, gy + 28, 160, 22, 4)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(elevOn and "[ON] Elevation" or "[OFF] Elevation", gx + 16, gy + 31)
+    editor._gsElevToggle = {x = gx + 10, y = gy + 28, w = 160, h = 22}
+    if elevOn then
+        local sizeLabels = {"Small", "Medium", "Large"}
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print("Size:", gx + 10, gy + 58)
+        for i = 1, 3 do
+            local bx2 = gx + 60 + (i - 1) * 66
+            local sel2 = i == gs.elevSize
+            love.graphics.setColor(sel2 and 0.3 or 0.15, sel2 and 0.5 or 0.15, sel2 and 0.6 or 0.2, 1)
+            love.graphics.rectangle("fill", bx2, gy + 56, 60, 22, 3)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print(sizeLabels[i], bx2 + 8, gy + 58)
+            editor._gsSizeRects = editor._gsSizeRects or {}
+            editor._gsSizeRects[i] = {x = bx2, y = gy + 56, w = 60, h = 22}
+        end
+        local widthLabels = {"Narrow", "Medium", "Wide"}
+        love.graphics.print("Width:", gx + 10, gy + 86)
+        for i = 1, 3 do
+            local bx3 = gx + 60 + (i - 1) * 66
+            local sel3 = i == gs.elevWidth
+            love.graphics.setColor(sel3 and 0.3 or 0.15, sel3 and 0.5 or 0.15, sel3 and 0.6 or 0.2, 1)
+            love.graphics.rectangle("fill", bx3, gy + 84, 60, 22, 3)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print(widthLabels[i], bx3 + 8, gy + 86)
+            editor._gsWidthRects = editor._gsWidthRects or {}
+            editor._gsWidthRects[i] = {x = bx3, y = gy + 84, w = 60, h = 22}
+        end
+        local estSizes = {12, 22, 34}
+        local estWidths = {[1] = 0.6, [2] = 0.85, [3] = 1.0}
+        local est = math.floor(estSizes[gs.elevSize] * estWidths[gs.elevWidth])
+        love.graphics.print(("Est. cells: ~%d"):format(est), gx + 10, gy + 120)
+    end
 
     -- File name input area
     local nameY = btns.save.y - 40
