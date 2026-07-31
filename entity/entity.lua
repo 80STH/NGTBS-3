@@ -53,8 +53,6 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     -- Can walk on water
     self.waterWalker = false
     
-    -- Flying unit (ignores obstacles and water during pathfinding)
-    self.flying = false
     -- Hovering unit (doesn't sink in water, but considers obstacles)
     self.hovering = false
     -- Teleporting unit (appears anywhere, avoids hazards)

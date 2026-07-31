@@ -432,7 +432,7 @@ function updateDeathAnimations(dt)
                     table.insert(_G.graveyard, {
                         name = e.name, q = e.q, r = e.r,
                         maxHealth = e.maxHealth, moveRange = e.moveRange,
-                        flying = e.flying, hovering = e.hovering,
+                        hovering = e.hovering,
                         teleporting = e.teleporting, waterWalker = e.waterWalker,
                         sprite = e.sprite, color = e.color,
                         attacks = e.attacks, upgradeLevel = e.upgradeLevel,

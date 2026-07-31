@@ -98,7 +98,7 @@ function renderer.draw(state)
                 love.graphics.setLineWidth(1)
             end
         elseif info.threatDirection then
-            local pulse = 0.5 + 0.5 * math.sin(t * 5)
+            local pulse = 0.5 + 0.5 * math.sin(t * 4)
             info.draw = function(vertices, ox, oy)
                 love.graphics.stencil(function()
                     love.graphics.polygon("fill", vertices)

@@ -56,17 +56,12 @@ function cell_rules.isPassable(q, r, mover, opts)
     if not o.ignoreWater then
         local terrain = o.terrainMap and o.terrainMap[q] and o.terrainMap[q][r] or "grass"
         if terrain == "water" then
-            if mover and (mover.waterWalker or mover.flying or mover.hovering) then
+            if mover and (mover.waterWalker or mover.hovering) then
                 -- ok
             else
                 return false
             end
         end
-    end
-
-    -- Flying ignores everything on the ground
-    if mover and mover.flying then
-        return true
     end
 
     for _, e in ipairs(o.entities) do
@@ -130,7 +125,7 @@ function cell_rules.isOccupied(q, r, mover, opts)
     if o.terrainMap and o.terrainMap[q] and o.terrainMap[q][r] then
         local terrain = o.terrainMap[q][r]
         if terrain == "water" then
-            if mover and (mover.waterWalker or mover.flying or mover.hovering) then
+            if mover and (mover.waterWalker or mover.hovering) then
                 -- ok
             else
                 return true

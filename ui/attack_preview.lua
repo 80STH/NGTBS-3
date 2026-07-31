@@ -239,9 +239,9 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
     end
 
     -- Highground push: low -> high = uphill block (1 damage, push stops)
-    local elevMap = _G.elevationMap
-    local fromElev = elevMap and elevMap[fromQ] and elevMap[fromQ][fromR]
-    local toElev = elevMap and elevMap[toQ] and elevMap[toQ][toR]
+    local elevMap = _G.elevationMap or elevationMap
+    local fromElev = (elevMap and elevMap[fromQ] and elevMap[fromQ][fromR]) == true
+    local toElev = (elevMap and elevMap[toQ] and elevMap[toQ][toR]) == true
     if not fromElev and toElev then
         if entity:isCharacter() then
             result.damage = 1

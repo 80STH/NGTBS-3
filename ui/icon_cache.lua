@@ -6,7 +6,7 @@ local icon_names = {
     "building_damage", "heavy_building_damage", "building_destruction",
     "collision_damage", "collision_no_damage",
     "health", "move",
-    "trait_flying", "trait_hovering", "trait_teleporting",
+    "trait_hovering", "trait_teleporting",
     "trait_water_walker", "trait_indestructible", "trait_move_after_attack",
     "atk_dash", "atk_flip", "atk_shoot", "atk_push", "atk_piercing_shot",
     "atk_stone_throw", "atk_cone_blast", "atk_magic_bolt", "atk_power_bolt",

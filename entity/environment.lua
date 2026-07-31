@@ -249,7 +249,7 @@ local ATTACK_SETS = {
 -- Used in createEnemyByType. Supplements ATTACK_SETS
 -- with data about health/moveRange/aura/flags.
 local ENEMY_TYPES = {
-    Ghost           = { attackSet = "ghost",       moveRange = 3, flying = true },
+    Ghost           = { attackSet = "ghost",       moveRange = 3, hovering = true },
     Zombie          = { attackSet = "zombie",      moveRange = 3 },
     PoisonousZombie = { attackSet = "zombie",      moveRange = 3 },
     Lich            = { attackSet = "lich",        moveRange = 3 },
@@ -680,7 +680,7 @@ function environment.loadNativeMap(data)
                                 entity.moveRange = 0
                             end
                             if def.name == "Ghost" then
-                                entity.flying = true
+                                entity.hovering = true
                             end
                             if def.attacks == "bogshaman" then
                                 entity.aura = { type = "slow", radius = 1 }
@@ -993,7 +993,6 @@ function environment.createEnemyByType(enemyType, q, r)
 
     local entity = Entity.new(name, Entity.TYPES.CHARACTER, q, r, maxHealth, false, moveRange, sprite, nil, attacks)
     -- Flags from registry (only those explicitly set).
-    if spec.flying          then entity.flying = true end
     if spec.hovering        then entity.hovering = true end
     if spec.healthCellSize  then entity.healthCellSize = spec.healthCellSize end
     if spec.isSummoningRod  then entity.isSummoningRod = true end

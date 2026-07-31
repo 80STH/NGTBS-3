@@ -231,7 +231,7 @@ if fromElev and not toElev then
         return
     end
 
-    -- Flying off the edge
+    -- Off the edge
     if not hex:isActiveHex(toQ, toR) then
         if target:isCharacter() then
             target.health = target.health - 1
@@ -390,6 +390,86 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     if not stepX then return false, "Not a straight line!" end
 
     local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+
+    -- Elevation check: walk from attacker toward dash endpoint (firstTarget or targetQ)
+    if elevationMap then
+        local endpointQ, endpointR
+        if firstTarget and targetHex then
+            endpointQ, endpointR = targetHex.q, targetHex.r
+        else
+            endpointQ, endpointR = targetQ, targetR
+        end
+        local walkQ, walkR = attacker.q, attacker.r
+        while walkQ ~= endpointQ or walkR ~= endpointR do
+            local nextQ, nextR = hex_utils.applyCubeStep(walkQ, walkR, stepX, stepY, stepZ)
+            if not hex:isActiveHex(nextQ, nextR) then break end
+            local walkElev = (elevationMap[walkQ] and elevationMap[walkQ][walkR]) == true
+            local nextElev = (elevationMap[nextQ] and elevationMap[nextQ][nextR]) == true
+            if walkElev ~= nextElev then
+                if not walkElev and nextElev then
+                    -- Low → High: crash at walkQ
+                    local crashQ, crashR = walkQ, walkR
+                    local oldQ, oldR = attacker.q, attacker.r
+                    attacker.q, attacker.r = crashQ, crashR
+                    if attacker.rootedTarget then
+                        status.removeFromEntity(attacker.rootedTarget, "rooted")
+                        attacker.rootedTarget = nil
+                    end
+                    attack_effects.dash(attacker, nil, crashQ, crashR, hex)
+                    local fromX, fromY = getDrawCoords(oldQ, oldR)
+                    local toX, toY = getDrawCoords(crashQ, crashR)
+                    push_animator.addCustomMove(attacker, fromX, fromY, toX, toY, 0.25, function()
+                        local fx, fy = getDrawCoords(crashQ, crashR)
+                        visual.addEffect(fx, fy, "collision", 0.3)
+                        if sounds then sounds.play("collision") end
+                    end)
+                    push_animator.start()
+                    attacker.hasActedThisTurn = true
+                    return true
+                elseif walkElev and not nextElev then
+                    -- High → Low: fall to next cell
+                    local landingQ, landingR = nextQ, nextR
+                    for _, e in ipairs(entities) do
+                        if e.health and e.health > 0 and e.q == landingQ and e.r == landingR then
+                            e.health = 0
+                            e:startDeath()
+                        end
+                    end
+                    local oldQ, oldR = attacker.q, attacker.r
+                    attacker.q, attacker.r = landingQ, landingR
+                    if attacker.rootedTarget then
+                        status.removeFromEntity(attacker.rootedTarget, "rooted")
+                        attacker.rootedTarget = nil
+                    end
+                    if attacker.health and attacker.health > 0 then
+                        attacker.health = attacker.health - 1
+                        if attacker.health <= 0 then attacker:startDeath() end
+                    end
+                    if terrainMap then
+                        local died = effects.applyAllCellEffects(attacker, landingQ, landingR, terrainMap, entities)
+                        if died then combat.deferDeath(attacker) end
+                    end
+                    local fromX, fromY = getDrawCoords(oldQ, oldR)
+                    local toX, toY = getDrawCoords(landingQ, landingR)
+                    local slideX = toX
+                    local slideY = fromY + (toY - fromY) * 0.4
+                    visual.addPushEffect(fromX, fromY, slideX, slideY, 0.15)
+                    push_animator.addCustomMove(attacker, fromX, fromY, slideX, slideY, 0.15, function()
+                        push_animator.addCustomMove(attacker, slideX, slideY, toX, toY, 0.2, function()
+                            local fx, fy = getDrawCoords(landingQ, landingR)
+                            visual.addEffect(fx, fy, "collision", 0.3)
+                            if sounds then sounds.play("collision") end
+                        end)
+                        push_animator._initNext()
+                    end, true)
+                    push_animator.start()
+                    attacker.hasActedThisTurn = true
+                    return true
+                end
+            end
+            walkQ, walkR = nextQ, nextR
+        end
+    end
 
     -- Determine where the attacker will land (cell before target, in cube coords)
     local moveQ, moveR

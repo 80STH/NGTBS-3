@@ -70,9 +70,9 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
         return true
     end
     
-    -- Water is impassable (except for flying/hovering)
+    -- Water is impassable (except for hovering)
     if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
-        if not (actor and (actor.flying or actor.hovering)) then
+        if not (actor and actor.hovering) then
             return false
         end
     end
@@ -85,14 +85,10 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
     local effectiveRange = ui.getEffectiveMoveRange(actor, entities, hex)
     local isBlockedFn
     local isOccupiedFn
-    if actor.flying then
-        isBlockedFn = function(q, r) return not hex:isActiveHex(q, r) end
-    else
-        isBlockedFn = function(q, r) return cell_rules.isOccupied(q, r, actor) end
-        isOccupiedFn = function(q, r)
-            local e = getEntityAtHex(q, r)
-            return e and e ~= actor and not e.isHazard
-        end
+    isBlockedFn = function(q, r) return cell_rules.isOccupied(q, r, actor) end
+    isOccupiedFn = function(q, r)
+        local e = getEntityAtHex(q, r)
+        return e and e ~= actor and not e.isHazard
     end
     local path = pathfinding.findPath(actor.q, actor.r, targetQ, targetR, effectiveRange,
         isBlockedFn, hex, isOccupiedFn)
@@ -641,20 +637,47 @@ function ui.drawAttackPreview(hex, attacker, attack, attackMode, hoverQ, hoverR,
         end
         return
     end
-if attack.name == "Magic Bolt" then
+if attack.visualType == "arc" then
     local distance = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
-    if distance <= attack.range then
+    local minRange = attack.minRange or 0
+    if distance >= minRange and distance <= attack.range then
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
         if stepX then
             local target = getEntityAtHex(hoverQ, hoverR, entities)
-            if target then
-                local toX, toY = getDrawCoords(hoverQ, hoverR)
+            if target and target.health > 0 and (target:isBuilding() or (target:isCharacter() and target.isPlayable)) then
                 local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
-                if target:isBuilding() or (target:isCharacter() and not target.isPlayable) then
-                    local dmg = attack.damage or 1
-                    if target:isBuilding() then
-                    end
+                local toX, toY = getDrawCoords(hoverQ, hoverR)
+                local time = love.timer.getTime()
+                local pulse = 0.7 + 0.3 * math.sin(time * 4)
+                -- Shadow dots along straight line
+                local dx, dy = toX - fromX, toY - fromY
+                local dist = math.sqrt(dx*dx + dy*dy)
+                local shadowSteps = math.max(1, math.floor(dist / (hex.radius * 0.4)))
+                for i = 0, shadowSteps do
+                    local t = i / shadowSteps
+                    love.graphics.setColor(0, 0, 0, 0.18 * pulse)
+                    love.graphics.circle("fill", fromX + dx * t, fromY + dy * t + 4, hex.radius * 0.1)
                 end
+                -- Red arc dots (bezier)
+                local midX = (fromX + toX) / 2
+                local midY = (fromY + toY) / 2
+                local ctrlX = midX
+                local ctrlY = midY - 60
+                local dotRadius = hex.radius * 0.12
+                local function bez(p)
+                    local u = 1 - p
+                    return u*u*fromX + 2*u*p*ctrlX + p*p*toX, u*u*fromY + 2*u*p*ctrlY + p*p*toY
+                end
+                local spacing = hex.radius * 0.4
+                local steps = math.max(1, math.floor(distance * hex.radius / spacing * 1.5))
+                for i = 0, steps do
+                    local t = i / steps
+                    local x, y = bez(t)
+                    love.graphics.setColor(0.85, 0.15, 0.15, 0.85 * pulse)
+                    love.graphics.circle("fill", x, y, dotRadius)
+                end
+                love.graphics.setColor(1, 0.2, 0.2, 0.25 * pulse)
+                love.graphics.circle("fill", toX, toY, hex.radius * 0.3)
             end
         end
     end
@@ -664,7 +687,7 @@ end
         local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
         if stepX then
             local firstTarget, targetHex, lastFree = attack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
-            
+
             -- Arrow should point to the target, not the cursor
             local indicatorQ, indicatorR
             if firstTarget and targetHex then
@@ -672,28 +695,119 @@ end
             else
                 indicatorQ, indicatorR = hoverQ, hoverR
             end
-            
-            -- Draw dash trail from attacker to target
+
+            -- Elevation preview: walk from attacker toward indicator
+            local elevBlock, elevFall, crashQ, crashR, hideArrows
+            local elevMap = _G.elevationMap or elevationMap
+            if elevMap then
+                local attackerElev = (elevMap[attacker.q] and elevMap[attacker.q][attacker.r]) == true
+                local indicatorElev = (elevMap[indicatorQ] and elevMap[indicatorQ][indicatorR]) == true
+                if attackerElev ~= indicatorElev then hideArrows = true end
+                local walkQ, walkR = attacker.q, attacker.r
+                while walkQ ~= indicatorQ or walkR ~= indicatorR do
+                    local nextQ, nextR = hex_utils.applyCubeStep(walkQ, walkR, stepX, stepY, stepZ)
+                    if not hex:isActiveHex(nextQ, nextR) then break end
+                    local walkElev = (elevMap[walkQ] and elevMap[walkQ][walkR]) == true
+                    local nextElev = (elevMap[nextQ] and elevMap[nextQ][nextR]) == true
+                    if walkElev ~= nextElev then
+                        if not walkElev and nextElev then
+                            elevBlock, crashQ, crashR = true, walkQ, walkR
+                        else
+                            elevFall, crashQ, crashR = true, nextQ, nextR
+                        end
+                        hideArrows = true
+                        break
+                    end
+                    walkQ, walkR = nextQ, nextR
+                end
+                -- Also check push destination elevation
+                if not hideArrows and firstTarget and targetHex then
+                    local pq, pr = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
+                    if hex:isActiveHex(pq, pr) then
+                        local te = (elevMap[targetHex.q] and elevMap[targetHex.q][targetHex.r]) == true
+                        local pe = (elevMap[pq] and elevMap[pq][pr]) == true
+                        if te ~= pe then hideArrows = true end
+                    end
+                end
+            end
+
+            -- Draw dash trail from attacker to indicator
             local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
-            local toX, toY = getDrawCoords(indicatorQ, indicatorR)
-            local trailPulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 6)
-            love.graphics.setLineWidth(6)
-            love.graphics.setColor(0.3, 1, 0.3, 0.15 * trailPulse)
-            love.graphics.line(fromX, fromY, toX, toY)
-            love.graphics.setLineWidth(2)
-            love.graphics.setColor(0.6, 1, 0.6, 0.4 * trailPulse)
-            love.graphics.line(fromX, fromY, toX, toY)
+            local toX, toY
+            if elevBlock then
+                toX, toY = getDrawCoords(crashQ, crashR)
+            elseif elevFall then
+                toX, toY = getDrawCoords(crashQ, crashR)
+            else
+                toX, toY = getDrawCoords(indicatorQ, indicatorR)
+            end
+            local trailPulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 4)
+            if elevBlock then
+                -- Trail to last low cell
+                love.graphics.setLineWidth(6)
+                love.graphics.setColor(1, 0.2, 0.2, 0.15 * trailPulse)
+                love.graphics.line(fromX, fromY, toX, toY)
+                love.graphics.setLineWidth(2)
+                love.graphics.setColor(1, 0.3, 0.3, 0.4 * trailPulse)
+                love.graphics.line(fromX, fromY, toX, toY)
+                love.graphics.setLineWidth(1)
+                -- Red X at edge toward high ground
+                local dx, dy = getDrawCoords(indicatorQ, indicatorR)
+                dx, dy = dx - fromX, dy - fromY
+                local d = math.sqrt(dx*dx + dy*dy)
+                local toEdgeX, toEdgeY = toX, toY
+                if d > 0 then
+                    toEdgeX = toX + dx/d * hex.radius * 0.3
+                    toEdgeY = toY + dy/d * hex.radius * 0.3
+                end
+                local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
+                local a = 0.4 + 0.4 * pulse
+                love.graphics.setColor(1, 0.2, 0.2, a)
+                local s = hex.radius * 0.22
+                love.graphics.setLineWidth(3)
+                love.graphics.line(toEdgeX - s, toEdgeY - s, toEdgeX + s, toEdgeY + s)
+                love.graphics.line(toEdgeX - s, toEdgeY + s, toEdgeX + s, toEdgeY - s)
+                love.graphics.setLineWidth(1)
+                return
+            elseif elevFall then
+                love.graphics.setLineWidth(6)
+                love.graphics.setColor(1, 0.7, 0.1, 0.15 * trailPulse)
+                love.graphics.line(fromX, fromY, toX, toY)
+                love.graphics.setLineWidth(2)
+                love.graphics.setColor(1, 0.8, 0.2, 0.4 * trailPulse)
+                love.graphics.line(fromX, fromY, toX, toY)
+            else
+                love.graphics.setLineWidth(6)
+                love.graphics.setColor(0.3, 1, 0.3, 0.15 * trailPulse)
+                love.graphics.line(fromX, fromY, toX, toY)
+                love.graphics.setLineWidth(2)
+                love.graphics.setColor(0.6, 1, 0.6, 0.4 * trailPulse)
+                love.graphics.line(fromX, fromY, toX, toY)
+            end
             love.graphics.setLineWidth(1)
-            ui.drawPushArrow(fromX, fromY, toX, toY, nil, nil, nil, nil, attacker.q, attacker.r, indicatorQ, indicatorR)
+            if not hideArrows then
+                ui.drawPushArrow(fromX, fromY, toX, toY)
+            end
             -- Target marker at impact point
-            local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
+            local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
             local alpha = 0.4 + 0.4 * pulse
-            love.graphics.setColor(1, 1, 0.4, alpha)
-            love.graphics.setLineWidth(2)
-            love.graphics.circle("line", toX, toY, hex.radius * 0.35)
+            if elevFall then
+                love.graphics.setColor(1, 0.7, 0.1, alpha)
+                love.graphics.setLineWidth(2)
+                love.graphics.circle("line", toX, toY, hex.radius * 0.35)
+                -- Down arrow
+                love.graphics.setLineWidth(2)
+                love.graphics.line(toX, toY - hex.radius * 0.2, toX, toY + hex.radius * 0.2)
+                love.graphics.line(toX - hex.radius * 0.12, toY + hex.radius * 0.08, toX, toY + hex.radius * 0.2)
+                love.graphics.line(toX + hex.radius * 0.12, toY + hex.radius * 0.08, toX, toY + hex.radius * 0.2)
+            else
+                love.graphics.setColor(1, 1, 0.4, alpha)
+                love.graphics.setLineWidth(2)
+                love.graphics.circle("line", toX, toY, hex.radius * 0.35)
+            end
             love.graphics.setLineWidth(1)
             -- Damage to first target + possible knockback damage
-            if firstTarget then
+            if firstTarget and not elevBlock and not elevFall then
                 local targetX, targetY = getDrawCoords(firstTarget.q, firstTarget.r)
                 local totalDamage = attack.damage or 1
                 local pushQ, pushR, isEdge
@@ -717,10 +831,10 @@ end
                 if firstTarget:isBuilding() then
                 end
                 
-                if targetHex and not isEdge and firstTarget.isPushable then
+                if targetHex and not isEdge and firstTarget.isPushable and not hideArrows then
                     if not combat.getEntityAtHex(pushQ, pushR, entities) then
                         local pushX, pushY = getDrawCoords(pushQ, pushR)
-                        ui.drawPushArrow(targetX, targetY, pushX, pushY, nil, nil, nil, nil, firstTarget.q, firstTarget.r, pushQ, pushR)
+                        ui.drawPushArrow(targetX, targetY, pushX, pushY)
                     end
                 end
             end
@@ -1467,6 +1581,20 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
     local fromR = enemy.preparedFromR or enemy.r
     local fromX, fromY = getDrawCoords(fromQ, fromR)
     if not fromX then return end
+    -- Determine attack order for light hue shift
+    local groupOrder
+    local queue = turnState and turnState.enemyAttackQueue
+    if queue then
+        for gi, group in ipairs(queue) do
+            for _, e in ipairs(group.enemies or {}) do
+                if e == enemy then groupOrder = gi; break end
+            end
+            if groupOrder then break end
+        end
+    end
+    local arcR, arcG, arcB = 0.7, 0.2, 1
+    if groupOrder == 1 then arcR, arcG, arcB = 0.9, 0.2, 0.8
+    elseif groupOrder == 2 then arcR, arcG, arcB = 0.5, 0.25, 1 end
     if attack.name == "TrainShunt" then
         if enemy.preparedTargetOffset then
             local targetQ, targetR = hex_utils.applyCubeDiff(
@@ -1477,7 +1605,7 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
             )
             if hex:isActiveHex(targetQ, targetR) then
                 local toX, toY = getDrawCoords(targetQ, targetR)
-                local pulse = 0.5 + 0.5 * math.sin(time * 6)
+                local pulse = 0.5 + 0.5 * math.sin(time * 4)
                 local alpha = 0.5 + 0.3 * pulse
                 ui.drawPushArrow(fromX, fromY, toX, toY, 0.3, 0.5, 1, alpha, fromQ, fromR, targetQ, targetR)
             end
@@ -1501,8 +1629,8 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
                 local startY = fromY + math.sin(angle) * edgeOffset
                 local endX = toX - math.cos(angle) * edgeOffset
                 local endY = toY - math.sin(angle) * edgeOffset
-                ui.drawVerticalArrow(startX, startY, "up", 0.7, 0.2, 1, 0.9)
-                ui.drawVerticalArrow(endX, endY, "down", 0.7, 0.2, 1, 0.9)
+                ui.drawVerticalArrow(startX, startY, "up", arcR, arcG, arcB, 0.9)
+                ui.drawVerticalArrow(endX, endY, "down", arcR, arcG, arcB, 0.9)
             end
         end
         return
@@ -1548,14 +1676,21 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
         local hovered = (hex.hoverQ == enemy.q and hex.hoverR == enemy.r)
         local alpha = 0.85
         if hovered then
-            alpha = 0.15 + 0.7 * (0.5 + 0.5 * math.sin(time * 8))
+            alpha = 0.15 + 0.7 * (0.5 + 0.5 * math.sin(time * 4))
         end
         local dotRadius = hex.radius * 0.12
         local spacing = hex.radius * 0.4
         local count = math.max(1, math.floor(dist / spacing))
+        local dotR, dotG, dotB = 0.85, 0.15, 0.15
+        if groupOrder == 1 then dotR, dotG, dotB = 0.95, 0.35, 0.1
+        elseif groupOrder == 2 then dotR, dotG, dotB = 0.7, 0.15, 0.3 end
         for i = 0, count do
             local t = i / count
-            ui.drawRedCircleWithShadow(fromX + dx * t, fromY + dy * t, dotRadius, alpha)
+            local x, y = fromX + dx * t, fromY + dy * t
+            love.graphics.setColor(0, 0, 0, alpha * 0.35)
+            love.graphics.circle("fill", x + 2, y + 2, dotRadius)
+            love.graphics.setColor(dotR, dotG, dotB, alpha)
+            love.graphics.circle("fill", x, y, dotRadius)
         end
         return
     end
@@ -1590,7 +1725,7 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
                     local hovered = (hex.hoverQ == enemy.q and hex.hoverR == enemy.r)
                     local alpha
                     if hovered then
-                        local pulse = 0.5 + 0.5 * math.sin(time * 8)
+                        local pulse = 0.5 + 0.5 * math.sin(time * 4)
                         alpha = 0.5 + 0.3 * pulse
                     else
                         alpha = 0.5
@@ -1616,7 +1751,7 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
         if hex:isActiveHex(targetQ, targetR) then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            local pulse = 0.5 + 0.5 * math.sin(time * 8)
+            local pulse = 0.5 + 0.5 * math.sin(time * 4)
             local alpha = 0.5 + 0.3 * pulse
             ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.2, 0.2, alpha, enemy.q, enemy.r, targetQ, targetR, 0.55)
         end
@@ -1737,7 +1872,7 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
     end
     
     if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
-        if not (enemy and (enemy.flying or enemy.hovering)) then
+        if not (enemy and enemy.hovering) then
             return false
         end
     end
@@ -1750,27 +1885,23 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
     local effectiveRange = ui.getEffectiveMoveRange(enemy, entities, hex)
     local isBlockedFn
     local isOccupiedFn
-    if enemy.flying then
-        isBlockedFn = function(q, r) return not hex:isActiveHex(q, r) end
-    else
-        isBlockedFn = function(q, r) return cell_rules.isOccupied(q, r, enemy, { entities = entities, hex = hex, allowPhaseThroughEnemies = false }) end
-        isOccupiedFn = function(q, r)
-            for _, e in ipairs(entities) do
-                if e ~= enemy and not e.isHazard then
-                    local occupies = (e.q == q and e.r == r)
-                    if not occupies and e.cells then
-                        for _, c in ipairs(e.cells) do
-                            if c.q == q and c.r == r then
-                                occupies = true
-                                break
-                            end
+    isBlockedFn = function(q, r) return cell_rules.isOccupied(q, r, enemy, { entities = entities, hex = hex, allowPhaseThroughEnemies = false }) end
+    isOccupiedFn = function(q, r)
+        for _, e in ipairs(entities) do
+            if e ~= enemy and not e.isHazard then
+                local occupies = (e.q == q and e.r == r)
+                if not occupies and e.cells then
+                    for _, c in ipairs(e.cells) do
+                        if c.q == q and c.r == r then
+                            occupies = true
+                            break
                         end
                     end
-                    if occupies then return true end
                 end
+                if occupies then return true end
             end
-            return false
         end
+        return false
     end
     local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effectiveRange,
         isBlockedFn, hex, isOccupiedFn)
@@ -1794,7 +1925,7 @@ function ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
     local diveY = fromY + dy * 0.33 + 35
     local riseX = fromX + dx * 0.66
     local riseY = fromY + dy * 0.66 - 35
-    local pulse = 0.6 + 0.4 * math.sin(time * 6)
+    local pulse = 0.6 + 0.4 * math.sin(time * 4)
     local alpha = 0.6 + 0.4 * pulse
     -- ===== 1. Arrow from Lich to dive point =====
     local function drawArrow(ax, ay, bx, by, a)
@@ -1832,7 +1963,7 @@ function ui.drawLichDoubleArrow(fromX, fromY, toX, toY, time)
         local t = i / numDots
         local px = diveX + (riseX - diveX) * t
         local py = diveY + (riseY - diveY) * t + math.sin(t * math.pi * 3) * 12
-        local dotSize = 6 * (0.4 + 0.6 * math.sin(time * 10 + i))
+        local dotSize = 6 * (0.4 + 0.6 * math.sin(time * 4 + i))
         love.graphics.setColor(0.4, 0.1, 0.7, alpha * 0.7)
         love.graphics.circle("fill", px, py, dotSize)
         love.graphics.setColor(0.8, 0.3, 1, alpha * 0.5)
@@ -1899,7 +2030,7 @@ function ui.drawHexLineDots(hex, fromQ, fromR, toQ, toR, cR, cG, cB, dotRadius, 
         local x, y = getDrawCoords(curQ, curR)
         local alpha
         if isHoverOnTarget then
-            alpha = 0.3 + 0.7 * math.abs(math.sin(time * 10))
+            alpha = 0.3 + 0.7 * math.abs(math.sin(time * 4))
         else
             alpha = 0.6 + 0.4 * math.sin(time * 4)
         end
@@ -2171,7 +2302,6 @@ function ui.drawSelectedStats(actor, entities, hex)
     table.insert(statsParts, { icon = "move", text = moveText, color = {0.8, 0.8, 0.8} })
     -- Traits
     local flags = {}
-    if actor.flying then table.insert(flags, "Flying") end
     if actor.hovering then table.insert(flags, "Hovering") end
     if actor.teleporting then table.insert(flags, "Teleporting") end
     if actor.waterWalker then table.insert(flags, "Water Walker") end

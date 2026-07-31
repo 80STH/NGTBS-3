@@ -145,6 +145,16 @@ function updatePreparePhase(dt)
             if anyMoving then
                 turnState._waitingForMoves = true
             else
+                -- No enemies moved — prepare all attacks now
+                for _, e in ipairs(entities) do
+                    if e:isCharacter() and not e.isPlayable and e.health > 0 then
+                        if e._willPrepareAfterMove or not e.hasPreparedAttack then
+                            if ai.canPrepareAttack(e, entities) then
+                                ai.prepareAttackForEnemy(e, entities, hex)
+                            end
+                        end
+                    end
+                end
                 transitionToPlayerTurn()
             end
         else
@@ -169,11 +179,15 @@ function updatePreparePhase(dt)
         end
         if not anyMoving then
             turnState._waitingForMoves = false
-            -- Prepare attacks for any that moved but haven't prepared yet
+            -- Prepare attacks for all enemies simultaneously
             for _, e in ipairs(entities) do
-                if e:isCharacter() and not e.isPlayable and e.health > 0 and not e.hasPreparedAttack then
-                    if ai.canPrepareAttack(e, entities) then
-                        ai.prepareAttackForEnemy(e, entities, hex)
+                if e:isCharacter() and not e.isPlayable and e.health > 0 then
+                    if e._willPrepareAfterMove then
+                        ai.prepareAttackForEnemy(e, entities, hex, {})
+                    elseif not e.hasPreparedAttack then
+                        if ai.canPrepareAttack(e, entities) then
+                            ai.prepareAttackForEnemy(e, entities, hex)
+                        end
                     end
                 end
             end

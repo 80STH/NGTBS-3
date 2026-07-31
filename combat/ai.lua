@@ -542,8 +542,12 @@ function ai.moveAndPrepare(enemy, entities, hex)
         return "failed"
     end
 
-    -- If already able to attack — prepare immediately
+    -- If already able to attack — record for later (batch) or prepare immediately
     if ai.canPrepareAttack(enemy, entities) then
+        if _G._batchMovePlanning then
+            enemy._willPrepareAfterMove = true
+            return "prepared"
+        end
         ai.prepareAttackForEnemy(enemy, entities, hex, {})
         return "prepared"
     end
@@ -552,6 +556,7 @@ function ai.moveAndPrepare(enemy, entities, hex)
     local nearestTarget = nil
     local nearestDist = math.huge
     local targets = ai.getAttackableTargets(entities)
+    local attack = getEnemyAttack(enemy)
     
     for _, t in ipairs(targets) do
         local target = t.entity
@@ -564,6 +569,60 @@ function ai.moveAndPrepare(enemy, entities, hex)
 
     if not nearestTarget then
         return "failed"
+    end
+
+    -- Ranged enemies: try to find a reachable cell from which they can attack
+    if attack and (attack.range > 1 or attack.minRange) and not enemy.teleporting then
+        local effRange = ai.getEffectiveMoveRange(enemy, hex, entities)
+        if effRange > 0 then
+            local reachable = {}
+            local visited = {[enemy.q .. "," .. enemy.r] = 0}
+            local queue = {{enemy.q, enemy.r, 0}}
+            local head = 1
+            while head <= #queue do
+                local q, r, d = table.unpack(queue[head])
+                head = head + 1
+                if d > 0 then table.insert(reachable, {q = q, r = r}) end
+                if d < effRange then
+                    for _, nb in ipairs(hex:getNeighbors(q, r)) do
+                        if hex:isActiveHex(nb.q, nb.r) and not visited[nb.q .. "," .. nb.r] then
+                            local blocked = false
+                            for _, e2 in ipairs(entities) do
+                                if e2 ~= enemy and not e2.isHazard then
+                                    if e2.q == nb.q and e2.r == nb.r then blocked = true; break end
+                                    if e2.cells then
+                                        for _, c in ipairs(e2.cells) do
+                                            if c.q == nb.q and c.r == nb.r then blocked = true; break end
+                                        end
+                                    end
+                                end
+                            end
+                            if not blocked and not isCellDangerousForEntity(nb.q, nb.r, enemy) then
+                                visited[nb.q .. "," .. nb.r] = d + 1
+                                table.insert(queue, {nb.q, nb.r, d + 1})
+                            end
+                        end
+                    end
+                end
+            end
+            local bestCell, bestDist = nil, math.huge
+            for _, cell in ipairs(reachable) do
+                local savedQ, savedR = enemy.q, enemy.r
+                enemy.q, enemy.r = cell.q, cell.r
+                local canAttack = ai.canPrepareAttack(enemy, entities)
+                enemy.q, enemy.r = savedQ, savedR
+                if canAttack then
+                    local d = hex:getDistance(enemy.q, enemy.r, cell.q, cell.r)
+                    if d < bestDist then
+                        bestDist = d
+                        bestCell = cell
+                    end
+                end
+            end
+        end
+        if bestCell then
+            return ai.moveToCell(enemy, bestCell.q, bestCell.r, hex, entities)
+        end
     end
 
     -- Try to take a step toward the target
@@ -771,27 +830,23 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
 
     local isBlockedFn
     local isOccupiedFn
-    if enemy.flying then
-        isBlockedFn = function(q, r) return not hex:isActiveHex(q, r) end
-    else
-        isBlockedFn = function(q, r) return ai.isPositionOccupied(q, r, enemy, entities, hex) end
-        isOccupiedFn = function(q, r)
-            for _, e in ipairs(entities) do
-                if e ~= enemy and not e.isHazard then
-                    local occupies = (e.q == q and e.r == r)
-                    if not occupies and e.cells then
-                        for _, c in ipairs(e.cells) do
-                            if c.q == q and c.r == r then
-                                occupies = true
-                                break
-                            end
+    isBlockedFn = function(q, r) return ai.isPositionOccupied(q, r, enemy, entities, hex) end
+    isOccupiedFn = function(q, r)
+        for _, e in ipairs(entities) do
+            if e ~= enemy and not e.isHazard then
+                local occupies = (e.q == q and e.r == r)
+                if not occupies and e.cells then
+                    for _, c in ipairs(e.cells) do
+                        if c.q == q and c.r == r then
+                            occupies = true
+                            break
                         end
                     end
-                    if occupies then return true end
                 end
+                if occupies then return true end
             end
-            return false
         end
+        return false
     end
     local path = pathfinding.findPath(enemy.q, enemy.r, targetQ, targetR, effRange,
         isBlockedFn, hex, isOccupiedFn)

@@ -54,12 +54,12 @@ return function(ui)
         if #statuses == 0 then return nil end
         local r, g, b = 1, 1, 1
         if status.hasEntityStatus(entity, "fire") then
-            r, g, b = 1, 0.3 + 0.3 * math.sin(time * 6), 0.1
+            r, g, b = 1, 0.3 + 0.3 * math.sin(time * 4), 0.1
         end
         if status.hasEntityStatus(entity, "decay") then
-            r = (r or 1) * (0.5 + 0.3 * math.sin(time * 3))
+            r = (r or 1) * (0.5 + 0.3 * math.sin(time * 4))
             g = (g or 1) * (0.7 + 0.2 * math.sin(time * 4))
-            b = (b or 1) * (0.3 + 0.2 * math.sin(time * 5))
+            b = (b or 1) * (0.3 + 0.2 * math.sin(time * 4))
         end
         if status.hasEntityStatus(entity, "acid") then
             local acidPulse = 0.5 + 0.5 * math.sin(time * 4)

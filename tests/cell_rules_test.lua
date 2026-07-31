@@ -76,16 +76,16 @@ local suite = {
             end,
         },
         {
-            name = "isPassable: water passable for flying",
+            name = "isPassable: water passable for hovering",
             fn = function()
                 local hex = makeHexMock()
                 local terrainMap = { [2] = { [2] = "water" } }
                 local mover = makeChar(1, 2, true)
-                mover.flying = true
+                mover.hovering = true
                 local ok = cell_rules.isPassable(2, 2, mover, {
                     entities = {}, terrainMap = terrainMap, hex = hex,
                 })
-                return assertEq(ok, true, "flying ignores water")
+                return assertEq(ok, true, "hovering ignores water")
             end,
         },
         {

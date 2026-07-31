@@ -608,7 +608,7 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
         end
         -- Check terrain
         local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
-        if terrain == "water" and not (self.target.waterWalker or self.target.flying or self.target.hovering) then
+        if terrain == "water" and not (self.target.waterWalker or self.target.hovering) then
             log.warn("abilities", "Cannot shift into water!")
             return true
         end
@@ -2622,7 +2622,7 @@ function UpsideDownAbility:onClickHex(q, r, hex, state)
     end
 
     local x, y = getDrawCoords(q, r)
-    visual.addFlyingRemains(x, y, target.sprite, target.color)
+    visual.addRisingRemains(x, y, target.sprite, target.color)
 
     target.health = 0
     target:startDeath()
@@ -2935,7 +2935,6 @@ function RespawnAllyAbility:onClickHex(q, r, hex, state)
         snapshot.color and {snapshot.color[1], snapshot.color[2], snapshot.color[3], 0.7} or {0.5, 0.7, 1, 0.7},
         {}
     )
-    ghost.flying = snapshot.flying or false
     ghost.hovering = snapshot.hovering or false
     ghost.teleporting = snapshot.teleporting or false
     ghost.waterWalker = snapshot.waterWalker or false

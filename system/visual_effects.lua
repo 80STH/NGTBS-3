@@ -164,7 +164,7 @@ elseif e.type == "line" then
      love.graphics.polygon("line", pulseVerts)
      love.graphics.setLineWidth(1)
 
- elseif e.type == "flying_remains" then
+ elseif e.type == "rising_remains" then
      local t = e.timer / e.duration
      local riseY = e.y - t * e.y
      local alpha = 1 - t * 0.5
@@ -294,9 +294,9 @@ function visual.addLightning(x, y, duration)
     })
 end
 
-function visual.addFlyingRemains(x, y, sprite, color)
+function visual.addRisingRemains(x, y, sprite, color)
     table.insert(visual.effects, {
-        type = "flying_remains",
+        type = "rising_remains",
         x = x, y = y,
         sprite = sprite,
         color = color or {0.8, 0.2, 0.1, 1},

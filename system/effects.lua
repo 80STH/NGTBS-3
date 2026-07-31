@@ -33,8 +33,8 @@ function effects.applyAllCellEffects(entity, q, r, terrainMap, entities)
         log.infof("effects", "%s covered in acid from cell, ground acid consumed!", entity.name)
     end
 
-    -- 4. Drowning in water (characters + caravans, not flying/hovering)
-    if terrain == "water" and not entity.flying and not entity.hovering then
+    -- 4. Drowning in water (characters + caravans, not hovering)
+    if terrain == "water" and not entity.hovering then
         if entity:isCharacter() or entity.name == "Caravan" then
             log.infof("effects", "%s drowns in water!", entity.name)
             sounds.play("collision")
@@ -87,8 +87,8 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
                 log.infof("effects", "%s's rage fades", entity.name)
             end
 
-            -- Drowning check (characters + caravans on water, not dead, not flying/hovering)
-            if not entity.flying and not entity.hovering then
+            -- Drowning check (characters + caravans on water, not dead, not hovering)
+            if not entity.hovering then
                 if entity:isCharacter() or entity.name == "Caravan" then
                     local terrain = terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] or "grass"
                     if terrain == "water" and entity.health > 0 then
