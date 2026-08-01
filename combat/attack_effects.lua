@@ -6,17 +6,17 @@ local hex_utils = require("grid.hex_utils")
 
 local attack_effects = {}
 
--- Helper: get the hex center coordinates
+-- Helper: get the hex center coordinates (elevation-aware)
 local function getHexCenter(entity, hex)
     if not entity then return 0, 0 end
-    return hex:hexToPixel(entity.q, entity.r)
+    return _G.getDrawCoords(entity.q, entity.r)
 end
 
 -- Effect for Dash (lunge with strike)
 function attack_effects.dash(attacker, target, targetQ, targetR, hex)
     -- Movement effect from attacker to target cell
     local fromX, fromY = getHexCenter(attacker, hex)
-    local toX, toY = hex:hexToPixel(targetQ, targetR)
+    local toX, toY = _G.getDrawCoords(targetQ, targetR)
     visual.addDashEffect(fromX, fromY, toX, toY)
     -- Hit on target
     if target then
@@ -28,7 +28,7 @@ end
 -- Effect for Flip
 function attack_effects.flip(attacker, target, behindQ, behindR, hex)
     local fromX, fromY = getHexCenter(target, hex)
-    local toX, toY = hex:hexToPixel(behindQ, behindR)
+    local toX, toY = _G.getDrawCoords(behindQ, behindR)
     -- Flip arc
     visual.addArcEffect(fromX, fromY, toX, toY, 0.2, 0.8, 0.2)
     -- Small flash at the landing spot
@@ -45,7 +45,7 @@ function attack_effects.shoot(attacker, target, pushToQ, pushToR, hex)
     visual.addEffect(targetX, targetY, "hit", 0.3)
     -- Knockback effect (if any)
     if pushToQ and pushToR then
-        local pushX, pushY = hex:hexToPixel(pushToQ, pushToR)
+        local pushX, pushY = _G.getDrawCoords(pushToQ, pushToR)
         visual.addPushEffect(targetX, targetY, pushX, pushY, 0.2)
     end
 end
@@ -65,7 +65,7 @@ function attack_effects.piercingShoot(attacker, firstTarget, secondTarget, first
         visual.addSpark(fx, fy, 6)
         -- Knockback effect for the first target
         if firstPushQ and firstPushR then
-            local pushX, pushY = hex:hexToPixel(firstPushQ, firstPushR)
+            local pushX, pushY = _G.getDrawCoords(firstPushQ, firstPushR)
             visual.addPushEffect(fx, fy, pushX, pushY, 0.2)
         end
     end
@@ -76,7 +76,7 @@ function attack_effects.piercingShoot(attacker, firstTarget, secondTarget, first
         visual.addBloodSplat(sx, sy)
         -- Knockback effect for the second target
         if secondPushQ and secondPushR then
-            local pushX, pushY = hex:hexToPixel(secondPushQ, secondPushR)
+            local pushX, pushY = _G.getDrawCoords(secondPushQ, secondPushR)
             visual.addPushEffect(sx, sy, pushX, pushY, 0.2)
         end
     end
@@ -84,13 +84,13 @@ end
 
 -- Effect for Stone Throw (AoePushAttack)
 function attack_effects.stoneThrow(centerQ, centerR, pushedTargets, hex)
-    local centerX, centerY = hex:hexToPixel(centerQ, centerR)
+    local centerX, centerY = _G.getDrawCoords(centerQ, centerR)
     if terrainMap and terrainMap[centerQ] and terrainMap[centerQ][centerR] == "water" then
         visual.addEffect(centerX, centerY, "drown", 0.4)
         for _, target in ipairs(pushedTargets) do
             if target and target.entity then
-                local tx, ty = hex:hexToPixel(target.entity.q, target.entity.r)
-                local ptx, pty = hex:hexToPixel(target.pushTo.q, target.pushTo.r)
+                local tx, ty = _G.getDrawCoords(target.entity.q, target.entity.r)
+                local ptx, pty = _G.getDrawCoords(target.pushTo.q, target.pushTo.r)
                 visual.addPushEffect(tx, ty, ptx, pty, 0.2)
             end
         end
@@ -101,7 +101,7 @@ end
 
 -- Effect for Cone Blast (AoeDirectionalAttack)
 function attack_effects.coneBlast(centerQ, centerR, hex)
-    local cx, cy = hex:hexToPixel(centerQ, centerR)
+    local cx, cy = _G.getDrawCoords(centerQ, centerR)
     visual.addEffect(cx, cy, "hit", 0.35)
     -- Diverging lines
     for i = 1, 3 do
@@ -149,7 +149,7 @@ end
 -- Effect for Rampage (Colossus charge)
 function attack_effects.rampage(attacker, target, targetQ, targetR, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
-    local toX, toY = hex:hexToPixel(targetQ, targetR)
+    local toX, toY = _G.getDrawCoords(targetQ, targetR)
     visual.addDashEffect(fromX, fromY, toX, toY)
     if target then
         visual.addEffect(toX, toY, "hit", 0.5)
@@ -183,7 +183,7 @@ end
 -- Effect for Mighty Throw (Colossus throws a target)
 function attack_effects.mightyThrow(attacker, thrownTarget, struckTarget, impactQ, impactR, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
-    local toX, toY = hex:hexToPixel(impactQ, impactR)
+    local toX, toY = _G.getDrawCoords(impactQ, impactR)
     local midX = (fromX + toX) / 2
     local midY = (fromY + toY) / 2
     local ctrlX = midX

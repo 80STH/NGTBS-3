@@ -580,7 +580,7 @@ function ai.moveAndPrepare(enemy, entities, hex)
             local queue = {{enemy.q, enemy.r, 0}}
             local head = 1
             while head <= #queue do
-                local q, r, d = table.unpack(queue[head])
+                local q, r, d = unpack(queue[head])
                 head = head + 1
                 if d > 0 then table.insert(reachable, {q = q, r = r}) end
                 if d < effRange then

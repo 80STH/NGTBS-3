@@ -227,23 +227,12 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
         occupant    = nil,
     }
 
-    -- Off the edge.
-    if not isActive(toQ, toR, hex) then
-        -- Only characters take edge damage (buildings bounce without damage).
-        if entity:isCharacter() then
-            result.damage = 1
-            result.type   = "collision_damage"
-            result.reason = "edge"
-        end
-        return result
-    end
-
     -- Highground push: low -> high = uphill block (1 damage, push stops)
     local elevMap = _G.elevationMap or elevationMap
     local fromElev = (elevMap and elevMap[fromQ] and elevMap[fromQ][fromR]) == true
-    local toElev = (elevMap and elevMap[toQ] and elevMap[toQ][toR]) == true
+    local toElev = isActive(toQ, toR, hex) and ((elevMap and elevMap[toQ] and elevMap[toQ][toR]) == true) or false
     if not fromElev and toElev then
-        if entity:isCharacter() then
+        if entity.health and entity.health > 0 then
             result.damage = 1
             result.type = "collision_damage"
             result.reason = "highground_block"
@@ -252,8 +241,8 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
     end
 
     -- Highground push: high -> low = fall (all units at destination die)
-    if fromElev and not toElev then
-        if entity:isCharacter() then
+    if fromElev and not toElev and isActive(toQ, toR, hex) then
+        if entity.health and entity.health > 0 then
             result.damage = 1
             result.type = "collision_damage"
             result.reason = "highground_fall"
@@ -275,6 +264,14 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
     local occupant = getEntity(toQ, toR, entities)
     if occupant and occupant ~= entity then
         result.occupant = occupant
+
+        -- Lethal collision (SharpReefs): instant death.
+        if occupant.lethalCollision then
+            result.damage = 99
+            result.type = "collision_damage"
+            result.reason = "collision_lethal"
+            return result
+        end
 
         -- Mountain slope / indestructible barrier: no damage, just bounce.
         if occupant.noCollisionDamage then
@@ -325,7 +322,27 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
         return result
     end
 
+    -- Off the edge (last, matching execution order in pushTargetToHex).
+    if not isActive(toQ, toR, hex) then
+        if entity.health and entity.health > 0 then
+            result.damage = 1
+            result.type   = "collision_damage"
+            result.reason = "edge"
+        end
+        return result
+    end
+
     return result
+end
+
+-- Check whether a push destination is water that would drown the entity.
+local function checkDrown(p, entity, toQ, toR)
+    if entity.hovering then return end
+    if not (entity:isCharacter() or entity.name == "Caravan") then return end
+    if terrainMap and terrainMap[toQ] and terrainMap[toQ][toR] == "water" then
+        preview.addOverlay(p, toQ, toR, "drown_dest")
+        preview.addCollisionDamage(p, entity, entity.health)
+    end
 end
 
 -- Register damage + hint for a single push.
@@ -352,6 +369,9 @@ function preview.applyPush(p, entity, fromQ, fromR, toQ, toR, hex, entities)
         end
     elseif col.occupantDmg > 0 and col.occupant then
         preview.addCollisionDamage(p, col.occupant, preview.calculateEffectiveCollisionDamage(col.occupant))
+    end
+    if not col.type or col.reason == "highground_fall" then
+        checkDrown(p, entity, toQ, toR)
     end
 
     return col
@@ -498,6 +518,49 @@ handlers["Push"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities)
 end
 handlers["Dash"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+    if not stepX then return end
+
+    -- Elevation walk: Dash stops at elevation boundaries, just like execution.
+    local elevMap = _G.elevationMap or elevationMap
+    if elevMap then
+        local firstTarget, firstHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+        local endpointQ, endpointR
+        if firstTarget and firstHex then
+            endpointQ, endpointR = firstHex.q, firstHex.r
+        else
+            endpointQ, endpointR = hoverQ, hoverR
+        end
+        local walkQ, walkR = attacker.q, attacker.r
+        while walkQ ~= endpointQ or walkR ~= endpointR do
+            local nextQ, nextR = hex_utils.applyCubeStep(walkQ, walkR, stepX, stepY, stepZ)
+            if not isActive(nextQ, nextR, hex) then break end
+            local walkElev = (elevMap[walkQ] and elevMap[walkQ][walkR]) == true
+            local nextElev = (elevMap[nextQ] and elevMap[nextQ][nextR]) == true
+            if walkElev ~= nextElev then
+                if not walkElev and nextElev then
+                    -- Low→High: attacker crashes at walkQ, no damage, no push.
+                    preview.addLine(p, attacker.q, attacker.r, walkQ, walkR)
+                    preview.addOverlay(p, walkQ, walkR, "target")
+                    return
+                elseif walkElev and not nextElev then
+                    -- High→Low: attacker falls to nextQ, takes 1 damage, kills landing occupants.
+                    preview.addLine(p, attacker.q, attacker.r, nextQ, nextR)
+                    preview.addOverlay(p, nextQ, nextR, "target")
+                    preview.addAttackDamage(p, attacker, 1)
+                    for _, e in ipairs(entities) do
+                        if e.health and e.health > 0 and e.q == nextQ and e.r == nextR and e ~= attacker then
+                            preview.addCollisionDamage(p, e, e.health)
+                        end
+                    end
+                    checkDrown(p, attacker, nextQ, nextR)
+                    return
+                end
+            end
+            walkQ, walkR = nextQ, nextR
+        end
+    end
+    -- No elevation transition: use normal line shot logic.
     handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities)
 end
 
@@ -610,6 +673,7 @@ handlers["Flip"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
         preview.markPushed(p, target, dest.q, dest.r)
         preview.addPushArrow(p, hoverQ, hoverR, dest.q, dest.r)
         preview.addOverlay(p, dest.q, dest.r, "push_dest")
+        checkDrown(p, target, dest.q, dest.r)
     end
 end
 
@@ -698,6 +762,9 @@ handlers["Wide Vortex"] = function(p, attacker, attack, hoverQ, hoverR, hex, ent
             if colA.occupantDmg > 0 and colA.occupant then
                 preview.addCollisionDamage(p, colA.occupant, preview.calculateEffectiveCollisionDamage(colA.occupant))
             end
+            if not colA.type or colA.reason == "highground_fall" then
+                checkDrown(p, target, dc.q, dc.r)
+            end
 
             if bothMove then
                 preview.markPushed(p, occupantB, b2q, b2r)
@@ -711,6 +778,9 @@ handlers["Wide Vortex"] = function(p, attacker, attack, hoverQ, hoverR, hex, ent
                 end
                 if colB.occupantDmg > 0 and colB.occupant then
                     preview.addCollisionDamage(p, colB.occupant, preview.calculateEffectiveCollisionDamage(colB.occupant))
+                end
+                if not colB.type or colB.reason == "highground_fall" then
+                    checkDrown(p, occupantB, b2q, b2r)
                 end
             end
         end
@@ -810,6 +880,7 @@ handlers["Pull Hook"] = function(p, attacker, attack, hoverQ, hoverR, hex, entit
                 preview.markPushed(p, hookTarget, pullQ, pullR)
                 preview.addPushArrow(p, hookTarget.q, hookTarget.r, pullQ, pullR)
                 preview.addOverlay(p, pullQ, pullR, "push_dest")
+                checkDrown(p, hookTarget, pullQ, pullR)
             end
         end
     end
@@ -1026,6 +1097,7 @@ handlers["Mighty Throw"] = function(p, attacker, attack, hoverQ, hoverR, hex, en
         if throwLandQ then
             preview.markPushed(p, throwTarget, throwLandQ, throwLandR)
             preview.addPushArrow(p, throwTarget.q, throwTarget.r, throwLandQ, throwLandR)
+            checkDrown(p, throwTarget, throwLandQ, throwLandR)
         end
 
         local rightX, rightY, rightZ = -stepY, -stepZ, -stepX
@@ -1086,6 +1158,21 @@ function preview.buildIcons(p, hex)
             }
         end
     end
+    for _, col in ipairs(p.collisions) do
+        if col.type then
+            local x1, y1 = getDrawCoords(col.fromQ, col.fromR)
+            local x2, y2 = getDrawCoords(col.toQ, col.toR)
+            icons[#icons + 1] = {
+                x = (x1 + x2) / 2, y = (y1 + y2) / 2,
+                icon = col.type,
+            }
+        end
+    end
+    return icons
+end
+
+function preview.buildCollisionIcons(p, hex)
+    local icons = {}
     for _, col in ipairs(p.collisions) do
         if col.type then
             local x1, y1 = getDrawCoords(col.fromQ, col.fromR)

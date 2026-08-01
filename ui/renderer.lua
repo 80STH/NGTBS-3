@@ -35,12 +35,38 @@ function renderer.draw(state)
         end
     end
 
-    -- Collect preview icons
-    local previewIcons = nil
+    -- Collect preview damaged entities (for entity blinking), collision icons, drown overlays, and push arrows
     local previewPushArrows = nil
+    local previewCollisionIcons = nil
+    local drownCells = nil
+    state.previewDamaged = {}
     if state.attackMode and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn and not state.flipTargetActor and hex.hoverQ >= 0 and hex.hoverR >= 0 then
-        previewIcons = ui.collectPreviewIcons(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities)
+        state.previewDamaged = ui.collectPreviewDamagedEntities(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities) or {}
+        previewCollisionIcons = ui.collectPreviewCollisionIcons(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities)
         previewPushArrows = ui.collectPreviewPushArrows(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities)
+        drownCells = ui.collectPreviewDrownOverlays(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities)
+    elseif not state.attackMode and hex.hoverQ >= 0 and hex.hoverR >= 0 then
+        local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
+        if hoverEntity and hoverEntity:isCharacter() and not hoverEntity.isPlayable and hoverEntity.hasPreparedAttack and hoverEntity.health > 0 then
+            local attack = hoverEntity.preparedAttack
+            if attack then
+                local targetCell = ui.getPreparedAttackTarget(hoverEntity, state.entities, hex)
+                if targetCell and hex:isValidHex(targetCell.q, targetCell.r) then
+                    local dmg = ui.collectPreviewDamagedEntities(hex, hoverEntity, attack, targetCell.q, targetCell.r, state.entities)
+                    if dmg then state.previewDamaged = dmg end
+                    previewCollisionIcons = ui.collectPreviewCollisionIcons(hex, hoverEntity, attack, targetCell.q, targetCell.r, state.entities)
+                    drownCells = ui.collectPreviewDrownOverlays(hex, hoverEntity, attack, targetCell.q, targetCell.r, state.entities)
+                end
+            end
+        end
+    end
+    if drownCells then
+        for _, c in ipairs(drownCells) do
+            local key = c.q .. "," .. c.r
+            if not cellOverlays[key] then
+                cellOverlays[key] = {drownDest = true}
+            end
+        end
     end
 
     -- Normalize overlay data
@@ -117,6 +143,9 @@ function renderer.draw(state)
         elseif info.flipDest then
             local pulse = 0.6 + 0.4 * math.sin(t * 4)
             cellOverlays[key] = {fill = {0.2, 0.7, 1, 0.25 * pulse}, line = {0.2, 0.7, 1, 0.8 * pulse}}
+        elseif info.drownDest then
+            local pulse = 0.5 + 0.5 * math.sin(t * 6)
+            cellOverlays[key] = {fill = {0.1, 0.35, 0.85, 0.25 + 0.2 * pulse}, line = {0.2, 0.5, 1, 0.6 + 0.3 * pulse}}
         elseif info.windTorrentDest then
             cellOverlays[key] = {fill = {0.3, 0.6, 1, 0.4}, line = {0.3, 0.6, 1, 0.8}}
         end
@@ -298,7 +327,7 @@ function renderer.draw(state)
             ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
         end
     end
-    ui.drawPreviewIcons(hex, previewIcons)
+    ui.drawPreviewIcons(hex, previewCollisionIcons)
     ui.drawPreviewPushArrows(previewPushArrows)
     visual.draw()
 
@@ -360,9 +389,6 @@ function renderer.draw(state)
                 end
                 if hex:isValidHex(targetQ, targetR) then
                     ui.drawAttackPreview(hex, hoverEntity, attack, true, targetQ, targetR, state.entities)
-                    -- Show damage icons on the victims of the enemy's prepared attack.
-                    local enemyPreviewIcons = ui.collectPreviewIcons(hex, hoverEntity, attack, targetQ, targetR, state.entities)
-                    ui.drawPreviewIcons(hex, enemyPreviewIcons)
                 end
             end
         end
@@ -975,6 +1001,27 @@ function drawEntity(entity, state)
             love.graphics.setColor(1, 0.3, 0.3, alpha)
         elseif shuntHighlight then
             love.graphics.setColor(0.3, 0.6, 1, alpha)
+        end
+        local previewInfo = state.previewDamaged and state.previewDamaged[entity]
+        if previewInfo then
+            if previewInfo.willKill then
+                local killPulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 12)
+                local glowR = state.hex.radius * 0.55 * (1 + killPulse * 0.25)
+                love.graphics.setColor(0.85, 0, 0, 0.25 + 0.4 * killPulse)
+                if entity.cells then
+                    for _, c in ipairs(entity.cells) do
+                        local gx, gy = getDrawCoords(c.q, c.r)
+                        love.graphics.circle("fill", gx, gy, glowR)
+                    end
+                else
+                    love.graphics.circle("fill", x, drawY, glowR)
+                end
+                finalScale = finalScale * (1 + killPulse * 0.08)
+                love.graphics.setColor(0.9, 0.02, 0.02, 0.35 + 0.65 * killPulse)
+            else
+                local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
+                love.graphics.setColor(1, 0.5, 0.1, 0.5 + 0.5 * pulse)
+            end
         end
         -- Directional entities: rotate sprite to match direction
         local spriteRotation = 0

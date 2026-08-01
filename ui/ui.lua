@@ -157,19 +157,42 @@ function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
 end
 -- Draw push arrow (with offset from centers)
 function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, toQ, toR, scale)
-    local getOffset = function(q, r)
-        local elv = state.elevationMap and state.elevationMap[q] and state.elevationMap[q][r]
-        if elv then return -38 end
-        local terrain = terrainMap and terrainMap[q] and terrainMap[q][r]
-        if terrain == "water" then return -config.WATER_Y_OFFSET
-        elseif terrain == "stone" then return 18 end
-        return 0
-    end
-    if fromQ ~= nil then
-        fromY = fromY - getOffset(fromQ, fromR)
-    end
-    if toQ ~= nil then
-        toY = toY - getOffset(toQ, toR)
+    -- Cross-elevation: draw step shape with horizontal at low ground
+    if fromQ ~= nil and toQ ~= nil then
+        local fromElv = state.elevationMap and state.elevationMap[fromQ] and state.elevationMap[fromQ][fromR]
+        local toElv = state.elevationMap and state.elevationMap[toQ] and state.elevationMap[toQ][toR]
+        if (fromElv and not toElv) or (not fromElv and toElv) then
+            local s = scale or 1; local lw = 2 * s; local as = 8 * s; local hw = as * 0.5
+            local cr = r or 1; local cg = g or 0.8; local cb = b or 0.2; local ca = alpha or 0.9
+            local so = 2 * s
+            local bx, by
+            if not fromElv and toElv then
+                bx, by = toX, fromY
+            else
+                bx, by = fromX, toY
+            end
+            love.graphics.setColor(0, 0, 0, ca * 0.35)
+            love.graphics.setLineWidth(lw + 2 * s)
+            love.graphics.line(fromX + so, fromY + so, bx + so, by + so)
+            love.graphics.line(bx + so, by + so, toX + so, toY + so)
+            love.graphics.setColor(cr, cg, cb, ca)
+            love.graphics.setLineWidth(lw)
+            love.graphics.line(fromX, fromY, bx, by)
+            love.graphics.line(bx, by, toX, toY)
+            love.graphics.setLineWidth(1)
+            local angle = math.atan2(toY - by, toX - bx)
+            local lx = toX + math.cos(angle + math.pi * 0.85) * hw
+            local ly = toY + math.sin(angle + math.pi * 0.85) * hw
+            local rx = toX + math.cos(angle - math.pi * 0.85) * hw
+            local ry = toY + math.sin(angle - math.pi * 0.85) * hw
+            local tipX = toX + math.cos(angle) * as
+            local tipY = toY + math.sin(angle) * as
+            love.graphics.setColor(0, 0, 0, ca * 0.35)
+            love.graphics.polygon("fill", tipX + so * 0.5, tipY + so * 0.5, lx + so * 0.5, ly + so * 0.5, rx + so * 0.5, ry + so * 0.5)
+            love.graphics.setColor(cr, cg, cb, ca)
+            love.graphics.polygon("fill", tipX, tipY, lx, ly, rx, ry)
+            return
+        end
     end
     local angle = math.atan2(toY - fromY, toX - fromX)
     local s = scale or 1
@@ -258,8 +281,10 @@ end
 
 function ui.drawPreviewIcons(hex, icons)
     if not icons then return end
+    local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
+    local alpha = 0.4 + 0.6 * pulse
     for _, ic in ipairs(icons) do
-        icon_cache.draw(ic.icon, ic.x, ic.y, 0.95)
+        icon_cache.draw(ic.icon, ic.x, ic.y, alpha)
     end
 end
 
@@ -280,6 +305,43 @@ function ui.collectPreviewPushArrows(hex, attacker, attack, hoverQ, hoverR, enti
     if not attack or not attacker then return nil end
     local p = attack_preview.compute(hex, attacker, attack, hoverQ, hoverR, entities)
     return attack_preview.buildPushArrows(p, hex)
+end
+
+function ui.collectPreviewDamagedEntities(hex, attacker, attack, hoverQ, hoverR, entities)
+    if not attack or not attacker then return nil end
+    local p = attack_preview.compute(hex, attacker, attack, hoverQ, hoverR, entities)
+    local damaged = {}
+    for _, info in pairs(p.damages) do
+        if info.totalDamage > 0 then
+            damaged[info.entity] = {
+                totalDamage = info.totalDamage,
+                willKill = attack_preview.willKill(info.entity, info.totalDamage),
+            }
+        end
+    end
+    if next(damaged) == nil then return nil end
+    return damaged
+end
+
+function ui.collectPreviewCollisionIcons(hex, attacker, attack, hoverQ, hoverR, entities)
+    if not attack or not attacker then return nil end
+    local p = attack_preview.compute(hex, attacker, attack, hoverQ, hoverR, entities)
+    local icons = attack_preview.buildCollisionIcons(p, hex)
+    if #icons == 0 then return nil end
+    return icons
+end
+
+function ui.collectPreviewDrownOverlays(hex, attacker, attack, hoverQ, hoverR, entities)
+    if not attack or not attacker then return nil end
+    local p = attack_preview.compute(hex, attacker, attack, hoverQ, hoverR, entities)
+    local cells = {}
+    for _, ov in pairs(p.overlays) do
+        if ov.kind == "drown_dest" then
+            cells[#cells + 1] = ov
+        end
+    end
+    if #cells == 0 then return nil end
+    return cells
 end
 -- ============================================================
 -- MAIN UI FUNCTIONS, CALLED FROM MAIN.LUA

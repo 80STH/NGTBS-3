@@ -30,7 +30,7 @@ function combat.Attack.new(name, description, range, damage, effects)
     self.effects = effects or {}
     self.visualType = "melee"
     return self
-end
+end 
 
 -- Determine straight-line direction (cube step)
 function combat.Attack:getLineDirection(fromQ, fromR, toQ, toR, hex)
