@@ -246,7 +246,8 @@ function love.mousepressed(x, y, button)
     if gamePhase == "menu" then
         menu.mousepressed(lx, ly)
     elseif gamePhase == "editor" then
-        map_editor.mousepressed(lx, ly, button)
+        local escale = map_editor.getScale()
+        map_editor.mousepressed(x / escale, y / escale, button)
     elseif gamePhase == "creature_lab" then
         enemy_lab.mousepressed(lx, ly)
     else
@@ -256,7 +257,8 @@ end
 
 function love.mousereleased(x, y, button)
     if gamePhase == "editor" then
-        map_editor.mousereleased(x / dpiScale, y / dpiScale, button)
+        local escale = map_editor.getScale()
+        map_editor.mousereleased(x / escale, y / escale, button)
     else
         input.mousereleased(x / dpiScale, y / dpiScale, button)
     end
@@ -264,7 +266,8 @@ end
 
 function love.mousemoved(x, y)
     if gamePhase == "editor" then
-        map_editor.mousemoved(x / dpiScale, y / dpiScale)
+        local escale = map_editor.getScale()
+        map_editor.mousemoved(x / escale, y / escale)
     end
 end
 

@@ -6,6 +6,7 @@ local editor = {}
 
 local hexgrid = require("grid.hexgrid")
 local hex_utils = require("grid.hex_utils")
+local water_gen = require("grid.water_gen")
 local config = require("core.config")
 local log = require("util.log")
 local sprites = require("util.sprites")
@@ -226,13 +227,13 @@ editor.terrainPalette = {
     { id = "swamp",            name = "Swamp" },
     { id = "lava",             name = "Lava" },
     { id = "water",            name = "Water" },
-    { id = "railway",          name = "Railway" },
     { id = "emptiness",        name = "Empty" },
 }
 
 editor.upperTerrainPalette = {
-    { id = "mountain_rubble", name = "MtnRubble" },
-    { id = "building_rubble", name = "BldRubble" },
+    { id = "railway",          name = "Railway" },
+    { id = "mountain_rubble",  name = "MtnRubble" },
+    { id = "building_rubble",  name = "BldRubble" },
 }
 
 -- Entity palette: { id, display name, type, color hint }
@@ -343,6 +344,22 @@ editor.secondaryObjectiveOptions = {
 -- MAP GENERATOR
 -- ============================================================
 
+-- What the chosen objectives require the generator to add.
+-- Single source of truth: used by generateMap and the objectives UI hint.
+local function getObjectiveContent()
+    local needs = {
+        railway = editor.objectivePrimary == nil or editor.objectivePrimary == "protect_railway",
+        caravans = editor.objectivePrimary == "protect_caravans",
+        blockpost = false,
+        tower = false,
+    }
+    for _, sid in ipairs(editor.objectiveSecondaries or {}) do
+        if sid == "protect_blockpost" then needs.blockpost = true end
+        if sid == "protect_tower" then needs.tower = true end
+    end
+    return needs
+end
+
 function editor.generateMap()
     if not editor.hex then return end
     love.math.setRandomSeed(os.time())
@@ -367,10 +384,12 @@ function editor.generateMap()
             if editor.hex:isActiveHex(q, r) then
                 local key = q .. "," .. r
                 local n = love.math.noise(q * scale, r * scale, seed * 0.01)
-                if n < waterThreshold then
-                    editor.terrainData[key] = "water"
-                elseif n < sandThreshold then
-                    editor.terrainData[key] = "sand"
+                if n < sandThreshold then
+                    if n < waterThreshold and not editor.genSettings.water then
+                        editor.terrainData[key] = "water"
+                    else
+                        editor.terrainData[key] = "sand"
+                    end
                 elseif n > stoneThreshold then
                     editor.terrainData[key] = "stone"
                 else
@@ -427,14 +446,101 @@ function editor.generateMap()
         editor.terrainData[c[1] .. "," .. c[2]] = "stone"
     end
 
+    -- === Water: exactly one body, must touch the map edge ===
+    -- ponytail: blob grows from a random edge cell inward; incompatible with highgrounds (elevation forced off)
+    if editor.genSettings.water then
+        local edgeCells = {}
+        for q = 0, editor.hex.gridWidth - 1 do
+            for r = 0, editor.hex.gridHeight - 1 do
+                if editor.hex:isActiveHex(q, r) then
+                    for _, nb in ipairs(editor.hex:getNeighbors(q, r)) do
+                        if not editor.hex:isActiveHex(nb.q, nb.r) then
+                            edgeCells[#edgeCells + 1] = {q, r}
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        local waterSizes = {10, 20, 30}
+        local cells = water_gen.growBlob({
+            edgeCells = edgeCells,
+            isActive = function(q, r) return editor.hex:isActiveHex(q, r) end,
+            getNeighbors = function(q, r) return editor.hex:getNeighbors(q, r) end,
+            target = love.math.random(waterSizes[editor.genSettings.elevSize], waterSizes[editor.genSettings.elevSize] + 6),
+            random = love.math.random,
+        })
+        for _, c in ipairs(cells) do
+            local key = c[1] .. "," .. c[2]
+            editor.terrainData[key] = "water"
+            editor.entityData[key] = nil
+            editor.elevationData[key] = nil
+        end
+    end
+
+    -- === Train tunnels: embedded in the left/right boundary walls, connected by railway ===
+    -- Interconnected with objectives: railway infrastructure only when the primary
+    -- objective is Auto or "Protect Railway Infrastructure".
+    local needs = getObjectiveContent()
+    local railTrackCells = {}
+    if needs.railway then
+    -- Strictly straight line: in this grid a straight left<->right crossing is only possible diagonally
+    local railLines = {
+        {{0,2},{1,2},{2,3},{3,3},{4,4},{5,4},{6,5},{7,5},{8,6}},
+        {{0,3},{1,3},{2,4},{3,4},{4,5},{5,5},{6,6},{7,6},{8,7}},
+        {{0,6},{1,5},{2,5},{3,4},{4,4},{5,3},{6,3},{7,2},{8,2}},
+    }
+    local line = railLines[love.math.random(1, #railLines)]
+    local leftCell, rightCell = line[1], line[#line]
+    local leftWall = editor.entityData["0,4"]
+    local rightWall = editor.entityData["8,4"]
+    local function removeCell(wall, cell)
+        if not wall then return end
+        for i = #wall.cells, 1, -1 do
+            if wall.cells[i][1] == cell[1] and wall.cells[i][2] == cell[2] then
+                table.remove(wall.cells, i)
+                return
+            end
+        end
+    end
+    removeCell(leftWall, leftCell)
+    removeCell(rightWall, rightCell)
+    local leftTunnel, rightTunnel = "TunnelEntrance", "TunnelExit"
+    -- direction 1 = down-right (+30 deg), 2 = up-right (-30 deg); travel direction
+    local dir = (leftCell[2] < rightCell[2]) and 1 or 2
+    if love.math.random() < 0.5 then
+        leftTunnel, rightTunnel = rightTunnel, leftTunnel
+        dir = (dir == 1 and 5 or 4) -- opposite of 1 is 5, opposite of 2 is 4
+    end
+    -- tunnel endpoints are never on the walls' home row 4, so no re-home needed
+    editor.entityData[leftCell[1] .. "," .. leftCell[2]] = leftTunnel
+    editor.entityData[rightCell[1] .. "," .. rightCell[2]] = rightTunnel
+    if leftWall then editor.entityData["0,4"] = leftWall end
+    if rightWall then editor.entityData["8,4"] = rightWall end
+    for _, c in ipairs(line) do
+        editor.upperTerrainData[c[1] .. "," .. c[2]] = "railway:" .. dir
+        railTrackCells[#railTrackCells + 1] = {c[1], c[2]}
+    end
+    end -- needs.railway
+
     -- === Elevation: organic cluster growing down from the top ===
-    if not editor.genSettings.noElevation then
+    -- Railway corridor must stay flat: no elevation on the track or its neighbors
+    local keepLow = {}
+    for _, c in ipairs(railTrackCells) do
+        keepLow[c[1] .. "," .. c[2]] = true
+        for _, nb in ipairs(editor.hex:getNeighbors(c[1], c[2])) do
+            if editor.hex:isActiveHex(nb.q, nb.r) then
+                keepLow[nb.q .. "," .. nb.r] = true
+            end
+        end
+    end
+    if not editor.genSettings.noElevation and not editor.genSettings.water then
     -- Seed: all active cells at r=0..1 are guaranteed high ground.
     local queue = {}
     for q = 0, editor.hex.gridWidth - 1 do
         for r0 = 0, 1 do
             local key = q .. "," .. r0
-            if editor.hex:isActiveHex(q, r0) then
+            if editor.hex:isActiveHex(q, r0) and not keepLow[key] then
                 editor.elevationData[key] = true
                 if r0 == 1 then table.insert(queue, {q, 1}) end
             end
@@ -457,7 +563,7 @@ function editor.generateMap()
         local found = false
         for _, nb in ipairs(neighbors) do
             local nk = nb.q .. "," .. nb.r
-            if not visited[nk] and editor.hex:isActiveHex(nb.q, nb.r) and nb.r >= cur[2] then
+            if not visited[nk] and editor.hex:isActiveHex(nb.q, nb.r) and not keepLow[nk] and nb.r >= cur[2] then
                 local reject = ({0.4, 0.25, 0.1})[editor.genSettings.elevWidth] -- narrow=more gaps
                 if nb.r > cur[2] and love.math.random() < reject then
                     -- skip this neighbor, try next
@@ -478,7 +584,7 @@ function editor.generateMap()
         for r = 0, editor.hex.gridHeight - 2 do
             local key = q .. "," .. r
             local belowKey = q .. "," .. (r + 1)
-            if not editor.elevationData[key] and editor.elevationData[belowKey] then
+            if not editor.elevationData[key] and editor.elevationData[belowKey] and not keepLow[key] then
                 editor.elevationData[key] = true
             end
         end
@@ -487,7 +593,7 @@ function editor.generateMap()
     for k, v in pairs(editor.entityData) do
         if type(v) == "table" and v.cells then
             for _, c in ipairs(v.cells) do
-                if c[2] <= 2 then
+                if c[2] <= 2 and not keepLow[c[1] .. "," .. c[2]] then
                     editor.elevationData[c[1] .. "," .. c[2]] = true
                 end
             end
@@ -503,7 +609,8 @@ function editor.generateMap()
             if editor.hex:isActiveHex(q, r) and not editor.entityData[key]
                 and not editor.elevationData[key]
                 and editor.terrainData[key] ~= "water"
-                and editor.terrainData[key] ~= "stone" then
+                and editor.terrainData[key] ~= "stone"
+                and not (editor.upperTerrainData[key] or ""):match("^railway") then
                 local n3 = love.math.noise(q * 0.6, r * 0.6, seed * 0.02 + 1)
                 if n3 > 0.3 then
                     buildingCandidates[#buildingCandidates + 1] = {q = q, r = r, score = n3}
@@ -528,7 +635,8 @@ function editor.generateMap()
             local key = q .. "," .. r
             if editor.hex:isActiveHex(q, r) and not editor.entityData[key]
                 and editor.terrainData[key] ~= "water"
-                and editor.terrainData[key] ~= "stone" then
+                and editor.terrainData[key] ~= "stone"
+                and not (editor.upperTerrainData[key] or ""):match("^railway") then
                 local n4 = love.math.noise(q * 0.7 + 5, r * 0.7 + 5, seed * 0.02 + 2)
                 if n4 > 0.45 then
                     mountainCandidates[#mountainCandidates + 1] = {q = q, r = r, score = n4}
@@ -542,6 +650,34 @@ function editor.generateMap()
         local c = mountainCandidates[i]
         local mkey = c.q .. "," .. c.r
         editor.entityData[mkey] = "WeakMountain"
+    end
+
+    -- === Objective content: place what the chosen objectives require ===
+    local placements = {}
+    if needs.caravans then placements.Caravan = 2; placements.Blockpost = 1 end
+    if needs.blockpost then placements.Blockpost = 1 end
+    if needs.tower then placements.Tower = 1 end
+    for name, count in pairs(placements) do
+        local candidates = {}
+        for q = 0, editor.hex.gridWidth - 1 do
+            for r = 0, editor.hex.gridHeight - 1 do
+                local key = q .. "," .. r
+                if editor.hex:isActiveHex(q, r) and not editor.entityData[key]
+                    and not editor.elevationData[key]
+                    and editor.terrainData[key] ~= "water"
+                    and editor.terrainData[key] ~= "stone"
+                    and not (editor.upperTerrainData[key] or ""):match("^railway") then
+                    candidates[#candidates + 1] = {q = q, r = r}
+                end
+            end
+        end
+        for i = #candidates, 2, -1 do
+            local j = love.math.random(1, i)
+            candidates[i], candidates[j] = candidates[j], candidates[i]
+        end
+        for i = 1, math.min(count, #candidates) do
+            editor.entityData[candidates[i].q .. "," .. candidates[i].r] = name
+        end
     end
 
     editor.fileName = "generated_" .. seed
@@ -565,7 +701,7 @@ function editor.init()
         "flat",
         EDITOR_ACTIVE_ROWS
     )
-    editor.hex:centerOnScreen(love.graphics.getWidth() / (editor.dpiScale or 1), love.graphics.getHeight() / (editor.dpiScale or 1))
+    editor.hex:centerOnScreen(love.graphics.getWidth() / editor.getScale(), love.graphics.getHeight() / editor.getScale())
     -- Shift grid left to make room for palette
     editor.hex.offsetX = editor.hex.offsetX - 210
     boundaryGroupCache = nil
@@ -592,7 +728,11 @@ function editor.init()
         noElevation = false,
         elevSize = 2,     -- 1=small, 2=medium, 3=large
         elevWidth = 2,    -- 1=narrow, 2=medium, 3=wide
+        water = false,    -- one water body touching map edge; incompatible with highgrounds
     }
+    -- UI scale: base enlargement + manual Ctrl+/- zoom (Ctrl+0 resets)
+    editor.uiScale = 1.25
+    editor.manualZoom = 1
 
     -- Dynamic entity palette from environment.lua
     local env = require("entity.environment")
@@ -754,7 +894,7 @@ function editor.loadMap(data)
         data.activeRows
     )
     boundaryGroupCache = nil
-    editor.hex:centerOnScreen(love.graphics.getWidth() / (editor.dpiScale or 1), love.graphics.getHeight() / (editor.dpiScale or 1))
+    editor.hex:centerOnScreen(love.graphics.getWidth() / editor.getScale(), love.graphics.getHeight() / editor.getScale())
     editor.hex.offsetX = editor.hex.offsetX - 200
 
     if data.terrain then
@@ -1166,6 +1306,8 @@ function editor.paintCell(q, r)
     elseif editor.currentLayer == editor.LAYER_UPPER_TERRAIN then
         if editor.eraser then
             editor.upperTerrainData[k] = nil
+        elseif editor.selectedUpperTerrain == "railway" then
+            editor.upperTerrainData[k] = "railway:" .. editor.directionIndex
         else
             editor.upperTerrainData[k] = editor.selectedUpperTerrain
         end
@@ -1176,6 +1318,16 @@ end
 -- INPUT
 -- ============================================================
 
+-- Manual zoom (Ctrl+/-) applied on top of DPI scale; also scales the draw canvas.
+function editor.getManualScale()
+    return (editor.uiScale or 1) * (editor.manualZoom or 1)
+end
+
+-- Full scale: layout space divisor AND mouse coordinate divisor.
+function editor.getScale()
+    return (editor.dpiScale or 1) * editor.getManualScale()
+end
+
 -- Palette layout constants
 local PAL_X = 0
 local PAL_W = 0
@@ -1185,8 +1337,8 @@ local PAL_TILE_GAP = 8
 local PAL_COLS = 3
 
 function editor.getPaletteRect()
-    local lw = love.graphics.getWidth() / (editor.dpiScale or 1)
-    local lh = love.graphics.getHeight() / (editor.dpiScale or 1)
+    local lw = love.graphics.getWidth() / editor.getScale()
+    local lh = love.graphics.getHeight() / editor.getScale()
     PAL_W = 420
     PAL_X = lw - PAL_W
     return PAL_X, 0, PAL_W, lh
@@ -1229,19 +1381,18 @@ end
 
 function editor.getButtonRects()
     local px, _, pw, _ = editor.getPaletteRect()
-    local lh = love.graphics.getHeight() / (editor.dpiScale or 1)
+    local lh = love.graphics.getHeight() / editor.getScale()
     local btnW = pw - 20
     local btnH = PAL_BTN_H
     local btnX = px + 10
     local btnGap = 8
-    local baseY = lh - (btnH + btnGap) * 6 - 20
+    local baseY = lh - (btnH + btnGap) * 5 - 20
     return {
         save     = { x = btnX, y = baseY,               w = btnW, h = btnH },
         load     = { x = btnX, y = baseY + btnH + btnGap, w = btnW, h = btnH },
         eraser   = { x = btnX, y = baseY + (btnH + btnGap) * 2, w = btnW, h = btnH },
         elevation = { x = btnX, y = baseY + (btnH + btnGap) * 3, w = btnW, h = btnH },
-        generate = { x = btnX, y = baseY + (btnH + btnGap) * 4, w = btnW, h = btnH },
-        back     = { x = btnX, y = baseY + (btnH + btnGap) * 5, w = btnW, h = btnH },
+        back     = { x = btnX, y = baseY + (btnH + btnGap) * 4, w = btnW, h = btnH },
     }
 end
 
@@ -1252,8 +1403,54 @@ function editor.mousepressed(x, y, button)
     local eg2 = editor._gsElevToggle
     if eg2 and x >= eg2.x and x <= eg2.x + eg2.w and y >= eg2.y and y <= eg2.y + eg2.h then
         editor.genSettings.noElevation = not editor.genSettings.noElevation
+        if not editor.genSettings.noElevation then editor.genSettings.water = false end
         return
     end
+    local wg2 = editor._gsWaterToggle
+    if wg2 and x >= wg2.x and x <= wg2.x + wg2.w and y >= wg2.y and y <= wg2.y + wg2.h then
+        editor.genSettings.water = not editor.genSettings.water
+        if editor.genSettings.water then editor.genSettings.noElevation = true end
+        return
+    end
+    local genBtn = editor._gsGenerateRect
+    if genBtn and x >= genBtn.x and x <= genBtn.x + genBtn.w and y >= genBtn.y and y <= genBtn.y + genBtn.h then
+        editor.pushUndo()
+        editor.generateMap()
+        return
+    end
+
+    -- Objective cycling (merged panel)
+    local priR = editor._gsPriRect
+    if priR and x >= priR.x and x <= priR.x + priR.w and y >= priR.y and y <= priR.y + priR.h then
+        local idx = 1
+        for i, opt in ipairs(editor.primaryObjectiveOptions) do
+            if opt.id == editor.objectivePrimary then idx = i; break end
+        end
+        editor.objectivePrimary = editor.primaryObjectiveOptions[(idx % #editor.primaryObjectiveOptions) + 1].id
+        return
+    end
+    local function cycleSecondary(slot)
+        local sRect = slot == 1 and editor._gsSec1Rect or editor._gsSec2Rect
+        if not sRect or x < sRect.x or x > sRect.x + sRect.w or y < sRect.y or y > sRect.y + sRect.h then return false end
+        local idx = 1
+        for i, opt in ipairs(editor.secondaryObjectiveOptions) do
+            if opt.id == editor.objectiveSecondaries[slot] then idx = i; break end
+        end
+        local newId = editor.secondaryObjectiveOptions[(idx % #editor.secondaryObjectiveOptions) + 1].id
+        if newId then
+            editor.objectiveSecondaries[slot] = newId
+        else
+            editor.objectiveSecondaries[slot] = nil
+            if slot == 1 and editor.objectiveSecondaries[2] then
+                editor.objectiveSecondaries[1] = editor.objectiveSecondaries[2]
+                editor.objectiveSecondaries[2] = nil
+            end
+        end
+        return true
+    end
+    if cycleSecondary(1) then return end
+    if cycleSecondary(2) then return end
+
     for i = 1, 3 do
         local r2 = (editor._gsSizeRects or {})[i]
         if r2 and x >= r2.x and x <= r2.x + r2.w and y >= r2.y and y <= r2.y + r2.h then
@@ -1325,73 +1522,8 @@ function editor.mousepressed(x, y, button)
             end
         end
 
-        -- Objectives cycling
-        local btns = editor.getButtonRects()
-        local nameY = btns.save.y - 40
-        local toolY = nameY - 30
-        local objY = toolY - 55
-        local font = love.graphics.getFont()
-
-        local function hitY(row)
-            return objY + 15 + row * 15
-        end
-
-        -- Primary
-        local priName = "Auto"
-        local priIdx = 1
-        for i, opt in ipairs(editor.primaryObjectiveOptions) do
-            if opt.id == editor.objectivePrimary then priIdx = i; priName = opt.name; break end
-        end
-        local priText = "Pri: [" .. priName .. "]"
-        if y >= hitY(0) and y <= hitY(0) + 14 and x >= px + 10 and x <= px + 10 + font:getWidth(priText) then
-            local nextIdx = (priIdx % #editor.primaryObjectiveOptions) + 1
-            editor.objectivePrimary = editor.primaryObjectiveOptions[nextIdx].id
-            return
-        end
-
-        -- Sec1
-        local sec1Id = editor.objectiveSecondaries[1]
-        local sec1Idx = 1
-        for i, opt in ipairs(editor.secondaryObjectiveOptions) do
-            if opt.id == sec1Id then sec1Idx = i; break end
-        end
-        local sec1Name = editor.secondaryObjectiveOptions[sec1Idx].name
-        local sec1Text = "Sec1: [" .. sec1Name .. "]"
-        if y >= hitY(1) and y <= hitY(1) + 14 and x >= px + 10 and x <= px + 10 + font:getWidth(sec1Text) then
-            local nextIdx = (sec1Idx % #editor.secondaryObjectiveOptions) + 1
-            local newId = editor.secondaryObjectiveOptions[nextIdx].id
-            if newId then
-                editor.objectiveSecondaries[1] = newId
-            else
-                editor.objectiveSecondaries[1] = nil
-                if editor.objectiveSecondaries[2] then
-                    editor.objectiveSecondaries[1] = editor.objectiveSecondaries[2]
-                    editor.objectiveSecondaries[2] = nil
-                end
-            end
-            return
-        end
-
-        -- Sec2
-        local sec2Id = editor.objectiveSecondaries[2]
-        local sec2Idx = 1
-        for i, opt in ipairs(editor.secondaryObjectiveOptions) do
-            if opt.id == sec2Id then sec2Idx = i; break end
-        end
-        local sec2Name = editor.secondaryObjectiveOptions[sec2Idx].name
-        local sec2Text = "Sec2: [" .. sec2Name .. "]"
-        if y >= hitY(2) and y <= hitY(2) + 14 and x >= px + 10 and x <= px + 10 + font:getWidth(sec2Text) then
-            local nextIdx = (sec2Idx % #editor.secondaryObjectiveOptions) + 1
-            local newId = editor.secondaryObjectiveOptions[nextIdx].id
-            if newId then
-                editor.objectiveSecondaries[2] = newId
-            else
-                editor.objectiveSecondaries[2] = nil
-            end
-            return
-        end
-
         -- Buttons
+        local btns = editor.getButtonRects()
         if x >= btns.save.x and x <= btns.save.x + btns.save.w and y >= btns.save.y and y <= btns.save.y + btns.save.h then
             editor.saveMap()
             return
@@ -1409,11 +1541,6 @@ function editor.mousepressed(x, y, button)
             editor.elevBrush = not editor.elevBrush
             editor.eraser = false
             editor.elevMode = editor.ELEV_NORMAL
-            return
-        end
-        if x >= btns.generate.x and x <= btns.generate.x + btns.generate.w and y >= btns.generate.y and y <= btns.generate.y + btns.generate.h then
-            editor.pushUndo()
-            editor.generateMap()
             return
         end
 
@@ -1438,7 +1565,7 @@ function editor.mousepressed(x, y, button)
 
     -- Map list dropdown: click on item or outside closes it
     if editor.mapListOpen then
-        local lw = love.graphics.getWidth() / (editor.dpiScale or 1)
+        local lw = love.graphics.getWidth() / editor.getScale()
         local btnRects = editor.getButtonRects()
         local listW = 200
         local listX = lw - 400 - listW - 10
@@ -1548,6 +1675,18 @@ function editor.keypressed(key)
         elseif key == "g" then
             editor.pushUndo()
             editor.generateMap()
+        elseif key == "kp_add" or key == "=" then
+            editor.manualZoom = math.min(2.5, (editor.manualZoom or 1) + 0.1)
+            editor.message = string.format("UI zoom: %.2fx", editor.manualZoom)
+            editor.messageTimer = 1.5
+        elseif key == "kp_subtract" or key == "-" then
+            editor.manualZoom = math.max(0.75, (editor.manualZoom or 1) - 0.1)
+            editor.message = string.format("UI zoom: %.2fx", editor.manualZoom)
+            editor.messageTimer = 1.5
+        elseif key == "0" then
+            editor.manualZoom = 1
+            editor.message = "UI zoom: 1.00x"
+            editor.messageTimer = 1.5
         end
         return
     end
@@ -1580,6 +1719,8 @@ function editor.keypressed(key)
             if isDirectionalEntity(name) then
                 editor.directionIndex = editor.directionIndex % 6 + 1
             end
+        elseif editor.currentLayer == editor.LAYER_UPPER_TERRAIN and editor.selectedUpperTerrain == "railway" then
+            editor.directionIndex = editor.directionIndex % 6 + 1
         end
     elseif key == "escape" then
         if editor.mapListOpen then
@@ -1638,10 +1779,10 @@ local terrainColors = {
     snow             = {0.9, 0.95, 1},
     swamp            = {0.45, 0.65, 0.35},
     water            = {0.2, 0.5, 0.85},
-    railway          = {0.35, 0.3, 0.25},
 }
 
 local upperTerrainColors = {
+    railway          = {0.35, 0.3, 0.25},
     mountain_rubble  = {0.42, 0.38, 0.33},
     building_rubble  = {0.5, 0.33, 0.18},
 }
@@ -1649,8 +1790,12 @@ local upperTerrainColors = {
 function editor.draw()
     if not editor.hex then return end
 
-    local lw = love.graphics.getWidth() / (editor.dpiScale or 1)
-    local lh = love.graphics.getHeight() / (editor.dpiScale or 1)
+    -- Scale the whole editor canvas (UI, fonts, map) by the manual zoom
+    love.graphics.push()
+    love.graphics.scale(editor.getManualScale(), editor.getManualScale())
+
+    local lw = love.graphics.getWidth() / editor.getScale()
+    local lh = love.graphics.getHeight() / editor.getScale()
     local px, py, pw, ph = editor.getPaletteRect()
 
     -- Draw hex grid
@@ -1831,7 +1976,8 @@ function editor.draw()
         end
         local ut = editor.upperTerrainData[hk]
         if ut then
-            lines[#lines + 1] = "Upper: " .. ut
+            local utDir = ut:match(":(%d+)$")
+            lines[#lines + 1] = "Upper: " .. (utDir and (ut:gsub(":%d+$", "") .. " [dir=" .. utDir .. "]") or ut)
         end
         editor.tooltipFont = editor.tooltipFont or love.graphics.newFont(24)
         local font = editor.tooltipFont
@@ -1846,7 +1992,7 @@ function editor.draw()
         end
         local tw, th = maxW + pad * 2, #lines * lineH + pad * 2
         local tx = 14
-        local ty = love.graphics.getHeight() / (editor.dpiScale or 1) - th - 14
+        local ty = love.graphics.getHeight() / editor.getScale() - th - 14
         love.graphics.setColor(0.08, 0.08, 0.14, 0.92)
         love.graphics.rectangle("fill", tx, ty, tw, th, 6)
         love.graphics.setColor(0.4, 0.4, 0.5, 1)
@@ -1996,32 +2142,8 @@ function editor.draw()
         love.graphics.print(name, ix + PAL_TILE_SIZE / 2 - nw / 2, iy + PAL_TILE_SIZE - 14)
     end
 
-    -- Objectives section
-    local btns = editor.getButtonRects()
-    local nameY = btns.save.y - 40
-    local toolY = nameY - 30
-    local objY = toolY - 55
-
-    local function optionName(options, id)
-        for _, opt in ipairs(options) do
-            if opt.id == id then return opt.name end
-        end
-        return "Auto"
-    end
-
-    love.graphics.setColor(0.5, 0.5, 0.7, 1)
-    love.graphics.print("Objectives:", px + 10, objY)
-
-    local priName = optionName(editor.primaryObjectiveOptions, editor.objectivePrimary)
-    love.graphics.setColor(0.8, 0.8, 1, 1)
-    love.graphics.print("Pri: [" .. priName .. "]", px + 10, objY + 15)
-
-    local sec1Name = optionName(editor.secondaryObjectiveOptions, editor.objectiveSecondaries[1])
-    local sec2Name = optionName(editor.secondaryObjectiveOptions, editor.objectiveSecondaries[2])
-    love.graphics.print("Sec1: [" .. sec1Name .. "]", px + 10, objY + 30)
-    love.graphics.print("Sec2: [" .. sec2Name .. "]", px + 10, objY + 45)
-
     -- Buttons
+    local btns = editor.getButtonRects()
     local function drawBtn(rect, label, highlight)
         love.graphics.setColor(highlight and 0.4 or 0.25, highlight and 0.6 or 0.35, highlight and 0.4 or 0.25, 0.9)
         love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 4)
@@ -2033,58 +2155,106 @@ function editor.draw()
     drawBtn(btns.load, "Load", false)
     drawBtn(btns.eraser, editor.eraser and "[ERASER ON]" or "Eraser [E]", editor.eraser)
     drawBtn(btns.elevation, editor.elevBrush and "[HIGH ON]" or "Highground [G]", editor.elevBrush)
-    drawBtn(btns.generate, "Generate [Ctrl+G]", false)
     drawBtn(btns.back, "Back [Esc]", false)
 
-    -- ===== GEN SETTINGS (top-left) =====
+    -- ===== GENERATION + OBJECTIVES (merged panel, top-left) =====
     local gs = editor.genSettings
     local gx, gy = 10, 10
+    local gPanelW, gPanelH = 300, 222
     love.graphics.setColor(0.08, 0.08, 0.14, 0.9)
-    love.graphics.rectangle("fill", gx, gy, 300, 170, 6)
+    love.graphics.rectangle("fill", gx, gy, gPanelW, gPanelH, 6)
     love.graphics.setColor(0.4, 0.4, 0.5, 1)
     love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", gx, gy, 300, 170, 6)
-    local font = love.graphics.getFont()
+    love.graphics.rectangle("line", gx, gy, gPanelW, gPanelH, 6)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("Generation [Ctrl+G]", gx + 10, gy + 8)
-    -- Elevation toggle
+    love.graphics.print("Generation + Objectives [Ctrl+G]", gx + 10, gy + 8)
+
+    -- Objective rows (click to cycle)
+    local function optionName(options, id)
+        for _, opt in ipairs(options) do
+            if opt.id == id then return opt.name end
+        end
+        return "Auto"
+    end
+    love.graphics.setColor(0.8, 0.8, 1, 1)
+    love.graphics.print("Pri: [" .. optionName(editor.primaryObjectiveOptions, editor.objectivePrimary) .. "]", gx + 10, gy + 26)
+    editor._gsPriRect = {x = gx + 10, y = gy + 24, w = gPanelW - 20, h = 16}
+    love.graphics.print("Sec1: [" .. optionName(editor.secondaryObjectiveOptions, editor.objectiveSecondaries[1]) .. "]", gx + 10, gy + 44)
+    editor._gsSec1Rect = {x = gx + 10, y = gy + 42, w = gPanelW - 20, h = 16}
+    love.graphics.print("Sec2: [" .. optionName(editor.secondaryObjectiveOptions, editor.objectiveSecondaries[2]) .. "]", gx + 10, gy + 62)
+    editor._gsSec2Rect = {x = gx + 10, y = gy + 60, w = gPanelW - 20, h = 16}
+
+    -- What the chosen objectives imply for generation
+    local genNeeds = getObjectiveContent()
+    local hint = {}
+    if genNeeds.railway then table.insert(hint, "rail+tunnels+train") end
+    if genNeeds.caravans then table.insert(hint, "caravans+blockpost") end
+    if genNeeds.blockpost and not genNeeds.caravans then table.insert(hint, "blockpost") end
+    if genNeeds.tower then table.insert(hint, "tower") end
+    if #hint > 0 then
+        love.graphics.setColor(0.7, 0.9, 0.7, 1)
+        love.graphics.print("Gen: " .. table.concat(hint, ", "), gx + 10, gy + 80)
+    end
+
+    -- Elevation / Water toggles (mutually exclusive)
     local elevOn = not gs.noElevation
     love.graphics.setColor(elevOn and 0.25 or 0.12, elevOn and 0.45 or 0.12, elevOn and 0.25 or 0.12, 0.9)
-    love.graphics.rectangle("fill", gx + 10, gy + 28, 160, 22, 4)
+    love.graphics.rectangle("fill", gx + 10, gy + 94, 140, 22, 4)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print(elevOn and "[ON] Elevation" or "[OFF] Elevation", gx + 16, gy + 31)
-    editor._gsElevToggle = {x = gx + 10, y = gy + 28, w = 160, h = 22}
-    if elevOn then
+    love.graphics.print(elevOn and "[ON] Elevation" or "[OFF] Elevation", gx + 16, gy + 97)
+    editor._gsElevToggle = {x = gx + 10, y = gy + 94, w = 140, h = 22}
+    love.graphics.setColor(gs.water and 0.2 or 0.12, gs.water and 0.45 or 0.12, gs.water and 0.55 or 0.12, 0.9)
+    love.graphics.rectangle("fill", gx + 158, gy + 94, 132, 22, 4)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(gs.water and "[ON] Water" or "[OFF] Water", gx + 164, gy + 97)
+    editor._gsWaterToggle = {x = gx + 158, y = gy + 94, w = 132, h = 22}
+
+    if gs.water or elevOn then
         local sizeLabels = {"Small", "Medium", "Large"}
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print("Size:", gx + 10, gy + 58)
+        love.graphics.print("Size:", gx + 10, gy + 118)
         for i = 1, 3 do
             local bx2 = gx + 60 + (i - 1) * 66
             local sel2 = i == gs.elevSize
             love.graphics.setColor(sel2 and 0.3 or 0.15, sel2 and 0.5 or 0.15, sel2 and 0.6 or 0.2, 1)
-            love.graphics.rectangle("fill", bx2, gy + 56, 60, 22, 3)
+            love.graphics.rectangle("fill", bx2, gy + 116, 60, 22, 3)
             love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.print(sizeLabels[i], bx2 + 8, gy + 58)
+            love.graphics.print(sizeLabels[i], bx2 + 8, gy + 118)
             editor._gsSizeRects = editor._gsSizeRects or {}
-            editor._gsSizeRects[i] = {x = bx2, y = gy + 56, w = 60, h = 22}
+            editor._gsSizeRects[i] = {x = bx2, y = gy + 116, w = 60, h = 22}
         end
+    end
+    if elevOn then
         local widthLabels = {"Narrow", "Medium", "Wide"}
-        love.graphics.print("Width:", gx + 10, gy + 86)
+        love.graphics.print("Width:", gx + 10, gy + 146)
         for i = 1, 3 do
             local bx3 = gx + 60 + (i - 1) * 66
             local sel3 = i == gs.elevWidth
             love.graphics.setColor(sel3 and 0.3 or 0.15, sel3 and 0.5 or 0.15, sel3 and 0.6 or 0.2, 1)
-            love.graphics.rectangle("fill", bx3, gy + 84, 60, 22, 3)
+            love.graphics.rectangle("fill", bx3, gy + 144, 60, 22, 3)
             love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.print(widthLabels[i], bx3 + 8, gy + 86)
+            love.graphics.print(widthLabels[i], bx3 + 8, gy + 146)
             editor._gsWidthRects = editor._gsWidthRects or {}
-            editor._gsWidthRects[i] = {x = bx3, y = gy + 84, w = 60, h = 22}
+            editor._gsWidthRects[i] = {x = bx3, y = gy + 144, w = 60, h = 22}
         end
         local estSizes = {12, 22, 34}
         local estWidths = {[1] = 0.6, [2] = 0.85, [3] = 1.0}
         local est = math.floor(estSizes[gs.elevSize] * estWidths[gs.elevWidth])
-        love.graphics.print(("Est. cells: ~%d"):format(est), gx + 10, gy + 120)
+        love.graphics.print(("Est. cells: ~%d"):format(est), gx + 10, gy + 172)
+    elseif gs.water then
+        local estSizes = {12, 22, 34}
+        local est = estSizes[gs.elevSize]
+        love.graphics.print(("Est. cells: ~%d"):format(est), gx + 10, gy + 172)
     end
+
+    -- Generate button
+    love.graphics.setColor(0.25, 0.45, 0.7, 1)
+    love.graphics.rectangle("fill", gx + 10, gy + 190, gPanelW - 20, 24, 4)
+    love.graphics.setColor(1, 1, 1, 1)
+    local genLabel = "Generate [Ctrl+G]"
+    local glw = font:getWidth(genLabel)
+    love.graphics.print(genLabel, gx + 10 + (gPanelW - 20) / 2 - glw / 2, gy + 195)
+    editor._gsGenerateRect = {x = gx + 10, y = gy + 190, w = gPanelW - 20, h = 24}
 
     -- File name input area
     local nameY = btns.save.y - 40
@@ -2121,6 +2291,9 @@ function editor.draw()
             toolText = toolText .. " | Dir: " .. editor.directionIndex .. " [R]"
         end
     end
+    if editor.currentLayer == editor.LAYER_UPPER_TERRAIN and editor.selectedUpperTerrain == "railway" and not editor.eraser then
+        toolText = toolText .. " | Dir: " .. editor.directionIndex .. " [R]"
+    end
 if editor.currentLayer == editor.LAYER_TERRAIN and editor.elevBrush then
          toolText = toolText .. " | Highground [g]"
     end
@@ -2154,8 +2327,9 @@ if editor.currentLayer == editor.LAYER_TERRAIN and editor.elevBrush then
             local iy = listY + (i - 1) * listItemH
             -- Hover highlight
             local mx, my = love.mouse.getPosition()
-            mx = mx / (editor.dpiScale or 1)
-            my = my / (editor.dpiScale or 1)
+            local escale = editor.getScale()
+            mx = mx / escale
+            my = my / escale
             if mx >= listX and mx <= listX + listW and my >= iy and my <= iy + listItemH then
                 love.graphics.setColor(0.3, 0.5, 0.7, 0.6)
                 love.graphics.rectangle("fill", listX, iy, listW, listItemH)
@@ -2167,6 +2341,8 @@ if editor.currentLayer == editor.LAYER_TERRAIN and editor.elevBrush then
         end
         love.graphics.setLineWidth(1)
     end
+
+    love.graphics.pop()
 end
 
 function editor.update(dt)
@@ -2176,9 +2352,9 @@ function editor.update(dt)
     -- Update hover
     if editor.hex then
         local mx, my = love.mouse.getPosition()
-        local dpiScale = editor.dpiScale or 1
-        mx = mx / dpiScale
-        my = my / dpiScale
+        local escale = editor.getScale()
+        mx = mx / escale
+        my = my / escale
         local hq, hr = editor.hex:pixelToHex(mx, my)
         if editor.hex:isActiveHex(hq, hr) then
             editor.hex.hoverQ, editor.hex.hoverR = hq, hr

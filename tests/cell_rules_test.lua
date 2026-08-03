@@ -256,6 +256,33 @@ local suite = {
                 return assertEq(ok, false, "obstacle blocks mover")
             end,
         },
+        {
+            name = "isRailway: plain railway upper terrain",
+            fn = function()
+                local upper = { [2] = { [2] = "railway" } }
+                return assertEq(cell_rules.isRailway(2, 2, upper), true, "railway recognized")
+            end,
+        },
+        {
+            name = "isRailway: railway with direction suffix",
+            fn = function()
+                local upper = { [2] = { [2] = "railway:4" } }
+                return assertEq(cell_rules.isRailway(2, 2, upper), true, "railway:4 recognized")
+            end,
+        },
+        {
+            name = "isRailway: non-railway upper terrain is not railway",
+            fn = function()
+                local upper = { [2] = { [2] = "mountain_rubble" } }
+                return assertEq(cell_rules.isRailway(2, 2, upper), false, "rubble is not railway")
+            end,
+        },
+        {
+            name = "isRailway: empty cell is not railway",
+            fn = function()
+                return assertEq(cell_rules.isRailway(2, 2, {}), false, "empty is not railway")
+            end,
+        },
     },
 }
 

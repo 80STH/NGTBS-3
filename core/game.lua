@@ -7,6 +7,7 @@ local objectives = require("system.objectives")
 local trains = require("system.trains")
 local Entity = require("entity.entity")
 local log = require("util.log")
+local cell_rules = require("grid.cell_rules")
 
 _G.graveyard = {}
 
@@ -219,16 +220,18 @@ function restartGame(mapPath)
             local entranceData = {{2,2},{2,6}}
             local exitData = {{6,2},{6,6}}
             local railCells = {{2,2},{3,2},{4,2},{5,2},{6,2},{2,6},{3,6},{4,6},{5,6},{6,6}}
+            local railDirs = {1,2,1,2,2, 1,2,1,2,2}
 
-            for _, cell in ipairs(railCells) do
+            for i, cell in ipairs(railCells) do
                 local q, r = cell[1], cell[2]
-                if not terrainMap[q] then terrainMap[q] = {} end
-                terrainMap[q][r] = "railway"
+                if not upperTerrainMap[q] then upperTerrainMap[q] = {} end
+                upperTerrainMap[q][r] = "railway:" .. railDirs[i]
             end
 
             for _, td in ipairs(entranceData) do
                 local tunnel = Entity.new("TunnelEntrance", Entity.TYPES.BUILDING, td[1], td[2], 2, false, 0, nil, nil, {})
                 tunnel.isObjective = true
+                tunnel.indestructible = true
                 tunnel.sprite = envMod.generateBuildingSprite("TunnelEntrance", tileW, tileH)
                 table.insert(entities, tunnel)
                 log.debugf("game", "Placed TunnelEntrance at (%d,%d)", td[1], td[2])
@@ -236,6 +239,7 @@ function restartGame(mapPath)
             for _, td in ipairs(exitData) do
                 local tunnel = Entity.new("TunnelExit", Entity.TYPES.BUILDING, td[1], td[2], 2, false, 0, nil, nil, {})
                 tunnel.isObjective = true
+                tunnel.indestructible = true
                 tunnel.sprite = envMod.generateBuildingSprite("TunnelExit", tileW, tileH)
                 table.insert(entities, tunnel)
                 log.debugf("game", "Placed TunnelExit at (%d,%d)", td[1], td[2])
@@ -482,7 +486,7 @@ function findRandomEmptyCells(count, excludeFn, qMin)
                 end
                 if not occupied then
                     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain ~= "water" and terrain ~= "railway" then
+                    if terrain ~= "water" and not cell_rules.isRailway(q, r) then
                         if not excludeFn or not excludeFn(q, r) then
                             if q >= qMin then
                                 table.insert(candidatesBias, {q = q, r = r})
@@ -541,7 +545,7 @@ function processDigSites()
             end
         end
         local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
-        if not occupied and terrain ~= "water" and terrain ~= "railway" and not status.hasNegativeHexStatus(dig.q, dig.r) then
+        if not occupied and terrain ~= "water" and not cell_rules.isRailway(dig.q, dig.r) and not status.hasNegativeHexStatus(dig.q, dig.r) then
             local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
             table.insert(entities, newEnemy)
             local x, y = hex:hexToPixel(dig.q, dig.r)

@@ -159,4 +159,11 @@ function cell_rules.isOccupied(q, r, mover, opts)
     return false
 end
 
+-- Is the cell covered by railway upper terrain ("railway" or "railway:<dir>")?
+function cell_rules.isRailway(q, r, upperTerrainMap)
+    local ut = upperTerrainMap or _G.upperTerrainMap
+    local v = ut and ut[q] and ut[q][r]
+    return v ~= nil and v:match("^railway") ~= nil
+end
+
 return cell_rules

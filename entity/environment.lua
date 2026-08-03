@@ -301,8 +301,8 @@ local gidToEntity = {
     [83] = { type = "character", name = "SummoningRod", isPlayable = false, maxHealth = 2, moveRange = 0, attacks = "summoningrod" },
     [48] = { type = "building",  name = "Caravan",   health = 1, moveRange = 1 },
     [77] = { type = "building",  name = "Blockpost", health = 2 },
-    [67] = { type = "building",  name = "TunnelEntrance", health = 2, isObjective = true },
-    [68] = { type = "building",  name = "TunnelExit",     health = 2, isObjective = true },
+    [67] = { type = "building",  name = "TunnelEntrance", health = 2, isObjective = true, indestructible = true },
+    [68] = { type = "building",  name = "TunnelExit",     health = 2, isObjective = true, indestructible = true },
     [74] = { type = "building",  name = "TrainCar",  health = 1, moveRange = 1 },
     [84] = { type = "building",  name = "MountainHouse", health = 2 },
     [85] = { type = "building",  name = "SmallMountainHouse", health = 1 },
@@ -702,6 +702,7 @@ function environment.loadNativeMap(data)
                             entity = Entity.new(def.name, Entity.TYPES.BUILDING, q, r, def.health, false, (def.moveRange or 0), nil, nil, {})
                             if def.waterWalker then entity.waterWalker = true end
                             if def.isObjective then entity.isObjective = true end
+                            if def.indestructible then entity.indestructible = true end
                         end
 
                         if entity then

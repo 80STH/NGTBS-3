@@ -1866,7 +1866,7 @@ function ui.drawCellTooltip(q, r, terrain, hex)
         end
     end
     if upperTerrain then
-        local upperName = upperTerrain:gsub("_", " "):gsub("^%l", string.upper)
+        local upperName = upperTerrain:gsub(":%d+$", ""):gsub("_", " "):gsub("^%l", string.upper)
         table.insert(content, { text = upperName, color = {0.7, 0.7, 0.7} })
         hasSpecial = true
     end

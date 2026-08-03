@@ -5,6 +5,7 @@ local Entity = require("entity.entity")
 local hex_utils = require("grid.hex_utils")
 local log = require("util.log")
 local env = require("entity.environment")
+local cell_rules = require("grid.cell_rules")
 local trains = {}
 
 local trainGroups = {}
@@ -17,7 +18,7 @@ function trains.isTrainCar(entity)
     return entity and (entity.name == "TrainCar" or entity.name == "Locomotive")
 end
 
-local function findRailPath(startQ, startR, endQ, endR, terrainMap, hex)
+local function findRailPath(startQ, startR, endQ, endR, upperMap, hex)
     if not hex then return nil end
     local path = {{q = startQ, r = startR}}
     local visited = {[startQ .. "," .. startR] = true}
@@ -30,12 +31,9 @@ local function findRailPath(startQ, startR, endQ, endR, terrainMap, hex)
         local nextCell = nil
         for _, n in ipairs(neighbors) do
             local key = n.q .. "," .. n.r
-            if not visited[key] and hex:isActiveHex(n.q, n.r) then
-                local t = terrainMap[n.q] and terrainMap[n.q][n.r]
-                if t == "railway" then
-                    nextCell = n
-                    break
-                end
+            if not visited[key] and hex:isActiveHex(n.q, n.r) and cell_rules.isRailway(n.q, n.r, upperMap) then
+                nextCell = n
+                break
             end
         end
         if not nextCell then return nil end
@@ -46,7 +44,7 @@ local function findRailPath(startQ, startR, endQ, endR, terrainMap, hex)
     return nil
 end
 
-function trains.findRailwayPaths(entities, terrainMap, hex)
+function trains.findRailwayPaths(entities, upperMap, hex)
     if not hex then return {} end
 
     local entrances = {}
@@ -65,7 +63,7 @@ function trains.findRailwayPaths(entities, terrainMap, hex)
     for _, entrance in ipairs(entrances) do
         for j, exitTunnel in ipairs(exits) do
             if not usedExits[j] then
-                local rawPath = findRailPath(entrance.q, entrance.r, exitTunnel.q, exitTunnel.r, terrainMap, hex)
+                local rawPath = findRailPath(entrance.q, entrance.r, exitTunnel.q, exitTunnel.r, upperMap, hex)
                 if rawPath and #rawPath >= 3 then
                     table.insert(paths, {tunnelA = entrance, tunnelB = exitTunnel, path = rawPath})
                     usedExits[j] = true
@@ -81,7 +79,7 @@ function trains.init(entities, terrainMap, hex)
     trainGroups = {}
     if not hex then return end
 
-    local paths = trains.findRailwayPaths(entities, terrainMap, hex)
+    local paths = trains.findRailwayPaths(entities, _G.upperTerrainMap or {}, hex)
     if #paths == 0 then
         log.info("trains", "No train paths found - no railway or tunnels on this map")
         return
@@ -237,6 +235,7 @@ local function convertTunnelToOccupied(tunnelEntity, entities, hex)
     local occ = Entity.new("OccupiedTunnel", Entity.TYPES.BUILDING, tunnelEntity.q, tunnelEntity.r, tunnelEntity.health, false, 0, nil, nil, {})
     occ.isObjective = true
     occ.isOccupiedTunnel = true
+    occ.indestructible = true
     occ.sprite = env.generateBuildingSprite("OccupiedTunnel", tileW, tileH)
 
     for i, e in ipairs(entities) do

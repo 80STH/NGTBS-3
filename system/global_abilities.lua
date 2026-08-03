@@ -232,7 +232,7 @@ function UnearthAbility:onActivate(state)
         end
         if not occupied then
             local terrain = state.terrainMap and state.terrainMap[site.q] and state.terrainMap[site.q][site.r] or "grass"
-            if terrain ~= "water" and terrain ~= "railway" and not status.hasNegativeHexStatus(site.q, site.r) then
+            if terrain ~= "water" and not cell_rules.isRailway(site.q, site.r) and not status.hasNegativeHexStatus(site.q, site.r) then
                 local newEnemy = environment.createRandomEnemy(site.q, site.r)
                 table.insert(state.entities, newEnemy)
                 spawned = spawned + 1
@@ -2018,7 +2018,8 @@ function ChainLightningAbility:drawPreview(hex, state)
             end
         end
         if second then
-            local icon_cache = require("ui.icon_cache")
+local icon_cache = require("ui.icon_cache")
+local cell_rules = require("grid.cell_rules")
             -- First target: wound icon
             local fx, fy = getDrawCoords(self.firstTarget.q, self.firstTarget.r)
             local ficon = attack_preview.getDamageIcon(self.firstTarget, math.min(attack_preview.calculateEffectiveDamage(self.firstTarget, self.firstTarget, 1, nil, nil), self.firstTarget.health))

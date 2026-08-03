@@ -2,6 +2,8 @@ local HexGrid = {}
 local hex_utils = require("grid.hex_utils")
 local water_shader = require("ui.water_shader")
 
+local railImage = nil
+
 local sandTexture = nil
 local sandMesh = nil
 local grassTexture = nil
@@ -590,7 +592,17 @@ function HexGrid:drawUpperTerrain(q, r, terrainType, x, y, yOffset)
 	end
 	local seed = q * 31 + r * 17 + 1
 
-	if terrainType == "mountain_rubble" then
+	if terrainType == "railway" or terrainType:match("^railway:") then
+		local dir = tonumber(terrainType:match(":(%d+)")) or 1
+		-- screen angle (y-down) per direction index 1..6; LOVE positive rotation == clockwise-down
+		local angles = {math.rad(30), math.rad(-30), math.rad(90), math.rad(150), math.rad(-150), math.rad(-90)}
+		if not railImage then railImage = love.graphics.newImage("sprites/railway_track.png") end
+		local size = radius * 2
+		local scale = size / railImage:getWidth()
+		love.graphics.setColor(1, 1, 1, 1)
+		love.graphics.draw(railImage, x, y + yOffset, angles[dir] or angles[1], scale, scale,
+			railImage:getWidth() / 2, railImage:getHeight() / 2)
+	elseif terrainType == "mountain_rubble" then
 		for i = 0, 5 do
 			local sx = srand(seed + i * 3) - 0.5
 			local sy = srand(seed + i * 3 + 99) - 0.5
