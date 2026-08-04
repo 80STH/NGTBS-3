@@ -84,7 +84,45 @@ return function(ui)
         love.graphics.setFont(old)
 
         if isHover then
-            local ttW, ttH = 260, 170
+            -- Interactive tooltip: only phases whose objects exist on the map right now
+            local lines = {}
+            local hasCaravan, hasBlockpost = false, false
+            local hasEnemies, hasPrepared = false, false
+            local hasUnitTargets, hasBuildingTargets = false, false
+            local hasBurningOrDecay = false
+            for _, e in ipairs(entities) do
+                if e:isCharacter() and not e.isPlayable and e.health > 0 then
+                    hasEnemies = true
+                    if e.hasPreparedAttack then
+                        hasPrepared = true
+                        if e._preparedTargetType == "building" then
+                            hasBuildingTargets = true
+                        else
+                            hasUnitTargets = true
+                        end
+                    end
+                end
+                if e.health and e.health > 0 and not e.isDying then
+                    if e.name == "Caravan" then hasCaravan = true
+                    elseif e.name == "Blockpost" then hasBlockpost = true end
+                    if status.hasEntityStatus(e, "fire") or status.hasEntityStatus(e, "decay") then
+                        hasBurningOrDecay = true
+                    end
+                end
+            end
+            if hasCaravan and hasBlockpost then lines[#lines + 1] = "Caravans move" end
+            if hasEnemies then lines[#lines + 1] = "Enemies move & prepare attacks" end
+            lines[#lines + 1] = "Player turn"
+            if hasPrepared then
+                if hasUnitTargets then lines[#lines + 1] = "Enemies attack player/units (in order)" end
+                if hasBuildingTargets then lines[#lines + 1] = "Enemies attack buildings (in order)" end
+            end
+            if hasBurningOrDecay then lines[#lines + 1] = "Debuffs: fire & decay apply" end
+            if status.getAllDigSites and #status.getAllDigSites() > 0 then
+                lines[#lines + 1] = "Dig sites damage & spawn"
+            end
+
+            local ttW, ttH = 260, 22 + #lines * 16
             local tx = logicalW - ttW - 10
             local ty = 46
             love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
@@ -94,17 +132,8 @@ return function(ui)
             love.graphics.setColor(1, 1, 0.6, 1)
             love.graphics.print("Turn Order", tx + 8, ty + 6)
             love.graphics.setColor(0.8, 0.8, 0.8, 1)
-            local orders = {
-                "1. Caravans move",
-                "2. Enemies move & prepare attacks",
-                "3. Player turn",
-                "4. Enemies attack player/units",
-                "5. Enemies attack buildings",
-                "6. Debuffs: fire & decay apply",
-                "7. Dig sites damage & spawn",
-            }
-            for i, line in ipairs(orders) do
-                love.graphics.print(line, tx + 8, ty + 22 + (i - 1) * 16)
+            for i, line in ipairs(lines) do
+                love.graphics.print(i .. ". " .. line, tx + 8, ty + 22 + (i - 1) * 16)
             end
             love.graphics.setColor(1, 1, 1, 1)
         end

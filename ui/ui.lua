@@ -122,7 +122,22 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     love.graphics.setLineWidth(3)
     love.graphics.setColor(0.2, 0.8, 0.2, 0.8)
     for i = 1, #points - 1 do
-        love.graphics.line(points[i].x, points[i].y, points[i+1].x, points[i+1].y)
+        local fromQ, fromR
+        if i == 1 then
+            fromQ, fromR = actor.q, actor.r
+        else
+            fromQ, fromR = path[i - 1].q, path[i - 1].r
+        end
+        local bx1, by1, bx2, by2
+        if getElevationBend then
+            bx1, by1, bx2, by2 = getElevationBend(fromQ, fromR, path[i].q, path[i].r,
+                points[i].x, points[i].y, points[i + 1].x, points[i + 1].y)
+        end
+        if bx1 then
+            love.graphics.line(points[i].x, points[i].y, bx1, by1, bx2, by2, points[i + 1].x, points[i + 1].y)
+        else
+            love.graphics.line(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y)
+        end
     end
     local targetX, targetY = points[#points].x, points[#points].y
     -- Draw transparent silhouette at origin (no blinking)
@@ -158,29 +173,31 @@ end
 -- Draw push arrow (with offset from centers)
 function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, toQ, toR, scale)
     -- Cross-elevation: draw step shape with horizontal at low ground
+    local s = scale or 1
+    local cr = r or 1
+    local cg = g or 0.8
+    local cb = b or 0.2
+    local ca = alpha or 0.9
     if fromQ ~= nil and toQ ~= nil then
-        local fromElv = state.elevationMap and state.elevationMap[fromQ] and state.elevationMap[fromQ][fromR]
-        local toElv = state.elevationMap and state.elevationMap[toQ] and state.elevationMap[toQ][toR]
-        if (fromElv and not toElv) or (not fromElv and toElv) then
-            local s = scale or 1; local lw = 2 * s; local as = 8 * s; local hw = as * 0.5
-            local cr = r or 1; local cg = g or 0.8; local cb = b or 0.2; local ca = alpha or 0.9
+        local bx1, by1, bx2, by2
+        if getElevationBend then
+            bx1, by1, bx2, by2 = getElevationBend(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY)
+        end
+        if bx1 then
+            local lw = 2 * s; local as = 8 * s; local hw = as * 0.5
             local so = 2 * s
-            local bx, by
-            if not fromElv and toElv then
-                bx, by = toX, fromY
-            else
-                bx, by = fromX, toY
-            end
             love.graphics.setColor(0, 0, 0, ca * 0.35)
             love.graphics.setLineWidth(lw + 2 * s)
-            love.graphics.line(fromX + so, fromY + so, bx + so, by + so)
-            love.graphics.line(bx + so, by + so, toX + so, toY + so)
+            love.graphics.line(fromX + so, fromY + so, bx1 + so, by1 + so)
+            love.graphics.line(bx1 + so, by1 + so, bx2 + so, by2 + so)
+            love.graphics.line(bx2 + so, by2 + so, toX + so, toY + so)
             love.graphics.setColor(cr, cg, cb, ca)
             love.graphics.setLineWidth(lw)
-            love.graphics.line(fromX, fromY, bx, by)
-            love.graphics.line(bx, by, toX, toY)
+            love.graphics.line(fromX, fromY, bx1, by1)
+            love.graphics.line(bx1, by1, bx2, by2)
+            love.graphics.line(bx2, by2, toX, toY)
             love.graphics.setLineWidth(1)
-            local angle = math.atan2(toY - by, toX - bx)
+            local angle = math.atan2(toY - by2, toX - bx2)
             local lx = toX + math.cos(angle + math.pi * 0.85) * hw
             local ly = toY + math.sin(angle + math.pi * 0.85) * hw
             local rx = toX + math.cos(angle - math.pi * 0.85) * hw
@@ -195,7 +212,6 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
         end
     end
     local angle = math.atan2(toY - fromY, toX - fromX)
-    local s = scale or 1
     local arrowSize = 8 * s
     local lineWidth = 2 * s
     local radius = hex.radius
@@ -204,10 +220,6 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
     local startY = fromY + math.sin(angle) * offset
     local endX = toX - math.cos(angle) * offset
     local endY = toY - math.sin(angle) * offset
-    local cr = r or 1
-    local cg = g or 0.8
-    local cb = b or 0.2
-    local ca = alpha or 0.9
     -- Shadow
     local shadowOff = 2 * s
     love.graphics.setColor(0, 0, 0, ca * 0.35)
@@ -720,12 +732,17 @@ if attack.visualType == "arc" then
                     love.graphics.setColor(0, 0, 0, 0.18 * pulse)
                     love.graphics.circle("fill", fromX + dx * t, fromY + dy * t + 4, hex.radius * 0.1)
                 end
-                -- Red arc dots (bezier)
+                -- Arc dots (bezier), heat-colored for enemy attackers
                 local midX = (fromX + toX) / 2
                 local midY = (fromY + toY) / 2
                 local ctrlX = midX
                 local ctrlY = midY - 60
                 local dotRadius = hex.radius * 0.12
+                local dotR, dotG, dotB = 0.85, 0.15, 0.15
+                if not attacker.isPlayable and turnState then
+                    local r, g, b = getEnemyAttackHeatColor(attacker, entities, turnState)
+                    if r then dotR, dotG, dotB = r, g, b end
+                end
                 local function bez(p)
                     local u = 1 - p
                     return u*u*fromX + 2*u*p*ctrlX + p*p*toX, u*u*fromY + 2*u*p*ctrlY + p*p*toY
@@ -735,10 +752,10 @@ if attack.visualType == "arc" then
                 for i = 0, steps do
                     local t = i / steps
                     local x, y = bez(t)
-                    love.graphics.setColor(0.85, 0.15, 0.15, 0.85 * pulse)
+                    love.graphics.setColor(dotR, dotG, dotB, 0.85 * pulse)
                     love.graphics.circle("fill", x, y, dotRadius)
                 end
-                love.graphics.setColor(1, 0.2, 0.2, 0.25 * pulse)
+                love.graphics.setColor(dotR, dotG, dotB, 0.25 * pulse)
                 love.graphics.circle("fill", toX, toY, hex.radius * 0.3)
             end
         end
@@ -1643,20 +1660,12 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
     local fromR = enemy.preparedFromR or enemy.r
     local fromX, fromY = getDrawCoords(fromQ, fromR)
     if not fromX then return end
-    -- Determine attack order for light hue shift
-    local groupOrder
-    local queue = turnState and turnState.enemyAttackQueue
-    if queue then
-        for gi, group in ipairs(queue) do
-            for _, e in ipairs(group.enemies or {}) do
-                if e == enemy then groupOrder = gi; break end
-            end
-            if groupOrder then break end
-        end
-    end
+    -- Heatmap color: red = first to attack, yellow = last
     local arcR, arcG, arcB = 0.7, 0.2, 1
-    if groupOrder == 1 then arcR, arcG, arcB = 0.9, 0.2, 0.8
-    elseif groupOrder == 2 then arcR, arcG, arcB = 0.5, 0.25, 1 end
+    if turnState then
+        local r, g, b = getEnemyAttackHeatColor(enemy, entities, turnState)
+        if r then arcR, arcG, arcB = r, g, b end
+    end
     if attack.name == "TrainShunt" then
         if enemy.preparedTargetOffset then
             local targetQ, targetR = hex_utils.applyCubeDiff(
@@ -1742,13 +1751,34 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
         end
         local dotRadius = hex.radius * 0.12
         local spacing = hex.radius * 0.4
-        local count = math.max(1, math.floor(dist / spacing))
-        local dotR, dotG, dotB = 0.85, 0.15, 0.15
-        if groupOrder == 1 then dotR, dotG, dotB = 0.95, 0.35, 0.1
-        elseif groupOrder == 2 then dotR, dotG, dotB = 0.7, 0.15, 0.3 end
+        -- Bend around elevation edge: dots follow low-ground -> cliff -> high-ground
+        local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
+        local path = { fromX, fromY }
+        if bx1 then
+            path[3], path[4], path[5], path[6], path[7], path[8] = bx1, by1, bx2, by2, toX, toY
+        else
+            path[3], path[4] = toX, toY
+        end
+        local segLens = {}
+        local totalLen = 0
+        for i = 1, #path - 2, 2 do
+            local lx, ly = path[i + 2] - path[i], path[i + 3] - path[i + 1]
+            local l = math.sqrt(lx * lx + ly * ly)
+            segLens[#segLens + 1] = l
+            totalLen = totalLen + l
+        end
+        local count = math.max(1, math.floor(totalLen / spacing))
+        local dotR, dotG, dotB = arcR, arcG, arcB
         for i = 0, count do
-            local t = i / count
-            local x, y = fromX + dx * t, fromY + dy * t
+            local t = i / count * totalLen
+            local seg, acc = 1, 0
+            for s = 1, #segLens do
+                if t <= acc + segLens[s] or s == #segLens then seg = s break end
+                acc = acc + segLens[s]
+            end
+            local k = segLens[seg] > 0 and (t - acc) / segLens[seg] or 0
+            local x = path[seg * 2 - 1] + (path[seg * 2 + 1] - path[seg * 2 - 1]) * k
+            local y = path[seg * 2] + (path[seg * 2 + 2] - path[seg * 2]) * k
             love.graphics.setColor(0, 0, 0, alpha * 0.35)
             love.graphics.circle("fill", x + 2, y + 2, dotRadius)
             love.graphics.setColor(dotR, dotG, dotB, alpha)
@@ -1792,9 +1822,9 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
                     else
                         alpha = 0.5
                     end
-                    love.graphics.setColor(1, 0.2, 0.2, alpha)
+                    love.graphics.setColor(arcR, arcG, arcB, alpha)
                     love.graphics.polygon("fill", v1x, v1y, v2x, v2y, v3x, v3y)
-                    love.graphics.setColor(1, 0.2, 0.2, alpha * 1.2)
+                    love.graphics.setColor(arcR, arcG, arcB, alpha * 1.2)
                     love.graphics.setLineWidth(2)
                     love.graphics.polygon("line", v1x, v1y, v2x, v2y, v3x, v3y)
                     love.graphics.setLineWidth(1)
@@ -1815,7 +1845,7 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
             local toX, toY = getDrawCoords(targetQ, targetR)
             local pulse = 0.5 + 0.5 * math.sin(time * 4)
             local alpha = 0.5 + 0.3 * pulse
-            ui.drawPushArrow(fromX, fromY, toX, toY, 1, 0.2, 0.2, alpha, enemy.q, enemy.r, targetQ, targetR, 0.55)
+            ui.drawPushArrow(fromX, fromY, toX, toY, arcR, arcG, arcB, alpha, enemy.q, enemy.r, targetQ, targetR, 0.55)
         end
         return
     end

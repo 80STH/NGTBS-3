@@ -260,7 +260,8 @@ function combat.Attack:noTargetLineFallback(attacker, stepX, stepY, stepZ, hex)
     if not endCell then return false end
     local fx, fy = getDrawCoords(attacker.q, attacker.r)
     local tx, ty = getDrawCoords(endCell.q, endCell.r)
-    visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.7, 0.2, 3, 1.0)
+    local bx1, by1, bx2, by2 = getElevationBend(attacker.q, attacker.r, endCell.q, endCell.r, fx, fy, tx, ty)
+    visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.7, 0.2, 3, 1.0, bx1, by1, bx2, by2)
     attacker.hasActedThisTurn = true
     return true
 end

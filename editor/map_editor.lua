@@ -731,7 +731,7 @@ function editor.init()
         water = false,    -- one water body touching map edge; incompatible with highgrounds
     }
     -- UI scale: base enlargement + manual Ctrl+/- zoom (Ctrl+0 resets)
-    editor.uiScale = 1.25
+    editor.uiScale = 1.0
     editor.manualZoom = 1
 
     -- Dynamic entity palette from environment.lua
@@ -2369,7 +2369,7 @@ function getDrawCoordsEditor(hex, q, r)
     local x, y = hex:hexToPixel(q, r)
     local elv = editor.elevationData[q .. "," .. r]
     if elv then
-        y = y - 38
+        y = y - 30
     end
     return x, y
 end

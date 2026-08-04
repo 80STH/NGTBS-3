@@ -205,7 +205,7 @@ function getDrawCoords(q, r)
     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r]
     local elv = state.elevationMap and state.elevationMap[q] and state.elevationMap[q][r]
     if elv then
-        y = y - 38
+        y = y - 30
     elseif terrain == "water" then
         y = y + config.WATER_Y_OFFSET
     elseif terrain == "water" then
@@ -455,22 +455,82 @@ end
 function getEnemyAttackOrder(entities, turnState)
     local order = {}
 
-    if turnState.phase == "enemy_attack" then
-        for _, g in ipairs(turnState.enemyAttackQueue or {}) do
-            for _, e in ipairs(g.enemies) do
-                order[e] = g.groupIdx
-            end
-        end
-        return order
+    -- During the attack phase the queue is authoritative (already-executed
+    -- enemies are consumed from it); otherwise preview the upcoming sequence
+    local queue = turnState.enemyAttackQueue or {}
+    if turnState.phase ~= "enemy_attack" or #queue == 0 then
+        queue = turnManager.buildEnemyAttackQueue()
     end
 
-    for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable and e.hasPreparedAttack and e.health > 0 then
-            local t = e._preparedTargetType or (e.targetPreference == "buildings" and "building" or "unit")
-            order[e] = t == "building" and 2 or 1
+    local n = 0
+    for _, g in ipairs(queue) do
+        for _, e in ipairs(g.enemies) do
+            n = n + 1
+            order[e] = n
         end
     end
     return order
+end
+
+-- Heatmap color for an enemy's attack preview: red = first, yellow = last.
+-- Returns nil when the enemy is not in the attack order.
+function getEnemyAttackHeatColor(enemy, entities, turnState)
+    if not enemy then return nil end
+    local orderMap = getEnemyAttackOrder(entities, turnState)
+    local n = orderMap[enemy]
+    if not n then return nil end
+    local maxN = 0
+    for _, e in ipairs(entities) do
+        local m = orderMap[e]
+        if m then maxN = math.max(maxN, m) end
+    end
+    local t = maxN > 1 and (n - 1) / (maxN - 1) or 0
+    return 1, t, 0
+end
+
+-- Vertical height of the highground; must match the -30 shifts in
+-- getDrawCoords and hexgrid:getCellYOffset.
+local ELEVATION_HEIGHT = 30
+
+-- Two bend points where a straight cell-to-cell line crosses an elevation
+-- edge (low <-> high). Returns bx1, by1, bx2, by2 for the polyline
+-- (fromX, fromY) -> (bx1, by1) -> (bx2, by2) -> (toX, toY), or nil when the
+-- line stays on one elevation level. The line keeps its straight direction
+-- and steps vertically by exactly the highground height at the shared edge
+-- of the two cells where the elevation changes.
+function getElevationBend(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY)
+    if not elevationMap then return nil end
+    if fromQ == toQ and fromR == toR then return nil end
+    -- Purely vertical line already goes straight up/down the cliff face — no bend
+    if toX == fromX then return nil end
+    local fx, fy, fz = hex_utils.axialToCube(fromQ, fromR)
+    local tx, ty, tz = hex_utils.axialToCube(toQ, toR)
+    local dx, dy, dz = tx - fx, ty - fy, tz - fz
+    local function gcd(a, b)
+        a = math.abs(a); b = math.abs(b)
+        while b ~= 0 do a, b = b, a % b end
+        return a
+    end
+    local g = gcd(gcd(dx, dy), dz)
+    if g == 0 then return nil end
+    local sx, sy, sz = dx / g, dy / g, dz / g
+    local curQ, curR = fromQ, fromR
+    local curElv = elevationMap[fromQ] and elevationMap[fromQ][fromR]
+    for _ = 1, g do
+        local nQ, nR = hex_utils.applyCubeStep(curQ, curR, sx, sy, sz)
+        local nElv = elevationMap[nQ] and elevationMap[nQ][nR]
+        if nElv ~= curElv then
+            local ax, ay = getDrawCoords(curQ, curR)
+            local bx, by = getDrawCoords(nQ, nR)
+            local edgeX = (ax + bx) / 2
+            -- Y of the straight line at the cliff edge
+            local lineY = fromY + (toY - fromY) * (edgeX - fromX) / (toX - fromX)
+            local drop = curElv and ELEVATION_HEIGHT or -ELEVATION_HEIGHT
+            return edgeX, lineY, edgeX, lineY + drop
+        end
+        curQ, curR, curElv = nQ, nR, nElv
+    end
+    return nil
 end
 
 function applyResolution(idx)

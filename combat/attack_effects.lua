@@ -1,4 +1,4 @@
--- attack_effects.lua
+﻿-- attack_effects.lua
 -- Visual effects for each attack
 
 local visual = require("system.visual_effects")
@@ -17,7 +17,8 @@ function attack_effects.dash(attacker, target, targetQ, targetR, hex)
     -- Movement effect from attacker to target cell
     local fromX, fromY = getHexCenter(attacker, hex)
     local toX, toY = _G.getDrawCoords(targetQ, targetR)
-    visual.addDashEffect(fromX, fromY, toX, toY)
+    local bx1, by1, bx2, by2 = _G.getElevationBend(attacker.q, attacker.r, targetQ, targetR, fromX, fromY, toX, toY)
+    visual.addDashEffect(fromX, fromY, toX, toY, bx1, by1, bx2, by2)
     -- Hit on target
     if target then
         visual.addEffect(toX, toY, "hit", 0.3)
@@ -40,7 +41,8 @@ function attack_effects.shoot(attacker, target, pushToQ, pushToR, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
     local targetX, targetY = getHexCenter(target, hex)
     -- Shot line
-    visual.addLineEffect(fromX, fromY, targetX, targetY, 0.9, 0.7, 0.2, 3)
+    local bx1, by1, bx2, by2 = _G.getElevationBend(attacker.q, attacker.r, target.q, target.r, fromX, fromY, targetX, targetY)
+    visual.addLineEffect(fromX, fromY, targetX, targetY, 0.9, 0.7, 0.2, 3, 1, bx1, by1, bx2, by2)
     -- Hit
     visual.addEffect(targetX, targetY, "hit", 0.3)
     -- Knockback effect (if any)
@@ -56,7 +58,8 @@ function attack_effects.piercingShoot(attacker, firstTarget, secondTarget, first
     -- Line across the full length to the second target
     local lastTarget = secondTarget or firstTarget
     local toX, toY = getHexCenter(lastTarget, hex)
-    visual.addLineEffect(fromX, fromY, toX, toY, 0.8, 0.5, 1.0, 4)
+    local bx1, by1, bx2, by2 = _G.getElevationBend(attacker.q, attacker.r, lastTarget.q, lastTarget.r, fromX, fromY, toX, toY)
+    visual.addLineEffect(fromX, fromY, toX, toY, 0.8, 0.5, 1.0, 4, 1, bx1, by1, bx2, by2)
     -- Hit on the first target
     if firstTarget then
         local fx, fy = getHexCenter(firstTarget, hex)
@@ -130,7 +133,8 @@ function attack_effects.ghostBolt(attacker, target, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
     local toX, toY = getHexCenter(target, hex)
     -- Semi-transparent line with "ghostly" glow
-    visual.addLineEffect(fromX, fromY, toX, toY, 0.7, 0.3, 1.0, 2, 0.6)
+    local bx1, by1, bx2, by2 = _G.getElevationBend(attacker.q, attacker.r, target.q, target.r, fromX, fromY, toX, toY)
+    visual.addLineEffect(fromX, fromY, toX, toY, 0.7, 0.3, 1.0, 2, 0.6, bx1, by1, bx2, by2)
     -- "Ghostly" hit effect
     visual.addEffect(toX, toY, "ghost_hit", 0.4)
 end
@@ -143,14 +147,16 @@ function attack_effects.bite(attacker, target, hex)
     visual.addEffect(toX, toY, "hit", 0.25)
     visual.addBloodSplat(toX, toY)
     -- Jaw animation (line from attacker to target)
-    visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.2, 0.2, 4, 0.8)
+    local bx1, by1, bx2, by2 = _G.getElevationBend(attacker.q, attacker.r, target.q, target.r, fromX, fromY, toX, toY)
+    visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.2, 0.2, 4, 0.8, bx1, by1, bx2, by2)
 end
 
 -- Effect for Rampage (Colossus charge)
 function attack_effects.rampage(attacker, target, targetQ, targetR, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
     local toX, toY = _G.getDrawCoords(targetQ, targetR)
-    visual.addDashEffect(fromX, fromY, toX, toY)
+    local bx1, by1, bx2, by2 = _G.getElevationBend(attacker.q, attacker.r, targetQ, targetR, fromX, fromY, toX, toY)
+    visual.addDashEffect(fromX, fromY, toX, toY, bx1, by1, bx2, by2)
     if target then
         visual.addEffect(toX, toY, "hit", 0.5)
         visual.addShockwave(toX, toY, 25)
@@ -162,7 +168,8 @@ end
 function attack_effects.frenzy(attacker, target, hex)
     local fromX, fromY = getHexCenter(attacker, hex)
     local toX, toY = getHexCenter(target, hex)
-    visual.addLineEffect(fromX, fromY, toX, toY, 1.0, 0.15, 0.1, 5, 1.0)
+    local bx1, by1, bx2, by2 = _G.getElevationBend(attacker.q, attacker.r, target.q, target.r, fromX, fromY, toX, toY)
+    visual.addLineEffect(fromX, fromY, toX, toY, 1.0, 0.15, 0.1, 5, 1.0, bx1, by1, bx2, by2)
     visual.addEffect(toX, toY, "hit", 0.5)
     visual.addBloodSplat(toX, toY)
 end

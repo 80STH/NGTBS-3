@@ -61,43 +61,9 @@ function turnManager.endPlayerTurn()
     local trains_mod = require("system.trains")
     trains_mod.prepareTrainAttacks(entities, hex)
 
-    -- Group enemies by actual prepared target type (fixed at prepare time)
-    -- Orders: non-building targets first, building targets second
-    local seqNonBuilding = {}
-    local simNonBuilding = {}
-    local seqBuilding = {}
-    local simBuilding = {}
-
-    for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable and not e.isTrainAttack and e.hasPreparedAttack and e.health > 0 and not e.isDying then
-            local targetType = e._preparedTargetType or "unit"
-            if e.isLeader then
-                table.insert(targetType == "building" and seqBuilding or seqNonBuilding, e)
-            else
-                table.insert(targetType == "building" and simBuilding or simNonBuilding, e)
-            end
-        end
-    end
-    table.sort(simNonBuilding, function(a, b) return a.attacksFirst and not b.attacksFirst end)
-    table.sort(simBuilding, function(a, b) return a.attacksFirst and not b.attacksFirst end)
-
-    local trainGroups = trains_mod.getTrainGroups()
-    for _, g in pairs(trainGroups) do
-        if g.active and g.cars and #g.cars > 0 then
-            local loco = g.cars[1]
-            if loco and loco.health and loco.health > 0 and not loco.isDying and loco.hasPreparedAttack then
-                table.insert(seqNonBuilding, loco)
-            end
-        end
-    end
-
-    local queue = {}
-    if #seqNonBuilding > 0 then table.insert(queue, { groupIdx = 1, type = "sequential", enemies = seqNonBuilding }) end
-    if #simNonBuilding > 0 then table.insert(queue, { groupIdx = 1, type = "simultaneous", enemies = simNonBuilding }) end
-    if #seqBuilding > 0 then table.insert(queue, { groupIdx = 2, type = "sequential", enemies = seqBuilding }) end
-    if #simBuilding > 0 then table.insert(queue, { groupIdx = 2, type = "simultaneous", enemies = simBuilding }) end
-
-    turnState.enemyAttackQueue = queue
+    -- All enemies attack one at a time, in order (units first, buildings last,
+    -- leaders before regulars, attacksFirst first; trains after everyone else)
+    turnState.enemyAttackQueue = turnManager.buildEnemyAttackQueue()
     turnState.enemyAttackTimer = 0
     turnState.phase = "enemy_attack"
     turnState.pendingDigProcessing = true
@@ -379,6 +345,38 @@ function moveCaravans()
     if hasMoves then
         combat.startPushAnimations(hex)
     end
+end
+
+-- One sequential group with every prepared enemy, in attack order
+function turnManager.buildEnemyAttackQueue()
+    local trains_mod = require("system.trains")
+    local enemies = {}
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and not e.isPlayable and not e.isTrainAttack and e.hasPreparedAttack and e.health > 0 and not e.isDying then
+            table.insert(enemies, e)
+        end
+    end
+    table.sort(enemies, function(a, b)
+        local ta = a._preparedTargetType == "building" and 1 or 0
+        local tb = b._preparedTargetType == "building" and 1 or 0
+        if ta ~= tb then return ta < tb end
+        if a.isLeader ~= b.isLeader then return a.isLeader and not b.isLeader end
+        return a.attacksFirst and not b.attacksFirst
+    end)
+    local trainGroups = trains_mod.getTrainGroups()
+    for _, g in pairs(trainGroups) do
+        if g.active and g.cars and #g.cars > 0 then
+            local loco = g.cars[1]
+            if loco and loco.health and loco.health > 0 and not loco.isDying and loco.hasPreparedAttack then
+                table.insert(enemies, loco)
+            end
+        end
+    end
+    local queue = {}
+    if #enemies > 0 then
+        table.insert(queue, { type = "sequential", enemies = enemies })
+    end
+    return queue
 end
 
 function startEnemyPreparePhase()

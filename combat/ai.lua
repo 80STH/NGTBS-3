@@ -1,4 +1,4 @@
--- ai.lua
+﻿-- ai.lua
 -- AI: enemies move toward the target, then prepare an attack
 -- Fixed: ranged attacks (Lich, Ghost) and Bite work correctly
 
@@ -41,7 +41,7 @@ local function debugPrint(...)
     log.debug("ai", ...)
 end
 
--- Whether the attack requires a straight line (for Bite and Magic Bolt — no)
+-- Whether the attack requires a straight line (for Bite and Magic Bolt вЂ” no)
 local function attackRequiresLine(attack)
     return true
 end
@@ -249,7 +249,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
 
     -- ===== 1. Determine the target cell and, possibly, the target =====
     if attackHitsFirstTarget(attack) then
-        -- Ghost Bolt, Shoot, Dash, Piercing – follow the line to the first target or to the edge
+        -- Ghost Bolt, Shoot, Dash, Piercing вЂ“ follow the line to the first target or to the edge
         local dir = enemy.attackDirection
         if dir then
             local curQ, curR = enemy.q, enemy.r
@@ -267,7 +267,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
                 curQ, curR = nextQ, nextR
             end
             if not target then
-                -- No target — take the last traversed cell (end of line or edge)
+                -- No target вЂ” take the last traversed cell (end of line or edge)
                 targetQ, targetR = lastValidQ, lastValidR
             end
         end
@@ -303,7 +303,8 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         elseif targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            visual.addLineEffect(fromX, fromY, toX, toY, 0.7, 0.3, 1.0, 3, 0.6)
+            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.7, 0.3, 1.0, 3, 0.6, bx1, by1, bx2, by2)
         end
     elseif attack.name == "Bite" then
         if target then
@@ -311,7 +312,8 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         elseif targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.2, 0.2, 4, 0.8)
+            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.2, 0.2, 4, 0.8, bx1, by1, bx2, by2)
             visual.addEffect(toX, toY, "hit", 0.25)
         end
     elseif attack.name == "Magic Bolt" then
@@ -334,7 +336,8 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         if targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            visual.addDashEffect(fromX, fromY, toX, toY)
+            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
+            visual.addDashEffect(fromX, fromY, toX, toY, bx1, by1, bx2, by2)
         end
     elseif attack.name == "Shoot" then
         if target then
@@ -347,12 +350,15 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         elseif targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.7, 0.2, 3, 1.0)
+            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.7, 0.2, 3, 1.0, bx1, by1, bx2, by2)
         end
     elseif attack.name == "Bash" or attack.name == "Lunge" then
         if target then
             local tx, ty = getDrawCoords(target.q, target.r)
-            visual.addLineEffect(getDrawCoords(enemy.q, enemy.r), tx, ty, 0.9, 0.5, 0.2, 4, 0.6)
+            local fx, fy = getDrawCoords(enemy.q, enemy.r)
+            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, target.q, target.r, fx, fy, tx, ty)
+            visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.5, 0.2, 4, 0.6, bx1, by1, bx2, by2)
             visual.addEffect(tx, ty, "hit", 0.3)
             -- Extra target for Bash (behind attacker) and Lunge (behind target)
             local extraQ, extraR, extraTarget = nil, nil, nil
@@ -382,7 +388,8 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         if targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.5, 0.2, 3, 0.6)
+            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.5, 0.2, 3, 0.6, bx1, by1, bx2, by2)
         end
         -- Two side targets (the main target will already be hit)
         local frontTargets = {}
@@ -542,7 +549,7 @@ function ai.moveAndPrepare(enemy, entities, hex)
         return "failed"
     end
 
-    -- If already able to attack — record for later (batch) or prepare immediately
+    -- If already able to attack вЂ” record for later (batch) or prepare immediately
     if ai.canPrepareAttack(enemy, entities) then
         if _G._batchMovePlanning then
             enemy._willPrepareAfterMove = true
@@ -862,7 +869,7 @@ end
 
 function ai.isPositionOccupied(q, r, movingEntity, entities, hex)
     -- Delegates to cell_rules.isOccupied. Enemies don't have phaseThroughEnemies,
-    -- so we disable this check — behavior is equivalent to the old version.
+    -- so we disable this check вЂ” behavior is equivalent to the old version.
     return require("grid.cell_rules").isOccupied(q, r, movingEntity, {
         entities = entities, hex = hex,
         allowPhaseThroughEnemies = false,

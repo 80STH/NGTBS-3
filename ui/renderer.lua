@@ -415,12 +415,19 @@ function renderer.draw(state)
 
     local showOrder = hoverOrder or state.showEnemyOrder or love.keyboard.isDown("o")
     if showOrder then
+        -- Heatmap: red = first to attack, yellow = last
         local orderMap = getEnemyAttackOrder(state.entities, state.turnState)
+        local maxN = 0
+        for _, enemy in ipairs(state.entities) do
+            local n = orderMap[enemy]
+            if n then maxN = math.max(maxN, n) end
+        end
         for _, enemy in ipairs(state.entities) do
             local n = orderMap[enemy]
             if n and enemy.health > 0 then
+                local t = maxN > 1 and (n - 1) / (maxN - 1) or 0
                 local x, y = getDrawCoords(enemy.q, enemy.r)
-                love.graphics.setColor(1, 0.8, 0.2, 0.9)
+                love.graphics.setColor(1, t, 0, 0.9)
                 love.graphics.circle("fill", x + 15, y - 20, 12)
                 love.graphics.setColor(0, 0, 0, 1)
                 love.graphics.print(tostring(n), x + 11, y - 28)

@@ -387,7 +387,7 @@ end
 function HexGrid:getCellYOffset(q, r, terrainType, waterYOffset, elevationMap)
      if elevationMap then
          local elv = elevationMap[q] and elevationMap[q][r]
-         if elv then return -38 end
+         if elv then return -30 end
      end
      local isHighGround = terrainType == "stone"
      return (terrainType == "water") and waterYOffset or (isHighGround and (waterYOffset + 6) or 0)
@@ -428,7 +428,7 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y, elevationMap)
      local radius = self.radius
      local extrude = 36
      local waterExtrude = 18
-     local highGroundExtrude = 80
+     local highGroundExtrude = 72
      local isLowTerrain = terrainType == "water"
      local isHighGround = terrainType == "stone"
      if elevationMap then
