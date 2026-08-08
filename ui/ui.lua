@@ -170,6 +170,9 @@ function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
     local col = attack_preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
     return col.damage, col.reason, col.occupant
 end
+-- Height of the highground; must match the -30 shift in hexgrid:getCellYOffset
+local ELEVATION_HEIGHT = 30
+
 -- Draw push arrow (with offset from centers)
 function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, toQ, toR, scale)
     -- Cross-elevation: draw step shape with horizontal at low ground
@@ -181,7 +184,16 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
     if fromQ ~= nil and toQ ~= nil then
         local bx1, by1, bx2, by2
         if getElevationBend then
-            bx1, by1, bx2, by2 = getElevationBend(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY)
+            local fromElv = elevationMap and elevationMap[fromQ] and elevationMap[fromQ][fromR]
+            local toElv = elevationMap and elevationMap[toQ] and elevationMap[toQ][toR]
+            if fromElv and not toElv then
+                -- Push off the highground: diagonal to the low cell's center
+                -- raised to the highground level, then straight down
+                bx1, by1 = toX, toY - ELEVATION_HEIGHT
+                bx2, by2 = toX, toY
+            else
+                bx1, by1, bx2, by2 = getElevationBend(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY)
+            end
         end
         if bx1 then
             local lw = 2 * s; local as = 8 * s; local hw = as * 0.5
@@ -197,7 +209,12 @@ function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, 
             love.graphics.line(bx1, by1, bx2, by2)
             love.graphics.line(bx2, by2, toX, toY)
             love.graphics.setLineWidth(1)
-            local angle = math.atan2(toY - by2, toX - bx2)
+            -- Arrowhead angle: last non-degenerate segment
+            local ax1, ay1 = bx2, by2
+            if toX == bx2 and toY == by2 then
+                ax1, ay1 = bx1, by1
+            end
+            local angle = math.atan2(toY - ay1, toX - ax1)
             local lx = toX + math.cos(angle + math.pi * 0.85) * hw
             local ly = toY + math.sin(angle + math.pi * 0.85) * hw
             local rx = toX + math.cos(angle - math.pi * 0.85) * hw

@@ -488,9 +488,9 @@ function getEnemyAttackHeatColor(enemy, entities, turnState)
     return 1, t, 0
 end
 
--- Vertical height of the highground; must match the -30 shifts in
--- getDrawCoords and hexgrid:getCellYOffset.
-local ELEVATION_HEIGHT = 30
+-- Vertical step of the elevation bend; smaller than the cliff height so the
+-- line keeps its original slope.
+local ELEVATION_BEND_STEP = 15
 
 -- Two bend points where a straight cell-to-cell line crosses an elevation
 -- edge (low <-> high). Returns bx1, by1, bx2, by2 for the polyline
@@ -525,7 +525,7 @@ function getElevationBend(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY)
             local edgeX = (ax + bx) / 2
             -- Y of the straight line at the cliff edge
             local lineY = fromY + (toY - fromY) * (edgeX - fromX) / (toX - fromX)
-            local drop = curElv and ELEVATION_HEIGHT or -ELEVATION_HEIGHT
+            local drop = curElv and ELEVATION_BEND_STEP or -ELEVATION_BEND_STEP
             return edgeX, lineY, edgeX, lineY + drop
         end
         curQ, curR, curElv = nQ, nR, nElv
