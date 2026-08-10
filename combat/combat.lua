@@ -107,15 +107,25 @@ local function applyCollisionDamage(pushed, obstacle, sounds)
     if not obstacle or obstacle.noCollisionDamage then return end
     if pushed.health and pushed.health > 0 then
         local wasDestroyed = pushed:takeDamage(1)
+        combat.notePushKill(pushed, wasDestroyed)
         if wasDestroyed then pushed:startDeath() end
     end
     if obstacle.health and obstacle.health > 0 then
         local wasDestroyed = obstacle:takeDamage(1)
+        combat.notePushKill(obstacle, wasDestroyed)
         if wasDestroyed then obstacle:startDeath() end
     end
     if sounds then sounds.play("collision") end
 end
 combat.applyCollisionDamage = applyCollisionDamage
+
+-- Track enemies killed by push damage (fatal_push objective, solo mode only)
+function combat.notePushKill(entity, wasDestroyed)
+    if not wasDestroyed or not entity then return end
+    if entity:isCharacter() and not entity.isPlayable then
+        _G.objective_fatalPushes = (_G.objective_fatalPushes or 0) + 1
+    end
+end
 
 local function finalizeMove(entity, toQ, toR)
     entity.q = toQ
@@ -142,14 +152,31 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
          return
      end
 
+     -- grounded: pushed with all effects (damage, collision, crush), then
+     -- snaps back to its original cell once the push resolves
+     local grounded = combat.isGrounded(target, entities, hex)
+     if grounded then
+         local realOnComplete = onComplete
+         onComplete = function(result)
+             if target.health and target.health > 0 then
+                 target.q, target.r = fromQ, fromR
+                 target.currentDrawX = nil
+                 target.currentDrawY = nil
+                 log.infof("combat", "%s is grounded — snaps back to (%d,%d)!", target.name, fromQ, fromR)
+             end
+             if realOnComplete then realOnComplete(result) end
+         end
+     end
+
      local fromElev = (elevationMap and elevationMap[fromQ] and elevationMap[fromQ][fromR]) == true
      local toElev = (elevationMap and elevationMap[toQ] and elevationMap[toQ][toR]) == true
 
      if not fromElev and toElev then
          if target.health and target.health > 0 then
-             target.health = target.health - 1
+             local wasDestroyed = target:takeDamage(1)
+             combat.notePushKill(target, wasDestroyed)
              log.infof("combat", "%s is pushed uphill to highground! Takes 1 damage!", target.name)
-             if target.health <= 0 then target:startDeath() end
+             if wasDestroyed then target:startDeath() end
          end
          combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, nil)
          if onComplete then onComplete(false) end
@@ -158,8 +185,12 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
 
 if fromElev and not toElev then
          -- Kill units at destination (crushed by falling entity)
+         local crushedBuilding = false
          for _, e in ipairs(entities) do
              if e.health and e.health > 0 and e.q == toQ and e.r == toR then
+                 if e:isBuilding() and not e.indestructible then
+                     crushedBuilding = true
+                 end
                  e.health = 0
                  e:startDeath()
              end
@@ -168,8 +199,16 @@ if fromElev and not toElev then
          finalizeMove(target, toQ, toR)
          -- 1 damage from fall
          if target.health and target.health > 0 then
-             target.health = target.health - 1
-             if target.health <= 0 then target:startDeath() end
+             local wasDestroyed = target:takeDamage(1)
+             combat.notePushKill(target, wasDestroyed)
+             if wasDestroyed then target:startDeath() end
+         end
+         -- 1 more damage from the destroyed building collapsing
+         if crushedBuilding and target.health and target.health > 0 then
+             local wasDestroyed = target:takeDamage(1)
+             combat.notePushKill(target, wasDestroyed)
+             log.infof("combat", "%s is hit by the collapsing building! Takes 1 more damage!", target.name)
+             if wasDestroyed then target:startDeath() end
          end
          log.infof("combat", "%s falls from highground! Takes 1 damage!", target.name)
          if sounds then sounds.play("collision") end
@@ -234,10 +273,11 @@ if fromElev and not toElev then
     -- Off the edge
     if not hex:isActiveHex(toQ, toR) then
         if target:isCharacter() then
-            target.health = target.health - 1
+            local wasDestroyed = target:takeDamage(1)
+            combat.notePushKill(target, wasDestroyed)
             log.infof("combat", "%s is slammed against the edge! Takes 1 damage!", target.name)
             if sounds then sounds.play("collision") end
-            if target.health <= 0 then
+            if wasDestroyed then
                 target:startDeath()
             end
         end
@@ -443,8 +483,9 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
                         attacker.rootedTarget = nil
                     end
                     if attacker.health and attacker.health > 0 then
-                        attacker.health = attacker.health - 1
-                        if attacker.health <= 0 then attacker:startDeath() end
+                        local wasDestroyed = attacker:takeDamage(1)
+                        combat.notePushKill(attacker, wasDestroyed)
+                        if wasDestroyed then attacker:startDeath() end
                     end
                     if terrainMap then
                         local died = effects.applyAllCellEffects(attacker, landingQ, landingR, terrainMap, entities)
@@ -1629,6 +1670,76 @@ function combat.BashAttack:getAffectedCells(attacker, targetQ, targetR, hex, ent
 end
 
 -- ============================================================
+-- FIRE STOMP (Blade): ignite 3 cells in front (cleave arc)
+-- ============================================================
+combat.FireStompAttack = setmetatable({}, combat.Attack)
+combat.FireStompAttack.__index = combat.FireStompAttack
+
+function combat.FireStompAttack.new()
+    local self = combat.Attack.new("Fire Stomp", "Ignite the selected cell and the two cells beside it", 1, 0, {})
+    return setmetatable(self, combat.FireStompAttack)
+end
+
+function combat.FireStompAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not on a straight line" end
+
+    -- Three cells: central target + two side cells (direction rotated +-60)
+    local cells = {{q = targetQ, r = targetR}}
+    local sx1, sy1, sz1 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+    local sx2, sy2, sz2 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
+    local side1Q, side1R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx1, sy1, sz1)
+    local side2Q, side2R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx2, sy2, sz2)
+    table.insert(cells, {q = side1Q, r = side1R})
+    table.insert(cells, {q = side2Q, r = side2R})
+
+    for _, cell in ipairs(cells) do
+        if hex:isActiveHex(cell.q, cell.r) then
+            status.applyToHex(cell.q, cell.r, "fire")
+            if _G.soloMode then
+                _G.objective_burnCells = _G.objective_burnCells or {}
+                local key = cell.q .. "," .. cell.r
+                if not _G.objective_burnCells[key] then
+                    _G.objective_burnCells[key] = true
+                    _G.objective_burnSites = (_G.objective_burnSites or 0) + 1
+                end
+            end
+            local x, y = getDrawCoords(cell.q, cell.r)
+            visual.addEffect(x, y, "fire", 0.6)
+            log.infof("combat", "%s stomps fire onto (%d,%d)!", attacker.name, cell.q, cell.r)
+        end
+    end
+
+    sounds.play("fire")
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.FireStompAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) == 1 then
+        return {q = targetQ, r = targetR}
+    end
+    return nil
+end
+
+function combat.FireStompAttack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
+    local cells = {{q = targetQ, r = targetR}}
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local sx1, sy1, sz1 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+        local sx2, sy2, sz2 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
+        local side1Q, side1R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx1, sy1, sz1)
+        local side2Q, side2R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx2, sy2, sz2)
+        table.insert(cells, {q = side1Q, r = side1R})
+        table.insert(cells, {q = side2Q, r = side2R})
+    end
+    return cells
+end
+
+-- ============================================================
 -- CLEAVE: melee, 1 damage to three targets in front
 -- ============================================================
 combat.CleaveAttack = setmetatable({}, combat.Attack)
@@ -1917,6 +2028,31 @@ function combat.isInSlowingAura(entity, entities, hex)
     return false
 end
 
+-- Grounded: the entity can be pushed with all effects, but snaps back to
+-- its original cell. Tagged by a "grounded" aura (radius 1, same as slow),
+-- the "grounded" status, or the entity.grounded flag.
+function combat.isGrounded(entity, entities, hex)
+    if not entity then return false end
+    if entity.grounded then return true end
+    if status.hasEntityStatus(entity, "grounded") then return true end
+    for _, e in ipairs(entities) do
+        if e ~= entity and e.health > 0 and e.aura and e.aura.type == "grounded" then
+            local dist = hex:getDistance(entity.q, entity.r, e.q, e.r)
+            if dist <= e.aura.radius then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- Poisoned marker: checks the "Poisonous" enemy name. Affects ONLY the
+-- kill_poisonous_with_decay objective — no gameplay effect.
+function combat.isPoisonousEnemy(entity)
+    if not entity or not entity.name then return false end
+    return entity.name:match("Poisonous") ~= nil
+end
+
 -- ============================================================
 -- ANIMATION QUEUE (pure visuals, handled by combat.push_animator)
 -- ============================================================
@@ -2114,14 +2250,21 @@ function performMove(actor, targetQ, targetR)
         return false
     end
     if actor.isMoving then return false end
-if status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
+ if status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
          log.infof("combat", "%s is rooted by a Zombie and cannot move!", actor.name)
          return false
      end
-     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return false end
-    if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then
-        log.debugf("combat", "%s has already moved this turn!", actor.name)
-        return false
+    if actor.soloActions then
+        if (actor.movesLeft or 0) <= 0 then
+            log.debugf("combat", "%s has no moves left!", actor.name)
+            return false
+        end
+    else
+        if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return false end
+        if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then
+            log.debugf("combat", "%s has already moved this turn!", actor.name)
+            return false
+        end
     end
     if actor.q == targetQ and actor.r == targetR then return false end
     
@@ -2164,7 +2307,11 @@ if status.hasEntityStatus(actor, "rooted") and not actor.rootImmune then
         log.debug("combat", "No valid path")
         return false
     end
-    actor.hasMovedThisTurn = true
+    if actor.soloActions then
+        actor.movesLeft = (actor.movesLeft or 0) - 1
+    else
+        actor.hasMovedThisTurn = true
+    end
     actor.path = path
     actor.currentPathIndex = 1
     startNextMove(actor)
@@ -2263,9 +2410,12 @@ function performAttackWithSelectedAttack(attacker, targetQ, targetR, attack)
         log.debug("combat", "Not a playable character")
         return false, "Not a playable character"
     end
-if attacker.hasActedThisTurn then
+if attacker.hasActedThisTurn and not (attacker.soloActions and (attacker.attacksLeft or 0) > 0) then
         log.debug("combat", "Already acted this turn")
         return false, "Already acted this turn"
+    end
+    if attacker.soloActions then
+        attacker.hasActedThisTurn = false
     end
     if not attack then
         log.debug("combat", "No attack selected")
@@ -2287,6 +2437,20 @@ if attacker.hasActedThisTurn then
 
     if success then
         undo.snapshot()
+        if attacker.soloActions then
+            _G.objective_usedAttacks = _G.objective_usedAttacks or {}
+            _G.objective_usedAttacks[attack.name] = true
+            attacker.hasActedThisTurn = false
+            attacker.attacksLeft = (attacker.attacksLeft or 2) - 1
+            if attacker.attacksLeft <= 0 then
+                attacker.hasActedThisTurn = true
+            end
+            attackMode = false
+            selectedAttack = nil
+            updateAttackButtons(attacker)
+            checkGameEnd()
+            return success, message
+        end
         local endTurn = true
 
         -- Warrior chain: directional (Dash→Flip or Flip→Dash)
@@ -2329,6 +2493,7 @@ if attacker.hasActedThisTurn then
             selectedAttack = nil
         end
     else
+        if attacker.soloActions then attacker.hasActedThisTurn = false end
         log.warnf("combat", "Attack failed: %s", (message or "unknown"))
     end
     return success, message
@@ -2576,7 +2741,7 @@ combat.FrenzyAttack = setmetatable({}, combat.Attack)
 combat.FrenzyAttack.__index = combat.FrenzyAttack
 
 function combat.FrenzyAttack.new()
-    local self = combat.Attack.new("Frenzy", "Lethal strike on target and target behind. Puts Colossus in stasis", 1, 99, {})
+    local self = combat.Attack.new("Frenzy", "Lethal strike on target and target behind. Kills Colossus", 1, 99, {})
     return setmetatable(self, combat.FrenzyAttack)
 end
 
@@ -2609,7 +2774,7 @@ function combat.FrenzyAttack:execute(attacker, targetQ, targetR, hex, entities, 
         end
     end
 
-    -- Kill Colossus (put in stasis) wherever it is
+    -- Kill Colossus wherever it is
     local colossus = self:findColossus(entities)
     if colossus and colossus.health > 0 then
         local colQ, colR = colossus.q, colossus.r

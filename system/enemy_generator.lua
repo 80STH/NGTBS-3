@@ -3,7 +3,7 @@ local enemy_generator = {}
 local HEALTH_COST = {0, 4, 8}
 local SPEED_COST = {0, 1, 2}
 local MOBILITY_COST = {walking = 0, hovering = 1, teleport = 4}
-local AURA_COST = {none = 0, slow = 3}
+local AURA_COST = {none = 0, slow = 3, grounded = 3}
 
 local ATTACKS = {
     {name = "Ghost Bolt", set = "ghost", cost = 2, color = {0.7, 0.3, 1}, melee = false},
@@ -56,12 +56,14 @@ function enemy_generator.generate(budget)
         params.moveRange = love.math.random(2, 4)
     end
     
-    params.aura = love.math.random() < 0.2 and "slow" or "none"
-    if params.aura == "slow" then
+    local auraRoll = love.math.random()
+    if auraRoll < 0.2 then
+        params.aura = "slow"
         local melee = {}
         for _, a in ipairs(ATTACKS) do if a.melee then table.insert(melee, a) end end
         params.attack = melee[love.math.random(#melee)]
     else
+        params.aura = auraRoll < 0.35 and "grounded" or "none"
         params.attack = ATTACKS[love.math.random(#ATTACKS)]
     end
     local aiModel = AI_MODELS[love.math.random(#AI_MODELS)]

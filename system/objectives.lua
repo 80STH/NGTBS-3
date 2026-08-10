@@ -3,8 +3,19 @@ local log = require("util.log")
 local status = require("system.status")
 local env = require("entity.environment")
 local fonts = require("util.fonts")
+local combat = require("combat.combat")
 
 local objectives = {}
+
+-- Solo mode: chaos sources drain the hero's health instead of the chaos meter.
+local function addChaos(amount, msg)
+    if _G.soloMode and _G.damageHero then
+        _G.damageHero(amount)
+        return
+    end
+    _G.chaos = (_G.chaos or 0) + amount
+    log.infof("objectives", msg .. " Chaos +%d (total: %d)", amount, _G.chaos)
+end
 
 local activeObjectives = {}
 local activePrimaryObjective = nil
@@ -72,9 +83,8 @@ primaryObjectiveDefs.protect_railway = {
         local prev = _G.railwayTakenDamage or 0
         if totalDamage > prev then
             local newDamage = totalDamage - prev
-            _G.chaos = (_G.chaos or 0) + newDamage
+            addChaos(newDamage, "Railway infrastructure damaged!")
             _G.railwayTakenDamage = totalDamage
-            log.infof("objectives", "Railway infrastructure damaged! Chaos +%d (total: %d)", newDamage, _G.chaos)
         end
 
         local aliveOcc = 0
@@ -86,8 +96,7 @@ primaryObjectiveDefs.protect_railway = {
         local prevOcc = _G.occupiedTunnelCount or 0
         if prevOcc > aliveOcc then
             local destroyed = prevOcc - aliveOcc
-            _G.chaos = (_G.chaos or 0) + destroyed * 2
-            log.infof("objectives", "Occupied tunnel destroyed! Chaos +%d (total: %d)", destroyed * 2, _G.chaos)
+            addChaos(destroyed * 2, "Occupied tunnel destroyed!")
         end
         _G.occupiedTunnelCount = aliveOcc
     end,
@@ -210,9 +219,8 @@ local function definePool()
                         local prevDamage = _G.blockpostDamageTracked or 0
                         if damageTaken > prevDamage then
                             local newDamage = damageTaken - prevDamage
-                            _G.chaos = (_G.chaos or 0) + newDamage
+                            addChaos(newDamage, "Blockpost damaged!")
                             _G.blockpostDamageTracked = damageTaken
-                            log.infof("objectives", "Blockpost damaged! Chaos +%d (total: %d)", newDamage, _G.chaos)
                         end
                         return
                     end
@@ -261,7 +269,7 @@ local function definePool()
                 local hasZombie = isEntityAlive(entities, "PoisonousZombie")
                 if not hasZombie then
                     for _, e in ipairs(entities) do
-                        if e.health and e.health > 0 and e.name:match("Poisonous") then
+                        if e.health and e.health > 0 and combat.isPoisonousEnemy(e) then
                             hasZombie = true
                             break
                         end
@@ -284,7 +292,7 @@ local function definePool()
                 local target = nil
                 local status_mod = require("system.status")
                 for _, e in ipairs(entities) do
-                    if e.health and e.health > 0 and e.name:match("Poisonous") then
+                    if e.health and e.health > 0 and combat.isPoisonousEnemy(e) then
                         target = e
                         break
                     end
@@ -346,22 +354,94 @@ local function definePool()
                 state["block_dig"] = (blocked >= 2) and "completed" or "failed"
             end,
         },
+        -- Hero-exclusive objectives (solo mode): only offered when the hero
+        -- has the required capabilities (see solo_mode.lua hero `tags`).
         {
-            id = "limit_stasis",
-            name = "Minimal Casualties",
-            desc = "No more than 1 unit enters stasis",
+            id = "burn_sites",
+            name = "Scorched Earth",
+            desc = "Ignite 5 different cells",
+            heroOnly = true,
+            requires = {"fire"},
             onGenerate = function(entities, hex)
-                _G.stasisCount = 0
+                _G.objective_burnCells = {}
+                _G.objective_burnSites = 0
             end,
             check = function(entities, state)
-                local count = _G.stasisCount or 0
-                if count > 1 then
-                    state["limit_stasis"] = "failed"
+                local n = 0
+                for _ in pairs(_G.objective_burnCells or {}) do n = n + 1 end
+                if n >= 5 then
+                    state["burn_sites"] = "completed"
                 end
             end,
             checkOnVictory = function(entities, state)
-                local count = _G.stasisCount or 0
-                state["limit_stasis"] = (count <= 1) and "completed" or "failed"
+                local n = 0
+                for _ in pairs(_G.objective_burnCells or {}) do n = n + 1 end
+                state["burn_sites"] = (n >= 5) and "completed" or "failed"
+            end,
+        },
+        {
+            id = "burn_kill",
+            name = "Burn Them",
+            desc = "Kill 2 enemies with fire damage",
+            heroOnly = true,
+            requires = {"fire"},
+            onGenerate = function(entities, hex)
+                _G.objective_burnKills = 0
+            end,
+            checkOnVictory = function(entities, state)
+                state["burn_kill"] = ((_G.objective_burnKills or 0) >= 2) and "completed" or "failed"
+            end,
+        },
+        {
+            id = "fatal_push",
+            name = "Deadly Push",
+            desc = "Kill an enemy with push damage",
+            heroOnly = true,
+            requires = {"push"},
+            onGenerate = function(entities, hex)
+                _G.objective_fatalPushes = 0
+            end,
+            checkOnVictory = function(entities, state)
+                state["fatal_push"] = ((_G.objective_fatalPushes or 0) >= 1) and "completed" or "failed"
+            end,
+        },
+        {
+            id = "shielded",
+            name = "Untouched",
+            desc = "Win without losing any shields",
+            heroOnly = true,
+            checkOnVictory = function(entities, state)
+                local hero = nil
+                for _, e in ipairs(entities) do
+                    if e.isPlayable and e:isCharacter() then
+                        hero = e
+                        break
+                    end
+                end
+                state["shielded"] = (hero and hero.shields and hero.maxShields
+                    and hero.shields >= hero.maxShields) and "completed" or "failed"
+            end,
+        },
+        {
+            id = "all_attacks",
+            name = "Full Arsenal",
+            desc = "Use every hero attack in battle",
+            heroOnly = true,
+            onGenerate = function(entities, hex)
+                _G.objective_usedAttacks = {}
+            end,
+            checkOnVictory = function(entities, state)
+                local hero = nil
+                for _, e in ipairs(entities) do
+                    if e.isPlayable and e:isCharacter() then
+                        hero = e
+                        break
+                    end
+                end
+                local used = 0
+                for _ in pairs(_G.objective_usedAttacks or {}) do used = used + 1 end
+                state["all_attacks"] = (hero and #hero.attacks > 0 and used >= #hero.attacks)
+                    and "completed" or "failed"
             end,
         },
         {
@@ -444,6 +524,18 @@ function objectives.generate(entities, hex, forcedObjectives)
     activeObjectives = {}
     activePrimaryObjective = nil
     objectiveStates = {}
+
+    -- Hero-exclusive objectives: only offer what the selected hero can do
+    local heroTags = {}
+    if _G.soloMode and _G.selectedSoloHero then
+        local sm = require("system.solo_mode")
+        local hdef = sm.getHeroDef(_G.selectedSoloHero)
+        if hdef and hdef.tags then
+            for _, t in ipairs(hdef.tags) do
+                heroTags[t] = true
+            end
+        end
+    end
 
     -- Primary selection: forced > map4 auto > content-based auto
     local isMap4 = _G.selectedMapPath and _G.selectedMapPath:match("map4")
@@ -535,6 +627,21 @@ function objectives.generate(entities, hex, forcedObjectives)
             local def = shuffled[i]
             local skip = false
 
+            -- Hero-exclusive: skip in non-solo modes or when the hero lacks the tags
+            if not skip and def.heroOnly then
+                if not _G.soloMode then
+                    skip = true
+                elseif def.requires then
+                    for _, t in ipairs(def.requires) do
+                        if not heroTags[t] then
+                            log.debugf("objectives", "Skipping '%s' — hero lacks '%s' capability", def.id, t)
+                            skip = true
+                            break
+                        end
+                    end
+                end
+            end
+
             if not skip and def.id == "kill_leader" then
                 skip = true
             end
@@ -602,8 +709,12 @@ function objectives.reset()
     objectiveStates = {}
     _G.objective_enemiesKilled = 0
     _G.objective_digBlocks = 0
-    _G.stasisCount = 0
     _G.caravanCount = 0
+    _G.objective_burnCells = {}
+    _G.objective_burnSites = 0
+    _G.objective_burnKills = 0
+    _G.objective_fatalPushes = 0
+    _G.objective_usedAttacks = {}
     _G.caravansDestroyed = 0
     _G.blockpostMaxHealth = 0
     _G.blockpostDamageTracked = 0
@@ -672,13 +783,12 @@ function objectives.update(entities)
     for _, obj in ipairs(activeObjectives) do
         if objectiveStates[obj.id] == "pending" then
             -- Certain objectives check immediately; others wait for decay
-            local canCheck = decayApplied or obj.id == "protect_tower" or obj.id == "protect_blockpost" or obj.id == "limit_stasis"
+            local canCheck = decayApplied or obj.id == "protect_tower" or obj.id == "protect_blockpost" or obj.id == "burn_sites"
             if canCheck and obj.check then
                 local prevState = objectiveStates[obj.id]
                 obj.check(entities, objectiveStates)
                 if prevState == "pending" and objectiveStates[obj.id] == "failed" then
-                    _G.chaos = (_G.chaos or 0) + 1
-                    log.infof("objectives", "Objective '%s' failed! Chaos +1 (total: %d)", obj.id, _G.chaos)
+                    addChaos(1, "Objective '" .. obj.id .. "' failed!")
                 end
             end
         end

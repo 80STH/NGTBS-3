@@ -22,6 +22,7 @@ local icon_names = {
     "abil_jumping_strike", "abil_stasis_overload", "abil_chain_lightning",
     "abil_invulnerability", "abil_vortex", "abil_hex",
     "abil_upside_down", "abil_teleport", "abil_speed_boost",
+    "fire_icon",
 }
 
 function icon_cache.loadAll()
@@ -68,6 +69,9 @@ end
 
 function icon_cache.keyForAbility(abilityName)
     if not abilityName then return nil end
+    if abilityName == "Overload" then
+        return icon_cache["abil_stasis_overload"] and "abil_stasis_overload" or nil
+    end
     local key = "abil_" .. abilityName:lower():gsub(" ", "_")
     return icon_cache[key] and key or nil
 end

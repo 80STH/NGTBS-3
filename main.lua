@@ -71,6 +71,8 @@ gamePhase = "menu"
 selectedMapPath = nil
 selectedSquad = nil
 selectedCommander = nil
+soloMode = false
+selectedSoloHero = nil
 difficultyModifier = 1
 squadHpBonus = 0
 squadMoveBonus = 0
@@ -195,9 +197,6 @@ function love.load()
 
     showEnemyOrder = false
     gamePhase = "menu"
-
-    -- Initialize global turnState (previously relied on confirmDeploy/
-    -- skipDeploy block in restartGame, which caused crashes on autostart).
 end
 
 function getDrawCoords(q, r)
@@ -208,10 +207,8 @@ function getDrawCoords(q, r)
         y = y - 30
     elseif terrain == "water" then
         y = y + config.WATER_Y_OFFSET
-    elseif terrain == "water" then
-        y = y + config.WATER_Y_OFFSET
     elseif terrain == "stone" then
-        y = y - 18
+        y = y - 30
     end
     if testViewActive and q == hex.centerQ and r == hex.centerR then
         y = y + testViewOffsetY

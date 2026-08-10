@@ -137,8 +137,8 @@ end
         if turnState.phase == "player" then
             local hasActive = false
             for _, e in ipairs(entities) do
-                if e.isPlayable and e.health > 0 and not e.hasActedThisTurn
-                    and not (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis")) then
+                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0)
+                if e.isPlayable and e.health > 0 and not done then
                     hasActive = true
                     break
                 end
@@ -372,8 +372,7 @@ end
     end
 
     local clicked = getEntityAtHex(tq, tr)
-    local inStasis = clicked and status and status.hasEntityStatus and status.hasEntityStatus(clicked, "stasis")
-    if clicked and (clicked.health > 0 or inStasis) and (clicked:isCharacter() or (clicked:isBuilding() and clicked.moveRange > 0)) then
+    if clicked and (clicked.health > 0) and (clicked:isCharacter() or (clicked:isBuilding() and clicked.moveRange > 0)) then
         selectedActor = clicked
         boundarySelected = nil
         hex.selectedQ, hex.selectedR = tq, tr
@@ -402,8 +401,7 @@ end
 
     if selectedActor and not selectedActor.isMoving then
         local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(selectedActor, "rooted") and not selectedActor.rootImmune
-        local isStasis = status and status.hasEntityStatus and status.hasEntityStatus(selectedActor, "stasis")
-        local canMove = not isRooted and not isStasis and (not selectedActor.hasActedThisTurn or selectedActor.canMoveAfterAttack) and (not selectedActor.hasMovedThisTurn or selectedActor.canMoveAfterAttack)
+        local canMove = not isRooted and (not selectedActor.hasActedThisTurn or selectedActor.canMoveAfterAttack) and (not selectedActor.hasMovedThisTurn or selectedActor.canMoveAfterAttack)
         if canMove then
             performMove(selectedActor, tq, tr)
             hex.selectedQ, hex.selectedR = selectedActor.q, selectedActor.r
@@ -521,11 +519,20 @@ function input.keypressed(key)
         return
     end
 
+    if key == "3" then
+        if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and #attackButtons >= 3 then
+            selectedAttack = attackButtons[3].attack
+            attackMode = true
+            log.debugf("input", "Attack selected: %s", attackButtons[3].name)
+        end
+        return
+    end
+
     if key == "tab" then
         if turnState.phase == "player" and (not selectedActor or not selectedActor.isMoving) then
             local actors = {}
             for _, e in ipairs(entities) do
-                if e.isPlayable and (e.health > 0 or (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis"))) then
+                if e.isPlayable and e.health > 0 then
                     table.insert(actors, e)
                 end
             end

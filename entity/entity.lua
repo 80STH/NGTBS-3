@@ -143,8 +143,9 @@ function Entity:switchAttack()
     return false
 end
 
--- Apply damage
-function Entity:takeDamage(damage)
+-- Apply damage. ignoreShields=true bypasses shields (objective/building
+-- damage drains health directly; shields protect the hero only).
+function Entity:takeDamage(damage, ignoreShields)
     if self.indestructible then
         return false
     end
@@ -155,17 +156,32 @@ function Entity:takeDamage(damage)
     if self.healthCellSize and self.health > self.healthCellSize then
         damage = math.min(damage, self.health - self.healthCellSize)
     end
+    -- Shields absorb damage first
+    if not ignoreShields and self.shields and self.shields > 0 then
+        local absorbed = math.min(damage, self.shields)
+        self.shields = self.shields - absorbed
+        damage = damage - absorbed
+        log.infof("entity", "%s shields absorb %d damage (%d left)!", self.name, absorbed, self.shields)
+    end
     local actualDamage = math.min(damage, self.health)
     self.health = self.health - actualDamage
     
     if self:isBuilding() and actualDamage > 0 and not self.isTrainCar    and self.name ~= "TunnelEntrance" and self.name ~= "TunnelExit" and self.name ~= "OccupiedTunnel" then
-        _G.chaos = (_G.chaos or 0) + actualDamage
-        log.infof("entity", "Building damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos)
+        if _G.soloMode and _G.damageHero then
+            _G.damageHero(actualDamage)
+        else
+            _G.chaos = (_G.chaos or 0) + actualDamage
+            log.infof("entity", "Building damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos)
+        end
     end
 
     if self.isTrainCar and actualDamage > 0 then
-        _G.chaos = (_G.chaos or 0) + actualDamage
-        log.infof("entity", "Train car damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos)
+        if _G.soloMode and _G.damageHero then
+            _G.damageHero(actualDamage)
+        else
+            _G.chaos = (_G.chaos or 0) + actualDamage
+            log.infof("entity", "Train car damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos)
+        end
     end
 
     log.debugf("entity", "%s takes %d damage! (%d/%d HP)",

@@ -118,15 +118,16 @@ function restartGame(mapPath)
         end
     end
 
-    -- Spawn 5 random enemies at game start
+    -- Spawn random enemies at game start
     local initialAlive = 0
     for _, e in ipairs(entities) do
         if e:isCharacter() and not e.isPlayable and e.health > 0 and not e.isSummoningRod then
             initialAlive = initialAlive + 1
         end
     end
-    if initialAlive < 5 then
-        local needed = 5 - initialAlive
+    local enemyTarget = soloMode and 3 or 5
+    if initialAlive < enemyTarget then
+        local needed = enemyTarget - initialAlive
         local spots = findRandomEmptyCells(needed, function(q, r)
             return status.hasNegativeHexStatus(q, r)
         end)
@@ -140,7 +141,9 @@ function restartGame(mapPath)
 
     -- Setup deploy phase
     local skipDeploy = mapPath:match("test_polygon_[12]")
-    if selectedSquad then
+    if soloMode and selectedSoloHero then
+        unplacedAllies = { require("system.solo_mode").createHero(selectedSoloHero, -1, -1) }
+    elseif selectedSquad then
         local squads = menu.getSquads()
         local squad = squads[selectedSquad]
         unplacedAllies = {}
@@ -252,8 +255,29 @@ function restartGame(mapPath)
     objectives.generate(entities, hex, mapData and mapData.objectives)
     objectives.update(entities)
 
-    if skipDeploy then
-        if selectedSquad then
+    if skipDeploy or (soloMode and selectedSoloHero) then
+        if soloMode and selectedSoloHero and #unplacedAllies > 0 then
+            local hero = unplacedAllies[1]
+            local spot = findRandomEmptyCells(1, function(q, r)
+                return status.hasNegativeHexStatus(q, r)
+            end)
+            if #spot > 0 then
+                hero.q, hero.r = spot[1].q, spot[1].r
+            else
+                for q = 0, hex.gridWidth - 1 do
+                    for r = 0, hex.gridHeight - 1 do
+                        if hero.q >= 0 then break end
+                        if hex:isActiveHex(q, r) then
+                            local occupied = false
+                            for _, e in ipairs(entities) do
+                                if e.q == q and e.r == r then occupied = true; break end
+                            end
+                            if not occupied then hero.q, hero.r = q, r end
+                        end
+                    end
+                end
+            end
+        elseif selectedSquad then
             local idx = 0
             for q = 0, hex.gridWidth - 1 do
                 for r = 0, hex.gridHeight - 1 do
@@ -314,7 +338,7 @@ function restartGame(mapPath)
     end
     clearCellDuplicateWarnings()
     rebuildEntityIndex()
-    log.infof("game", "=== MAP LOADED — %s ===", (skipDeploy and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
+    log.infof("game", "=== MAP LOADED — %s ===", ((skipDeploy or (soloMode and selectedSoloHero)) and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
 end
 
 function confirmDeploy()
@@ -356,8 +380,39 @@ function confirmDeploy()
     log.info("game", "=== DEPLOY CONFIRMED — GAME STARTED ===")
 end
 
+-- Damage the playable hero (solo mode: buildings drain the hero's health
+-- instead of the chaos meter). Bypasses shields — shields absorb direct
+-- hero damage only, not objective damage. No hero alive = nothing to damage.
+function damageHero(damage)
+    for _, e in ipairs(entities) do
+        if e.isPlayable and e:isCharacter() and e.health > 0 and not e.isDying then
+            log.infof("game", "The realm suffers — %s loses %d health!", e.name, damage)
+            local died = e:takeDamage(damage, true)
+            if died then e:startDeath() end
+            checkGameEnd()
+            return
+        end
+    end
+end
+
 function checkGameEnd()
     if not gameActive then return end
+
+    if soloMode then
+        local heroAlive = false
+        for _, e in ipairs(entities) do
+            if e.isPlayable and e.health > 0 and not e.isDying then
+                heroAlive = true
+                break
+            end
+        end
+        if not heroAlive then
+            loss = true
+            gameActive = false
+            log.warn("game", "DEFEAT: The hero has fallen!")
+            return
+        end
+    end
 
     if (chaos or 0) >= chaosMax then
         loss = true
@@ -528,7 +583,7 @@ function processDigSites()
     end
 
     for i = #entities, 1, -1 do
-        if entities[i].health <= 0 and not status.hasEntityStatus(entities[i], "stasis") then
+        if entities[i].health <= 0 then
             local e = entities[i]
             placeRubble(e)
             table.remove(entities, i)

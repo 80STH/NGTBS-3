@@ -314,7 +314,7 @@ local function completeShunt(group, entities, hex)
             and e.name ~= "TunnelEntrance" and e.name ~= "TunnelExit" and e.name ~= "OccupiedTunnel" then
             local wasDestroyed = e:takeDamage(999)
             if wasDestroyed then e:startDeath() end
-            if e.health and e.health <= 0 and not status.hasEntityStatus(e, "stasis") then table.remove(entities, i) end
+            if e.health and e.health <= 0 then table.remove(entities, i) end
         end
     end
 

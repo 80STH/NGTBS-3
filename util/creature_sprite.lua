@@ -68,6 +68,12 @@ local function genPart(category, variant)
         if variant == "none" then
             love.graphics.setColor(1, 1, 1)
             love.graphics.circle("fill", 8, 3, 3)
+        elseif variant == "grounded" then
+            love.graphics.setColor(0.75, 0.6, 0.4)
+            love.graphics.circle("fill", 8, 3, 4)
+            love.graphics.setColor(0.35, 0.25, 0.15)
+            love.graphics.polygon("fill", 5, 4, 6, 8, 7, 4)
+            love.graphics.polygon("fill", 11, 4, 10, 8, 9, 4)
         else -- slow
             love.graphics.setColor(0.6, 0.8, 1)
             love.graphics.circle("fill", 8, 3, 4)

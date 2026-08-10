@@ -390,7 +390,8 @@ function HexGrid:getCellYOffset(q, r, terrainType, waterYOffset, elevationMap)
          if elv then return -30 end
      end
      local isHighGround = terrainType == "stone"
-     return (terrainType == "water") and waterYOffset or (isHighGround and (waterYOffset + 6) or 0)
+     -- stone top face sits at y-30 (see drawTerrainHex); overlays must match it
+     return (terrainType == "water") and waterYOffset or (isHighGround and -30 or 0)
  end
 
 function HexGrid:invalidateSortedCells()

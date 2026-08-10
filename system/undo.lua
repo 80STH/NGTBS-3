@@ -34,7 +34,6 @@ function undo.snapshot()
         objectiveTracking = {
             enemiesKilled = _G.objective_enemiesKilled or 0,
             digBlocks = _G.objective_digBlocks or 0,
-            stasisCount = _G.stasisCount or 0,
             caravanCount = _G.caravanCount or 0,
             caravansDestroyed = _G.caravansDestroyed or 0,
             blockpostMaxHealth = _G.blockpostMaxHealth,
@@ -46,7 +45,20 @@ function undo.snapshot()
             poisonousHadDecay = _G.poisonousHadDecay or false,
             occupiedTunnelCount = _G.occupiedTunnelCount or 0,
             lichKilledPlayer = _G.lichKilledPlayer or false,
+            burnSites = _G.objective_burnSites or 0,
+            burnKills = _G.objective_burnKills or 0,
+            fatalPushes = _G.objective_fatalPushes or 0,
         },
+        burnCells = (function()
+            local bc = {}
+            for k in pairs(_G.objective_burnCells or {}) do bc[k] = true end
+            return bc
+        end)(),
+        usedAttacks = (function()
+            local ua = {}
+            for k in pairs(_G.objective_usedAttacks or {}) do ua[k] = true end
+            return ua
+        end)(),
         actionHistoryCount = #undo.history,
         maxTurns = _G.maxTurns,
         digSites = status.saveDigSites(),
@@ -59,10 +71,14 @@ function undo.snapshot()
             name = e.name,
             q = e.q, r = e.r,
             health = e.health, maxHealth = e.maxHealth,
+            shields = e.shields, maxShields = e.maxShields,
             attacksFirst = e.attacksFirst,
             hasActedThisTurn = e.hasActedThisTurn,
             hasMovedThisTurn = e.hasMovedThisTurn,
             canMoveAfterAttack = e.canMoveAfterAttack,
+            soloActions = e.soloActions,
+            attacksLeft = e.attacksLeft,
+            movesLeft = e.movesLeft,
             isMoving = e.isMoving,
             isDying = e.isDying,
             deathTimer = e.deathTimer,
@@ -147,10 +163,15 @@ function undo.restore(snap)
             es.ref.currentDrawY = nil
             es.ref.health = es.health
             es.ref.maxHealth = es.maxHealth
+            es.ref.shields = es.shields
+            es.ref.maxShields = es.maxShields
             es.ref.attacksFirst = es.attacksFirst
             es.ref.hasActedThisTurn = es.hasActedThisTurn
             es.ref.hasMovedThisTurn = es.hasMovedThisTurn
             es.ref.canMoveAfterAttack = es.canMoveAfterAttack
+            es.ref.soloActions = es.soloActions
+            es.ref.attacksLeft = es.attacksLeft
+            es.ref.movesLeft = es.movesLeft
             es.ref.isMoving = es.isMoving
             es.ref.isDying = es.isDying
             es.ref.deathTimer = es.deathTimer
@@ -277,7 +298,6 @@ function undo.restore(snap)
     if snap.objectiveTracking then
         _G.objective_enemiesKilled = snap.objectiveTracking.enemiesKilled
         _G.objective_digBlocks = snap.objectiveTracking.digBlocks
-        _G.stasisCount = snap.objectiveTracking.stasisCount
         _G.caravanCount = snap.objectiveTracking.caravanCount
         _G.caravansDestroyed = snap.objectiveTracking.caravansDestroyed
         _G.blockpostMaxHealth = snap.objectiveTracking.blockpostMaxHealth
@@ -289,7 +309,14 @@ function undo.restore(snap)
         _G.poisonousHadDecay = snap.objectiveTracking.poisonousHadDecay
         _G.occupiedTunnelCount = snap.objectiveTracking.occupiedTunnelCount
         _G.lichKilledPlayer = snap.objectiveTracking.lichKilledPlayer
+        _G.objective_burnSites = snap.objectiveTracking.burnSites or 0
+        _G.objective_burnKills = snap.objectiveTracking.burnKills or 0
+        _G.objective_fatalPushes = snap.objectiveTracking.fatalPushes or 0
     end
+    _G.objective_burnCells = {}
+    for k in pairs(snap.burnCells or {}) do _G.objective_burnCells[k] = true end
+    _G.objective_usedAttacks = {}
+    for k in pairs(snap.usedAttacks or {}) do _G.objective_usedAttacks[k] = true end
 
     log.debugf("undo", "Snapshot restored. History size: %d", #undo.history)
     if _G.rebuildEntityIndex then _G.rebuildEntityIndex() end

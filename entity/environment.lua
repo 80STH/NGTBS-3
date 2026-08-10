@@ -203,14 +203,14 @@ local ATTACK_SETS = {
     keeper = function()
         local c = require("combat.combat")
         return {
-            { attack = c.MendAttack.new(), name = "Mend", description = "Fully heal adjacent Colossus and remove stasis" },
+            { attack = c.MendAttack.new(), name = "Mend", description = "Fully heal adjacent Colossus" },
             { attack = c.PhaseShiftAttack.new(), name = "Phase Shift", description = "Swap with an ally, choose landing within 1 tile of them" },
         }
     end,
     provoker = function()
         local c = require("combat.combat")
         return {
-            { attack = c.FrenzyAttack.new(), name = "Frenzy", description = "Lethal to target and enemy behind. Puts Colossus in stasis" },
+            { attack = c.FrenzyAttack.new(), name = "Frenzy", description = "Lethal to target and enemy behind. Kills Colossus" },
             { attack = c.HuntAttack.new(), name = "Hunt", description = "Push target. Collision with Colossus = lethal, Colossus unharmed" },
         }
     end,
@@ -1031,6 +1031,8 @@ function environment.createGeneratedEnemy(params, q, r)
     
     if params.aura == "slow" then
         entity.aura = {type = "slow", radius = 1}
+    elseif params.aura == "grounded" then
+        entity.aura = {type = "grounded", radius = 1}
     end
     
     entity.targetPreference = params.aiModel

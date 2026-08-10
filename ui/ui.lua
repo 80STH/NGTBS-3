@@ -1,4 +1,4 @@
-﻿-- ui.lua
+-- ui.lua
 -- All UI functions (buttons, panels, attack preview, movement, etc.)
 local ui = {}
 local pathfinding = require("grid.pathfinding")
@@ -98,6 +98,7 @@ end
 function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then return end
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return end
+    if actor.soloActions and (actor.movesLeft or 0) <= 0 then return end
     if not hex:isActiveHex(hoverQ, hoverR) then return end
     if actor.teleporting then return end
     local effectiveRange = ui.getEffectiveMoveRange(actor, entities, hex)
@@ -400,7 +401,7 @@ function ui.drawPreparedAttacks(hex, entities)
         local q, r = cellKey:match("^(%d+),(%d+)$")
         q, r = tonumber(q), tonumber(r)
         local x, y = getDrawCoords(q, r)
-        local vertices = hex:drawInsetHexagon(x, y, hex.radius, 0.92)
+        local vertices = hex:drawInsetHexagon(x, y, hex.radius, 1.0)
         local threatCount = math.min(count, 3)
         local alpha, rCol, gCol, bCol, scaleMod
         if threatCount == 1 then
@@ -1031,7 +1032,7 @@ end
                 end
             end
         elseif vortexTargetCell then
-            -- Second click phase: show arrows for Aв†’dest and Bв†’further + damage preview
+            -- Second click phase: show arrows for A→dest and B→further + damage preview
             local target = getEntityAtHex(vortexTargetCell.q, vortexTargetCell.r, entities)
             if target then
                 local dests = attack:getShiftDestinations(attacker, vortexTargetCell.q, vortexTargetCell.r, hex)
@@ -1048,7 +1049,7 @@ end
                     local tx, ty = getDrawCoords(vortexTargetCell.q, vortexTargetCell.r)
                     local hx, hy = getDrawCoords(hoverQ, hoverR)
                     local occupant = getEntityAtHex(hoverQ, hoverR, entities)
-                    -- Arrow: A в†’ destination
+                    -- Arrow: A → destination
                     ui.drawPushArrow(tx, ty, hx, hy, nil, nil, nil, nil, vortexTargetCell.q, vortexTargetCell.r, hoverQ, hoverR)
                     local hasCollision = false
                     local occDamaged = false
@@ -1475,6 +1476,15 @@ local hasTarget = target and target:isCharacter() and target.health > 0
     end
     return
 end
+    -- Fire Stomp: flame icons on the cells that will ignite
+    if attack.name == "Fire Stomp" then
+        local cells = attack:getAffectedCells(attacker, hoverQ, hoverR, hex, entities)
+        for _, c in ipairs(cells) do
+            local cx, cy = getDrawCoords(c.q, c.r)
+            icon_cache.draw("fire_icon", cx, cy, 0.9)
+        end
+        return
+    end
     -- Generic method: getAffectedCells (for new attacks)
     if attack.getAffectedCells then
         local cells = attack:getAffectedCells(attacker, hoverQ, hoverR, hex, entities)
@@ -1572,6 +1582,7 @@ end
 function ui.drawMovementRange(hex, actor, entities, terrainMap)
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then return end
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return end
+    if actor.soloActions and (actor.movesLeft or 0) <= 0 then return end
 
     -- Cache: recompute only when actor/position changes
     local cacheKey = actor.q .. "," .. actor.r .. "," .. tostring(actor)
@@ -1588,7 +1599,7 @@ function ui.drawMovementRange(hex, actor, entities, terrainMap)
 
     for _, cell in ipairs(ui._moveRangeCache) do
         local x, y = getDrawCoords(cell.q, cell.r)
-        local vertices = hex:drawInsetHexagon(x, y, hex.radius, 0.92)
+        local vertices = hex:drawInsetHexagon(x, y, hex.radius, 1.0)
         love.graphics.setColor(0.2, 0.8, 0.2, 0.2)
         love.graphics.polygon("fill", vertices)
         love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
@@ -1959,7 +1970,7 @@ function ui.drawEnemyMovementRange(hex, enemy, entities, terrainMap)
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) and ui.isCellReachableForEnemy(enemy, q, r, entities, terrainMap, hex) then
                 local x, y = getDrawCoords(q, r)
-                local vertices = hex:drawInsetHexagon(x, y, hex.radius, 0.92)
+                local vertices = hex:drawInsetHexagon(x, y, hex.radius, 1.0)
                 love.graphics.setColor(0.8, 0.2, 0.2, 0.2)
                 love.graphics.polygon("fill", vertices)
                 love.graphics.setColor(0.8, 0.2, 0.2, 0.5)
@@ -2159,7 +2170,7 @@ function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
         local q, r = key:match("^(%d+),(%d+)$")
         q, r = tonumber(q), tonumber(r)
         local x, y = getDrawCoords(q, r)
-        local vertices = hex:drawInsetHexagon(x, y, hex.radius, 0.92)
+        local vertices = hex:drawInsetHexagon(x, y, hex.radius, 1.0)
         love.graphics.setColor(0.9, 0.8, 0.2, 0.25)
         love.graphics.polygon("fill", vertices)
         love.graphics.setColor(0.9, 0.8, 0.2, 0.7)
@@ -2535,7 +2546,7 @@ love.graphics.print(ally.name, x + 5, by + 2)
          local indY = by + btnH / 2 - 1
          if ally.hasActedThisTurn then
             love.graphics.setColor(0.5, 0.5, 0.5, 1)
-            love.graphics.print("вњ—", indX, indY - 2)
+            love.graphics.print("✗", indX, indY - 2)
         elseif not ally.hasMovedThisTurn then
             local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(ally, "rooted") and not ally.rootImmune
             if isRooted then
@@ -2559,15 +2570,31 @@ function ui.getPauseBtnRect()
 end
 
 function ui.drawChaosBar(mx, my)
-    local chaosVal = _G.chaos or 0
-    local chaosMaxVal = (_G.chaosMax or 5) + (_G.chaosScaleBonus or 0)
+    local solo = _G.soloMode
+    local barVal, barMax
+    local hero
+    if solo then
+        for _, e in ipairs(_G.entities or {}) do
+            if e.isPlayable and e.health > 0 then
+                hero = e
+                break
+            end
+        end
+        barMax = (hero and hero.maxHealth) or 7
+        barVal = hero and hero.health or 0
+    else
+        barVal = _G.chaos or 0
+        barMax = (_G.chaosMax or 5) + (_G.chaosScaleBonus or 0)
+    end
     local surplus = _G.chaosSurplus or 0
+    local shieldMax = solo and hero and (hero.maxShields or 0) or 0
+    local shieldVal = solo and hero and (hero.shields or 0) or 0
 
     local cellW = 30
     local cellH = 14
     local gap = 3
     local pad = 4
-    local totalW = (cellW + gap) * chaosMaxVal + pad * 2
+    local totalW = (cellW + gap) * (barMax + shieldMax) + pad * 2
 
     if not smallFont then smallFont = fonts.get(12) end
 
@@ -2596,19 +2623,40 @@ function ui.drawChaosBar(mx, my)
     love.graphics.setColor(0.3, 0.2, 0.4, 0.6)
     love.graphics.rectangle("line", barX, barY, totalW, cellH + pad * 2, 4)
 
-    for i = 1, chaosMaxVal do
+    for i = 1, barMax do
         local cx = barX + pad + (i - 1) * (cellW + gap)
         local cy = barY + pad
-        local filled = i <= chaosVal
+        local filled = i <= barVal
         if filled then
             local t = love.timer.getTime()
             local pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 0.5)
-            love.graphics.setColor(0.9 * pulse, 0.35 * pulse, 0.4 * pulse, 0.9)
+            if solo then
+                love.graphics.setColor(0.35 * pulse, 0.85 * pulse, 0.4 * pulse, 0.9)
+            else
+                love.graphics.setColor(0.9 * pulse, 0.35 * pulse, 0.4 * pulse, 0.9)
+            end
         else
             love.graphics.setColor(0.2, 0.2, 0.25, 0.6)
         end
         love.graphics.rectangle("fill", cx, cy, cellW, cellH, 2)
         love.graphics.setColor(0.4, 0.3, 0.5, 0.5)
+        love.graphics.rectangle("line", cx, cy, cellW, cellH, 2)
+    end
+
+    -- Shield cells (solo): blue, right after the health cells
+    for i = 1, shieldMax do
+        local cx = barX + pad + (barMax + i - 1) * (cellW + gap)
+        local cy = barY + pad
+        local filled = i <= shieldVal
+        if filled then
+            local t = love.timer.getTime()
+            local pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 0.5)
+            love.graphics.setColor(0.3 * pulse, 0.55 * pulse, 1 * pulse, 0.9)
+        else
+            love.graphics.setColor(0.2, 0.2, 0.25, 0.6)
+        end
+        love.graphics.rectangle("fill", cx, cy, cellW, cellH, 2)
+        love.graphics.setColor(0.35, 0.45, 0.65, 0.5)
         love.graphics.rectangle("line", cx, cy, cellW, cellH, 2)
     end
 
@@ -2675,8 +2723,8 @@ function ui.drawChaosBar(mx, my)
     love.graphics.printf("II", pb.x, pbY + pb.h / 2 - 8, pb.w, "center")
 
     if mx >= barX and mx <= barX + totalW and my >= barY and my <= barY + cellH + pad * 2 then
-        local ttW = 200
-        local ttH = 110
+        local ttW = 220
+        local ttH = solo and 185 or 110
         local ttx = barX
         local tty = barY + cellH + pad * 2 + 12
         love.graphics.setColor(0.1, 0.1, 0.2, 0.92)
@@ -2684,15 +2732,32 @@ function ui.drawChaosBar(mx, my)
         love.graphics.setColor(0.6, 0.4, 0.7, 0.8)
         love.graphics.rectangle("line", ttx, tty, ttW, ttH, 5)
 
-        local lines = {
-            {text = "Chaos", color = {0.9, 0.6, 0.8, 1}},
-            {text = "", color = {1, 1, 1, 1}},
-            {text = "Chaos rises when buildings take", color = {0.8, 0.8, 0.8, 1}},
-            {text = "damage or secondary objectives fail.", color = {0.8, 0.8, 0.8, 1}},
-            {text = "At maximum, the realm collapses.", color = {0.8, 0.8, 0.8, 1}},
-            {text = "", color = {1, 1, 1, 1}},
-            {text = string.format("Current: %d / %d", chaosVal, chaosMaxVal), color = chaosVal >= chaosMaxVal and {1, 0.3, 0.3, 1} or {1, 0.9, 0.2, 1}},
-        }
+        local lines
+        if solo then
+            lines = {
+                {text = "Health", color = {0.5, 0.9, 0.6, 1}},
+                {text = "", color = {1, 1, 1, 1}},
+                {text = "Your hero's life. Buildings", color = {0.8, 0.8, 0.8, 1}},
+                {text = "damaged and failed objectives", color = {0.8, 0.8, 0.8, 1}},
+                {text = "drain it. At zero, defeat.", color = {0.8, 0.8, 0.8, 1}},
+                {text = "", color = {1, 1, 1, 1}},
+                {text = "Blue cells are shields: they absorb", color = {0.7, 0.8, 1, 1}},
+                {text = "direct hero damage and refill", color = {0.7, 0.8, 1, 1}},
+                {text = "between levels.", color = {0.7, 0.8, 1, 1}},
+                {text = "", color = {1, 1, 1, 1}},
+                {text = string.format("Current: %d / %d  Shields: %d", barVal, barMax, shieldVal), color = barVal <= 0 and {1, 0.3, 0.3, 1} or {0.5, 1, 0.6, 1}},
+            }
+        else
+            lines = {
+                {text = "Chaos", color = {0.9, 0.6, 0.8, 1}},
+                {text = "", color = {1, 1, 1, 1}},
+                {text = "Chaos rises when buildings take", color = {0.8, 0.8, 0.8, 1}},
+                {text = "damage or secondary objectives fail.", color = {0.8, 0.8, 0.8, 1}},
+                {text = "At maximum, the realm collapses.", color = {0.8, 0.8, 0.8, 1}},
+                {text = "", color = {1, 1, 1, 1}},
+                {text = string.format("Current: %d / %d", barVal, barMax), color = barVal >= barMax and {1, 0.3, 0.3, 1} or {1, 0.9, 0.2, 1}},
+            }
+        end
         local curY = tty + 6
         for _, l in ipairs(lines) do
             love.graphics.setColor(l.color[1], l.color[2], l.color[3], l.color[4] or 1)

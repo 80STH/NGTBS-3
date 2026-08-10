@@ -336,6 +336,7 @@ function renderer.draw(state)
         if sel and not sel.isMoving and state.turnState.phase == "player" then
             local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(sel, "rooted") and not sel.rootImmune
             local canShowMove = not isRooted and (not sel.hasActedThisTurn or sel.canMoveAfterAttack) and (not sel.hasMovedThisTurn or sel.canMoveAfterAttack)
+                and (not sel.soloActions or (sel.movesLeft or 0) > 0)
             if canShowMove then
                 ui.drawMovementRange(hex, sel, state.entities, state.terrainMap)
                 if sel.isPlayable and hex.hoverQ >= 0 and hex.hoverR >= 0 then
@@ -799,7 +800,7 @@ function drawHexGrid(state, cellOverlays)
         local cellKey = cell.q .. "," .. cell.r
         local overlay = cellOverlays and cellOverlays[cellKey]
         if overlay then
-            local verts = hex:drawInsetHexagon(cell.x, drawY + yOffset, hex.radius, 0.92)
+            local verts = hex:drawInsetHexagon(cell.x, drawY + yOffset, hex.radius, 1.0)
             if overlay.fill then
                 love.graphics.setColor(overlay.fill[1], overlay.fill[2], overlay.fill[3], overlay.fill[4])
                 love.graphics.polygon("fill", verts)
@@ -813,7 +814,7 @@ function drawHexGrid(state, cellOverlays)
             end
         end
 
-        local insetVerts = hex:drawHexagon(cell.x, drawY + yOffset, hex.radius - 2)
+        local insetVerts = hex:drawHexagon(cell.x, drawY + yOffset, hex.radius)
 
         local isCurrentActor = state.selectedActor and state.selectedActor.q == cell.q and state.selectedActor.r == cell.r
             and not state.selectedActor.isMoving
@@ -979,12 +980,6 @@ function drawEntity(entity, state)
         love.graphics.setColor(1, 1, 1, alpha)
     end
 
-    local inStasis = status.hasEntityStatus(entity, "stasis")
-    if inStasis then
-        alpha = 0.7
-        love.graphics.setColor(0.3, 0.5, 1, alpha)
-    end
-
     local wounded = entity:isCharacter() and entity.health > 0 and entity.health < entity.maxHealth
 
     -- Highlight shuntable train cars
@@ -1004,7 +999,7 @@ function drawEntity(entity, state)
         if entity:isObstacle() or entity:isBuilding() then
             drawY = y - 6
         end
-        if wounded and not inStasis then
+        if wounded then
             love.graphics.setColor(1, 0.3, 0.3, alpha)
         elseif shuntHighlight then
             love.graphics.setColor(0.3, 0.6, 1, alpha)

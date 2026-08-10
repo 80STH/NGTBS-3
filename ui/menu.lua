@@ -2,6 +2,7 @@ local menu = {}
 local shop = require("ui.shop")
 local commanders = require("system.commanders")
 local fonts = require("util.fonts")
+local solo_mode = require("system.solo_mode")
 
 local function loadMapList()
     local items = love.filesystem.getDirectoryItems("maps")
@@ -56,25 +57,6 @@ local squads = {
         }
     },
 }
-
-local squadAttackNames = {}
-local function getSquadAttackNames(squadIdx)
-    if squadAttackNames[squadIdx] then return squadAttackNames[squadIdx] end
-    local names = {}
-    local squad = squads[squadIdx]
-    if squad then
-        for _, u in ipairs(squad.units) do
-            local atkSet = environment and environment.getAttacks and environment.getAttacks(u.attacks)
-            if atkSet then
-                for _, a in ipairs(atkSet) do
-                    table.insert(names, a.name)
-                end
-            end
-        end
-    end
-    squadAttackNames[squadIdx] = names
-    return names
-end
 
 function menu.getMapList()
     return mapList
@@ -141,21 +123,21 @@ local function computeLayout(w, h)
     end
     y = y + cmdCardH + 10
 
-    -- Squads (horizontal row of compact cards)
-    l.squadLabelY = y
+    -- Heroes (solo mode)
+    l.heroLabelY = y
     y = y + 18
-    local squadCardW = math.floor((contentW - (#squads - 1) * 6) / #squads)
-    local squadCardH = 40
-    l.squadCards = {}
-    for i, squad in ipairs(squads) do
-        l.squadCards[i] = {
-            x = cx + (i - 1) * (squadCardW + 6),
+    local heroCardW = math.floor((contentW - 4 * 4) / 5)
+    local heroCardH = 54
+    l.heroCards = {}
+    for i, hero in ipairs(solo_mode.getHeroes()) do
+        l.heroCards[i] = {
+            x = cx + (i - 1) * (heroCardW + 4),
             y = y,
-            w = squadCardW,
-            h = squadCardH,
+            w = heroCardW,
+            h = heroCardH,
         }
     end
-    y = y + squadCardH + 14
+    y = y + heroCardH + 12
 
     -- Maps
     local smallFont = fonts.get(11)
@@ -272,41 +254,41 @@ function menu.draw()
         love.graphics.printf(table.concat(cmd.startAbilities, ", "), card.x + 6, card.y + 19, card.w - 12, "center")
     end
 
-    -- Squad label
+    -- Hero label
     love.graphics.setFont(l.cardFont)
     love.graphics.setColor(0.6, 0.8, 1, 0.9)
-    love.graphics.printf("Squad", l.cx, l.squadLabelY, l.contentW, "center")
+    love.graphics.printf("Hero (solo: 2 atk + 2 move per turn)", l.cx, l.heroLabelY, l.contentW, "center")
 
-    -- Squad cards
-    for i, squad in ipairs(squads) do
-        local card = l.squadCards[i]
+    -- Hero cards
+    local heroes = solo_mode.getHeroes()
+    for i, hero in ipairs(heroes) do
+        local card = l.heroCards[i]
         local hover = mx >= card.x and mx <= card.x + card.w and my >= card.y and my <= card.y + card.h
-        local sel = selectedSquad == i
+        local sel = selectedSoloHero == i
 
-        love.graphics.setColor(hover and 0.2 or 0.1, hover and 0.18 or 0.12, sel and 0.3 or (hover and 0.25 or 0.15), 0.95)
+        love.graphics.setColor(hover and 0.2 or 0.1, hover and 0.16 or 0.12, hover and 0.3 or (sel and 0.25 or 0.15), 0.95)
         love.graphics.rectangle("fill", card.x, card.y, card.w, card.h, 5)
         if sel then
-            love.graphics.setColor(0.4, 0.35, 0.8, 0.9)
+            love.graphics.setColor(0.9, 0.55, 0.2, 0.9)
             love.graphics.setLineWidth(2)
             love.graphics.rectangle("line", card.x, card.y, card.w, card.h, 5)
             love.graphics.setLineWidth(1)
         else
-            love.graphics.setColor(0.3, 0.3, 0.4, 0.4)
+            love.graphics.setColor(0.4, 0.3, 0.25, 0.4)
             love.graphics.rectangle("line", card.x, card.y, card.w, card.h, 5)
         end
 
         love.graphics.setColor(1, 1, 1, 0.95)
         love.graphics.setFont(l.cardFont)
-        love.graphics.printf(squad.name, card.x + 6, card.y + 3, card.w - 12, "center")
-
-        local unitNames = ""
-        for j, u in ipairs(squad.units) do
-            if j > 1 then unitNames = unitNames .. ", " end
-            unitNames = unitNames .. u.name
-        end
-        love.graphics.setColor(0.7, 0.7, 0.7, 0.7)
+        love.graphics.printf(hero.name, card.x + 2, card.y + 2, card.w - 4, "center")
+        love.graphics.setColor(0.8, 0.7, 0.5, 0.9)
         love.graphics.setFont(l.tinyFont)
-        love.graphics.printf(unitNames, card.x + 6, card.y + 19, card.w - 12, "center")
+        love.graphics.printf("HP" .. hero.hp .. " SH" .. (hero.shields or 2) .. " Mv" .. hero.move, card.x + 2, card.y + 15, card.w - 4, "center")
+        local names = {}
+        for _, a in ipairs(hero.attacks()) do table.insert(names, a.name) end
+        love.graphics.setColor(0.7, 0.8, 1, 0.85)
+        love.graphics.setFont(fonts.get(7))
+        love.graphics.printf(table.concat(names, " / "), card.x + 2, card.y + 26, card.w - 4, "center")
     end
 
     -- Map label
@@ -396,11 +378,12 @@ function menu.mousepressed(x, y)
         end
     end
 
-    -- Squads
-    for i, card in ipairs(l.squadCards) do
+    -- Heroes (solo mode)
+    for i, card in ipairs(l.heroCards) do
         if x >= card.x and x <= card.x + card.w and y >= card.y and y <= card.y + card.h then
             if not selectedCommander then return true end
-            selectedSquad = i
+            selectedSoloHero = i
+            soloMode = true
             return true
         end
     end
@@ -409,7 +392,8 @@ function menu.mousepressed(x, y)
     for i, btn in ipairs(l.mapBtns) do
         if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
             if not selectedCommander then return true end
-            if not selectedSquad then selectedSquad = 1 end
+            if not selectedSoloHero then selectedSoloHero = 1 end
+            soloMode = true
             isProgressionRun = false
             global_abilities.initWithCommander(selectedCommander)
             restartGame(btn.path)
@@ -423,6 +407,8 @@ function menu.mousepressed(x, y)
             if btn.key == "progression" then
                 if not selectedCommander then return true end
                 if not selectedSquad then selectedSquad = 1 end
+                selectedSoloHero = nil
+                soloMode = false
                 unitUpgrades = {}
                 artifacts = {}
                 commanderArtifacts = {}
@@ -475,7 +461,8 @@ function menu.keypressed(key)
     if key == "return" or key == " " then
         if #mapList > 0 then
             if not selectedCommander then return true end
-            if not selectedSquad then selectedSquad = 1 end
+            if not selectedSoloHero then selectedSoloHero = 1 end
+            soloMode = true
             global_abilities.initWithCommander(selectedCommander)
             restartGame(mapList[1])
             return true

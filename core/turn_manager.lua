@@ -168,12 +168,16 @@ function transitionToPlayerTurn()
     sounds.play("turn_start")
     for _, a in ipairs(entities) do
         if a.isPlayable then
-            if a.health > 0 or (status and status.hasEntityStatus and status.hasEntityStatus(a, "stasis")) then
+            if a.health > 0 then
                 a.hasActedThisTurn = false
                 a.hasMovedThisTurn = false
                 a.canMoveAfterAttack = false
                 a.chainAttack = nil
                 a.redirectPending = nil
+                if a.soloActions then
+                    a.attacksLeft = 2
+                    a.movesLeft = 2
+                end
             end
         end
     end

@@ -3,7 +3,7 @@ local boss_generator = {}
 local HEALTH_COST = {4, 6, 8, 10}
 local SPEED_COST = {1, 2, 3}
 local MOBILITY_COST = {walking = 0, hovering = 2, teleport = 10}
-local AURA_COST = {none = 0, slow = 3}
+local AURA_COST = {none = 0, slow = 3, grounded = 3}
 
 local ATTACKS = {
     {name = "Magic Bolt", set = "lich", cost = 3, color = {0.8, 0.2, 0.8}},
@@ -52,7 +52,8 @@ function boss_generator.generate(budget)
     end
     
     params.attack = ATTACKS[1]
-    params.aura = love.math.random() < 0.25 and "slow" or "none"
+    local auraRoll = love.math.random()
+    params.aura = auraRoll < 0.25 and "slow" or (auraRoll < 0.4 and "grounded" or "none")
     local aiModel = AI_MODELS[love.math.random(#AI_MODELS)]
     params.aiModel = aiModel.id
     

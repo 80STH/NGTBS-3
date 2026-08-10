@@ -171,8 +171,8 @@ return function(ui)
         local hasActiveUnits = false
         if isPlayerTurn then
             for _, e in ipairs(entities) do
-                if e.isPlayable and e.health > 0 and not e.hasActedThisTurn
-                    and not (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis")) then
+                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0)
+                if e.isPlayable and e.health > 0 and not done then
                     hasActiveUnits = true
                     break
                 end
@@ -228,8 +228,8 @@ return function(ui)
         if btn.isHovered and isPlayerTurn and hasActiveUnits then
             local unitsLeft = {}
             for _, e in ipairs(entities) do
-                if e.isPlayable and e.health > 0 and not e.hasActedThisTurn
-                    and not (status and status.hasEntityStatus and status.hasEntityStatus(e, "stasis")) then
+                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0)
+                if e.isPlayable and e.health > 0 and not done then
                     table.insert(unitsLeft, e.name)
                 end
             end

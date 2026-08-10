@@ -45,3 +45,38 @@ Working recipe (verified):
 6. **LOVE rotation convention**: positive rotation angle rotates clockwise-down on screen
    (verified: `rotate(math.rad(30))` maps (10,0) → (8.66, +5)). Hex sprites should use a flat-top
    hex mask: faces at normals 30°+60°·k, apothem `radius*cos(30°)`.
+
+## PNG capture / pixel analysis (verified this session)
+
+7. **Screenshot of the running game** — `love.graphics.captureScreenshot` needs an argument in
+   LOVE 11.5 (filename OR callback; with no args it errors). Use the callback form to write
+   anywhere via `io`:
+
+   ```lua
+   love.graphics.captureScreenshot(function(img)        -- img is ImageData
+       local fd = img:encode("png")                     -- FileData, NOT a string
+       local f = io.open("C:/path/shot.png", "wb")
+       f:write(fd:getString()); f:close()
+   end)
+   ```
+
+   Trigger it from a temporary `love.update` override inside an env-var-gated block in the
+   game's `love.load` (see "TEMP TEST" pattern); `love.event.quit()` right after.
+
+8. **Programmatic pixel analysis instead of viewing images** — the model cannot read PNGs.
+   Draw to a canvas, read pixels back, scan for color transitions, dump the run to a log:
+
+   ```lua
+   local canvas = love.graphics.newCanvas(W, H)
+   love.graphics.setCanvas(canvas); love.graphics.clear(0, 0, 0, 1)
+   -- ...draw stuff...
+   love.graphics.setCanvas()
+   local img = canvas:newImageData()
+   local r, g, b, a = img:getPixel(x, y)                -- scan lines for edge positions
+   ```
+
+9. **Standalone render/test folders are flaky**: a game folder WITHOUT the project's
+   `conf.lua` (`highdpi`, `t.console`) hangs at startup — copy `conf.lua` in. After
+   force-killing `lovec.exe`, the next run may hang at map load (leftover window/GPU state) —
+   kill all `love*` processes and wait ~3 s between runs; prefer running inside the game
+   folder via an env-var-gated temp block in `love.load`.

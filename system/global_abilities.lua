@@ -26,13 +26,13 @@ global_abilities.mana = 3
 global_abilities.maxMana = 3
 global_abilities.abilityUsedThisTurn = false
 
-global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Stasis Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport", "Speed Boost"}
+global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport", "Speed Boost"}
 
 global_abilities.heroicAbilities = {
     ["Wind Torrent"] = true,
     ["Accelerate Decay"] = true,
     ["The Big One"] = true,
-    ["Stasis Overload"] = true,
+    ["Overload"] = true,
     ["Vortex"] = true,
 }
 
@@ -485,7 +485,7 @@ function HealAbility:onClickHex(q, r, hex, state)
         log.warn("abilities", "No valid target!")
         return true
     end
-    if target.health <= 0 and not status.hasEntityStatus(target, "stasis") then
+    if target.health <= 0 then
         log.warn("abilities", "Cannot heal dead units!")
         return true
     end
@@ -496,12 +496,8 @@ function HealAbility:onClickHex(q, r, hex, state)
         return true
     end
 
-    local wasStasis = status.hasEntityStatus(target, "stasis")
     target.health = target.maxHealth
     status.entityStatuses[target] = nil
-    if wasStasis then
-        log.infof("abilities", "%s revived from stasis!", tostring(target.name))
-    end
     if status.hasAtHex(target.q, target.r, "fire") then
         status.removeFromHex(target.q, target.r, "fire")
         log.info("abilities", "Fire on the ground extinguished!")
@@ -578,7 +574,7 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
             log.warn("abilities", "No valid ally at this cell!")
             return true
         end
-        if target.health <= 0 and not status.hasEntityStatus(target, "stasis") then
+        if target.health <= 0 then
             log.warn("abilities", "Cannot target dead units!")
             return true
         end
@@ -621,16 +617,11 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
         end
 
         -- Remove all negative statuses
-        local wasStasis = status.hasEntityStatus(self.target, "stasis")
         local statuses = status.getEntityStatuses(self.target)
         for _, st in ipairs(statuses) do
             if st ~= "empowered" then
                 status.removeFromEntity(self.target, st)
             end
-        end
-        if wasStasis then
-            self.target.health = 1
-            log.infof("abilities", "%s revived from stasis with 1 HP!", tostring(self.target.name))
         end
         if status.hasAtHex(self.target.q, self.target.r, "fire") then
             status.removeFromHex(self.target.q, self.target.r, "fire")
@@ -924,9 +915,10 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
         local newQ, newR = hex_utils.applyCubeDiff(oldQ, oldR, step.dx, step.dy, step.dz)
         if not hex:isActiveHex(newQ, newR) then
             if obj:isCharacter() then
-                obj.health = obj.health - 1
+                local wasDestroyed = obj:takeDamage(1)
+                combat.notePushKill(obj, wasDestroyed)
                 if sounds then sounds.play("collision") end
-                if obj.health <= 0 then obj:startDeath() end
+                if wasDestroyed then obj:startDeath() end
             end
             local fx, fy = getDrawCoords(oldQ, oldR)
             visual.addEffect(fx, fy, "slam")
@@ -1737,35 +1729,35 @@ function JumpingStrikeAbility:drawButton(mx, my, state)
 end
 
 -- ============================================================
--- STASIS OVERLOAD: fatal damage to ally and all adjacent
+-- OVERLOAD: fatal damage to ally and all adjacent
 -- ============================================================
-local StasisOverloadAbility = {}
-StasisOverloadAbility.__index = StasisOverloadAbility
+local OverloadAbility = {}
+OverloadAbility.__index = OverloadAbility
 
-function StasisOverloadAbility.new()
+function OverloadAbility.new()
     local self = {
-        name = "Stasis Overload",
+        name = "Overload",
         manaCost = 2,
         button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
     }
-    return setmetatable(self, StasisOverloadAbility)
+    return setmetatable(self, OverloadAbility)
 end
 
-function StasisOverloadAbility:reset()
+function OverloadAbility:reset()
     self.hasBeenUsed = false
 end
 
-function StasisOverloadAbility:onActivate(state)
-    log.info("abilities", "Click on an ally to trigger Stasis Overload, or press ESC to cancel")
+function OverloadAbility:onActivate(state)
+    log.info("abilities", "Click on an ally to trigger Overload, or press ESC to cancel")
 end
 
-function StasisOverloadAbility:onDeactivate(state)
+function OverloadAbility:onDeactivate(state)
     restoreSelectedActor()
     log.infof("abilities", "%s cancelled", self.name)
 end
 
-function StasisOverloadAbility:onClickHex(q, r, hex, state)
+function OverloadAbility:onClickHex(q, r, hex, state)
     local target = nil
     for _, e in ipairs(state.entities) do
         if e.q == q and e.r == r and e.health > 0 and e.isPlayable then
@@ -1802,14 +1794,14 @@ function StasisOverloadAbility:onClickHex(q, r, hex, state)
 
     global_abilities.spendAbility(self)
     undo.snapshot()
-    log.info("abilities", "Stasis Overload activated!")
+    log.info("abilities", "Overload activated!")
     if _G.checkGameEnd then _G.checkGameEnd() end
     restoreSelectedActor()
     global_abilities.activeAbility = nil
     return true
 end
 
-function StasisOverloadAbility:collectOverlays(hex, cellOverlays, state)
+function OverloadAbility:collectOverlays(hex, cellOverlays, state)
     local hq, hr = hex.hoverQ, hex.hoverR
     if hq < 0 or hr < 0 then return end
 
@@ -1846,13 +1838,13 @@ function StasisOverloadAbility:collectOverlays(hex, cellOverlays, state)
     end
 end
 
-function StasisOverloadAbility:drawButton(mx, my, state)
+function OverloadAbility:drawButton(mx, my, state)
     global_abilities.drawAbilityButton(self, mx, my, state, {
         color = {0.8, 0.2, 0.8},
-        label = "Stasis Overload",
+        label = "Overload",
         activeLabel = "Select ally",
         tooltipH = 80,
-        tooltipTitle = "Stasis Overload",
+        tooltipTitle = "Overload",
         tooltipLines = {
             "Deal fatal damage to an ally",
             "and all units adjacent to it.",
@@ -2101,18 +2093,11 @@ function InvulnerabilityAbility:onClickHex(q, r, hex, state)
     end
 
     -- Clear all negative statuses (keep empowered)
-    local wasStasis = status.hasEntityStatus(target, "stasis")
     local sts = status.getEntityStatuses(target)
     for _, st in ipairs(sts) do
         if st ~= "empowered" then
             status.removeFromEntity(target, st)
         end
-    end
-
-    -- Heal to full if was in stasis
-    if wasStasis then
-        target.health = target.maxHealth
-        log.infof("abilities", "%s revived from stasis!", tostring(target.name))
     end
 
     -- Make indestructible
@@ -2267,9 +2252,10 @@ local function executeVortex(self, centerQ, centerR, radius, clockwise, hex, ent
                 if col.reason == "edge" then
                     local entity = m.entity
                     if entity:isCharacter() then
-                        entity.health = entity.health - 1
+                        local wasDestroyed = entity:takeDamage(1)
+                        combat.notePushKill(entity, wasDestroyed)
                         if sounds then sounds.play("collision") end
-                        if entity.health <= 0 then entity:startDeath() end
+                        if wasDestroyed then entity:startDeath() end
                     end
                     local fx, fy = getDrawCoords(m.fromQ, m.fromR)
                     visual.addEffect(fx, fy, "slam")
@@ -2810,7 +2796,7 @@ function SpeedBoostAbility:onClickHex(q, r, hex, state)
         log.warn("abilities", "No valid ally at this cell!")
         return true
     end
-    if target.health <= 0 and not status.hasEntityStatus(target, "stasis") then
+    if target.health <= 0 then
         log.warn("abilities", "Cannot target dead units!")
         return true
     end
@@ -3027,7 +3013,7 @@ global_abilities.register(RageAbility.new())
 global_abilities.register(TheBigOneAbility.new())
 global_abilities.register(AirStrikeAbility.new())
 global_abilities.register(JumpingStrikeAbility.new())
-global_abilities.register(StasisOverloadAbility.new())
+global_abilities.register(OverloadAbility.new())
 global_abilities.register(ChainLightningAbility.new())
 global_abilities.register(InvulnerabilityAbility.new())
 global_abilities.register(VortexAbility.new())

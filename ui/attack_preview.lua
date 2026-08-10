@@ -93,9 +93,9 @@ end
 
 -- Will this exact amount of (already-effective) damage kill the target?
 -- Collision damage in combat is always 1 HP, but a few modifiers can reduce it.
-function preview.calculateEffectiveCollisionDamage(target)
+function preview.calculateEffectiveCollisionDamage(target, rawDamage)
     if not target or target.health <= 0 or target.indestructible then return 0 end
-    local damage = 1
+    local damage = rawDamage or 1
     if target.isPlayable and (_G.squadArmorBonus or 0) > 0 then
         damage = math.max(0, damage - _G.squadArmorBonus)
     end
@@ -104,6 +104,9 @@ function preview.calculateEffectiveCollisionDamage(target)
     end
     if target.healthCellSize and target.health > target.healthCellSize then
         damage = math.min(damage, target.health - target.healthCellSize)
+    end
+    if target.shields and target.shields > 0 then
+        damage = math.max(0, damage - target.shields)
     end
     return damage
 end
@@ -242,22 +245,28 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
 
     -- Highground push: high -> low = fall (all units at destination die)
     if fromElev and not toElev and isActive(toQ, toR, hex) then
+        local occupantAtDest = nil
+        if entities then
+            for _, e in ipairs(entities) do
+                if e.health and e.health > 0 and e.q == toQ and e.r == toR and e ~= entity then
+                    occupantAtDest = e
+                    break
+                end
+            end
+        end
+        -- 1 damage from the fall, +1 when a destructible building is crushed
+        local dmg = 1
+        if occupantAtDest and occupantAtDest:isBuilding() and not occupantAtDest.indestructible then
+            dmg = 2
+        end
         if entity.health and entity.health > 0 then
-            result.damage = 1
+            result.damage = dmg
             result.type = "collision_damage"
             result.reason = "highground_fall"
         end
         -- All entities at destination are killed
         result.occupantDmg = 99
-        result.occupant = nil
-        if entities then
-            for _, e in ipairs(entities) do
-                if e.health and e.health > 0 and e.q == toQ and e.r == toR and e ~= entity then
-                    result.occupant = e
-                    break
-                end
-            end
-        end
+        result.occupant = occupantAtDest
         return result
     end
 
@@ -358,7 +367,7 @@ function preview.applyPush(p, entity, fromQ, fromR, toQ, toR, hex, entities)
         preview.addCollisionHint(p, fromQ, fromR, toQ, toR, col.type, entity, col.occupant, col.reason)
     end
     if col.damage > 0 then
-        preview.addCollisionDamage(p, entity, preview.calculateEffectiveCollisionDamage(entity))
+        preview.addCollisionDamage(p, entity, preview.calculateEffectiveCollisionDamage(entity, col.damage))
     end
     if col.reason == "highground_fall" and entities then
         -- All units at destination die: show fatal on each
@@ -975,7 +984,7 @@ handlers["Phase Shift"] = function(p, attacker, attack, hoverQ, hoverR, hex, ent
     end
 end
 
--- Frenzy: lethal to target + behind, puts Colossus in stasis.
+-- Frenzy: lethal to target + behind, kills Colossus.
 handlers["Frenzy"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
     if dist ~= 1 then return end

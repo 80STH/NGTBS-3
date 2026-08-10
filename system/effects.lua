@@ -59,6 +59,9 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
                     local damage = 1
                     log.infof("effects", "%s burns for %d damage!", entity.name, damage)
                     local wasDestroyed = entity:takeDamage(damage)
+                    if wasDestroyed and entity:isCharacter() and not entity.isPlayable then
+                        _G.objective_burnKills = (_G.objective_burnKills or 0) + 1
+                    end
                     sounds.play("fire")
                     if wasDestroyed then
                         entity:startDeath()
