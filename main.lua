@@ -73,6 +73,7 @@ selectedSquad = nil
 selectedCommander = nil
 soloMode = false
 selectedSoloHero = nil
+hero = nil  -- solo mode: the single playable hero entity
 difficultyModifier = 1
 squadHpBonus = 0
 squadMoveBonus = 0
@@ -489,14 +490,16 @@ end
 -- Vertical step of the elevation bend; smaller than the cliff height so the
 -- line keeps its original slope.
 local ELEVATION_BEND_STEP = 15
+local ELEVATION_ARC_SEGMENTS = 10
+local ELEVATION_ARC_BULGE = 12
 
--- Two bend points where a straight cell-to-cell line crosses an elevation
--- edge (low <-> high). Returns bx1, by1, bx2, by2 for the polyline
--- (fromX, fromY) -> (bx1, by1) -> (bx2, by2) -> (toX, toY), or nil when the
--- line stays on one elevation level. The line keeps its straight direction
--- and steps vertically by exactly the highground height at the shared edge
--- of the two cells where the elevation changes.
-function getElevationBend(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY)
+-- Smooth curve polyline where a straight cell-to-cell line crosses elevation
+-- edges (low <-> high). Returns a flat point list {x1, y1, x2, y2, ...} from
+-- (fromX, fromY) to (toX, toY) that follows the straight line on each level
+-- and arcs over every cliff edge it crosses, or nil when the line stays on
+-- one elevation level. ox/oy offset the whole polyline (for shadows).
+function getElevationCurve(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY, ox, oy)
+    ox, oy = ox or 0, oy or 0
     if not elevationMap then return nil end
     if fromQ == toQ and fromR == toR then return nil end
     -- Purely vertical line already goes straight up/down the cliff face — no bend
@@ -512,6 +515,9 @@ function getElevationBend(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY)
     local g = gcd(gcd(dx, dy), dz)
     if g == 0 then return nil end
     local sx, sy, sz = dx / g, dy / g, dz / g
+    local dir = toX > fromX and 1 or -1
+    local pts = { fromX + ox, fromY + oy }
+    local crossings = 0
     local curQ, curR = fromQ, fromR
     local curElv = elevationMap[fromQ] and elevationMap[fromQ][fromR]
     for _ = 1, g do
@@ -524,11 +530,24 @@ function getElevationBend(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY)
             -- Y of the straight line at the cliff edge
             local lineY = fromY + (toY - fromY) * (edgeX - fromX) / (toX - fromX)
             local drop = curElv and ELEVATION_BEND_STEP or -ELEVATION_BEND_STEP
-            return edgeX, lineY, edgeX, lineY + drop
+            -- Quadratic arc over the cliff, bulging in the travel direction
+            local x0, y0 = edgeX, lineY
+            local x2, y2 = edgeX, lineY + drop
+            local cx, cy = edgeX + ELEVATION_ARC_BULGE * dir, lineY + drop / 2
+            for s = 1, ELEVATION_ARC_SEGMENTS do
+                local p = s / ELEVATION_ARC_SEGMENTS
+                local u = 1 - p
+                pts[#pts + 1] = u * u * x0 + 2 * u * p * cx + p * p * x2 + ox
+                pts[#pts + 1] = u * u * y0 + 2 * u * p * cy + p * p * y2 + oy
+            end
+            crossings = crossings + 1
         end
         curQ, curR, curElv = nQ, nR, nElv
     end
-    return nil
+    if crossings == 0 then return nil end
+    pts[#pts + 1] = toX + ox
+    pts[#pts + 1] = toY + oy
+    return pts
 end
 
 function applyResolution(idx)

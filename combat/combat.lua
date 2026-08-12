@@ -300,8 +300,8 @@ function combat.Attack:noTargetLineFallback(attacker, stepX, stepY, stepZ, hex)
     if not endCell then return false end
     local fx, fy = getDrawCoords(attacker.q, attacker.r)
     local tx, ty = getDrawCoords(endCell.q, endCell.r)
-    local bx1, by1, bx2, by2 = getElevationBend(attacker.q, attacker.r, endCell.q, endCell.r, fx, fy, tx, ty)
-    visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.7, 0.2, 3, 1.0, bx1, by1, bx2, by2)
+    visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.7, 0.2, 3, 1.0,
+        getElevationCurve(attacker.q, attacker.r, endCell.q, endCell.r, fx, fy, tx, ty))
     attacker.hasActedThisTurn = true
     return true
 end
@@ -452,6 +452,9 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
                     local crashQ, crashR = walkQ, walkR
                     local oldQ, oldR = attacker.q, attacker.r
                     attacker.q, attacker.r = crashQ, crashR
+                    if selectedActor == attacker then
+                        hex.selectedQ, hex.selectedR = attacker.q, attacker.r
+                    end
                     if attacker.rootedTarget then
                         status.removeFromEntity(attacker.rootedTarget, "rooted")
                         attacker.rootedTarget = nil
@@ -478,6 +481,9 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
                     end
                     local oldQ, oldR = attacker.q, attacker.r
                     attacker.q, attacker.r = landingQ, landingR
+                    if selectedActor == attacker then
+                        hex.selectedQ, hex.selectedR = attacker.q, attacker.r
+                    end
                     if attacker.rootedTarget then
                         status.removeFromEntity(attacker.rootedTarget, "rooted")
                         attacker.rootedTarget = nil
@@ -552,6 +558,9 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     if shouldMove then
         attacker.q = moveQ
         attacker.r = moveR
+        if selectedActor == attacker then
+            hex.selectedQ, hex.selectedR = attacker.q, attacker.r
+        end
         if attacker.rootedTarget then
             status.removeFromEntity(attacker.rootedTarget, "rooted")
             attacker.rootedTarget = nil
@@ -2227,6 +2236,9 @@ end
 function combat.moveEntityWithAnimation(entity, fromQ, fromR, toQ, toR, onComplete)
     entity.q = toQ
     entity.r = toR
+    if selectedActor == entity then
+        hex.selectedQ, hex.selectedR = entity.q, entity.r
+    end
     if entity.rootedTarget then
         status.removeFromEntity(entity.rootedTarget, "rooted")
         entity.rootedTarget = nil

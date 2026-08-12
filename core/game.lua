@@ -141,8 +141,10 @@ function restartGame(mapPath)
 
     -- Setup deploy phase
     local skipDeploy = mapPath:match("test_polygon_[12]")
+    hero = nil
     if soloMode and selectedSoloHero then
-        unplacedAllies = { require("system.solo_mode").createHero(selectedSoloHero, -1, -1) }
+        hero = require("system.solo_mode").createHero(selectedSoloHero, -1, -1)
+        unplacedAllies = { hero }
     elseif selectedSquad then
         local squads = menu.getSquads()
         local squad = squads[selectedSquad]
@@ -256,8 +258,7 @@ function restartGame(mapPath)
     objectives.update(entities)
 
     if skipDeploy or (soloMode and selectedSoloHero) then
-        if soloMode and selectedSoloHero and #unplacedAllies > 0 then
-            local hero = unplacedAllies[1]
+        if soloMode and hero then
             local spot = findRandomEmptyCells(1, function(q, r)
                 return status.hasNegativeHexStatus(q, r)
             end)
@@ -388,14 +389,11 @@ end
 -- instead of the chaos meter). Bypasses shields — shields absorb direct
 -- hero damage only, not objective damage. No hero alive = nothing to damage.
 function damageHero(damage)
-    for _, e in ipairs(entities) do
-        if e.isPlayable and e:isCharacter() and e.health > 0 and not e.isDying then
-            log.infof("game", "The realm suffers — %s loses %d health!", e.name, damage)
-            local died = e:takeDamage(damage, true)
-            if died then e:startDeath() end
-            checkGameEnd()
-            return
-        end
+    if hero and hero:isCharacter() and hero.health > 0 and not hero.isDying then
+        log.infof("game", "The realm suffers — %s loses %d health!", hero.name, damage)
+        local died = hero:takeDamage(damage, true)
+        if died then hero:startDeath() end
+        checkGameEnd()
     end
 end
 
@@ -403,14 +401,7 @@ function checkGameEnd()
     if not gameActive then return end
 
     if soloMode then
-        local heroAlive = false
-        for _, e in ipairs(entities) do
-            if e.isPlayable and e.health > 0 and not e.isDying then
-                heroAlive = true
-                break
-            end
-        end
-        if not heroAlive then
+        if not (hero and hero.health > 0 and not hero.isDying) then
             loss = true
             gameActive = false
             log.warn("game", "DEFEAT: The hero has fallen!")

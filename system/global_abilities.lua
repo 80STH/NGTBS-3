@@ -1487,7 +1487,8 @@ function AirStrikeAbility:drawPreview(hex, state)
         local tx, ty = getDrawCoords(endQ, endR)
         love.graphics.setLineWidth(3)
         love.graphics.setColor(1, 0.8, 0.2, 0.5)
-        love.graphics.line(fx, fy, tx, ty)
+        local pts = getElevationCurve(lastQ, lastR, endQ, endR, fx, fy, tx, ty)
+        if pts then love.graphics.line(unpack(pts)) else love.graphics.line(fx, fy, tx, ty) end
         love.graphics.setLineWidth(1)
         love.graphics.setColor(1, 1, 1, 1)
     end
@@ -1683,7 +1684,8 @@ function JumpingStrikeAbility:drawPreview(hex, state)
         local tx, ty = getDrawCoords(endQ, endR)
         love.graphics.setLineWidth(3)
         love.graphics.setColor(1, 0.8, 0.2, 0.5)
-        love.graphics.line(fx, fy, tx, ty)
+        local pts = getElevationCurve(lastQ, lastR, endQ, endR, fx, fy, tx, ty)
+        if pts then love.graphics.line(unpack(pts)) else love.graphics.line(fx, fy, tx, ty) end
         love.graphics.setLineWidth(1)
         love.graphics.setColor(1, 1, 1, 1)
 
@@ -2023,7 +2025,8 @@ local cell_rules = require("grid.cell_rules")
             -- Draw lightning bolt line
             love.graphics.setLineWidth(4)
             love.graphics.setColor(0.8, 0.2, 1, 0.7)
-            love.graphics.line(fx, fy, sx, sy)
+            local pts = getElevationCurve(self.firstTarget.q, self.firstTarget.r, second.q, second.r, fx, fy, sx, sy)
+            if pts then love.graphics.line(unpack(pts)) else love.graphics.line(fx, fy, sx, sy) end
             love.graphics.setLineWidth(2)
             local midx, midy = (fx + sx) / 2, (fy + sy) / 2
             love.graphics.line(midx - 4, midy - 4, midx + 4, midy + 4)

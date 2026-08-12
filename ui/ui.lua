@@ -129,13 +129,13 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
         else
             fromQ, fromR = path[i - 1].q, path[i - 1].r
         end
-        local bx1, by1, bx2, by2
-        if getElevationBend then
-            bx1, by1, bx2, by2 = getElevationBend(fromQ, fromR, path[i].q, path[i].r,
+        local pts
+        if getElevationCurve then
+            pts = getElevationCurve(fromQ, fromR, path[i].q, path[i].r,
                 points[i].x, points[i].y, points[i + 1].x, points[i + 1].y)
         end
-        if bx1 then
-            love.graphics.line(points[i].x, points[i].y, bx1, by1, bx2, by2, points[i + 1].x, points[i + 1].y)
+        if pts then
+            love.graphics.line(unpack(pts))
         else
             love.graphics.line(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y)
         end
@@ -171,50 +171,39 @@ function ui.checkCollisionDamage(entity, fromQ, fromR, toQ, toR, hex, entities)
     local col = attack_preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
     return col.damage, col.reason, col.occupant
 end
--- Height of the highground; must match the -30 shift in hexgrid:getCellYOffset
-local ELEVATION_HEIGHT = 30
+-- Draw a hint line that arcs over any elevation edge it crosses.
+local function drawHintLine(fq, fr, tq, tr, fx, fy, tx, ty)
+    local pts = getElevationCurve(fq, fr, tq, tr, fx, fy, tx, ty)
+    if pts then
+        love.graphics.line(unpack(pts))
+    else
+        love.graphics.line(fx, fy, tx, ty)
+    end
+end
 
 -- Draw push arrow (with offset from centers)
 function ui.drawPushArrow(fromX, fromY, toX, toY, r, g, b, alpha, fromQ, fromR, toQ, toR, scale)
-    -- Cross-elevation: draw step shape with horizontal at low ground
+    -- Cross-elevation: arc over the cliff edge
     local s = scale or 1
     local cr = r or 1
     local cg = g or 0.8
     local cb = b or 0.2
     local ca = alpha or 0.9
-    if fromQ ~= nil and toQ ~= nil then
-        local bx1, by1, bx2, by2
-        if getElevationBend then
-            local fromElv = elevationMap and elevationMap[fromQ] and elevationMap[fromQ][fromR]
-            local toElv = elevationMap and elevationMap[toQ] and elevationMap[toQ][toR]
-            if fromElv and not toElv then
-                -- Push off the highground: diagonal to the low cell's center
-                -- raised to the highground level, then straight down
-                bx1, by1 = toX, toY - ELEVATION_HEIGHT
-                bx2, by2 = toX, toY
-            else
-                bx1, by1, bx2, by2 = getElevationBend(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY)
-            end
-        end
-        if bx1 then
+    if fromQ ~= nil and toQ ~= nil and getElevationCurve then
+        local pts = getElevationCurve(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY)
+        if pts then
             local lw = 2 * s; local as = 8 * s; local hw = as * 0.5
             local so = 2 * s
+            local spts = getElevationCurve(fromQ, fromR, toQ, toR, fromX, fromY, toX, toY, so, so)
             love.graphics.setColor(0, 0, 0, ca * 0.35)
             love.graphics.setLineWidth(lw + 2 * s)
-            love.graphics.line(fromX + so, fromY + so, bx1 + so, by1 + so)
-            love.graphics.line(bx1 + so, by1 + so, bx2 + so, by2 + so)
-            love.graphics.line(bx2 + so, by2 + so, toX + so, toY + so)
+            love.graphics.line(unpack(spts))
             love.graphics.setColor(cr, cg, cb, ca)
             love.graphics.setLineWidth(lw)
-            love.graphics.line(fromX, fromY, bx1, by1)
-            love.graphics.line(bx1, by1, bx2, by2)
-            love.graphics.line(bx2, by2, toX, toY)
+            love.graphics.line(unpack(pts))
             love.graphics.setLineWidth(1)
             -- Arrowhead angle: last non-degenerate segment
-            local ax1, ay1 = bx2, by2
-            if toX == bx2 and toY == by2 then
-                ax1, ay1 = bx1, by1
-            end
+            local ax1, ay1 = pts[#pts - 3], pts[#pts - 2]
             local angle = math.atan2(toY - ay1, toX - ax1)
             local lx = toX + math.cos(angle + math.pi * 0.85) * hw
             local ly = toY + math.sin(angle + math.pi * 0.85) * hw
@@ -843,10 +832,10 @@ end
                 -- Trail to last low cell
                 love.graphics.setLineWidth(6)
                 love.graphics.setColor(1, 0.2, 0.2, 0.15 * trailPulse)
-                love.graphics.line(fromX, fromY, toX, toY)
+                drawHintLine(attacker.q, attacker.r, crashQ, crashR, fromX, fromY, toX, toY)
                 love.graphics.setLineWidth(2)
                 love.graphics.setColor(1, 0.3, 0.3, 0.4 * trailPulse)
-                love.graphics.line(fromX, fromY, toX, toY)
+                drawHintLine(attacker.q, attacker.r, crashQ, crashR, fromX, fromY, toX, toY)
                 love.graphics.setLineWidth(1)
                 -- Red X at edge toward high ground
                 local dx, dy = getDrawCoords(indicatorQ, indicatorR)
@@ -869,17 +858,17 @@ end
             elseif elevFall then
                 love.graphics.setLineWidth(6)
                 love.graphics.setColor(1, 0.7, 0.1, 0.15 * trailPulse)
-                love.graphics.line(fromX, fromY, toX, toY)
+                drawHintLine(attacker.q, attacker.r, crashQ, crashR, fromX, fromY, toX, toY)
                 love.graphics.setLineWidth(2)
                 love.graphics.setColor(1, 0.8, 0.2, 0.4 * trailPulse)
-                love.graphics.line(fromX, fromY, toX, toY)
+                drawHintLine(attacker.q, attacker.r, crashQ, crashR, fromX, fromY, toX, toY)
             else
                 love.graphics.setLineWidth(6)
                 love.graphics.setColor(0.3, 1, 0.3, 0.15 * trailPulse)
-                love.graphics.line(fromX, fromY, toX, toY)
+                drawHintLine(attacker.q, attacker.r, indicatorQ, indicatorR, fromX, fromY, toX, toY)
                 love.graphics.setLineWidth(2)
                 love.graphics.setColor(0.6, 1, 0.6, 0.4 * trailPulse)
-                love.graphics.line(fromX, fromY, toX, toY)
+                drawHintLine(attacker.q, attacker.r, indicatorQ, indicatorR, fromX, fromY, toX, toY)
             end
             love.graphics.setLineWidth(1)
             if not hideArrows then
@@ -931,7 +920,8 @@ end
                 if targetHex and not isEdge and firstTarget.isPushable and not hideArrows then
                     if not combat.getEntityAtHex(pushQ, pushR, entities) then
                         local pushX, pushY = getDrawCoords(pushQ, pushR)
-                        ui.drawPushArrow(targetX, targetY, pushX, pushY)
+                        ui.drawPushArrow(targetX, targetY, pushX, pushY, nil, nil, nil, nil,
+                            targetHex.q, targetHex.r, pushQ, pushR)
                     end
                 end
             end
@@ -1714,13 +1704,10 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
         end
         local dotRadius = hex.radius * 0.12
         local spacing = hex.radius * 0.4
-        -- Bend around elevation edge: dots follow low-ground -> cliff -> high-ground
-        local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
-        local path = { fromX, fromY }
-        if bx1 then
-            path[3], path[4], path[5], path[6], path[7], path[8] = bx1, by1, bx2, by2, toX, toY
-        else
-            path[3], path[4] = toX, toY
+        -- Arc over elevation edges: dots follow low-ground -> curve -> high-ground
+        local path = getElevationCurve(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
+        if not path then
+            path = { fromX, fromY, toX, toY }
         end
         local segLens = {}
         local totalLen = 0
@@ -2507,14 +2494,8 @@ end
 function ui.drawChaosBar(mx, my)
     local solo = _G.soloMode
     local barVal, barMax
-    local hero
+    local hero = _G.hero
     if solo then
-        for _, e in ipairs(_G.entities or {}) do
-            if e.isPlayable and e.health > 0 then
-                hero = e
-                break
-            end
-        end
         barMax = (hero and hero.maxHealth) or 7
         barVal = hero and hero.health or 0
     else

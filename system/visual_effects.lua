@@ -91,8 +91,8 @@ function visual.draw()
     local t = e.timer / e.duration
     local alpha = 1 - t
     local x, y
-    if e.bendX1 then
-        local pts = { e.fromX, e.fromY, e.bendX1, e.bendY1, e.bendX2, e.bendY2, e.toX, e.toY }
+    if e.points then
+        local pts = e.points
         local segLens, total = {}, 0
         for i = 1, #pts - 2, 2 do
             local lx, ly = pts[i + 2] - pts[i], pts[i + 3] - pts[i + 1]
@@ -148,8 +148,8 @@ elseif e.type == "line" then
     local alpha = (1 - t) * e.alpha
     love.graphics.setLineWidth(e.thickness)
     love.graphics.setColor(e.r, e.g, e.b, alpha)
-    if e.bendX1 then
-        love.graphics.line(e.fromX, e.fromY, e.bendX1, e.bendY1, e.bendX2, e.bendY2, e.toX, e.toY)
+    if e.points then
+        love.graphics.line(unpack(e.points))
     else
         love.graphics.line(e.fromX, e.fromY, e.toX, e.toY)
     end
@@ -234,13 +234,12 @@ end
 -- NEW EFFECTS FOR ATTACKS
 -- ============================================================
 
-function visual.addDashEffect(fromX, fromY, toX, toY, bx1, by1, bx2, by2)
+function visual.addDashEffect(fromX, fromY, toX, toY, points)
     table.insert(visual.effects, {
         type = "dash",
         fromX = fromX, fromY = fromY,
         toX = toX, toY = toY,
-        bendX1 = bx1, bendY1 = by1,
-        bendX2 = bx2, bendY2 = by2,
+        points = points,
         timer = 0, duration = 0.25
     })
 end
@@ -257,7 +256,7 @@ function visual.addArcEffect(fromX, fromY, toX, toY, r, g, b, duration, ctrlX, c
     })
 end
 
-function visual.addLineEffect(fromX, fromY, toX, toY, r, g, b, thickness, alpha, bx1, by1, bx2, by2)
+function visual.addLineEffect(fromX, fromY, toX, toY, r, g, b, thickness, alpha, points)
     table.insert(visual.effects, {
         type = "line",
         fromX = fromX, fromY = fromY,
@@ -265,8 +264,7 @@ function visual.addLineEffect(fromX, fromY, toX, toY, r, g, b, thickness, alpha,
         r = r, g = g, b = b,
         thickness = thickness or 2,
         alpha = alpha or 1,
-        bendX1 = bx1, bendY1 = by1,
-        bendX2 = bx2, bendY2 = by2,
+        points = points,
         timer = 0, duration = 0.2
     })
 end

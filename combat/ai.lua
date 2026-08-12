@@ -303,8 +303,8 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         elseif targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
-            visual.addLineEffect(fromX, fromY, toX, toY, 0.7, 0.3, 1.0, 3, 0.6, bx1, by1, bx2, by2)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.7, 0.3, 1.0, 3, 0.6,
+                getElevationCurve(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY))
         end
     elseif attack.name == "Bite" then
         if target then
@@ -312,8 +312,8 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         elseif targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
-            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.2, 0.2, 4, 0.8, bx1, by1, bx2, by2)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.2, 0.2, 4, 0.8,
+                getElevationCurve(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY))
             visual.addEffect(toX, toY, "hit", 0.25)
         end
     elseif attack.name == "Magic Bolt" then
@@ -336,8 +336,8 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         if targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
-            visual.addDashEffect(fromX, fromY, toX, toY, bx1, by1, bx2, by2)
+            visual.addDashEffect(fromX, fromY, toX, toY,
+                getElevationCurve(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY))
         end
     elseif attack.name == "Shoot" then
         if target then
@@ -350,15 +350,15 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         elseif targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
-            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.7, 0.2, 3, 1.0, bx1, by1, bx2, by2)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.7, 0.2, 3, 1.0,
+                getElevationCurve(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY))
         end
     elseif attack.name == "Bash" or attack.name == "Lunge" then
         if target then
             local tx, ty = getDrawCoords(target.q, target.r)
             local fx, fy = getDrawCoords(enemy.q, enemy.r)
-            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, target.q, target.r, fx, fy, tx, ty)
-            visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.5, 0.2, 4, 0.6, bx1, by1, bx2, by2)
+            visual.addLineEffect(fx, fy, tx, ty, 0.9, 0.5, 0.2, 4, 0.6,
+                getElevationCurve(enemy.q, enemy.r, target.q, target.r, fx, fy, tx, ty))
             visual.addEffect(tx, ty, "hit", 0.3)
             -- Extra target for Bash (behind attacker) and Lunge (behind target)
             local extraQ, extraR, extraTarget = nil, nil, nil
@@ -388,8 +388,8 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         if targetQ and targetR then
             local fromX, fromY = getDrawCoords(enemy.q, enemy.r)
             local toX, toY = getDrawCoords(targetQ, targetR)
-            local bx1, by1, bx2, by2 = getElevationBend(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
-            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.5, 0.2, 3, 0.6, bx1, by1, bx2, by2)
+            visual.addLineEffect(fromX, fromY, toX, toY, 0.9, 0.5, 0.2, 3, 0.6,
+                getElevationCurve(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY))
         end
         -- Two side targets (the main target will already be hit)
         local frontTargets = {}

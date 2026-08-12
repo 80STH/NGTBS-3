@@ -411,13 +411,7 @@ local function definePool()
             desc = "Win without losing any shields",
             heroOnly = true,
             checkOnVictory = function(entities, state)
-                local hero = nil
-                for _, e in ipairs(entities) do
-                    if e.isPlayable and e:isCharacter() then
-                        hero = e
-                        break
-                    end
-                end
+                local hero = _G.hero
                 state["shielded"] = (hero and hero.shields and hero.maxShields
                     and hero.shields >= hero.maxShields) and "completed" or "failed"
             end,
@@ -431,13 +425,7 @@ local function definePool()
                 _G.objective_usedAttacks = {}
             end,
             checkOnVictory = function(entities, state)
-                local hero = nil
-                for _, e in ipairs(entities) do
-                    if e.isPlayable and e:isCharacter() then
-                        hero = e
-                        break
-                    end
-                end
+                local hero = _G.hero
                 local used = 0
                 for _ in pairs(_G.objective_usedAttacks or {}) do used = used + 1 end
                 state["all_attacks"] = (hero and #hero.attacks > 0 and used >= #hero.attacks)
