@@ -30,7 +30,7 @@ globals = {
   "entities", "terrainMap", "turnState", "turnCount", "maxTurns",
   "gameActive", "win", "loss", "selectedActor", "selectedAttack",
   "attackMode", "flipTargetActor", "vortexTargetCell", "pushDirTargetCell",
-  "pullHookTargetCell", "attackButtons", "sounds", "actionHistory",
+  "attackButtons", "sounds", "actionHistory",
   "maxUndoCount", "decayAppliedForTurnLimit", "decayMessageTimer",
   "fireAppliedForTurnLimit", "pushAnimations", "dpiScale", "screenShake",
   "testViewActive", "testViewOffsetY", "gamePhase", "selectedMapPath",

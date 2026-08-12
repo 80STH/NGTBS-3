@@ -1468,89 +1468,172 @@ function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entiti
 end
 
 -- ============================================================
-combat.PullHookAttack = setmetatable({}, combat.Attack)
-combat.PullHookAttack.__index = combat.PullHookAttack
+-- ============================================================
+-- CATCH (Hooker): line shot, pull first target to self + 1 damage
+-- ============================================================
+combat.CatchAttack = setmetatable({}, combat.Attack)
+combat.CatchAttack.__index = combat.CatchAttack
 
-function combat.PullHookAttack.new()
-    local self = combat.Attack.new("Pull Hook", "Hook a target on a straight line, move to a chosen cell and pull it towards you", 999, 0, {})
-    return setmetatable(self, combat.PullHookAttack)
+function combat.CatchAttack.new()
+    local self = combat.Attack.new("Catch", "Hook the first enemy in line, pull it to you and deal 1 damage", 999, 1, {})
+    self.visualType = "line"
+    return setmetatable(self, combat.CatchAttack)
 end
 
-function combat.PullHookAttack:getLineTarget(attacker, targetQ, targetR, hex, entities)
+function combat.CatchAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if not firstTarget then return false, "No target in that direction!" end
+    if firstTarget.isPushable == false then return false, "Target cannot be pulled!" end
+
+    -- Pull the target to the free cell next to the hero (on the line)
+    local pullQ, pullR = hex_utils.applyCubeStep(attacker.q, attacker.r, stepX, stepY, stepZ)
+    local occupied = false
+    if not hex:isActiveHex(pullQ, pullR) then
+        occupied = true
+    else
+        for _, e in ipairs(entities) do
+            if e ~= firstTarget and e.q == pullQ and e.r == pullR and e.health > 0 then
+                occupied = true
+                break
+            end
+        end
+    end
+
+    if not occupied then
+        combat.moveEntityWithAnimation(firstTarget, firstTarget.q, firstTarget.r, pullQ, pullR, function()
+            self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
+        end)
+        combat.startPushAnimations(hex)
+    else
+        self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
+    end
+
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.CatchAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return nil end
     local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     if firstTarget and targetHex then
-        local dist = hex:getDistance(attacker.q, attacker.r, targetHex.q, targetHex.r)
-        if dist < 2 then return nil end
-        return {q = targetHex.q, r = targetHex.r, entity = firstTarget}
+        return targetHex
     end
     return nil
 end
 
-function combat.PullHookAttack:getPullHookMoveCells(attacker, stepX, stepY, stepZ, hookTargetQ, hookTargetR, hex, entities)
-    local cells = {}
-    -- Attacker can always stay in place
-    table.insert(cells, {q = attacker.q, r = attacker.r})
-    local curQ, curR = attacker.q, attacker.r
-    while true do
-        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
-        if not hex:isValidHex(nextQ, nextR) then break end
-        if nextQ == hookTargetQ and nextR == hookTargetR then break end
-        if hex:isActiveHex(nextQ, nextR) then
-            local occupied = false
-            for _, e in ipairs(entities) do
-                if e.health > 0 and e.q == nextQ and e.r == nextR then
-                    occupied = true
-                    break
-                end
-            end
-            if not occupied then
-                table.insert(cells, {q = nextQ, r = nextR})
-            end
-        end
-        curQ, curR = nextQ, nextR
-    end
-    return cells
+-- ============================================================
+-- GRAPPLE (Hooker): line shot, hero pulls himself to the target;
+-- lethal damage if the covered distance is more than 3 cells
+-- ============================================================
+combat.GrappleAttack = setmetatable({}, combat.Attack)
+combat.GrappleAttack.__index = combat.GrappleAttack
+
+function combat.GrappleAttack.new()
+    local self = combat.Attack.new("Grapple", "Pull yourself to the first enemy in line and deal 1 damage. Lethal beyond 3 cells", 999, 1, {})
+    self.visualType = "line"
+    return setmetatable(self, combat.GrappleAttack)
 end
 
-function combat.PullHookAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    local hookTarget = self._pullHookTarget
-    if not hookTarget then return false, "No hook target!" end
-    self._pullHookTarget = nil
-
-    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, hookTarget.q, hookTarget.r, hex)
+function combat.GrappleAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if not firstTarget then return false, "No target in that direction!" end
 
-    local targetEntity = combat.getEntityAtHex(hookTarget.q, hookTarget.r, entities)
-    if not targetEntity or targetEntity.health <= 0 or targetEntity.isPushable == false then return false, "Target is gone!" end
-
-    local moveQ, moveR = targetQ, targetR
-    local isStationary = (moveQ == attacker.q and moveR == attacker.r)
-
-    if isStationary then
-        -- Attacker stays in place, pull target directly
-        local pullQ, pullR = hex_utils.applyCubeStep(moveQ, moveR, stepX, stepY, stepZ)
-        if hex:isActiveHex(pullQ, pullR) and not combat.getEntityAtHex(pullQ, pullR, entities) then
-            combat.moveEntityWithAnimation(targetEntity, hookTarget.q, hookTarget.r, pullQ, pullR)
-            combat.startPushAnimations(hex)
-        end
-    else
-        -- Animate attacker moving to selected cell, then pull target
-        combat.moveEntityWithAnimation(attacker, attacker.q, attacker.r, moveQ, moveR)
-        combat.startPushAnimations(hex, function()
-            local pullQ, pullR = hex_utils.applyCubeStep(moveQ, moveR, stepX, stepY, stepZ)
-            local occupant = combat.getEntityAtHex(pullQ, pullR, entities)
-            if hex:isActiveHex(pullQ, pullR) and (not occupant or occupant == targetEntity) then
-                combat.moveEntityWithAnimation(targetEntity, targetEntity.q, targetEntity.r, pullQ, pullR)
-                combat.startPushAnimations(hex)
+    -- Last free cell before the target along the line
+    local landQ, landR = attacker.q, attacker.r
+    local curQ, curR = attacker.q, attacker.r
+    while true do
+        local nQ, nR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if nQ == targetHex.q and nR == targetHex.r then break end
+        if not hex:isActiveHex(nQ, nR) then break end
+        local occ = false
+        for _, e in ipairs(entities) do
+            if e ~= attacker and e.q == nQ and e.r == nR and e.health > 0 then
+                occ = true
+                break
             end
-        end)
+        end
+        if occ then break end
+        landQ, landR = nQ, nR
+        curQ, curR = nQ, nR
     end
 
-    sounds.play("pull_hook")
+    local dist = hex:getDistance(attacker.q, attacker.r, targetHex.q, targetHex.r)
+    local damage = self.damage
+    if dist > 3 then
+        damage = 99
+    end
+
+    combat.moveEntityWithAnimation(attacker, attacker.q, attacker.r, landQ, landR, function()
+        self:dealDamageToTarget(firstTarget, attacker, damage, entities, sounds, nil)
+    end)
+    combat.startPushAnimations(hex)
+
     attacker.hasActedThisTurn = true
     return true
+end
+
+function combat.GrappleAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if firstTarget and targetHex then
+        return targetHex
+    end
+    return nil
+end
+
+-- ============================================================
+-- WARP PRISM (Hooker): line shot, swap the hero and the hit unit.
+-- Works on any unit that can be moved (pushable), grounded included.
+-- ============================================================
+combat.WarpPrismAttack = setmetatable({}, combat.Attack)
+combat.WarpPrismAttack.__index = combat.WarpPrismAttack
+
+function combat.WarpPrismAttack.new()
+    local self = combat.Attack.new("Warp Prism", "Swap places with the first enemy in line. Works on grounded units", 999, 0, {})
+    self.visualType = "line"
+    return setmetatable(self, combat.WarpPrismAttack)
+end
+
+function combat.WarpPrismAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not a straight line!" end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if not firstTarget then return false, "No target in that direction!" end
+    if firstTarget == attacker then return false, "Cannot warp with yourself!" end
+    if firstTarget.isPushable == false then return false, "Target cannot be warped!" end
+
+    local aQ, aR = attacker.q, attacker.r
+    local tQ, tR = firstTarget.q, firstTarget.r
+
+    if visual then
+        local fx, fy = getDrawCoords(aQ, aR)
+        local tx, ty = getDrawCoords(tQ, tR)
+        visual.addLineEffect(fx, fy, tx, ty, 0.8, 0.3, 1, 3, 0.8)
+    end
+
+    combat.moveEntityWithAnimation(attacker, aQ, aR, tQ, tR)
+    combat.moveEntityWithAnimation(firstTarget, tQ, tR, aQ, aR)
+    combat.startPushAnimations(hex)
+
+    sounds.play("blip")
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.WarpPrismAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+    local firstTarget, targetHex = self:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if firstTarget and targetHex then
+        return targetHex
+    end
+    return nil
 end
 
 -- ============================================================
@@ -2044,6 +2127,72 @@ function combat.isGrounded(entity, entities, hex)
         end
     end
     return false
+end
+
+-- ============================================================
+-- TELEPORTERS (upper terrain "teleporter:<pairId>")
+-- ============================================================
+
+-- Swap the entity with whoever stands on the paired teleporter cell.
+-- Any character landing on a teleporter triggers it (the hero included).
+-- If the paired portal is empty, the entity still teleports there.
+function combat.triggerTeleporter(entity)
+    if not entity or not entity:isCharacter() then return false end
+    if entity.health <= 0 or entity.isDying or entity.isMoving then return false end
+    local teleporters = require("system.teleporters")
+    local id, other = teleporters.getCellInfo(entity.q, entity.r)
+    if not id or not other then return false end
+
+    local otherEntity = nil
+    for _, e in ipairs(entities) do
+        if e ~= entity and e.q == other.q and e.r == other.r
+            and e.health > 0 and not e.isDying and e:isCharacter() then
+            otherEntity = e
+            break
+        end
+    end
+
+    local fromQ, fromR = entity.q, entity.r
+    if otherEntity then
+        otherEntity.q, otherEntity.r = fromQ, fromR
+        entity.q, entity.r = other.q, other.r
+        -- Prevent re-triggering this frame (both now stand on teleporter cells)
+        otherEntity._tpChecked = otherEntity.q .. "," .. otherEntity.r
+    else
+        -- One-way teleport to the empty paired portal
+        entity.q, entity.r = other.q, other.r
+    end
+    entity._tpChecked = entity.q .. "," .. entity.r
+
+    if visual then
+        local x1, y1 = getDrawCoords(fromQ, fromR)
+        local x2, y2 = getDrawCoords(other.q, other.r)
+        visual.addMagicExplosion(x1, y1, 1.0, 0.6, 0.9)
+        visual.addMagicExplosion(x2, y2, 1.0, 0.6, 0.9)
+    end
+    sounds.play("blip")
+    teleporters.markUsed(id)
+    if otherEntity then
+        log.infof("combat", "%s teleports to (%d,%d), swapping with %s!", entity.name, other.q, other.r, otherEntity.name)
+    else
+        log.infof("combat", "%s teleports to the empty portal at (%d,%d)!", entity.name, other.q, other.r)
+    end
+    return true
+end
+
+-- Called every frame: entities that just arrived on a teleporter cell swap.
+-- Portals are disabled during the enemy's turn.
+function combat.pollTeleporters()
+    if not turnState or turnState.phase ~= "player" then return end
+    for _, e in ipairs(entities) do
+        if e:isCharacter() and e.health > 0 and not e.isDying and not e.isMoving then
+            local key = e.q .. "," .. e.r
+            if key ~= (e._tpChecked or "") then
+                e._tpChecked = key
+                combat.triggerTeleporter(e)
+            end
+        end
+    end
 end
 
 -- Poisoned marker: checks the "Poisonous" enemy name. Affects ONLY the

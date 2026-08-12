@@ -26,7 +26,7 @@ global_abilities.mana = 3
 global_abilities.maxMana = 3
 global_abilities.abilityUsedThisTurn = false
 
-global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport", "Speed Boost"}
+global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport", "Speed Boost", "Void"}
 
 global_abilities.heroicAbilities = {
     ["Wind Torrent"] = true,
@@ -2566,6 +2566,104 @@ function HexAbility:drawButton(mx, my, state)
 end
 
 -- ============================================================
+-- VOID: turn a cell into empty (banish entities, clear statuses)
+-- ============================================================
+local VoidAbility = {}
+VoidAbility.__index = VoidAbility
+
+function VoidAbility.new()
+    local self = {
+        name = "Void",
+        manaCost = 2,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }
+    return setmetatable(self, VoidAbility)
+end
+
+function VoidAbility:reset()
+    self.hasBeenUsed = false
+end
+
+function VoidAbility:onActivate(state)
+    log.info("abilities", "Click on a cell to turn it into empty, or press ESC to cancel")
+end
+
+function VoidAbility:onDeactivate(state)
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+
+function VoidAbility:onClickHex(q, r, hex, state)
+    if not hex:isActiveHex(q, r) then return true end
+
+    undo.snapshot()
+
+    -- Banish every destructible non-playable entity on the cell
+    for i = #state.entities, 1, -1 do
+        local e = state.entities[i]
+        if e.q == q and e.r == r and not e.isPlayable and not e.indestructible and e.health and e.health > 0 then
+            table.remove(state.entities, i)
+        end
+    end
+
+    -- Destroying a teleporter disables its pair forever (before clearing
+    -- the marker — destroy reads it from the upper terrain)
+    local teleporters = require("system.teleporters")
+    teleporters.destroy(q, r, state.upperTerrainMap)
+
+    -- Clear hex statuses (fire, acid, decay), dig sites and rubble
+    status.hexStatuses[q .. "," .. r] = nil
+    status.removeDigSite(q, r)
+    if state.upperTerrainMap and state.upperTerrainMap[q] then
+        state.upperTerrainMap[q][r] = nil
+    end
+
+    -- Turn the cell itself into emptiness
+    if state.terrainMap then
+        if not state.terrainMap[q] then state.terrainMap[q] = {} end
+        state.terrainMap[q][r] = "emptiness"
+    end
+    if _G.hex and _G.hex.invalidateSortedCells then _G.hex:invalidateSortedCells() end
+
+    if visual then
+        local x, y = getDrawCoords(q, r)
+        visual.addMagicExplosion(x, y, 1.0, 0.7, 0.2)
+    end
+
+    global_abilities.spendAbility(self)
+    sounds.play("blip")
+    if _G.rebuildEntityIndex then _G.rebuildEntityIndex() end
+    if _G.checkGameEnd then _G.checkGameEnd() end
+    restoreSelectedActor()
+    global_abilities.activeAbility = nil
+    return true
+end
+
+function VoidAbility:collectOverlays(hex, cellOverlays, state)
+    if hex.hoverQ < 0 or hex.hoverR < 0 then return end
+    local key = hex.hoverQ .. "," .. hex.hoverR
+    if hex:isActiveHex(hex.hoverQ, hex.hoverR) then
+        cellOverlays[key] = {fill = {0.7, 0.4, 0.9, 0.35}, line = {0.7, 0.4, 0.9, 0.8}}
+    end
+end
+
+function VoidAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.7, 0.4, 0.9},
+        label = "Void",
+        activeLabel = "Select cell",
+        tooltipH = 80,
+        tooltipTitle = "Void",
+        tooltipLines = {
+            "Turn a cell into emptiness:",
+            "banish enemies, clear fire/",
+            "acid, dig sites and rubble.",
+        },
+    })
+end
+
+-- ============================================================
 -- UPSIDE DOWN: kill a creature, remains fly up, fall at end of turn
 -- ============================================================
 local UpsideDownAbility = {}
@@ -3021,5 +3119,6 @@ global_abilities.register(HexAbility.new())
 global_abilities.register(UpsideDownAbility.new())
 global_abilities.register(TeleportAbility.new())
 global_abilities.register(SpeedBoostAbility.new())
+global_abilities.register(VoidAbility.new())
 
 return global_abilities

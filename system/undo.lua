@@ -200,6 +200,7 @@ function undo.restore(snap)
             es.ref.color = es.color
             es.ref.attacks = es.attacks
             es.ref.moveRange = es.moveRange
+            es.ref._tpChecked = es.q .. "," .. es.r
             -- Restore statuses
             status.setEntityStatuses(es.ref, es.statuses)
             existingRefs[es.ref] = true

@@ -291,34 +291,6 @@ end
                 end
             end
             return
-        elseif selectedAttack.name == "Pull Hook" then
-            if pullHookTargetCell then
-                local stepX, stepY, stepZ = selectedAttack:getLineDirection(selectedActor.q, selectedActor.r, pullHookTargetCell.q, pullHookTargetCell.r, hex)
-                if stepX then
-                    local moveCells = selectedAttack:getPullHookMoveCells(selectedActor, stepX, stepY, stepZ, pullHookTargetCell.q, pullHookTargetCell.r, hex, entities)
-                    local isValid = false
-                    for _, c in ipairs(moveCells) do
-                        if c.q == tq and c.r == tr then
-                            selectedAttack._pullHookTarget = {q = pullHookTargetCell.q, r = pullHookTargetCell.r}
-                            local success, msg = performAttackWithSelectedAttack(selectedActor, tq, tr, selectedAttack)
-                            if not success then log.warnf("input", "Attack failed: %s", msg) end
-                            isValid = true
-                            break
-                        end
-                    end
-                    if isValid then
-                        attackMode = false
-                        selectedAttack = nil
-                    end
-                end
-                pullHookTargetCell = nil
-            else
-                local target = selectedAttack:getLineTarget(selectedActor, tq, tr, hex, entities)
-                if target then
-                    pullHookTargetCell = {q = target.q, r = target.r, entity = target.entity}
-                end
-            end
-            return
             elseif (selectedAttack.name == "Heavy Punch" or selectedAttack.name == "Empower Punch") and selectedActor.choosePushDir then
             if pushDirTargetCell then
                 -- Second click: choose push direction cell
@@ -446,9 +418,6 @@ function input.keypressed(key)
         elseif vortexTargetCell then
             vortexTargetCell = nil
             log.debug("input", "Vortex target cancelled")
-        elseif pullHookTargetCell then
-            pullHookTargetCell = nil
-            log.debug("input", "Pull Hook cancelled")
         elseif pushDirTargetCell then
             pushDirTargetCell = nil
             log.debug("input", "Push dir cancelled")
@@ -501,29 +470,16 @@ function input.keypressed(key)
         return
     end
 
-    if key == "1" then
-        if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and #attackButtons >= 1 then
-            selectedAttack = attackButtons[1].attack
+    -- Attack hotkeys 1/2/3: reversed order vs the UI buttons
+    -- (key 1 selects the bottom attack, key 3 the top one)
+    local hotkeyIdx = key == "1" and 3 or key == "2" and 2 or key == "3" and 1
+    if hotkeyIdx then
+        local btn = attackButtons[#attackButtons - hotkeyIdx + 1]
+        if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn
+            and not selectedActor.isMoving and btn then
+            selectedAttack = btn.attack
             attackMode = true
-            log.debugf("input", "Attack selected: %s", attackButtons[1].name)
-        end
-        return
-    end
-
-    if key == "2" then
-        if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and #attackButtons >= 2 then
-            selectedAttack = attackButtons[2].attack
-            attackMode = true
-            log.debugf("input", "Attack selected: %s", attackButtons[2].name)
-        end
-        return
-    end
-
-    if key == "3" then
-        if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving and #attackButtons >= 3 then
-            selectedAttack = attackButtons[3].attack
-            attackMode = true
-            log.debugf("input", "Attack selected: %s", attackButtons[3].name)
+            log.debugf("input", "Attack selected: %s", btn.name)
         end
         return
     end

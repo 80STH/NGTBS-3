@@ -166,6 +166,7 @@ end
 function transitionToPlayerTurn()
     turnState.phase = "player"
     sounds.play("turn_start")
+    require("system.teleporters").refresh()
     for _, a in ipairs(entities) do
         if a.isPlayable then
             if a.health > 0 then

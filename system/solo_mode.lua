@@ -54,8 +54,18 @@ local function getHeroes()
             attacks = function()
                 return {
                     { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any cell, ignores obstacles, wounds" },
-                    { attack = c.PullHookAttack.new(), name = "Pull Hook", description = "Hooks target and pulls it toward you" },
+                    { attack = c.SummonAttack.new(), name = "Summon", description = "Summons a minion at target cell" },
                     { attack = c.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, wounds twice" },
+                }
+            end,
+        },
+        {
+            id = "hooker", name = "Hooker", spriteGid = 31, hp = 5, shields = 2, move = 3, tags = {},
+            attacks = function()
+                return {
+                    { attack = c.CatchAttack.new(), name = "Catch", description = "Hook the first enemy in line, pull it to you and deal 1 damage" },
+                    { attack = c.GrappleAttack.new(), name = "Grapple", description = "Pull yourself to the first enemy in line and deal 1 damage. Lethal beyond 3 cells" },
+                    { attack = c.WarpPrismAttack.new(), name = "Warp Prism", description = "Swap places with the first enemy in line. Works on grounded units" },
                 }
             end,
         },

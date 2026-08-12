@@ -484,6 +484,10 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y, elevationMap)
         topColor = {0.35, 0.3, 0.25, 1}
         sideColor = {0.25, 0.2, 0.15, 1}
         edgeColor = {0.15, 0.1, 0.05, 1}
+    elseif terrainType == "emptiness" then
+        topColor = {0.12, 0.1, 0.18, 1}
+        sideColor = {0.08, 0.07, 0.12, 1}
+        edgeColor = {0.05, 0.04, 0.08, 1}
     else
         topColor = {0.35, 0.35, 0.35, 1}
         sideColor = {0.25, 0.25, 0.25, 1}
@@ -603,6 +607,20 @@ function HexGrid:drawUpperTerrain(q, r, terrainType, x, y, yOffset)
 		love.graphics.setColor(1, 1, 1, 1)
 		love.graphics.draw(railImage, x, y + yOffset, angles[dir] or angles[1], scale, scale,
 			railImage:getWidth() / 2, railImage:getHeight() / 2)
+	elseif terrainType == "teleporter" or terrainType:match("^teleporter:") then
+		-- portal ring, pulsing
+		local t = love.timer.getTime()
+		local pulse = 1 + 0.15 * math.sin(t * 3)
+		local r = radius * 0.38 * pulse
+		love.graphics.setColor(0.75, 0.35, 1, 0.85)
+		love.graphics.setLineWidth(3)
+		love.graphics.circle("line", x, y + yOffset, r)
+		love.graphics.setColor(0.75, 0.35, 1, 0.25)
+		love.graphics.circle("fill", x, y + yOffset, r * 0.6)
+		love.graphics.setColor(0.95, 0.7, 1, 0.9)
+		love.graphics.setLineWidth(1.5)
+		love.graphics.circle("line", x, y + yOffset, r * 0.6)
+		love.graphics.setLineWidth(1)
 	elseif terrainType == "mountain_rubble" then
 		for i = 0, 5 do
 			local sx = srand(seed + i * 3) - 0.5

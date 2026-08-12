@@ -872,29 +872,6 @@ handlers["Electric Hook"] = function(p, attacker, attack, hoverQ, hoverR, hex, e
     end
 end
 
--- Pull Hook: no damage, attacker moves to chosen cell then pulls target one step closer.
-handlers["Pull Hook"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
-    local hookTarget = _G.pullHookTargetCell and getEntity(_G.pullHookTargetCell.q, _G.pullHookTargetCell.r, entities)
-    if not hookTarget then return end
-
-    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hookTarget.q, hookTarget.r, hex)
-    if not stepX then return end
-
-    local moveCells = attack:getPullHookMoveCells(attacker, stepX, stepY, stepZ, hookTarget.q, hookTarget.r, hex, entities)
-    for _, c in ipairs(moveCells) do
-        preview.addOverlay(p, c.q, c.r, "push_dest")
-        if c.q == hoverQ and c.r == hoverR then
-            local pullQ, pullR = hex_utils.applyCubeStep(c.q, c.r, stepX, stepY, stepZ)
-            if isActive(pullQ, pullR, hex) then
-                preview.markPushed(p, hookTarget, pullQ, pullR)
-                preview.addPushArrow(p, hookTarget.q, hookTarget.r, pullQ, pullR)
-                preview.addOverlay(p, pullQ, pullR, "push_dest")
-                checkDrown(p, hookTarget, pullQ, pullR)
-            end
-        end
-    end
-end
-
 -- Rampage: dash, push enemies aside, lethal to primary target.
 handlers["Rampage"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)

@@ -348,6 +348,7 @@ function love.update(dt)
     end
 
     combat.updatePushAnimations(dt, hex)
+    combat.pollTeleporters()
     rebuildEntityIndex()
     if decayMessageTimer > 0 then
         decayMessageTimer = decayMessageTimer - dt

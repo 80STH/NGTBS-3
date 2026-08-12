@@ -85,7 +85,7 @@ local layout = {}
 local function computeLayout(w, h)
     local l = {}
     local pad = 12
-    local contentW = math.min(w - 2 * pad, 420)
+    local contentW = math.min(w - 2 * pad, 480)
     local cx = math.floor((w - contentW) / 2)
     l.cx = cx
     l.contentW = contentW
@@ -95,57 +95,58 @@ local function computeLayout(w, h)
     table.sort(cmdNames)
     l.cmdNames = cmdNames
 
-    local y = 10
-    local titleFont = fonts.get(math.max(14, math.floor(h * 0.025)))
+    local y = 14
+    local titleFont = fonts.get(math.max(18, math.floor(h * 0.032)))
     l.titleFont = titleFont
     l.titleY = y
-    y = y + titleFont:getHeight() + 14
+    y = y + titleFont:getHeight() + 18
 
     -- Commanders (horizontal row of compact cards)
-    local cardFont = fonts.get(12)
-    local tinyFont = fonts.get(10)
+    local cardFont = fonts.get(16)
+    local tinyFont = fonts.get(13)
     l.cardFont = cardFont
     l.tinyFont = tinyFont
 
     l.cmdLabelY = y
-    y = y + 18
-    local cmdCardW = math.floor((contentW - (#cmdNames - 1) * 6) / #cmdNames)
-    local cmdCardH = 40
+    y = y + 24
+    local cmdCardW = math.floor((contentW - (#cmdNames - 1) * 8) / #cmdNames)
+    local cmdCardH = 52
     l.cmdCards = {}
     for i, name in ipairs(cmdNames) do
         l.cmdCards[i] = {
             name = name,
-            x = cx + (i - 1) * (cmdCardW + 6),
+            x = cx + (i - 1) * (cmdCardW + 8),
             y = y,
             w = cmdCardW,
             h = cmdCardH,
         }
     end
-    y = y + cmdCardH + 10
+    y = y + cmdCardH + 14
 
     -- Heroes (solo mode)
     l.heroLabelY = y
-    y = y + 18
-    local heroCardW = math.floor((contentW - 4 * 4) / 5)
-    local heroCardH = 54
+    y = y + 24
+    local heroCount = #solo_mode.getHeroes()
+    local heroCardW = math.floor((contentW - (heroCount - 1) * 6) / heroCount)
+    local heroCardH = 68
     l.heroCards = {}
     for i, hero in ipairs(solo_mode.getHeroes()) do
         l.heroCards[i] = {
-            x = cx + (i - 1) * (heroCardW + 4),
+            x = cx + (i - 1) * (heroCardW + 6),
             y = y,
             w = heroCardW,
             h = heroCardH,
         }
     end
-    y = y + heroCardH + 12
+    y = y + heroCardH + 16
 
     -- Maps
-    local smallFont = fonts.get(11)
+    local smallFont = fonts.get(14)
     l.smallFont = smallFont
     l.mapLabelY = y
-    y = y + 18
-    local mapBtnH = 32
-    local mapBtnGap = 4
+    y = y + 24
+    local mapBtnH = 42
+    local mapBtnGap = 6
     l.mapBtns = {}
     for i, mapPath in ipairs(mapList) do
         l.mapBtns[i] = {
@@ -157,11 +158,11 @@ local function computeLayout(w, h)
         }
         y = y + mapBtnH + mapBtnGap
     end
-    y = y + 6
+    y = y + 8
 
     -- Bottom buttons (2-column grid)
-    local btnH = 50
-    local btnGap = 10
+    local btnH = 62
+    local btnGap = 12
     local btnColW = math.floor((contentW - btnGap) / 2)
     l.btns = {}
     local btnDefs = {
@@ -185,18 +186,18 @@ local function computeLayout(w, h)
             h = btnH,
         }
     end
-    y = y + btnRows * (btnH + btnGap) + 4
+    y = y + btnRows * (btnH + btnGap) + 6
 
     -- Checkboxes
-    local cbSize = 14
+    local cbSize = 18
     l.cb = { x = cx, y = y, w = cbSize, h = cbSize }
-    l.cbLabelX = cx + cbSize + 6
+    l.cbLabelX = cx + cbSize + 8
     l.cbLabelY = y
-    y = y + cbSize + 6
+    y = y + cbSize + 8
     l.cb2 = { x = cx, y = y, w = cbSize, h = cbSize }
-    l.cb2LabelX = cx + cbSize + 6
+    l.cb2LabelX = cx + cbSize + 8
     l.cb2LabelY = y
-    y = y + cbSize + 12
+    y = y + cbSize + 16
 
     -- Hint
     l.hintY = y
@@ -248,10 +249,10 @@ function menu.draw()
 
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.setFont(l.cardFont)
-        love.graphics.printf(cmd.name, card.x + 6, card.y + 3, card.w - 12, "center")
+        love.graphics.printf(cmd.name, card.x + 6, card.y + 4, card.w - 12, "center")
         love.graphics.setColor(0.6, 0.6, 0.6, 0.7)
         love.graphics.setFont(l.tinyFont)
-        love.graphics.printf(table.concat(cmd.startAbilities, ", "), card.x + 6, card.y + 19, card.w - 12, "center")
+        love.graphics.printf(table.concat(cmd.startAbilities, ", "), card.x + 6, card.y + 27, card.w - 12, "center")
     end
 
     -- Hero label
@@ -280,15 +281,15 @@ function menu.draw()
 
         love.graphics.setColor(1, 1, 1, 0.95)
         love.graphics.setFont(l.cardFont)
-        love.graphics.printf(hero.name, card.x + 2, card.y + 2, card.w - 4, "center")
+        love.graphics.printf(hero.name, card.x + 2, card.y + 3, card.w - 4, "center")
         love.graphics.setColor(0.8, 0.7, 0.5, 0.9)
         love.graphics.setFont(l.tinyFont)
-        love.graphics.printf("HP" .. hero.hp .. " SH" .. (hero.shields or 2) .. " Mv" .. hero.move, card.x + 2, card.y + 15, card.w - 4, "center")
+        love.graphics.printf("HP" .. hero.hp .. " SH" .. (hero.shields or 2) .. " Mv" .. hero.move, card.x + 2, card.y + 20, card.w - 4, "center")
         local names = {}
         for _, a in ipairs(hero.attacks()) do table.insert(names, a.name) end
         love.graphics.setColor(0.7, 0.8, 1, 0.85)
-        love.graphics.setFont(fonts.get(7))
-        love.graphics.printf(table.concat(names, " / "), card.x + 2, card.y + 26, card.w - 4, "center")
+        love.graphics.setFont(fonts.get(9))
+        love.graphics.printf(table.concat(names, " / "), card.x + 2, card.y + 35, card.w - 4, "center")
     end
 
     -- Map label
@@ -325,7 +326,7 @@ function menu.draw()
 
     -- Checkboxes
     local cb = l.cb
-    local cbHover = mx >= cb.x and mx <= cb.x + 180 and my >= cb.y and my <= cb.y + cb.h
+    local cbHover = mx >= cb.x and mx <= cb.x + 260 and my >= cb.y and my <= cb.y + cb.h
     love.graphics.setColor(0.15, 0.15, 0.2, 0.9)
     love.graphics.rectangle("fill", cb.x, cb.y, cb.w, cb.h, 3)
     love.graphics.setColor(cbHover and 0.5 or 0.35, cbHover and 0.5 or 0.35, cbHover and 0.7 or 0.5, 0.8)
@@ -443,7 +444,7 @@ function menu.mousepressed(x, y)
 
     -- Checkboxes
     local cb = l.cb
-    if x >= cb.x and x <= cb.x + 180 and y >= cb.y and y <= cb.y + cb.h then
+    if x >= cb.x and x <= cb.x + 260 and y >= cb.y and y <= cb.y + cb.h then
         spawnAllUnits = not spawnAllUnits
         return true
     end

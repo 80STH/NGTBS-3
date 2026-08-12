@@ -185,7 +185,6 @@ function restartGame(mapPath)
     flipTargetActor = nil
     mightyThrowTarget = nil
     vortexTargetCell = nil
-    pullHookTargetCell = nil
     pushDirTargetCell = nil
     attackMode = false
     selectedAttack = nil
@@ -251,6 +250,7 @@ function restartGame(mapPath)
     end
 
     trains.init(entities, terrainMap, hex)
+    require("system.teleporters").scan(upperTerrainMap)
     objectives.reset()
     objectives.generate(entities, hex, mapData and mapData.objectives)
     objectives.update(entities)
@@ -338,6 +338,10 @@ function restartGame(mapPath)
     end
     clearCellDuplicateWarnings()
     rebuildEntityIndex()
+    -- Entities already standing on teleporter cells at spawn must not trigger
+    for _, e in ipairs(entities) do
+        e._tpChecked = e.q .. "," .. e.r
+    end
     log.infof("game", "=== MAP LOADED — %s ===", ((skipDeploy or (soloMode and selectedSoloHero)) and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
 end
 

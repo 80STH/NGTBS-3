@@ -182,7 +182,6 @@ local ATTACK_SETS = {
     hooks = function()
         local c = require("combat.combat")
         return {
-            { attack = c.PullHookAttack.new(), name = "Pull Hook", description = "Hooks target and pulls it toward you" },
             { attack = c.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning, wounds everyone on the line" },
         }
     end,
@@ -234,7 +233,6 @@ local ATTACK_SETS = {
             { attack = c.DividerAttack.new(), name = "Split", description = "Splits into two Divided units" },
             { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shifts an enemy left or right and wounds" },
             { attack = c.WideVortexAttack.new(), name = "Wide Vortex", description = "Shifts 3 enemies in front left or right" },
-            { attack = c.PullHookAttack.new(), name = "Pull Hook", description = "Hooks target and pulls it toward you" },
             { attack = c.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning, wounds everyone on the line" },
             { attack = c.BashAttack.new(), name = "Bash", description = "Heavy blow: wounds target and enemy behind attacker" },
             { attack = c.CleaveAttack.new(), name = "Cleave", description = "Wide swing: wounds up to 3 targets in front" },
