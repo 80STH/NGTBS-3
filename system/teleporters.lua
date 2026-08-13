@@ -88,6 +88,27 @@ function teleporters.refresh()
     end
 end
 
+-- Whether the map has a working teleporter pair
+function teleporters.hasActivePair()
+    for _, pair in pairs(telePairs) do
+        if not pair.disabled then return true end
+    end
+    return false
+end
+
+-- All cells of active teleporter pairs (for hover hints)
+function teleporters.getActiveCells()
+    local cells = {}
+    for _, pair in pairs(telePairs) do
+        if not pair.disabled then
+            for _, c in ipairs(pair.cells) do
+                table.insert(cells, { q = c.q, r = c.r })
+            end
+        end
+    end
+    return cells
+end
+
 -- Destroy a teleporter (terraforming spells only). The pair is disabled
 -- forever and the partner's marker is removed too.
 function teleporters.destroy(q, r, upperTerrainMap)

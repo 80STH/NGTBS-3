@@ -11,53 +11,6 @@ shop.categories = {}
 shop.allowedCategory = nil
 shop.bothObjectivesCompleted = false
 
-local function buildUnitCategory()
-    local cat = { title = "UNIT UPGRADES", slots = {}, taken = false }
-    if not _G.selectedSquad then return cat end
-    local squads = _G.menu and _G.menu.getSquads() or {}
-    local squadDef = squads[_G.selectedSquad]
-    if not squadDef then return cat end
-    local takenUpgrades = _G.unitUpgrades or {}
-    local available = {}
-    for _, unitDef in ipairs(squadDef.units) do
-        local choices = (_G.UPGRADE_CHOICES or {})[unitDef.name]
-        if choices then
-            local data = takenUpgrades[unitDef.name] or { choices = {} }
-            for _, ch in ipairs(choices) do
-                local already = false
-                for _, c in ipairs(data.choices) do
-                    if c == ch.id then already = true; break end
-                end
-                if not already then
-                    table.insert(available, { unitName = unitDef.name, id = ch.id, name = ch.name, desc = ch.desc })
-                end
-            end
-        end
-    end
-    local unitsSeen = {}
-    local selected = {}
-    local maxSlots = shop.bothObjectivesCompleted and 5 or 4
-    for _, item in ipairs(available) do
-        if not unitsSeen[item.unitName] then unitsSeen[item.unitName] = 0 end
-        if unitsSeen[item.unitName] < 2 then
-            table.insert(selected, item)
-            unitsSeen[item.unitName] = unitsSeen[item.unitName] + 1
-        end
-        if #selected >= maxSlots then break end
-    end
-    for _, item in ipairs(selected) do
-        table.insert(cat.slots, {
-            type = "unit",
-            id = item.unitName .. "|" .. item.id,
-            name = item.name .. " (" .. item.unitName .. ")",
-            desc = item.desc,
-            icon = "⚔",
-            taken = false,
-        })
-    end
-    return cat
-end
-
 local function buildGenericCategory()
     local cat = { title = "GENERIC", slots = {}, taken = false }
     local takenGeneric = _G.genericUpgrades or {}
@@ -181,7 +134,7 @@ local function buildCommanderCategory()
 end
 
 local function ensureCategories()
-    local key = shop.allowedCategory or "unit"
+    local key = shop.allowedCategory or "generic"
     if not shop.categories[key] then
         shop.reroll()
     end
@@ -190,7 +143,6 @@ end
 function shop.reroll()
     if shop.allowedCategory then
         local builders = {
-            unit = buildUnitCategory,
             generic = buildGenericCategory,
             spell = buildSpellCategory,
             commander = buildCommanderCategory,
@@ -201,16 +153,14 @@ function shop.reroll()
         log.debugf("shop", "Rerolled (progression %s): %d slots", shop.allowedCategory, #shop.categories[shop.allowedCategory].slots)
     else
         shop.categories = {
-            unit = buildUnitCategory(),
             generic = buildGenericCategory(),
             spell = buildSpellCategory(),
             commander = buildCommanderCategory(),
             heroic = buildHeroicCategory(),
         }
-        log.debugf("shop", "Rerolled: unit=%d generic=%d spell=%d commander=%d heroic=%d",
-            #shop.categories.unit.slots, #shop.categories.generic.slots,
-            #shop.categories.spell.slots, #shop.categories.commander.slots,
-            #shop.categories.heroic.slots)
+        log.debugf("shop", "Rerolled: generic=%d spell=%d commander=%d heroic=%d",
+            #shop.categories.generic.slots, #shop.categories.spell.slots,
+            #shop.categories.commander.slots, #shop.categories.heroic.slots)
     end
 end
 
@@ -226,7 +176,7 @@ function shop.openForProgression(bothObjectivesCompleted)
     shop.autoOpened = true
     shop.bothObjectivesCompleted = bothObjectivesCompleted or false
     local mapIdx = _G.currentMapIndex or 1
-    local catMap = { [1] = "spell", [2] = "unit", [3] = "generic", [4] = "heroic" }
+    local catMap = { [1] = "spell", [2] = "generic", [3] = "heroic", [4] = "commander" }
     shop.allowedCategory = catMap[mapIdx]
     shop.reroll()
     shop.isOpen = true

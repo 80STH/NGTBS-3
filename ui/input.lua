@@ -117,6 +117,20 @@ end
         return
     end
 
+    -- Mechanism button (right column, topmost): highground + teleporters + conveyors
+    if #retractableCells > 0 or next(conveyorCells or {}) ~= nil
+        or require("system.teleporters").hasActivePair() then
+        local hr = ui.getRightBtnRect(4)
+        if x >= hr.x and x <= hr.x + hr.w and y >= hr.y and y <= hr.y + hr.h then
+            if turnState.phase == "player" then
+                if not activateMechanisms() then sounds.play("cant") end
+            else
+                sounds.play("cant")
+            end
+            return
+        end
+    end
+
     -- Undo button (right column)
     local ur = ui.getRightBtnRect(1)
     if x >= ur.x and x <= ur.x + ur.w and y >= ur.y and y <= ur.y + ur.h then

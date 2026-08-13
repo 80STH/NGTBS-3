@@ -69,15 +69,19 @@ testViewOffsetY = 0
 
 gamePhase = "menu"
 selectedMapPath = nil
-selectedSquad = nil
 selectedCommander = nil
 soloMode = false
 selectedSoloHero = nil
 hero = nil  -- solo mode: the single playable hero entity
+
+-- Environment mechanisms (single Mechanism button): retractable highground,
+-- teleporters, conveyor belts. 1-turn shared cooldown.
+retractableCells = {}       -- { {q=,r=}, ... } toggleable elevation cells
+conveyorCells = {}          -- "q,r" -> cube dir {1,0,-1}; from upper terrain "conveyor:<dir>"
+highgroundRaised = false    -- current highground state (true = raised)
+mechanismUsedThisTurn = false  -- 1-turn cooldown for the Mechanism button
+highgroundAnim = nil        -- { start=, duration=, raising= } while animating
 difficultyModifier = 1
-squadHpBonus = 0
-squadMoveBonus = 0
-squadArmorBonus = 0
 spawnAllUnits = false
 unlimitedAbilities = false
 chaos = 0
@@ -214,7 +218,32 @@ function getDrawCoords(q, r)
     if testViewActive and q == hex.centerQ and r == hex.centerR then
         y = y + testViewOffsetY
     end
+    y = y + highgroundAnimCatchUp(q, r)
     return x, y
+end
+
+-- Retractable highground animation.
+-- Returns p (0..1 eased progress), raising (bool) while the cell is animating,
+-- or nil when the cell is not a retractable cell / not currently animating.
+function highgroundAnimInfo(q, r)
+    if not highgroundAnim or not retractableCells then return nil end
+    local found = false
+    for _, c in ipairs(retractableCells) do
+        if c.q == q and c.r == r then found = true break end
+    end
+    if not found then return nil end
+    local t = (love.timer.getTime() - highgroundAnim.start) / highgroundAnim.duration
+    if t >= 1 then return nil end
+    local eased = t * t * (3 - 2 * t)
+    return eased, highgroundAnim.raising
+end
+
+-- Extra Y to ADD on top of the final elevation offset while animating
+-- (elevationMap flips instantly; the visual catches up).
+function highgroundAnimCatchUp(q, r)
+    local p, raising = highgroundAnimInfo(q, r)
+    if not p then return 0 end
+    return raising and (30 * (1 - p)) or (-30 * (1 - p))
 end
 
 
@@ -340,6 +369,9 @@ function love.update(dt)
 
     visual.update(dt)
     updateDeathAnimations(dt)
+    if highgroundAnim and love.timer.getTime() - highgroundAnim.start >= highgroundAnim.duration then
+        highgroundAnim = nil
+    end
     for _, actor in ipairs(entities) do
         updateActorMovement(actor, dt)
         ai.updateEnemyMovement(actor, dt, hex)
@@ -349,7 +381,6 @@ function love.update(dt)
     end
 
     combat.updatePushAnimations(dt, hex)
-    combat.pollTeleporters()
     rebuildEntityIndex()
     if decayMessageTimer > 0 then
         decayMessageTimer = decayMessageTimer - dt

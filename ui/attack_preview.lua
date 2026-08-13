@@ -78,9 +78,6 @@ function preview.calculateEffectiveDamage(target, attacker, baseDamage, directio
 
     if damage < 1 then damage = 1 end
 
-    if target.isPlayable and (_G.squadArmorBonus or 0) > 0 then
-        damage = math.max(0, damage - _G.squadArmorBonus)
-    end
     if target.maxDamagePerHit then
         damage = math.min(damage, target.maxDamagePerHit)
     end
@@ -96,9 +93,6 @@ end
 function preview.calculateEffectiveCollisionDamage(target, rawDamage)
     if not target or target.health <= 0 or target.indestructible then return 0 end
     local damage = rawDamage or 1
-    if target.isPlayable and (_G.squadArmorBonus or 0) > 0 then
-        damage = math.max(0, damage - _G.squadArmorBonus)
-    end
     if target.maxDamagePerHit then
         damage = math.min(damage, target.maxDamagePerHit)
     end

@@ -282,9 +282,9 @@ local gidToEntity = {
     [15] = { type = "obstacle",  name = "MountainSlope", indestructible = true, noCollisionDamage = true },
     [16] = { type = "obstacle",  name = "SuperMountainSlope", indestructible = true, noCollisionDamage = true },
     [5]  = { type = "obstacle",  name = "SharpReefs", indestructible = true, lethalCollision = true },
-    [17] = { type = "obstacle",  name = "MountainRange", indestructible = true },
-    [18] = { type = "obstacle",  name = "ReefRange", indestructible = true, lethalCollision = true },
-    [19] = { type = "obstacle",  name = "SlopeRange", indestructible = true, noCollisionDamage = true },
+    [17] = { type = "edge",  name = "MountainRange", indestructible = true },
+    [18] = { type = "edge",  name = "ReefRange", indestructible = true, lethalCollision = true },
+    [19] = { type = "edge",  name = "SlopeRange", indestructible = true, noCollisionDamage = true },
     [12] = { type = "building",  name = "SmallBuilding", health = 1 },
     [7] = { type = "building",  name = "BigBuilding",   health = 2 },
     [6] = { type = "obstacle",  name = "WeakMountain",  health = 2, maxDamagePerHit = 1 },
@@ -683,9 +683,10 @@ function environment.loadNativeMap(data)
                             if def.attacks == "bogshaman" then
                                 entity.aura = { type = "slow", radius = 1 }
                             end
-                        elseif def.type == "obstacle" then
+                        elseif def.type == "obstacle" or def.type == "edge" then
                             local health = def.health or 1
-                            entity = Entity.new(def.name, Entity.TYPES.OBSTACLE, q, r, health, false, 0, nil, nil, {})
+                            local etype = def.type == "edge" and Entity.TYPES.EDGE or Entity.TYPES.OBSTACLE
+                            entity = Entity.new(def.name, etype, q, r, health, false, 0, nil, nil, {})
                             if def.maxDamagePerHit then entity.maxDamagePerHit = def.maxDamagePerHit end
                             if def.indestructible then entity.indestructible = true end
                             if def.noCollisionDamage then entity.noCollisionDamage = true end
@@ -830,94 +831,6 @@ function environment.loadUnitSprites()
         local name = def and def.name or "nil"
         log.debugf("env", "  [OK]   GID %3d -> %-20s", gid, name)
     end
-end
-
-function environment.createSquadUnit(unitDef, q, r)
-    local attacks = environment.getAttacks(unitDef.attacks)
-
-    local nameToGid = {
-        Warrior = 34, Puncher = 30, Rogue = 31,
-        Summoner = 40, Divider = 45, Summoned = 42, Divided = 44,
-        AttackTest = 68,
-        Colossus = 96, Keeper = 97, Provoker = 98,
-    }
-    local gid = nameToGid[unitDef.name]
-    local sprite = gid and unitSpriteCache[gid] or nil
-    if not sprite then
-        local key = nameToSpriteKey[unitDef.name]
-        sprite = key and loadSpritePNG(key)
-    end
-
-    local colors = {
-        Warrior = {0.8, 0.3, 0.2},
-        Puncher = {0.2, 0.8, 0.3},
-        Rogue = {0.2, 0.5, 0.8},
-        Summoner = {0.8, 0.2, 0.8},
-        Divider = {0.9, 0.7, 0.1},
-        Summoned = {0.6, 0.3, 0.9},
-        Divided = {0.6, 0.4, 0.1},
-        AttackTest = {0.2, 0.9, 0.9},
-        Colossus = {0.9, 0.55, 0.1},
-        Keeper = {0.3, 0.9, 0.4},
-        Provoker = {0.9, 0.2, 0.3},
-    }
-
-    local entity = Entity.new(
-        unitDef.name, Entity.TYPES.CHARACTER, q, r,
-        unitDef.maxHealth, true, unitDef.moveRange,
-        sprite, sprite and nil or (colors[unitDef.name] or {0.5, 0.5, 0.5}),
-        attacks
-    )
-
-    -- Apply shop buffs: squad HP/Move bonuses
-    local hpBonus = _G.squadHpBonus or 0
-    local moveBonus = _G.squadMoveBonus or 0
-    if hpBonus > 0 then
-        entity.maxHealth = entity.maxHealth + hpBonus
-        entity.health = entity.maxHealth
-    end
-    if moveBonus > 0 then
-        entity.moveRange = entity.moveRange + moveBonus
-    end
-
-    -- Apply progression upgrades (choice-based)
-    local upgradeData = _G.unitUpgrades and _G.unitUpgrades[unitDef.name] or { choices = {} }
-    entity.upgradeLevel = #upgradeData.choices
-
-    for _, choiceId in ipairs(upgradeData.choices) do
-        if choiceId == "dashToFlipChain" then entity.dashToFlipChain = true end
-        if choiceId == "flipToDashChain" then entity.flipToDashChain = true end
-        if choiceId == "empowerAtStart" then entity.empowerAtStart = true end
-        if choiceId == "choosePushDir" then entity.choosePushDir = true end
-        if choiceId == "redirectShot" then entity.redirectShot = true end
-        if choiceId == "pointBlankLethal" then entity.pointBlankLethal = true end
-    end
-
-    -- Apply artifacts (global bonuses)
-    local artifactList = _G.artifacts or {}
-    for _, artId in ipairs(artifactList) do
-        if artId == "rootImmune" then entity.rootImmune = true end
-        if artId == "deployAnywhere" then entity.deployAnywhere = true end
-        if artId == "armor" then entity.armor = 1 end
-        if artId == "moveSpeed" then entity.moveRange = entity.moveRange + 1 end
-        if artId == "canMoveAfterAttack" then entity.canMoveAfterAttack = true end
-        if artId == "phaseThroughEnemies" then entity.phaseThroughEnemies = true end
-    end
-
-    -- Apply generic upgrades (shop)
-    local genericList = _G.genericUpgrades or {}
-    for _, gid in ipairs(genericList) do
-        if gid == "fireImmune" then entity.fireImmune = true end
-        if gid == "acidImmune" then entity.acidImmune = true end
-        if gid == "rootImmune" then entity.rootImmune = true end
-        if gid == "armor" then entity.armor = 1 end
-        if gid == "moveSpeed" then entity.moveRange = entity.moveRange + 1 end
-        if gid == "deployAnywhere" then entity.deployAnywhere = true end
-        if gid == "canMoveAfterAttack" then entity.canMoveAfterAttack = true end
-        if gid == "phaseThroughEnemies" then entity.phaseThroughEnemies = true end
-    end
-
-    return entity
 end
 
 function environment.createEnemyByType(enemyType, q, r)

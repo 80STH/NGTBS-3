@@ -63,6 +63,17 @@ function undo.snapshot()
         maxTurns = _G.maxTurns,
         digSites = status.saveDigSites(),
         graveyard = _G.graveyard and {unpack(_G.graveyard)} or {},
+        highgroundRaised = _G.highgroundRaised,
+        mechanismUsedThisTurn = _G.mechanismUsedThisTurn,
+        elevationMap = (function()
+            local em = {}
+            for q, row in pairs(_G.elevationMap or {}) do
+                local rowCopy = {}
+                for r, v in pairs(row) do rowCopy[r] = v end
+                em[q] = rowCopy
+            end
+            return em
+        end)(),
     }
     -- Save every entity's state
     for _, e in ipairs(_G.entities) do
@@ -200,7 +211,6 @@ function undo.restore(snap)
             es.ref.color = es.color
             es.ref.attacks = es.attacks
             es.ref.moveRange = es.moveRange
-            es.ref._tpChecked = es.q .. "," .. es.r
             -- Restore statuses
             status.setEntityStatuses(es.ref, es.statuses)
             existingRefs[es.ref] = true
@@ -260,6 +270,22 @@ function undo.restore(snap)
             rowCopy[r] = val
         end
         utm[q] = rowCopy
+    end
+
+    -- Restore retractable highground state
+    _G.highgroundRaised = snap.highgroundRaised or false
+    _G.mechanismUsedThisTurn = snap.mechanismUsedThisTurn or false
+    _G.highgroundAnim = nil
+    local em = _G.elevationMap
+    if em then
+        for q, _ in pairs(em) do
+            em[q] = nil
+        end
+        for q, row in pairs(snap.elevationMap or {}) do
+            local rowCopy = {}
+            for r, v in pairs(row) do rowCopy[r] = v end
+            em[q] = rowCopy
+        end
     end
 
     -- Keep current selected actor, just update its highlight position

@@ -185,6 +185,7 @@ function transitionToPlayerTurn()
     undo.clear()
     undo.snapshot()
     global_abilities.abilityUsedThisTurn = false
+    _G.mechanismUsedThisTurn = false
     selectLightningTarget()
     log.info("turn", "=== PLAYER TURN ===")
 end

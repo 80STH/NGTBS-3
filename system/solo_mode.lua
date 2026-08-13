@@ -11,6 +11,7 @@ local function getHeroes()
     HEROES = {
         {
             id = "blade", name = "Blade", spriteGid = 34, hp = 5, shields = 2, move = 3, tags = {"fire", "push"},
+            deployEffect = { type = "damage_nearby", damage = 1, radius = 1 },
             attacks = function()
                 return {
                     { attack = c.DashAttack.new(), name = "Dash", description = "Charge forward, pushes enemy" },
@@ -91,6 +92,7 @@ function solo_mode.createHero(defIdx, q, r)
     e.soloActions = true
     e.attacksLeft = 2
     e.movesLeft = 2
+    e.deployEffect = def.deployEffect
     -- 2 shield points: absorb direct hero damage only, refill between levels
     e.shields = def.shields or 2
     e.maxShields = e.shields

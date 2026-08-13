@@ -47,7 +47,110 @@ return function(ui)
         }
     end
 
-    -- ═══ Abilities Toggle Button (index 4, top of right column) ═══
+    -- ═══ Mechanism Button (index 4, top of right column) ═══
+    -- One press drives every environment mechanism on the map:
+    -- retractable highground, teleporters, conveyor belts.
+    function ui.drawMechanismButton(state)
+        local hasHighground = #(_G.retractableCells or {}) > 0
+        local hasConveyor = next(_G.conveyorCells or {}) ~= nil
+        local hasTeleporter = require("system.teleporters").hasActivePair()
+        if not (hasHighground or hasConveyor or hasTeleporter) then return end
+        local r = ui.getRightBtnRect(4)
+        local mx, my = love.mouse.getPosition()
+        mx, my = mx / (_G.dpiScale or 1), my / (_G.dpiScale or 1)
+        local isHover = mx >= r.x and mx <= r.x + r.w and my >= r.y and my <= r.y + r.h
+        local isPlayerTurn = state.turnState and state.turnState.phase == "player"
+        local available = isPlayerTurn and not _G.mechanismUsedThisTurn
+
+        love.graphics.setColor(0.55, 0.4, 0.15, available and 0.9 or 0.4)
+        love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 5)
+        icon_cache.drawSmall("abil_unearth", r.x + 20, r.y + r.h / 2, 36, available and 1 or 0.5)
+        love.graphics.setColor(1, 1, 1, available and 1 or 0.5)
+        local old = love.graphics.getFont()
+        love.graphics.setFont(buttonFont)
+        love.graphics.printf("Mechanism", r.x + 40, r.y + r.h / 2 - 10, r.w - 40, "center")
+        love.graphics.setFont(old)
+        love.graphics.setColor(1, 1, 1, 1)
+
+        if isHover then
+            -- Highlight the cells the mechanism affects
+            local function cellHint(q, r, color)
+                local x, y = getDrawCoords(q, r)
+                local verts = hex:drawInsetHexagon(x, y, hex.radius, 0.92)
+                love.graphics.setColor(color[1], color[2], color[3], 0.25)
+                love.graphics.polygon("fill", verts)
+                love.graphics.setColor(color[1], color[2], color[3], 0.9)
+                love.graphics.setLineWidth(2)
+                love.graphics.polygon("line", verts)
+                love.graphics.setLineWidth(1)
+            end
+            for _, c in ipairs(_G.retractableCells or {}) do
+                cellHint(c.q, c.r, _G.highgroundRaised and {1, 0.4, 0.3} or {1, 0.7, 0.2})
+            end
+            for _, c in ipairs(require("system.teleporters").getActiveCells()) do
+                cellHint(c.q, c.r, {0.75, 0.35, 1})
+            end
+            for key in pairs(_G.conveyorCells or {}) do
+                local q, r = key:match("^(%d+),(%d+)$")
+                if q then cellHint(tonumber(q), tonumber(r), {0.95, 0.8, 0.25}) end
+            end
+
+            -- Simulate the belts: push arrows for free moves, collision icons
+            -- (like the regular push preview) where a unit would be slammed
+            -- into an occupied cell.
+            local hex_utils = require("grid.hex_utils")
+            local colIcons = {}
+            for _, e in ipairs(_G.entities or {}) do
+                if e:isCharacter() and e.health > 0 and not e.isDying and not e.isMoving then
+                    local dir = _G.conveyorCells and _G.conveyorCells[e.q .. "," .. e.r]
+                    if dir then
+                        local nq, nr = hex_utils.applyCubeStep(e.q, e.r, dir[1], dir[2], dir[3])
+                        if hex:isActiveHex(nq, nr) then
+                            local x1, y1 = getDrawCoords(e.q, e.r)
+                            local x2, y2 = getDrawCoords(nq, nr)
+                            local occ = getEntityAtHex(nq, nr)
+                            if occ then
+                                colIcons[#colIcons + 1] = {
+                                    x = (x1 + x2) / 2, y = (y1 + y2) / 2,
+                                    icon = occ.noCollisionDamage and "collision_no_damage" or "collision_damage",
+                                }
+                            else
+                                local terrain = _G.terrainMap and _G.terrainMap[nq] and _G.terrainMap[nq][nr] or "grass"
+                                if terrain ~= "water" or e.waterWalker or e.hovering then
+                                    ui.drawPushArrow(x1, y1, x2, y2, nil, nil, nil, nil,
+                                        e.q, e.r, nq, nr, 0.55)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            if #colIcons > 0 then ui.drawPreviewIcons(hex, colIcons) end
+
+            local lines = {}
+            if hasHighground then lines[#lines + 1] = _G.highgroundRaised and "- Lower the highground" or "- Raise the highground" end
+            if hasTeleporter then lines[#lines + 1] = "- Activate the teleporters" end
+            if hasConveyor then lines[#lines + 1] = "- Run the conveyor belts" end
+            lines[#lines + 1] = "Cooldown: 1 turn."
+            if _G.mechanismUsedThisTurn then lines[#lines + 1] = "(used this turn)" end
+            local ttW, ttH = 250, 36 + #lines * 16
+            local ttx = r.x - ttW - 8
+            local tty = r.y + r.h / 2 - ttH / 2
+            love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
+            love.graphics.rectangle("fill", ttx, tty, ttW, ttH, 6)
+            love.graphics.setColor(0.8, 0.8, 0.8, 1)
+            love.graphics.rectangle("line", ttx, tty, ttW, ttH, 6)
+            love.graphics.setColor(1, 1, 0.6, 1)
+            love.graphics.print("Mechanism", ttx + 8, tty + 6)
+            love.graphics.setColor(0.8, 0.8, 0.8, 1)
+            for j, line in ipairs(lines) do
+                love.graphics.print(line, ttx + 8, tty + 22 + (j - 1) * 16)
+            end
+            love.graphics.setColor(1, 1, 1, 1)
+        end
+    end
+
+    -- ═══ Abilities Toggle Button (index 3) ═══
     function ui.drawAbilitiesToggleButton(state, mouseX, mouseY)
         local r = ui.getRightBtnRect(3)
         local isHover = mouseX and mouseX >= r.x and mouseX <= r.x + r.w and mouseY >= r.y and mouseY <= r.y + r.h

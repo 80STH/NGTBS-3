@@ -403,6 +403,7 @@ function renderer.draw(state)
     ui.drawUndoButton(undo.history, state.maxUndoCount, state.selectedActor)
     ui.drawEndTurnButton(state.turnState, state.entities, state.turnCount, state.maxTurns, state)
     ui.drawAbilitiesToggleButton(state, mx, my)
+    ui.drawMechanismButton(state)
     ui.drawAbilityButtons(state)
 
     global_abilities.drawPreview(hex, state)
@@ -823,7 +824,7 @@ function drawHexGrid(state, cellOverlays)
         local isHovered = (hex.hoverQ == cell.q and hex.hoverR == cell.r)
 
         local cellEntity = getEntityAtHex(cell.q, cell.r)
-        local inGroup = cellEntity and cellEntity.cells and cellEntity:isObstacle()
+        local inGroup = cellEntity and cellEntity.cells and (cellEntity:isObstacle() or cellEntity:isEdge())
         local isHoveredGroup = inGroup and cellEntity == hoveredBoundaryEntity
         local isSelectedGroup = inGroup and cellEntity == selectedBoundaryEntity
 
@@ -991,12 +992,12 @@ function drawEntity(entity, state)
     if entity.sprite then
         local sw, sh = entity.sprite:getDimensions()
         local baseScale = 6
-        if entity:isObstacle() or entity:isBuilding() then
+        if entity:isObstacle() or entity:isBuilding() or entity:isEdge() then
             baseScale = 5
         end
         local finalScale = baseScale * scale
         local drawY = y
-        if entity:isObstacle() or entity:isBuilding() then
+        if entity:isObstacle() or entity:isBuilding() or entity:isEdge() then
             drawY = y - 6
         end
         if wounded then
@@ -1040,7 +1041,7 @@ function drawEntity(entity, state)
             for _, c in ipairs(entity.cells) do
                 local cx, cy = getDrawCoords(c.q, c.r)
                 local cdrawY = cy
-                if entity:isObstacle() or entity:isBuilding() then
+                if entity:isObstacle() or entity:isBuilding() or entity:isEdge() then
                     cdrawY = cy - 6
                 end
                 love.graphics.draw(entity.sprite, cx, cdrawY, spriteRotation, finalScale, finalScale, sw/2, sh/2)

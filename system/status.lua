@@ -17,6 +17,11 @@ status.gidToStatus = {
 -- Apply status to a hex
 function status.applyToHex(q, r, statusType, hex)  -- added hex parameter (optional)
     if hex and not hex:isActiveHex(q, r) then return end  -- do not apply status to inactive cells
+    -- Edge cells are immune: no effects can be applied to the map border
+    if _G.getEntityAtHex then
+        local e = _G.getEntityAtHex(q, r)
+        if e and e.isEdge and e:isEdge() then return end
+    end
     local key = q .. "," .. r
     if not status.hexStatuses[key] then
         status.hexStatuses[key] = {}
@@ -64,6 +69,8 @@ end
 
 -- Apply status to an entity
 function status.applyToEntity(entity, statusType)
+    -- Edge entities are immune to all statuses
+    if entity and entity.isEdge and entity:isEdge() then return end
     if not status.entityStatuses[entity] then
         status.entityStatuses[entity] = {}
     end
@@ -160,6 +167,11 @@ local digSites = {}
 
 -- Set a dig site on a cell
 function status.setDigSite(q, r, timer, spawnType)
+    -- Edge cells are immune: no dig sites on the map border
+    if _G.getEntityAtHex then
+        local e = _G.getEntityAtHex(q, r)
+        if e and e.isEdge and e:isEdge() then return end
+    end
     local key = q .. "," .. r
     digSites[key] = { timer = timer or 1, age = 0, spawnType = spawnType }
 end

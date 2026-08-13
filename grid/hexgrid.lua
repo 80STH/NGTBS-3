@@ -1,4 +1,16 @@
 local HexGrid = {}
+
+-- Conveyor belt direction names -> cube steps (flat orientation, screen compass:
+-- x = q*1.5R right, y = r*1.732R down, odd columns shifted +0.5H).
+-- Neighbors are at n / ne / se / s / sw / nw — flat-top hexes have no pure e/w neighbor.
+HexGrid.CONVEYOR_DIRS = {
+    n  = {0, 1, -1},
+    ne = {1, 0, -1},
+    se = {1, -1, 0},
+    s  = {0, -1, 1},
+    sw = {-1, 0, 1},
+    nw = {-1, 1, 0},
+}
 local hex_utils = require("grid.hex_utils")
 local water_shader = require("ui.water_shader")
 
@@ -385,6 +397,14 @@ function HexGrid:getSortedCells(terrainMap, waterYOffset, elevationMap)
 end
 
 function HexGrid:getCellYOffset(q, r, terrainType, waterYOffset, elevationMap)
+     -- Retractable highground animation overrides the static offset
+     if _G.highgroundAnimInfo then
+         local ap, araising = _G.highgroundAnimInfo(q, r)
+         if ap then
+             local visual = araising and ap or (1 - ap)
+             return -30 * visual
+         end
+     end
      if elevationMap then
          local elv = elevationMap[q] and elevationMap[q][r]
          if elv then return -30 end
@@ -445,6 +465,17 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y, elevationMap)
          yOffset = extrude - waterExtrude
      elseif isHighGround then
          yOffset = extrude - highGroundExtrude + 6
+     end
+
+     -- Retractable highground animation: blend yOffset and extrude so the
+     -- cliff stays rooted at the ground while the top face slides.
+     if _G.highgroundAnimInfo then
+         local ap, araising = _G.highgroundAnimInfo(q, r)
+         if ap then
+             local visual = araising and ap or (1 - ap)
+             yOffset = -30 * visual
+             actualExtrude = 36 + 36 * visual
+         end
      end
 
     local topColor, sideColor, edgeColor
@@ -621,6 +652,36 @@ function HexGrid:drawUpperTerrain(q, r, terrainType, x, y, yOffset)
 		love.graphics.setLineWidth(1.5)
 		love.graphics.circle("line", x, y + yOffset, r * 0.6)
 		love.graphics.setLineWidth(1)
+	elseif terrainType:match("^conveyor:") then
+		-- conveyor belt: base plate + chevrons pointing in travel direction
+		local dirName = terrainType:match("^conveyor:(%a+)$")
+		local dir = dirName and HexGrid.CONVEYOR_DIRS[dirName]
+		local verts = self:drawHexagon(x, y + yOffset, radius * 0.7)
+		love.graphics.setColor(0.35, 0.3, 0.22, 0.8)
+		love.graphics.polygon("fill", verts)
+		love.graphics.setColor(0.55, 0.48, 0.35, 0.9)
+		love.graphics.setLineWidth(1.5)
+		love.graphics.polygon("line", verts)
+		if dir then
+			local hex_utils = require("grid.hex_utils")
+			local nq, nr = hex_utils.applyCubeStep(q, r, dir[1], dir[2], dir[3])
+			local nx, ny = self:hexToPixel(nq, nr)
+			local ang = math.atan2(ny - y, nx - x)
+			local back = ang + math.pi
+			love.graphics.setColor(0.95, 0.8, 0.25, 0.95)
+			love.graphics.setLineWidth(3)
+			for i = -1, 1 do
+				local off = i * radius * 0.28
+				local cx = x + math.cos(ang) * off
+				local cy = y + yOffset + math.sin(ang) * off
+				local s = 4
+				love.graphics.line(
+					cx + math.cos(back - 0.7) * s, cy + math.sin(back - 0.7) * s,
+					cx, cy,
+					cx + math.cos(back + 0.7) * s, cy + math.sin(back + 0.7) * s)
+			end
+			love.graphics.setLineWidth(1)
+		end
 	elseif terrainType == "mountain_rubble" then
 		for i = 0, 5 do
 			local sx = srand(seed + i * 3) - 0.5

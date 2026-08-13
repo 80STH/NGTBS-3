@@ -10,7 +10,8 @@ local log = require("util.log")
 Entity.TYPES = {
     CHARACTER = "character",  -- Playable character
     OBSTACLE = "obstacle",    -- Obstacle (destructible)
-    BUILDING = "building"     -- Building (affects global health)
+    BUILDING = "building",    -- Building (affects global health)
+    EDGE = "edge",            -- Map border: absolutely invulnerable, immune to all effects
 }
 
 function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, color, attacks)
@@ -62,6 +63,11 @@ function Entity.new(name, type, q, r, maxHealth, isPlayable, moveRange, sprite, 
     
     -- Indestructible entity (ignores all damage)
     self.indestructible = false
+
+    -- Edge entity: map border, absolutely invulnerable, no effects apply
+    if type == Entity.TYPES.EDGE then
+        self.indestructible = true
+    end
     
     -- Hazard zone (doesn't block movement, but kills those who enter)
     self.isHazard = false
@@ -119,6 +125,11 @@ function Entity:isBuilding()
     return self.type == Entity.TYPES.BUILDING
 end
 
+-- Check if entity is a map edge (border) — invulnerable, effect-immune
+function Entity:isEdge()
+    return self.type == Entity.TYPES.EDGE
+end
+
 -- Can the entity be pushed
 function Entity:isPushable()
     return self.isPushable
@@ -146,7 +157,7 @@ end
 -- Apply damage. ignoreShields=true bypasses shields (objective/building
 -- damage drains health directly; shields protect the hero only).
 function Entity:takeDamage(damage, ignoreShields)
-    if self.indestructible then
+    if self.indestructible or self:isEdge() then
         return false
     end
     if self.maxDamagePerHit then
@@ -212,6 +223,7 @@ end
 -- Start death animation
 function Entity:startDeath()
      if self.isDying then return end
+     if self:isEdge() then return end  -- map borders can never die
      self.isDying = true
     self.deathTimer = 0
     self.health = 0
@@ -231,6 +243,8 @@ end
 function Entity:getTypeString()
     if self:isCharacter() then
         return self.isPlayable and "ally" or "enemy"
+    elseif self:isEdge() then
+        return "edge"
     elseif self:isObstacle() then
         return "obstacle"
     else
@@ -247,6 +261,7 @@ function Entity:isAlly()
 end
 
 function Entity:isDestructible()
+    if self:isEdge() then return false end
     return self:isObstacle() or self:isBuilding()
 end
 

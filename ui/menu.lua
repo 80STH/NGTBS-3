@@ -18,52 +18,8 @@ end
 
 local mapList = loadMapList()
 
-local squads = {
-    {
-        name = "Old Guard",
-        units = {
-            { name = "Warrior", maxHealth = 2, moveRange = 3, attacks = "warrior" },
-            { name = "Puncher", maxHealth = 2, moveRange = 3, attacks = "puncher" },
-            { name = "Rogue",   maxHealth = 2, moveRange = 3, attacks = "rogue" },
-        }
-    },
-    {
-        name = "Disruptors",
-        units = {
-            { name = "Warrior", maxHealth = 2, moveRange = 3, attacks = "vortex" },
-            { name = "Puncher", maxHealth = 2, moveRange = 3, attacks = "hooks" },
-            { name = "Rogue",   maxHealth = 2, moveRange = 3, attacks = "area" },
-        }
-    },
-    {
-        name = "New Blood",
-        units = {
-            { name = "Summoner", maxHealth = 2, moveRange = 3, attacks = "summoner" },
-            { name = "Divider",  maxHealth = 2, moveRange = 3, attacks = "divider" },
-        }
-    },
-    {
-        name = "Wildbond",
-        units = {
-            { name = "Colossus", maxHealth = 2, moveRange = 3, attacks = "colossus" },
-            { name = "Keeper",   maxHealth = 1, moveRange = 2, attacks = "keeper" },
-            { name = "Provoker", maxHealth = 1, moveRange = 2, attacks = "provoker" },
-        }
-    },
-    {
-        name = "Attack Test",
-        units = {
-            { name = "AttackTest", maxHealth = 2, moveRange = 3, attacks = "all" },
-        }
-    },
-}
-
 function menu.getMapList()
     return mapList
-end
-
-function menu.getSquads()
-    return squads
 end
 
 local defaultsSet = false
@@ -76,7 +32,6 @@ local function ensureDefaults()
         table.sort(names)
         if #names > 0 then selectedCommander = names[1] end
     end
-    if not selectedSquad then selectedSquad = 1 end
 end
 
 -- Cached layout data (computed on draw, reused on click)
@@ -407,9 +362,8 @@ function menu.mousepressed(x, y)
         if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
             if btn.key == "progression" then
                 if not selectedCommander then return true end
-                if not selectedSquad then selectedSquad = 1 end
-                selectedSoloHero = nil
-                soloMode = false
+                selectedSoloHero = 1
+                soloMode = true
                 unitUpgrades = {}
                 artifacts = {}
                 commanderArtifacts = {}

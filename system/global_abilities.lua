@@ -1879,7 +1879,7 @@ function ChainLightningAbility:reset()
 end
 
 local function isValidLightningTarget(e)
-    return e and e.health > 0 and not e.indestructible and not e:isBuilding() and not e:isObstacle()
+    return e and e.health > 0 and not e.indestructible and not e:isBuilding() and not e:isObstacle() and not e:isEdge()
 end
 
 function ChainLightningAbility:onActivate(state)
@@ -2768,7 +2768,7 @@ function global_abilities.processPendingRemains(entities, hex, sounds)
         visual.addFallingRemains(x, y)
 
         for _, e in ipairs(entities) do
-            if e.q == remains.q and e.r == remains.r and e.health > 0 then
+            if e.q == remains.q and e.r == remains.r and e.health > 0 and not e.indestructible and not e:isEdge() then
                 e.health = 0
                 e:startDeath()
                 log.infof("abilities", "Remains fell on %s, dealing fatal damage!", tostring(e.name))

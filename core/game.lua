@@ -81,6 +81,32 @@ function restartGame(mapPath)
             end
         end
     end
+
+    -- Retractable highground: cells toggleable via the Mechanism button
+    retractableCells = {}
+    if mapData and mapData.retractable then
+        for key in pairs(mapData.retractable) do
+            local q, r = key:match("^(%d+),(%d+)$")
+            if q and r then
+                table.insert(retractableCells, { q = tonumber(q), r = tonumber(r) })
+            end
+        end
+    end
+    highgroundRaised = false
+    mechanismUsedThisTurn = false
+    highgroundAnim = nil
+
+    -- Conveyor belt cells (upper terrain "conveyor:<dir>"), driven by the Mechanism button
+    local HexGrid = require("grid.hexgrid")
+    conveyorCells = {}
+    for q, row in pairs(upperTerrainMap or {}) do
+        for r, val in pairs(row) do
+            local dirName = val and val:match("^conveyor:(%a+)$")
+            if dirName and HexGrid.CONVEYOR_DIRS[dirName] then
+                conveyorCells[q .. "," .. r] = HexGrid.CONVEYOR_DIRS[dirName]
+            end
+        end
+    end
     mapActiveRadius = mapData and mapData.activeRadius or config.ACTIVE_RADIUS
     mapCenterQ = mapData and mapData.centerQ or config.CENTER_Q or math.floor(width / 2)
     mapCenterR = mapData and mapData.centerR or config.CENTER_R or math.floor(height / 2)
@@ -145,13 +171,6 @@ function restartGame(mapPath)
     if soloMode and selectedSoloHero then
         hero = require("system.solo_mode").createHero(selectedSoloHero, -1, -1)
         unplacedAllies = { hero }
-    elseif selectedSquad then
-        local squads = menu.getSquads()
-        local squad = squads[selectedSquad]
-        unplacedAllies = {}
-        for _, unitDef in ipairs(squad.units) do
-            table.insert(unplacedAllies, environment.createSquadUnit(unitDef, -1, -1))
-        end
     else
         unplacedAllies = deployableAllies or {}
     end
@@ -176,9 +195,6 @@ function restartGame(mapPath)
     end
     global_abilities.reset()
     _G.graveyard = {}
-    _G.squadHpBonus = 0
-    _G.squadMoveBonus = 0
-    _G.squadArmorBonus = 0
     if not isProgressionRun then
         _G.genericUpgrades = {}
     end
@@ -257,58 +273,7 @@ function restartGame(mapPath)
     objectives.generate(entities, hex, mapData and mapData.objectives)
     objectives.update(entities)
 
-    if skipDeploy or (soloMode and selectedSoloHero) then
-        if soloMode and hero then
-            local spot = findRandomEmptyCells(1, function(q, r)
-                return status.hasNegativeHexStatus(q, r)
-            end)
-            if #spot > 0 then
-                hero.q, hero.r = spot[1].q, spot[1].r
-            else
-                for q = 0, hex.gridWidth - 1 do
-                    for r = 0, hex.gridHeight - 1 do
-                        if hero.q >= 0 then break end
-                        if hex:isActiveHex(q, r) then
-                            local occupied = false
-                            for _, e in ipairs(entities) do
-                                if e.q == q and e.r == r then occupied = true; break end
-                            end
-                            if not occupied then hero.q, hero.r = q, r end
-                        end
-                    end
-                end
-            end
-        elseif selectedSquad then
-            local idx = 0
-            for q = 0, hex.gridWidth - 1 do
-                for r = 0, hex.gridHeight - 1 do
-                    if hex:isActiveHex(q, r) then
-                        local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                        if terrain ~= "water" then
-                            local occupied = false
-                            for _, e in ipairs(entities) do
-                                if e.q == q and e.r == r then occupied = true; break end
-                                if e.cells then
-                                    for _, c in ipairs(e.cells) do
-                                        if c.q == q and c.r == r then
-                                            occupied = true
-                                            break
-                                        end
-                                    end
-                                end
-                            end
-                            if not occupied then
-                                idx = idx + 1
-                                if idx <= #unplacedAllies then
-                                    unplacedAllies[idx].q = q
-                                    unplacedAllies[idx].r = r
-                                else break end
-                            end
-                        end
-                    end
-                end
-            end
-        end
+    if skipDeploy then
         for _, ally in ipairs(unplacedAllies) do
             table.insert(entities, ally)
         end
@@ -339,16 +304,18 @@ function restartGame(mapPath)
     end
     clearCellDuplicateWarnings()
     rebuildEntityIndex()
-    -- Entities already standing on teleporter cells at spawn must not trigger
-    for _, e in ipairs(entities) do
-        e._tpChecked = e.q .. "," .. e.r
-    end
-    log.infof("game", "=== MAP LOADED — %s ===", ((skipDeploy or (soloMode and selectedSoloHero)) and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
+    log.infof("game", "=== MAP LOADED — %s ===", (skipDeploy and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
 end
 
 function confirmDeploy()
+    local deploy_effects = require("system.deploy_effects")
     for _, ally in ipairs(placedAllies) do
         table.insert(entities, ally)
+    end
+
+    -- Landing effects: each ally triggers its deploy effect at its cell
+    for _, ally in ipairs(placedAllies) do
+        deploy_effects.apply(ally, ally.q, ally.r)
     end
 
     selectedActor = nil
@@ -395,6 +362,79 @@ function damageHero(damage)
         if died then hero:startDeath() end
         checkGameEnd()
     end
+end
+
+-- The Mechanism button: one press drives every environment mechanism on
+-- the map at once — toggles the retractable highground, activates the
+-- teleporters and runs the conveyor belts. 1-turn cooldown.
+function activateMechanisms()
+    local teleporters = require("system.teleporters")
+    local anyMechanism = (#retractableCells > 0) or teleporters.hasActivePair()
+        or next(conveyorCells or {}) ~= nil
+    if not anyMechanism then return false end
+    if mechanismUsedThisTurn then return false end
+
+    -- 1. Retractable highground: flip elevation (logic instantly, visuals animate)
+    if #retractableCells > 0 then
+        highgroundRaised = not highgroundRaised
+        for _, c in ipairs(retractableCells) do
+            if highgroundRaised then
+                if not elevationMap[c.q] then elevationMap[c.q] = {} end
+                elevationMap[c.q][c.r] = true
+            else
+                if elevationMap[c.q] then elevationMap[c.q][c.r] = nil end
+            end
+        end
+        highgroundAnim = {
+            start = love.timer.getTime(),
+            duration = 0.5,
+            raising = highgroundRaised,
+        }
+        log.infof("game", "Highground %s", highgroundRaised and "raised" or "lowered")
+    end
+
+    -- 2. Teleporters: everyone standing on a portal is teleported (or swapped)
+    if teleporters.hasActivePair() then
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and e.health > 0 and not e.isDying and not e.isMoving then
+                combat.triggerTeleporter(e)
+            end
+        end
+    end
+
+    -- 3. Conveyor belts: every character on a belt cell is pushed one step;
+    -- being pushed into an occupied cell counts as a collision.
+    if next(conveyorCells or {}) ~= nil then
+        local hex_utils = require("grid.hex_utils")
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and e.health > 0 and not e.isDying and not e.isMoving then
+                local dir = conveyorCells[e.q .. "," .. e.r]
+                if dir then
+                    local nq, nr = hex_utils.applyCubeStep(e.q, e.r, dir[1], dir[2], dir[3])
+                    if hex:isActiveHex(nq, nr) then
+                        local occupant = getEntityAtHex(nq, nr)
+                        if occupant then
+                            -- Collision: both take 1 damage, pushed unit bounces back
+                            combat.applyCollisionDamage(e, occupant, sounds)
+                            combat.addCollisionBounceAnimation(e, e.q, e.r, nq, nr, hex, entities, sounds, occupant)
+                            log.infof("game", "Conveyor slams %s into %s at (%d,%d)!", e.name, occupant.name, nq, nr)
+                        else
+                            local terrain = terrainMap and terrainMap[nq] and terrainMap[nq][nr] or "grass"
+                            if terrain ~= "water" or e.waterWalker or e.hovering then
+                                combat.moveEntityWithAnimation(e, e.q, e.r, nq, nr)
+                                log.infof("game", "Conveyor moves %s to (%d,%d)", e.name, nq, nr)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    mechanismUsedThisTurn = true
+    undo.snapshot()
+    if sounds then sounds.play("click") end
+    return true
 end
 
 function checkGameEnd()

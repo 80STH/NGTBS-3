@@ -183,18 +183,18 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
          return
      end
 
-if fromElev and not toElev then
-         -- Kill units at destination (crushed by falling entity)
-         local crushedBuilding = false
-         for _, e in ipairs(entities) do
-             if e.health and e.health > 0 and e.q == toQ and e.r == toR then
-                 if e:isBuilding() and not e.indestructible then
-                     crushedBuilding = true
-                 end
-                 e.health = 0
-                 e:startDeath()
-             end
-         end
+ if fromElev and not toElev then
+          -- Kill units at destination (crushed by falling entity)
+          local crushedBuilding = false
+          for _, e in ipairs(entities) do
+              if e.health and e.health > 0 and not e.indestructible and not e:isEdge() and e.q == toQ and e.r == toR then
+                  if e:isBuilding() and not e.indestructible then
+                      crushedBuilding = true
+                  end
+                  e.health = 0
+                  e:startDeath()
+              end
+          end
          -- Move falling entity to destination
          finalizeMove(target, toQ, toR)
          -- 1 damage from fall
@@ -474,7 +474,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
                     -- High → Low: fall to next cell
                     local landingQ, landingR = nextQ, nextR
                     for _, e in ipairs(entities) do
-                        if e.health and e.health > 0 and e.q == landingQ and e.r == landingR then
+                        if e.health and e.health > 0 and not e.indestructible and not e:isEdge() and e.q == landingQ and e.r == landingR then
                             e.health = 0
                             e:startDeath()
                         end
@@ -2143,7 +2143,7 @@ end
 -- ============================================================
 
 -- Swap the entity with whoever stands on the paired teleporter cell.
--- Any character landing on a teleporter triggers it (the hero included).
+-- Activated by the Mechanism button (no automatic triggers).
 -- If the paired portal is empty, the entity still teleports there.
 function combat.triggerTeleporter(entity)
     if not entity or not entity:isCharacter() then return false end
@@ -2165,13 +2165,10 @@ function combat.triggerTeleporter(entity)
     if otherEntity then
         otherEntity.q, otherEntity.r = fromQ, fromR
         entity.q, entity.r = other.q, other.r
-        -- Prevent re-triggering this frame (both now stand on teleporter cells)
-        otherEntity._tpChecked = otherEntity.q .. "," .. otherEntity.r
     else
         -- One-way teleport to the empty paired portal
         entity.q, entity.r = other.q, other.r
     end
-    entity._tpChecked = entity.q .. "," .. entity.r
 
     if visual then
         local x1, y1 = getDrawCoords(fromQ, fromR)
@@ -2187,21 +2184,6 @@ function combat.triggerTeleporter(entity)
         log.infof("combat", "%s teleports to the empty portal at (%d,%d)!", entity.name, other.q, other.r)
     end
     return true
-end
-
--- Called every frame: entities that just arrived on a teleporter cell swap.
--- Portals are disabled during the enemy's turn.
-function combat.pollTeleporters()
-    if not turnState or turnState.phase ~= "player" then return end
-    for _, e in ipairs(entities) do
-        if e:isCharacter() and e.health > 0 and not e.isDying and not e.isMoving then
-            local key = e.q .. "," .. e.r
-            if key ~= (e._tpChecked or "") then
-                e._tpChecked = key
-                combat.triggerTeleporter(e)
-            end
-        end
-    end
 end
 
 -- Poisoned marker: checks the "Poisonous" enemy name. Affects ONLY the

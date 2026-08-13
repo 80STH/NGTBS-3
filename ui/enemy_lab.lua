@@ -217,7 +217,6 @@ local function spawnCreature()
         for name, _ in pairs(commanders.list) do table.insert(names, name) end
         selectedCommander = names[1]
     end
-    if not selectedSquad then selectedSquad = 1 end
     global_abilities.initWithCommander(selectedCommander)
     restartGame("maps/map1.lua")
     
