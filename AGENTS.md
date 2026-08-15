@@ -9,6 +9,85 @@ cd "C:\Users\80STH\Desktop\test"
 
 Love2D 11.5 installed. The game window will open — close it manually when done testing.
 
+## Architecture map (read this first — saves exploration tokens)
+
+- **Solo-only game**: one playable hero (`hero` global, `selectedSoloHero` = hero def index in
+  `system/solo_mode.lua`; `solo_mode.createHero(def, q, r)`). Squad code was fully deleted.
+- **Deploy**: `gamePhase == "deploy"` → player places hero → `confirmDeploy()` (core/game.lua)
+  applies landing effects via `system/deploy_effects.lua` (`entity.deployEffect` registry).
+- **Entity types** (entity/entity.lua): CHARACTER / OBSTACLE / BUILDING / EDGE (map borders,
+  invulnerable, immune to statuses/dig sites).
+- **Mechanism button** (top-right, `ui.drawMechanismButton` → `activateMechanisms()` in
+  core/game.lua, 1-turn cooldown `mechanismUsedThisTurn`, reset in transitionToPlayerTurn):
+  1. retractable highground (map field `retractable = {["q,r"]=true}`; upper-terrain marker
+     `"lift"`; animation via `highgroundAnim` + `highgroundAnimInfo/CatchUp` in main.lua)
+  2. teleporters (`system/teleporters.lua`; upper terrain `"teleporter:<id>"` pairs;
+     button-activated only; undo re-runs `teleporters.scan(utm)` to reset cooldowns)
+  3. conveyor belts (upper terrain `"conveyor:<dir>"`; dirs n/ne/se/s/sw/nw =
+     `HexGrid.CONVEYOR_DIRS` cube steps — flat-top hexes have NO pure e/w neighbors;
+     push into occupied cell = collision: `combat.applyCollisionDamage` + bounce)
+- **Undo** (`system/undo.lua`): snapshot AFTER an action; `undo.undoLast()` pops to previous.
+  Restores entities (by ref), hexStatuses, upperTerrain, elevationMap, digSites, abilities,
+  mechanism flags.
+- **Overlap guard**: `rebuildEntityIndex()` (main.lua) runs every frame and warns
+  `[WARN] ENTITY OVERLAP` with traceback; AI batch moves reserve destinations via
+  `_reservedCell` (combat/ai.lua `moveToCell`).
+- **AI danger avoidance**: `isCellDangerousForEntity(q,r,e)` (combat/ai.lua) = dig site
+  (`status.hasDigSite` — NOT in hexStatuses!) + fire/acid/decay; dangerous cells are
+  lowest-priority fallback in all move paths.
+- **Trains** live only on `maps/map3.lua` (railway/tunnels). Creature Lab, Shop, Progression
+  mode are LIVE but kept by owner request. Generic shop upgrades are recorded but NOT yet
+  applied to the hero (`ponytail:` marker in ui/shop.lua `applyTake`).
+- **Hex geometry (flat orientation)**: x = q·1.5R, y = r·1.732R, odd columns +0.5H down.
+  Neighbors = N/NE/SE/S/SW/NW (screen). Cube↔axial via grid/hex_utils.lua.
+- **HP bars** (`ui.drawChaosBar` hero, `ui.drawLeaderHPBar` map4): static; only the
+  potentially-lost cells flicker when `state.previewDamaged[entity]` (hovered attack threat).
+- **Menu** auto-lists every `maps/*.lua` (no registration needed).
+
+## Temp verification block pattern (env-gated, always remove after)
+
+Insert at the end of `love.load` in main.lua, run with lovec.exe, read report file:
+
+```lua
+if os.getenv("NGTBS_TEMP_X") then
+    local ok, err = xpcall(function()
+        restartGame("maps/<map>.lua")     -- set soloMode/selectedSoloHero before if needed
+        local report = {}
+        local function chk(n, c) report[#report+1] = (c and "OK   " or "FAIL ") .. n end
+        -- ...assert via chk(...)...
+        local f = io.open("x_report.txt", "w")
+        for _, l in ipairs(report) do f:write(l, "\n") end
+        f:close()
+        love.event.quit()
+    end, function(e) return debug.traceback(e, 2) end)
+    if not ok then
+        local f = io.open("x_report.txt", "w"); f:write("ERROR: ", tostring(err), "\n"); f:close()
+        love.event.quit()
+    end
+end
+```
+
+Run it:
+
+```powershell
+Get-Process -Name love* -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 2
+Remove-Item x_report.txt -ErrorAction SilentlyContinue
+$env:NGTBS_TEMP_X = "1"
+$p = Start-Process "C:\Program Files\LOVE\lovec.exe" -ArgumentList "." -PassThru -NoNewWindow
+$p.WaitForExit(25000) | Out-Null
+if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force; "TIMEOUT" } else { "EXITED" }
+Remove-Item Env:\NGTBS_TEMP_X
+Get-Content x_report.txt
+```
+
+Notes:
+- TIMEOUT + NO REPORT = Lua error (love shows error screen, process stays alive). Syntax-check
+  first: `lua -e "print(loadfile('main.lua') and 'OK' or 'SYNTAX ERROR')"`.
+- `lua tests/run.lua` = headless suite. 1 pre-existing failure
+  ("pushable building pushed off edge does not take damage") — ignore.
+- For log-file output set `$env:NGTBS_LOG_FILE = "C:\Users\80STH\Desktop\test\x.log"` and
+  grep with `Select-String -LiteralPath x.log -Pattern "..."`.
+
 ## Generating sprites programmatically (LOVE headless)
 
 Sprites (e.g. `sprites/railway_track.png`) can be generated procedurally with LOVE itself.

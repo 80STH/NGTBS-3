@@ -578,57 +578,63 @@ function ai.moveAndPrepare(enemy, entities, hex)
         return "failed"
     end
 
-    -- Ranged enemies: try to find a reachable cell from which they can attack
+    -- Ranged enemies: try to find a reachable cell from which they can attack.
+    -- Safe cells first; cells with negative statuses / dig sites are the
+    -- lowest-priority fallback.
     if attack and (attack.range > 1 or attack.minRange) and not enemy.teleporting then
+        local bestCell = nil
         local effRange = ai.getEffectiveMoveRange(enemy, hex, entities)
         if effRange > 0 then
-            local reachable = {}
-            local visited = {[enemy.q .. "," .. enemy.r] = 0}
-            local queue = {{enemy.q, enemy.r, 0}}
-            local head = 1
-            while head <= #queue do
-                local q, r, d = unpack(queue[head])
-                head = head + 1
-                if d > 0 then table.insert(reachable, {q = q, r = r}) end
-                if d < effRange then
-                    for _, nb in ipairs(hex:getNeighbors(q, r)) do
-                        if hex:isActiveHex(nb.q, nb.r) and not visited[nb.q .. "," .. nb.r] then
-                            local blocked = false
-                            for _, e2 in ipairs(entities) do
-                                if e2 ~= enemy and not e2.isHazard then
-                                    if e2.q == nb.q and e2.r == nb.r then blocked = true; break end
-                                    if e2.cells then
-                                        for _, c in ipairs(e2.cells) do
-                                            if c.q == nb.q and c.r == nb.r then blocked = true; break end
+            local function findAttackCell(allowDangerous)
+                local reachable = {}
+                local visited = {[enemy.q .. "," .. enemy.r] = 0}
+                local queue = {{enemy.q, enemy.r, 0}}
+                local head = 1
+                while head <= #queue do
+                    local q, r, d = unpack(queue[head])
+                    head = head + 1
+                    if d > 0 then table.insert(reachable, {q = q, r = r}) end
+                    if d < effRange then
+                        for _, nb in ipairs(hex:getNeighbors(q, r)) do
+                            if hex:isActiveHex(nb.q, nb.r) and not visited[nb.q .. "," .. nb.r] then
+                                local blocked = false
+                                for _, e2 in ipairs(entities) do
+                                    if e2 ~= enemy and not e2.isHazard then
+                                        if e2.q == nb.q and e2.r == nb.r then blocked = true; break end
+                                        if e2.cells then
+                                            for _, c in ipairs(e2.cells) do
+                                                if c.q == nb.q and c.r == nb.r then blocked = true; break end
+                                            end
                                         end
                                     end
                                 end
-                            end
-                            if not blocked and not isCellDangerousForEntity(nb.q, nb.r, enemy) then
-                                visited[nb.q .. "," .. nb.r] = d + 1
-                                table.insert(queue, {nb.q, nb.r, d + 1})
+                                if not blocked and (allowDangerous or not isCellDangerousForEntity(nb.q, nb.r, enemy)) then
+                                    visited[nb.q .. "," .. nb.r] = d + 1
+                                    table.insert(queue, {nb.q, nb.r, d + 1})
+                                end
                             end
                         end
                     end
                 end
-            end
-            local bestCell, bestDist = nil, math.huge
-            for _, cell in ipairs(reachable) do
-                local savedQ, savedR = enemy.q, enemy.r
-                enemy.q, enemy.r = cell.q, cell.r
-                local canAttack = ai.canPrepareAttack(enemy, entities)
-                enemy.q, enemy.r = savedQ, savedR
-                if canAttack then
-                    local d = hex:getDistance(enemy.q, enemy.r, cell.q, cell.r)
-                    if d < bestDist then
-                        bestDist = d
-                        bestCell = cell
+                local bestCell, bestDist = nil, math.huge
+                for _, cell in ipairs(reachable) do
+                    local savedQ, savedR = enemy.q, enemy.r
+                    enemy.q, enemy.r = cell.q, cell.r
+                    local canAttack = ai.canPrepareAttack(enemy, entities)
+                    enemy.q, enemy.r = savedQ, savedR
+                    if canAttack then
+                        local d = hex:getDistance(enemy.q, enemy.r, cell.q, cell.r)
+                        if d < bestDist then
+                            bestDist = d
+                            bestCell = cell
+                        end
                     end
                 end
+                return bestCell
             end
+            bestCell = findAttackCell(false) or findAttackCell(true)
         end
-        if bestCell then
-            return ai.moveToCell(enemy, bestCell.q, bestCell.r, hex, entities)
+        if bestCell then            return ai.moveToCell(enemy, bestCell.q, bestCell.r, hex, entities)
         end
     end
 
@@ -645,6 +651,8 @@ end
 function ai.performTeleportTowards(enemy, target, entities, hex)
     local bestCell = nil
     local bestDist = math.huge
+    local dangCell = nil
+    local dangDist = math.huge
     
     for _, cell in ipairs(hex._activeCells) do
         local q, r = cell.q, cell.r
@@ -668,19 +676,25 @@ function ai.performTeleportTowards(enemy, target, entities, hex)
             end
         end
         if not occupied then
+            local dist = hex:getDistance(q, r, target.q, target.r)
             if not isCellDangerousForEntity(q, r, enemy) then
-                local dist = hex:getDistance(q, r, target.q, target.r)
                 if dist < bestDist then
                     bestDist = dist
                     bestCell = cell
+                end
+            else
+                if dist < dangDist then
+                    dangDist = dist
+                    dangCell = cell
                 end
             end
         end
     end
     
-    if bestCell then
-        enemy.q = bestCell.q
-        enemy.r = bestCell.r
+    local pick = bestCell or dangCell
+    if pick then
+        enemy.q = pick.q
+        enemy.r = pick.r
         enemy.movementFinished = true
         return true
     end
@@ -831,6 +845,13 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
             end
         end
     end
+    -- Another enemy already reserved this cell as its planned destination —
+    -- prevents two units planning onto the same cell during batch movement.
+    for _, e in ipairs(entities) do
+        if e ~= enemy and e._reservedCell == (targetQ .. "," .. targetR) then
+            return false
+        end
+    end
     local distance = hex:getDistance(enemy.q, enemy.r, targetQ, targetR)
     local effRange = ai.getEffectiveMoveRange(enemy, hex, entities)
     if distance > effRange then return false end
@@ -861,6 +882,9 @@ function ai.moveToCell(enemy, targetQ, targetR, hex, entities)
     if path and #path > 0 and #path <= effRange then
         enemy.path = path
         enemy.currentPathIndex = 1
+        -- Reserve the final destination until the move completes
+        local last = path[#path]
+        enemy._reservedCell = last.q .. "," .. last.r
         ai.startEnemyMove(enemy, hex)
         return true
     end
@@ -891,6 +915,7 @@ function ai.startEnemyMove(enemy, hex)
         enemy.isMoving = false
         enemy.path = {}
         enemy.currentPathIndex = 0
+        enemy._reservedCell = nil
     end
 end
 
@@ -918,6 +943,7 @@ function ai.updateEnemyMovement(enemy, dt, hex)
                     enemy.path = {}
                     enemy.currentPathIndex = 0
                     enemy.movementFinished = true
+                    enemy._reservedCell = nil
                 end
             end
         end
@@ -951,6 +977,8 @@ function ai.moveCowardlyBeast(enemy, entities, hex)
     local neighbors = hex:getNeighbors(enemy.q, enemy.r)
     local bestCell = nil
     local bestDist = -math.huge
+    local dangCell = nil
+    local dangDist = -math.huge
     for _, nb in ipairs(neighbors) do
         if hex:isActiveHex(nb.q, nb.r) then
             local occupied = false
@@ -962,16 +990,24 @@ function ai.moveCowardlyBeast(enemy, entities, hex)
             end
             if not occupied then
                 local d = hex:getDistance(nb.q, nb.r, nearestAlly.q, nearestAlly.r)
-                if d > bestDist then
-                    bestDist = d
-                    bestCell = nb
+                if isCellDangerousForEntity(nb.q, nb.r, enemy) then
+                    if d > dangDist then
+                        dangDist = d
+                        dangCell = nb
+                    end
+                else
+                    if d > bestDist then
+                        bestDist = d
+                        bestCell = nb
+                    end
                 end
             end
         end
     end
 
-    if bestCell then
-        if ai.moveToCell(enemy, bestCell.q, bestCell.r, hex, entities) then
+    local target = bestCell or dangCell
+    if target then
+        if ai.moveToCell(enemy, target.q, target.r, hex, entities) then
             return "moving"
         end
     end
@@ -979,15 +1015,16 @@ function ai.moveCowardlyBeast(enemy, entities, hex)
 end
 
 function isCellDangerousForEntity(q, r, entity)
+    -- Dig sites live in their own table, not in hex statuses
+    if status.hasDigSite(q, r) then
+        return true
+    end
     local cellStatuses = status.getAtHex(q, r)
     if not cellStatuses or #cellStatuses == 0 then
         return false
     end
     for _, st in ipairs(cellStatuses) do
-        if st == "dig_site" then
-            return true
-        end
-        if st == "fire" or st == "acid" then
+        if st == "fire" or st == "acid" or st == "decay" then
             if not status.hasEntityStatus(entity, st) then
                 return true
             end

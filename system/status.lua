@@ -167,10 +167,10 @@ local digSites = {}
 
 -- Set a dig site on a cell
 function status.setDigSite(q, r, timer, spawnType)
-    -- Edge cells are immune: no dig sites on the map border
+    -- Dig sites only ever appear on empty cells (no entities, no map borders)
     if _G.getEntityAtHex then
         local e = _G.getEntityAtHex(q, r)
-        if e and e.isEdge and e:isEdge() then return end
+        if e then return end
     end
     local key = q .. "," .. r
     digSites[key] = { timer = timer or 1, age = 0, spawnType = spawnType }

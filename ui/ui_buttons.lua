@@ -127,6 +127,28 @@ return function(ui)
             end
             if #colIcons > 0 then ui.drawPreviewIcons(hex, colIcons) end
 
+            -- Teleporters: ghost silhouette of everyone who would be
+            -- teleported, drawn at their new position.
+            local teleporters = require("system.teleporters")
+            for _, e in ipairs(_G.entities or {}) do
+                if e:isCharacter() and e.health > 0 and not e.isDying and not e.isMoving then
+                    local _, other = teleporters.getCellInfo(e.q, e.r)
+                    if other then
+                        local x2, y2 = getDrawCoords(other.q, other.r)
+                        if e.sprite then
+                            local sw, sh = e.sprite:getDimensions()
+                            love.graphics.setColor(1, 1, 1, 0.5)
+                            love.graphics.draw(e.sprite, x2, y2, 0, 6, 6, sw / 2, sh / 2)
+                            love.graphics.setColor(1, 1, 1, 1)
+                        else
+                            love.graphics.setColor(0.75, 0.35, 1, 0.35)
+                            love.graphics.circle("fill", x2, y2, hex.radius * 0.45)
+                            love.graphics.setColor(1, 1, 1, 1)
+                        end
+                    end
+                end
+            end
+
             local lines = {}
             if hasHighground then lines[#lines + 1] = _G.highgroundRaised and "- Lower the highground" or "- Raise the highground" end
             if hasTeleporter then lines[#lines + 1] = "- Activate the teleporters" end

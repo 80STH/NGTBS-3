@@ -682,6 +682,31 @@ function HexGrid:drawUpperTerrain(q, r, terrainType, x, y, yOffset)
 			end
 			love.graphics.setLineWidth(1)
 		end
+	elseif terrainType == "lift" then
+		-- retractable highground: mechanical steel platform with bolts and a hub
+		local cy = y + yOffset
+		local plate = self:drawInsetHexagon(x, cy, radius * 0.88)
+		love.graphics.setColor(0.47, 0.5, 0.55, 0.95)
+		love.graphics.polygon("fill", plate)
+		love.graphics.setColor(0.62, 0.65, 0.7, 0.9)
+		love.graphics.setLineWidth(1.5)
+		love.graphics.polygon("line", plate)
+		local inner = self:drawInsetHexagon(x, cy, radius * 0.64)
+		love.graphics.setColor(0.3, 0.32, 0.37, 0.95)
+		love.graphics.polygon("fill", inner)
+		-- center hub
+		love.graphics.setColor(0.55, 0.58, 0.63, 1)
+		love.graphics.circle("fill", x, cy, radius * 0.2)
+		love.graphics.setColor(0.25, 0.27, 0.31, 1)
+		love.graphics.setLineWidth(2)
+		love.graphics.circle("line", x, cy, radius * 0.2)
+		love.graphics.setLineWidth(1)
+		-- six corner bolts
+		local bv = self:drawHexagon(x, cy, radius * 0.62)
+		love.graphics.setColor(0.72, 0.75, 0.8, 1)
+		for i = 0, 5 do
+			love.graphics.circle("fill", bv[i * 2 + 1], bv[i * 2 + 2], radius * 0.07)
+		end
 	elseif terrainType == "mountain_rubble" then
 		for i = 0, 5 do
 			local sx = srand(seed + i * 3) - 0.5

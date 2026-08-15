@@ -81,7 +81,6 @@ conveyorCells = {}          -- "q,r" -> cube dir {1,0,-1}; from upper terrain "c
 highgroundRaised = false    -- current highground state (true = raised)
 mechanismUsedThisTurn = false  -- 1-turn cooldown for the Mechanism button
 highgroundAnim = nil        -- { start=, duration=, raising= } while animating
-difficultyModifier = 1
 spawnAllUnits = false
 unlimitedAbilities = false
 chaos = 0
@@ -96,36 +95,10 @@ progressionShopOpened = false
 progressionOverlay = nil
 mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua", "maps/map4.lua"}
 progressionChoices = {}
-unitUpgrades = {}  -- "Warrior" > { choices = {"dashToFlipChain"} }
-artifacts = {}  -- list of unlocked artifact IDs
 commanderArtifacts = {}  -- commander-specific artifact IDs
 placedAllies = {}
 deploySelectedIdx = nil
 allyPanelButtons = {}
-
-UPGRADE_CHOICES = {
-    Warrior = {
-        { id = "dashToFlipChain", name = "Dash>Flip", desc = "After Dash, can Flip the same target" },
-        { id = "flipToDashChain", name = "Flip>Dash", desc = "After Flip, can Dash the same target" },
-    },
-    Puncher = {
-        { id = "empowerAtStart", name = "Empowered Start", desc = "Start each map empowered" },
-        { id = "choosePushDir", name = "Windup", desc = "Choose push direction" },
-    },
-    Rogue = {
-        { id = "redirectShot", name = "Ricochet", desc = "Redirect shot to second target" },
-        { id = "pointBlankLethal", name = "Close Quarters", desc = "Point-blank shot is lethal" },
-    },
-}
-
-ARTIFACT_CHOICES = {
-    { id = "rootImmune", name = "Iron Will", desc = "All units immune to roots/slowing auras" },
-    { id = "deployAnywhere", name = "Scout", desc = "All units deploy on any terrain" },
-    { id = "armor", name = "Fortress", desc = "All units take -1 damage" },
-    { id = "moveSpeed", name = "Swift Boots", desc = "All units gain +1 move range" },
-    { id = "canMoveAfterAttack", name = "Hit & Run", desc = "All units move after attacking" },
-    { id = "phaseThroughEnemies", name = "Ghost Cloak", desc = "All units phase through enemies" },
-}
 
 function processLevelVictory()
     objectives.checkOnVictory(entities)
@@ -316,15 +289,20 @@ end
 
 function rebuildEntityIndex()
     entityAt = {}
+    local activeOverlaps = {}
     for _, e in ipairs(entities) do
         local function registerCell(q, r)
             local key = q .. "," .. r
             local existing = entityAt[key]
             if existing and existing ~= e then
+                -- Two entities on one cell is absolutely forbidden: warn loudly
+                -- (with a traceback) on first detection of each occurrence.
                 local warnKey = key .. "|" .. tostring(existing.name or existing) .. "|" .. tostring(e.name or e)
+                activeOverlaps[warnKey] = true
                 if not cellDuplicateWarnings[warnKey] then
                     cellDuplicateWarnings[warnKey] = true
-                    log.debugf("debug", "cell overlap: %s and %s both at (%d,%d)", tostring(existing.name or existing), tostring(e.name or e), q, r)
+                    log.warnf("debug", "ENTITY OVERLAP: %s and %s both at (%d,%d)!\n%s",
+                        tostring(existing.name or existing), tostring(e.name or e), q, r, debug.traceback())
                 end
             end
             entityAt[key] = e
@@ -337,6 +315,12 @@ function rebuildEntityIndex()
             registerCell(e.q, e.r)
         end
     end
+    -- Forget resolved overlaps so a fresh occurrence warns again
+    for key in pairs(cellDuplicateWarnings) do
+        if not activeOverlaps[key] then
+            cellDuplicateWarnings[key] = nil
+        end
+    end
     if ui then ui._moveRangeCacheKey = nil end
 end
 
@@ -346,7 +330,6 @@ end
 
 function love.update(dt)
     if pause_menu.isOpen then return end
-    shop.update(dt)
     if gamePhase == "editor" then
         map_editor.dpiScale = dpiScale
         map_editor.update(dt)

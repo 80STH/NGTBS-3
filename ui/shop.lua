@@ -183,18 +183,9 @@ function shop.openForProgression(bothObjectivesCompleted)
 end
 
 local function applyTake(slot, catKey)
-    if slot.type == "unit" then
-        local pipePos = slot.id:find("|")
-        if pipePos then
-            local unitName = slot.id:sub(1, pipePos - 1)
-            local choiceId = slot.id:sub(pipePos + 1)
-            local data = (_G.unitUpgrades or {})[unitName] or { choices = {} }
-            table.insert(data.choices, choiceId)
-            _G.unitUpgrades[unitName] = data
-            table.insert(_G.progressionChoices, { type = "unit", name = slot.name })
-            log.infof("shop", "Upgrade applied: %s -> %s", unitName, choiceId)
-        end
-    elseif slot.type == "generic" then
+    if slot.type == "generic" then
+        -- ponytail: generic upgrade effects (armor/moveSpeed/immunities) are recorded
+        -- but not yet applied to the hero — wire them up when implementing upgrades
         _G.genericUpgrades = _G.genericUpgrades or {}
         table.insert(_G.genericUpgrades, slot.id)
         table.insert(_G.progressionChoices, { type = "generic", name = slot.name })
@@ -220,11 +211,8 @@ local function applyTake(slot, catKey)
     shop.categories[catKey].taken = true
 end
 
-function shop.update(dt)
-end
-
 local function getContentHeight()
-    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "unit", "generic", "spell", "commander", "heroic" }
+    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "generic", "spell", "commander", "heroic" }
     local h = 45
     for _, catKey in ipairs(catOrder) do
         local cat = shop.categories[catKey]
@@ -232,9 +220,6 @@ local function getContentHeight()
         h = h + 22
         if #cat.slots == 0 then
             h = h + 24
-        elseif catKey == "unit" then
-            local rows = math.ceil(#cat.slots / 2)
-            h = h + rows * 78 + 8
         else
             h = h + #cat.slots * 40 + 8
         end
@@ -290,9 +275,8 @@ function shop.draw()
     love.graphics.setFont(fonts.get(16))
     love.graphics.printf("X", closeX, closeY + 4, 28, "center")
 
-    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "unit", "generic", "spell", "commander", "heroic" }
+    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "generic", "spell", "commander", "heroic" }
     local catColors = {
-        unit = {0.8, 0.8, 0.4},
         generic = {0.5, 0.9, 0.5},
         spell = {0.8, 0.5, 1.0},
         commander = {0.4, 0.8, 1.0},
@@ -314,58 +298,6 @@ function shop.draw()
             love.graphics.setFont(fonts.get(11))
             love.graphics.print("(none available)", contentX, y)
             y = y + 24
-        elseif catKey == "unit" then
-            local cardW = (contentW - 10) / 2
-            local cardH = 70
-            for i, slot in ipairs(cat.slots) do
-                local col = ((i - 1) % 2)
-                local row = math.floor((i - 1) / 2)
-                local cx = contentX + col * (cardW + 10)
-                local cy = y + row * (cardH + 8)
-
-                local bg = slot.taken and {0.08, 0.12, 0.08} or {0.14, 0.16, 0.22}
-                love.graphics.setColor(bg[1], bg[2], bg[3], 0.95)
-                love.graphics.rectangle("fill", cx, cy, cardW, cardH, 6)
-
-                love.graphics.setColor(color[1], color[2], color[3], slot.taken and 0.3 or 0.8)
-                love.graphics.setFont(fonts.get(18))
-                love.graphics.print(slot.icon, cx + 8, cy + 6)
-
-                love.graphics.setColor(slot.taken and 0.4 or 1, slot.taken and 0.4 or 1, slot.taken and 0.4 or 1, slot.taken and 0.5 or 1)
-                love.graphics.setFont(fonts.get(12))
-                love.graphics.print(slot.name, cx + 8, cy + 30)
-
-                love.graphics.setColor(slot.taken and 0.3 or 0.6, slot.taken and 0.3 or 0.6, slot.taken and 0.3 or 0.6, slot.taken and 0.4 or 0.7)
-                love.graphics.setFont(fonts.get(9))
-                love.graphics.printf(slot.desc, cx + 8, cy + 46, cardW - 16, "left")
-
-                if not slot.taken then
-                    local btnW = 50
-                    local btnH = 22
-                    local btnX = cx + cardW - btnW - 6
-                    local btnY = cy + cardH - btnH - 6
-                    local hover = mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH
-                    love.graphics.setColor(hover and 0.25 or 0.15, hover and 0.5 or 0.3, hover and 0.3 or 0.18, 0.9)
-                    love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 4)
-                    love.graphics.setColor(0.3, 0.9, 0.4, hover and 1 or 0.7)
-                    love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 4)
-                    love.graphics.setColor(0.3, 0.9, 0.4, hover and 1 or 0.7)
-                    love.graphics.setFont(fonts.get(10))
-                    love.graphics.printf("Take", btnX, btnY + 4, btnW, "center")
-                else
-                    local btnW = 50
-                    local btnH = 22
-                    local btnX = cx + cardW - btnW - 6
-                    local btnY = cy + cardH - btnH - 6
-                    love.graphics.setColor(0.2, 0.5, 0.2, 0.7)
-                    love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 4)
-                    love.graphics.setColor(0.3, 0.8, 0.3, 0.7)
-                    love.graphics.setFont(fonts.get(10))
-                    love.graphics.printf("Taken", btnX, btnY + 4, btnW, "center")
-                end
-            end
-            local rows = math.ceil(#cat.slots / 2)
-            y = y + rows * 78 + 8
         else
             local rowH = 36
             for _, slot in ipairs(cat.slots) do
@@ -473,7 +405,7 @@ function shop.mousepressed(x, y)
         return true
     end
 
-    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "unit", "generic", "spell", "commander", "heroic" }
+    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "generic", "spell", "commander", "heroic" }
     local y = startY
     for _, catKey in ipairs(catOrder) do
         local cat = shop.categories[catKey]
@@ -481,33 +413,6 @@ function shop.mousepressed(x, y)
         y = y + 22
         if #cat.slots == 0 then
             y = y + 24
-        elseif catKey == "unit" then
-            local cardW = (contentW - 10) / 2
-            local cardH = 70
-            for i, slot in ipairs(cat.slots) do
-                if not slot.taken then
-                    local col = ((i - 1) % 2)
-                    local row = math.floor((i - 1) / 2)
-                    local cx = contentX + col * (cardW + 10)
-                    local cy = y + row * (cardH + 8)
-                    local btnW = 50
-                    local btnH = 22
-                    local btnX = cx + cardW - btnW - 6
-                    local btnY = cy + cardH - btnH - 6
-                    if mx >= btnX and mx <= btnX + btnW and my >= btnY and my <= btnY + btnH then
-                        slot.taken = true
-                        applyTake(slot, catKey)
-                        if shop.autoOpened then
-                            shop.isOpen = false
-                            shop.autoOpened = false
-                            finishProgression()
-                        end
-                        return true
-                    end
-                end
-            end
-            local rows = math.ceil(#cat.slots / 2)
-            y = y + rows * 78 + 8
         else
             local rowH = 36
             for _, slot in ipairs(cat.slots) do

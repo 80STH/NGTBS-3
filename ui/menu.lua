@@ -364,8 +364,6 @@ function menu.mousepressed(x, y)
                 if not selectedCommander then return true end
                 selectedSoloHero = 1
                 soloMode = true
-                unitUpgrades = {}
-                artifacts = {}
                 commanderArtifacts = {}
                 genericUpgrades = {}
                 progressionChoices = {}

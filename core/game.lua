@@ -35,6 +35,7 @@ local function resetEnemyPrepareFlags()
             e.isMoving = false
             e.path = {}
             e.currentPathIndex = 0
+            e._reservedCell = nil
         end
         if e.rootedTarget then
             status.removeFromEntity(e.rootedTarget, "rooted")
@@ -88,9 +89,16 @@ function restartGame(mapPath)
         for key in pairs(mapData.retractable) do
             local q, r = key:match("^(%d+),(%d+)$")
             if q and r then
-                table.insert(retractableCells, { q = tonumber(q), r = tonumber(r) })
+                q, r = tonumber(q), tonumber(r)
+                table.insert(retractableCells, { q = q, r = r })
             end
         end
+    end
+    -- Unique lift texture for retractable cells (upper terrain follows the
+    -- raise/lower animation and is already covered by undo snapshots)
+    for _, c in ipairs(retractableCells) do
+        if not upperTerrainMap[c.q] then upperTerrainMap[c.q] = {} end
+        upperTerrainMap[c.q][c.r] = "lift"
     end
     highgroundRaised = false
     mechanismUsedThisTurn = false

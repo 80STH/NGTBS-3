@@ -301,7 +301,6 @@ local gidToEntity = {
     [77] = { type = "building",  name = "Blockpost", health = 2 },
     [67] = { type = "building",  name = "TunnelEntrance", health = 2, isObjective = true, indestructible = true },
     [68] = { type = "building",  name = "TunnelExit",     health = 2, isObjective = true, indestructible = true },
-    [74] = { type = "building",  name = "TrainCar",  health = 1, moveRange = 1 },
     [84] = { type = "building",  name = "MountainHouse", health = 2 },
     [85] = { type = "building",  name = "SmallMountainHouse", health = 1 },
     [96] = { type = "character", name = "Colossus",  isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "colossus" },

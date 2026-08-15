@@ -48,25 +48,4 @@ return function(ui)
             status_shaders.drawRooted(x, y, radius * 0.8, time, 0.9)
         end
     end
-
-    function ui.getEntityStatusColor(entity, time)
-        local statuses = status.getEntityStatuses(entity)
-        if #statuses == 0 then return nil end
-        local r, g, b = 1, 1, 1
-        if status.hasEntityStatus(entity, "fire") then
-            r, g, b = 1, 0.3 + 0.3 * math.sin(time * 4), 0.1
-        end
-        if status.hasEntityStatus(entity, "decay") then
-            r = (r or 1) * (0.5 + 0.3 * math.sin(time * 4))
-            g = (g or 1) * (0.7 + 0.2 * math.sin(time * 4))
-            b = (b or 1) * (0.3 + 0.2 * math.sin(time * 4))
-        end
-        if status.hasEntityStatus(entity, "acid") then
-            local acidPulse = 0.5 + 0.5 * math.sin(time * 4)
-            r = (r or 1) * (0.5 + acidPulse * 0.5)
-            g = (g or 1) * (0.9 + acidPulse * 0.1)
-            b = (b or 1) * (0.3 + acidPulse * 0.3)
-        end
-        return r, g, b
-    end
 end

@@ -211,6 +211,7 @@ function undo.restore(snap)
             es.ref.color = es.color
             es.ref.attacks = es.attacks
             es.ref.moveRange = es.moveRange
+            es.ref._reservedCell = nil
             -- Restore statuses
             status.setEntityStatuses(es.ref, es.statuses)
             existingRefs[es.ref] = true
@@ -271,6 +272,9 @@ function undo.restore(snap)
         end
         utm[q] = rowCopy
     end
+
+    -- Rebuild teleporter pairs from the restored markers (also resets cooldowns)
+    require("system.teleporters").scan(utm)
 
     -- Restore retractable highground state
     _G.highgroundRaised = snap.highgroundRaised or false

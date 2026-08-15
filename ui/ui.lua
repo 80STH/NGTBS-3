@@ -538,6 +538,36 @@ function ui.collectFlipDestOverlays(hex, selectedActor, flipTargetActor, attack,
         out[key] = {flipDest = true}
     end
 end
+-- Where a dash toward (targetQ, targetR) actually ends, mirroring
+-- combat.DashAttack:execute — first elevation boundary (crash/fall) or the
+-- first target on the line. Returns endQ, endR, reason ("crash" | "fall" |
+-- "target" | "free").
+local function dashEndpoint(attacker, targetQ, targetR, stepX, stepY, stepZ, hex, entities)
+    local elv = _G.elevationMap
+    local curQ, curR = attacker.q, attacker.r
+    local curElev = elv and elv[curQ] and elv[curQ][curR] == true
+    while curQ ~= targetQ or curR ~= targetR do
+        local nextQ, nextR = hex_utils.applyCubeStep(curQ, curR, stepX, stepY, stepZ)
+        if not hex:isActiveHex(nextQ, nextR) then
+            return curQ, curR, "free"
+        end
+        local nextElev = elv and elv[nextQ] and elv[nextQ][nextR] == true
+        if nextElev ~= curElev then
+            if not curElev and nextElev then
+                return curQ, curR, "crash"   -- low -> high: crash at the last low cell
+            else
+                return nextQ, nextR, "fall"   -- high -> low: land on the low cell
+            end
+        end
+        local e = getEntityAtHex(nextQ, nextR, entities)
+        if e and e.health > 0 and e ~= attacker then
+            return nextQ, nextR, "target"
+        end
+        curQ, curR, curElev = nextQ, nextR, nextElev
+    end
+    return targetQ, targetR, "free"
+end
+
 function ui.getAttackableCellKeys(hex, attacker, attack, entities)
     local keys = {}
     if not attacker or not attack then return keys end
@@ -577,11 +607,21 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
                     local target = getEntityAtHex(q, r, entities)
                     if target and (target:isCharacter() and not target.isPlayable or target:isBuilding()) then canApply = true end
                 end
-            elseif attack.name == "Ghost Bolt" or attack.name == "Dash" then
+            elseif attack.name == "Ghost Bolt" then
                 local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
                 if stepX then
                     local firstTarget, _ = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
                     if firstTarget then canApply = true end
+                end
+            elseif attack.name == "Dash" then
+                -- Elevation-aware: only highlight cells the dash can actually
+                -- reach (target, crash or fall landing) — nothing beyond a cliff.
+                local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
+                if stepX then
+                    local endQ, endR, reason = dashEndpoint(attacker, q, r, stepX, stepY, stepZ, hex, entities)
+                    if endQ == q and endR == r and (reason == "target" or reason == "crash" or reason == "fall") then
+                        canApply = true
+                    end
                 end
             elseif attack.name == "Shoot" or attack.name == "Piercing Shot" or attack.name == "Push" then
                 local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
@@ -2506,6 +2546,16 @@ function ui.drawChaosBar(mx, my)
     local shieldMax = solo and hero and (hero.maxShields or 0) or 0
     local shieldVal = solo and hero and (hero.shields or 0) or 0
 
+    -- Cells that would be lost to the hovered attack's damage: shields absorb
+    -- first, then health. Only these cells flicker.
+    local lostShields = 0
+    local lostHealth = 0
+    if solo and hero and _G.state and _G.state.previewDamaged and _G.state.previewDamaged[hero] then
+        local dmg = _G.state.previewDamaged[hero].totalDamage or 0
+        lostShields = math.min(dmg, shieldVal)
+        lostHealth = math.min(dmg - lostShields, barVal)
+    end
+
     local cellW = 30
     local cellH = 14
     local gap = 3
@@ -2544,8 +2594,12 @@ function ui.drawChaosBar(mx, my)
         local cy = barY + pad
         local filled = i <= barVal
         if filled then
+            -- Static bar; only the cells that would be lost pulse
             local t = love.timer.getTime()
-            local pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 0.5)
+            local pulse = 1
+            if i > barVal - lostHealth then
+                pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 0.5)
+            end
             if solo then
                 love.graphics.setColor(0.35 * pulse, 0.85 * pulse, 0.4 * pulse, 0.9)
             else
@@ -2566,7 +2620,10 @@ function ui.drawChaosBar(mx, my)
         local filled = i <= shieldVal
         if filled then
             local t = love.timer.getTime()
-            local pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 0.5)
+            local pulse = 1
+            if i > shieldVal - lostShields then
+                pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 0.5)
+            end
             love.graphics.setColor(0.3 * pulse, 0.55 * pulse, 1 * pulse, 0.9)
         else
             love.graphics.setColor(0.2, 0.2, 0.25, 0.6)
@@ -2720,6 +2777,12 @@ function ui.drawLeaderHPBar(mx, my)
     love.graphics.setColor(0.5, 0.1, 0.2, 0.6)
     love.graphics.rectangle("line", barX, bgY, totalW, cellH + pad * 2, 4)
 
+    -- Cells that would be lost to the hovered attack's damage
+    local lostHealth = 0
+    if _G.state and _G.state.previewDamaged and _G.state.previewDamaged[leader] then
+        lostHealth = math.min(_G.state.previewDamaged[leader].totalDamage or 0, leader.health)
+    end
+
     -- Cells (2 cells, each divided into 3 sub-cells of 1 HP)
     local healthPerCell = 3
     local subGap = 3
@@ -2733,8 +2796,13 @@ function ui.drawLeaderHPBar(mx, my)
         for j = 1, healthPerCell do
             local scx = cx + (j - 1) * (subCellW + subGap)
             if j <= filledSubCells then
+                -- Static bar; only the cells that would be lost pulse
+                local idx = (i - 1) * healthPerCell + j
                 local t = love.timer.getTime()
-                local pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 1.5 + j * 0.8)
+                local pulse = 1
+                if idx > leader.health - lostHealth then
+                    pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 1.5 + j * 0.8)
+                end
                 love.graphics.setColor(0.9 * pulse, 0.1 * pulse, 0.2 * pulse, 0.9)
                 love.graphics.rectangle("fill", scx, cy, subCellW, cellH, 2)
             end

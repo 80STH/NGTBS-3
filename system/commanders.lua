@@ -56,16 +56,4 @@ function commanders.get(name)
     return commanders.list[name]
 end
 
-function commanders.init(commanderName)
-    local cmd = commanders.list[commanderName]
-    if not cmd then return end
-    global_abilities.setUnlocked(nil) -- clear
-    global_abilities.resetUnlocks()
-    for _, ab in ipairs(cmd.startAbilities) do
-        global_abilities.setUnlocked(ab)
-    end
-    global_abilities.mana = cmd.startMana
-    global_abilities.maxMana = cmd.startMaxMana
-end
-
 return commanders
