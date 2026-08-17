@@ -98,7 +98,7 @@ end
 function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then return end
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return end
-    if actor.soloActions and (actor.movesLeft or 0) <= 0 then return end
+    if actor.soloActions and ((actor.movesLeft or 0) <= 0 or (actor.attacksLeft or 0) <= 0) then return end
     if not hex:isActiveHex(hoverQ, hoverR) then return end
     if actor.teleporting then return end
     local effectiveRange = ui.getEffectiveMoveRange(actor, entities, hex)
@@ -162,7 +162,7 @@ function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
         love.graphics.circle("fill", targetX, targetY, hex.radius * 0.5)
     end
     local vertices = hex:drawHexagon(targetX, targetY, hex.radius)
-    love.graphics.setColor(0.2, 0.8, 0.2, 0.6)
+    love.graphics.setColor(0.2, 0.8, 0.2, 1)
     love.graphics.polygon("line", vertices)
     love.graphics.setLineWidth(1)
 end
@@ -613,7 +613,7 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
                     local firstTarget, _ = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
                     if firstTarget then canApply = true end
                 end
-            elseif attack.name == "Dash" then
+            elseif attack.name == "Dash" or attack.name == "Heavy Charge" then
                 -- Elevation-aware: only highlight cells the dash can actually
                 -- reach (target, crash or fall landing) — nothing beyond a cliff.
                 local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
@@ -967,6 +967,11 @@ end
             end
             return
         end
+    end
+    -- Heavy Charge (pin & drag): trail to hero destination + drag arrow
+    if attack.name == "Heavy Charge" then
+        ui.drawHeavyChargePlan(hex, attacker, attack, hoverQ, hoverR, entities)
+        return
     end
     -- Vortex Strike
     if attack.name == "Vortex Strike" then
@@ -1544,10 +1549,36 @@ end
         end
     end
 end
+-- Draws only the outer boundary of a set of hex cells: edges facing cells NOT in the set.
+-- Caller sets line width and color beforehand. set = { ["q,r"] = true }
+function ui.drawSetOutline(hex, set, scale)
+    for key in pairs(set) do
+        local q, r = key:match("^(-?%d+),(-?%d+)$")
+        q, r = tonumber(q), tonumber(r)
+        local x, y = getDrawCoords(q, r)
+        local v = hex:drawInsetHexagon(x, y, hex.radius, scale or 1.0)
+        for _, n in ipairs(hex:getNeighbors(q, r)) do
+            if not set[n.q .. "," .. n.r] then
+                local nx, ny = getDrawCoords(n.q, n.r)
+                local best, bestD = 0, math.huge
+                for e = 0, 5 do
+                    local i1 = e * 2 + 1
+                    local i2 = ((e + 1) % 6) * 2 + 1
+                    local mx = (v[i1] + v[i2]) / 2
+                    local my = (v[i1 + 1] + v[i2 + 1]) / 2
+                    local d = (mx - nx) * (mx - nx) + (my - ny) * (my - ny)
+                    if d < bestD then bestD, best = d, e end
+                end
+                love.graphics.line(v[best * 2 + 1], v[best * 2 + 2],
+                                   v[((best + 1) % 6) * 2 + 1], v[((best + 1) % 6) * 2 + 2])
+            end
+        end
+    end
+end
 function ui.drawMovementRange(hex, actor, entities, terrainMap)
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then return end
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return end
-    if actor.soloActions and (actor.movesLeft or 0) <= 0 then return end
+    if actor.soloActions and ((actor.movesLeft or 0) <= 0 or (actor.attacksLeft or 0) <= 0) then return end
 
     -- Cache: recompute only when actor/position changes
     local cacheKey = actor.q .. "," .. actor.r .. "," .. tostring(actor)
@@ -1562,14 +1593,18 @@ function ui.drawMovementRange(hex, actor, entities, terrainMap)
         ui._moveRangeCache = reachable
     end
 
+    local set = {}
     for _, cell in ipairs(ui._moveRangeCache) do
+        set[cell.q .. "," .. cell.r] = true
         local x, y = getDrawCoords(cell.q, cell.r)
         local vertices = hex:drawInsetHexagon(x, y, hex.radius, 1.0)
         love.graphics.setColor(0.2, 0.8, 0.2, 0.2)
         love.graphics.polygon("fill", vertices)
-        love.graphics.setColor(0.2, 0.8, 0.2, 0.5)
-        love.graphics.polygon("line", vertices)
     end
+    love.graphics.setLineWidth(2)
+    love.graphics.setColor(0.2, 0.8, 0.2, 1)
+    ui.drawSetOutline(hex, set)
+    love.graphics.setLineWidth(1)
 end
 -- Undo button
 function ui.getEffectiveStatuses(entity)
@@ -1928,18 +1963,22 @@ end
 function ui.drawEnemyMovementRange(hex, enemy, entities, terrainMap)
     if not enemy or enemy.isPlayable or not enemy:isCharacter() or enemy.health <= 0 then return end
     if enemy.hasActedThisTurn or enemy.isMoving then return end
+    local set = {}
     for q = 0, hex.gridWidth - 1 do
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) and ui.isCellReachableForEnemy(enemy, q, r, entities, terrainMap, hex) then
+                set[q .. "," .. r] = true
                 local x, y = getDrawCoords(q, r)
                 local vertices = hex:drawInsetHexagon(x, y, hex.radius, 1.0)
                 love.graphics.setColor(0.8, 0.2, 0.2, 0.2)
                 love.graphics.polygon("fill", vertices)
-                love.graphics.setColor(0.8, 0.2, 0.2, 0.5)
-                love.graphics.polygon("line", vertices)
             end
         end
     end
+    love.graphics.setLineWidth(2)
+    love.graphics.setColor(0.8, 0.2, 0.2, 1)
+    ui.drawSetOutline(hex, set)
+    love.graphics.setLineWidth(1)
 end
 function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMap, hex)
     if not hex:isActiveHex(targetQ, targetR) then return false end
@@ -2128,16 +2167,20 @@ function ui.drawHexLineDots(hex, fromQ, fromR, toQ, toR, cR, cG, cB, dotRadius, 
 end
 function ui.drawAttackableCells(hex, attacker, attack, entities, terrainMap)
     local keys = ui.getAttackableCellKeys(hex, attacker, attack, entities)
+    local set = {}
     for key in pairs(keys) do
+        set[key] = true
         local q, r = key:match("^(%d+),(%d+)$")
         q, r = tonumber(q), tonumber(r)
         local x, y = getDrawCoords(q, r)
         local vertices = hex:drawInsetHexagon(x, y, hex.radius, 1.0)
         love.graphics.setColor(0.9, 0.8, 0.2, 0.25)
         love.graphics.polygon("fill", vertices)
-        love.graphics.setColor(0.9, 0.8, 0.2, 0.7)
-        love.graphics.polygon("line", vertices)
     end
+    love.graphics.setLineWidth(2)
+    love.graphics.setColor(0.9, 0.8, 0.2, 1)
+    ui.drawSetOutline(hex, set)
+    love.graphics.setLineWidth(1)
 end
 -- ======================================================
 -- ============================================================
@@ -2237,6 +2280,17 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
         if stepX then
             local firstTarget, targetHex = attack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
             if firstTarget and targetHex then table.insert(out, {q = targetHex.q, r = targetHex.r}) end
+        end
+        return
+    end
+    if attack.name == "Heavy Charge" then
+        local plan = attack:computeCharge(attacker, hoverQ, hoverR, hex, entities)
+        if plan then
+            if plan.target then
+                table.insert(out, {q = plan.startQ, r = plan.startR})
+            else
+                table.insert(out, {q = plan.heroQ, r = plan.heroR})
+            end
         end
         return
     end
@@ -2343,6 +2397,7 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
 end
 function ui.drawSelectedStats(actor, entities, hex)
     if not actor then return end
+    if actor.soloActions then return end -- the solo hero has no stats panel
     if not actor:isCharacter() and not (actor:isBuilding() and actor.moveRange > 0) then return end
     local font = love.graphics.getFont()
     local pad = 8
@@ -2362,7 +2417,10 @@ function ui.drawSelectedStats(actor, entities, hex)
     local nameText = actor.name
     if actor.hasActedThisTurn then nameText = nameText .. " (acted)" end
     local nameW = font:getWidth(nameText) + pad * 4 + 24
-    local px, py = margin, 46
+    local objectives = require("system.objectives")
+    local objH = objectives.getPanelHeight()
+    local py = (objH > 0) and (46 + objH + 4) or 46
+    local px = margin
     love.graphics.setColor(0.1, 0.15, 0.1, 0.9)
     love.graphics.rectangle("fill", px, py, nameW, lineH + pad * 2, 8)
     love.graphics.setColor(nameColor[1], nameColor[2], nameColor[3], 1)
@@ -2421,6 +2479,68 @@ function ui.drawSelectedStats(actor, entities, hex)
         end
     end
 end
+-- Full plan preview for a Heavy Charge toward a target cell (used both while
+-- aiming and for the pending delayed cast).
+function ui.drawHeavyChargePlan(hex, attacker, attack, targetQ, targetR, entities)
+    local plan = attack:computeCharge(attacker, targetQ, targetR, hex, entities)
+    if not plan then return end
+    local fromX, fromY = getDrawCoords(attacker.q, attacker.r)
+    local toX, toY = getDrawCoords(plan.heroQ, plan.heroR)
+    love.graphics.setLineWidth(6)
+    love.graphics.setColor(1, 0.4, 0.1, 0.15)
+    drawHintLine(attacker.q, attacker.r, plan.heroQ, plan.heroR, fromX, fromY, toX, toY)
+    love.graphics.setLineWidth(2)
+    love.graphics.setColor(1, 0.6, 0.2, 0.4)
+    drawHintLine(attacker.q, attacker.r, plan.heroQ, plan.heroR, fromX, fromY, toX, toY)
+    love.graphics.setLineWidth(1)
+    local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
+    love.graphics.setColor(1, 1, 0.4, 0.4 + 0.4 * pulse)
+    love.graphics.setLineWidth(2)
+    love.graphics.circle("line", toX, toY, hex.radius * 0.35)
+    love.graphics.setLineWidth(1)
+    if plan.target then
+        local tFromX, tFromY = getDrawCoords(plan.startQ, plan.startR)
+        local tToX, tToY = getDrawCoords(plan.endQ, plan.endR)
+        ui.drawPushArrow(tFromX, tFromY, tToX, tToY, nil, nil, nil, nil,
+            plan.startQ, plan.startR, plan.endQ, plan.endR)
+    end
+end
+
+-- Visual hints for delayed attacks: pending queue (orange) and armed Deflect (cyan)
+function ui.drawDelayedHints(entities)
+    if not smallFont then smallFont = fonts.get(12) end
+    for _, e in ipairs(entities) do
+        if e.isPlayable and e.health and e.health > 0 then
+            local label, r, g, b
+            if e.pendingDelayedAttack then
+                label = e.pendingDelayedAttack.attack and e.pendingDelayedAttack.attack.name or "Delayed"
+                r, g, b = 1, 0.6, 0.2
+            elseif e.deflectArmed then
+                label = "Deflect"
+                r, g, b = 0.3, 0.9, 1
+            end
+            if label then
+                local x, y = getDrawCoords(e.q, e.r)
+                local t = love.timer.getTime()
+                local pulse = 0.5 + 0.5 * math.sin(t * 5)
+                love.graphics.setLineWidth(3)
+                love.graphics.setColor(r, g, b, 0.4 + 0.4 * pulse)
+                love.graphics.circle("line", x, y, hex.radius * (0.7 + 0.12 * pulse))
+                love.graphics.setLineWidth(1)
+                love.graphics.setFont(smallFont)
+                love.graphics.setColor(r, g, b, 0.9)
+                love.graphics.printf(label, x - 60, y - hex.radius - 26, 120, "center")
+                love.graphics.setColor(1, 1, 1, 1)
+            end
+            -- Pending charge: show exactly what it will do, like the aiming preview
+            local pa = e.pendingDelayedAttack
+            if pa and pa.attack and pa.attack.visualType == "line" then
+                ui.drawHeavyChargePlan(hex, e, pa.attack, pa.q, pa.r, entities)
+            end
+        end
+    end
+end
+
 function ui.drawAbilityStats(ability)
     if not ability or not ability._cfg then return end
     local cfg = ability._cfg

@@ -21,16 +21,25 @@ pushAnimations = push_animator
 combat.Attack = {}
 combat.Attack.__index = combat.Attack
 
-function combat.Attack.new(name, description, range, damage, effects)
+function combat.Attack.new(name, description, range, damage, effects, tags)
     local self = setmetatable({}, combat.Attack)
     self.name = name or "Attack"
     self.description = description or "A basic attack"
     self.range = range or 1
     self.damage = damage or 1
     self.effects = effects or {}
+    self.tags = tags or {}
     self.visualType = "melee"
     return self
-end 
+end
+
+local function hasTag(tags, tag)
+    for _, t in ipairs(tags or {}) do
+        if t == tag then return true end
+    end
+    return false
+end
+combat.hasTag = hasTag 
 
 -- Determine straight-line direction (cube step)
 function combat.Attack:getLineDirection(fromQ, fromR, toQ, toR, hex)
@@ -229,10 +238,11 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
 
      local occupant = combat.getEntityAtHex(toQ, toR, entities)
     if occupant and occupant ~= target then
-        -- SharpReefs / lethal collision: instant death
-        if occupant.lethalCollision then
+        -- SharpReefs / lethal pushes (Heavy Charge): instant death on obstacle collision
+        if occupant.lethalCollision or (self.lethalPush and not occupant.isHazard) then
             target.health = 0
             target:startDeath()
+            if self.lethalPush then combat.notePushKill(target, true) end
             log.infof("combat", "%s is pushed into %s! Instant death!", target.name, occupant.name)
             if sounds then sounds.play("collision") end
             combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant, true)
@@ -392,7 +402,7 @@ function combat.DashAttack.new()
 end
 
 -- Returns first target, its cell, and last free cell before target
-function combat.DashAttack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+function combat.Attack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
     local curQ, curR = attacker.q, attacker.r
     local lastFreeQ, lastFreeR = curQ, curR
     local firstTarget = nil
@@ -433,90 +443,12 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     local firstTarget, targetHex, lastFree = self:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
     -- Elevation check: walk from attacker toward dash endpoint (firstTarget or targetQ)
-    if elevationMap then
-        local endpointQ, endpointR
-        if firstTarget and targetHex then
-            endpointQ, endpointR = targetHex.q, targetHex.r
-        else
-            endpointQ, endpointR = targetQ, targetR
-        end
-        local walkQ, walkR = attacker.q, attacker.r
-        while walkQ ~= endpointQ or walkR ~= endpointR do
-            local nextQ, nextR = hex_utils.applyCubeStep(walkQ, walkR, stepX, stepY, stepZ)
-            if not hex:isActiveHex(nextQ, nextR) then break end
-            local walkElev = (elevationMap[walkQ] and elevationMap[walkQ][walkR]) == true
-            local nextElev = (elevationMap[nextQ] and elevationMap[nextQ][nextR]) == true
-            if walkElev ~= nextElev then
-                if not walkElev and nextElev then
-                    -- Low → High: crash at walkQ
-                    local crashQ, crashR = walkQ, walkR
-                    local oldQ, oldR = attacker.q, attacker.r
-                    attacker.q, attacker.r = crashQ, crashR
-                    if selectedActor == attacker then
-                        hex.selectedQ, hex.selectedR = attacker.q, attacker.r
-                    end
-                    if attacker.rootedTarget then
-                        status.removeFromEntity(attacker.rootedTarget, "rooted")
-                        attacker.rootedTarget = nil
-                    end
-                    attack_effects.dash(attacker, nil, crashQ, crashR, hex)
-                    local fromX, fromY = getDrawCoords(oldQ, oldR)
-                    local toX, toY = getDrawCoords(crashQ, crashR)
-                    push_animator.addCustomMove(attacker, fromX, fromY, toX, toY, 0.25, function()
-                        local fx, fy = getDrawCoords(crashQ, crashR)
-                        visual.addEffect(fx, fy, "collision", 0.3)
-                        if sounds then sounds.play("collision") end
-                    end)
-                    push_animator.start()
-                    attacker.hasActedThisTurn = true
-                    return true
-                elseif walkElev and not nextElev then
-                    -- High → Low: fall to next cell
-                    local landingQ, landingR = nextQ, nextR
-                    for _, e in ipairs(entities) do
-                        if e.health and e.health > 0 and not e.indestructible and not e:isEdge() and e.q == landingQ and e.r == landingR then
-                            e.health = 0
-                            e:startDeath()
-                        end
-                    end
-                    local oldQ, oldR = attacker.q, attacker.r
-                    attacker.q, attacker.r = landingQ, landingR
-                    if selectedActor == attacker then
-                        hex.selectedQ, hex.selectedR = attacker.q, attacker.r
-                    end
-                    if attacker.rootedTarget then
-                        status.removeFromEntity(attacker.rootedTarget, "rooted")
-                        attacker.rootedTarget = nil
-                    end
-                    if attacker.health and attacker.health > 0 then
-                        local wasDestroyed = attacker:takeDamage(1)
-                        combat.notePushKill(attacker, wasDestroyed)
-                        if wasDestroyed then attacker:startDeath() end
-                    end
-                    if terrainMap then
-                        local died = effects.applyAllCellEffects(attacker, landingQ, landingR, terrainMap, entities)
-                        if died then combat.deferDeath(attacker) end
-                    end
-                    local fromX, fromY = getDrawCoords(oldQ, oldR)
-                    local toX, toY = getDrawCoords(landingQ, landingR)
-                    local slideX = toX
-                    local slideY = fromY + (toY - fromY) * 0.4
-                    visual.addPushEffect(fromX, fromY, slideX, slideY, 0.15)
-                    push_animator.addCustomMove(attacker, fromX, fromY, slideX, slideY, 0.15, function()
-                        push_animator.addCustomMove(attacker, slideX, slideY, toX, toY, 0.2, function()
-                            local fx, fy = getDrawCoords(landingQ, landingR)
-                            visual.addEffect(fx, fy, "collision", 0.3)
-                            if sounds then sounds.play("collision") end
-                        end)
-                        push_animator._initNext()
-                    end, true)
-                    push_animator.start()
-                    attacker.hasActedThisTurn = true
-                    return true
-                end
-            end
-            walkQ, walkR = nextQ, nextR
-        end
+    local endpointQ, endpointR = targetQ, targetR
+    if firstTarget and targetHex then
+        endpointQ, endpointR = targetHex.q, targetHex.r
+    end
+    if self:checkElevationCrashOrFall(attacker, stepX, stepY, stepZ, endpointQ, endpointR, hex, entities, sounds) then
+        return true
     end
 
     -- Determine where the attacker will land (cell before target, in cube coords)
@@ -587,20 +519,259 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     local visX = logicalEndX + (targetX - logicalEndX) * lungeFrac
     local visY = logicalEndY + (targetY - logicalEndY) * lungeFrac
 
-    push_animator.addCustomMove(attacker, fromX, fromY, visX, visY, 0.2, function()
-        combat.withDeferredDeaths(function()
-            if firstTarget and firstTarget.health > 0 then
-                self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
-            end
-            if firstTarget and firstTarget.health > 0 and targetHex and firstTarget.isPushable then
-                self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
-            end
-        end)
-        combat.startPushAnimations(hex)
+    -- Damage and push are applied synchronously so the undo snapshot taken
+    -- right after the attack includes the collision results (e.g. uphill
+    -- collision damage). The lunge animation below is purely visual.
+    combat.withDeferredDeaths(function()
+        if firstTarget and firstTarget.health > 0 then
+            self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
+        end
+        if firstTarget and firstTarget.health > 0 and targetHex and firstTarget.isPushable then
+            self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
+        end
     end)
+    combat.startPushAnimations(hex)
+
+    push_animator.addCustomMove(attacker, fromX, fromY, visX, visY, 0.2)
     push_animator.start()
 
     attacker.hasActedThisTurn = true
+    return true
+end
+
+-- ============================================================
+-- DELAYED ATTACKS: finishers that resolve after the turn ends.
+-- All delayed attacks carry the finisher + delayed tags and prevent
+-- any further actions once cast.
+-- ============================================================
+combat.DelayedAttack = setmetatable({}, combat.Attack)
+combat.DelayedAttack.__index = combat.DelayedAttack
+
+function combat.DelayedAttack.new(name, description, range, damage, effects)
+    local self = combat.Attack.new(name, description, range, damage, effects)
+    self.tags = {"finisher", "delayed"}
+    return setmetatable(self, combat.DelayedAttack)
+end
+
+-- ============================================================
+-- HEAVY CHARGE (player-only): delayed finisher.
+-- Reinhardt-style pin: drags the first enemy along the line until it
+-- collides with something — obstacle / cliff = lethal, edge = slam.
+-- ============================================================
+combat.HeavyChargeAttack = setmetatable({}, combat.DelayedAttack)
+combat.HeavyChargeAttack.__index = combat.HeavyChargeAttack
+
+function combat.HeavyChargeAttack.new()
+    local self = combat.DelayedAttack.new("Heavy Charge",
+        "Finisher: after your turn ends, charge in a straight line, pinning and dragging the first enemy until it collides with an obstacle (lethal)",
+        math.huge, 0, {})
+    self.visualType = "line"
+    self.lethalPush = true
+    return setmetatable(self, combat.HeavyChargeAttack)
+end
+
+-- Simulate the pin & drag without applying anything.
+-- Returns nil if not a straight line, else:
+-- { stepX/Y/Z, target, startQ/R, endQ/R, heroQ/R, collision }
+-- collision: "obstacle" / "elevation" / "edge" / "hazard" / nil
+function combat.HeavyChargeAttack:computeCharge(attacker, targetQ, targetR, hex, entities)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return nil end
+
+    local plan = {
+        stepX = stepX, stepY = stepY, stepZ = stepZ,
+        target = nil, startQ = nil, startR = nil,
+        endQ = nil, endR = nil,
+        heroQ = attacker.q, heroR = attacker.r,
+        collision = nil,
+    }
+
+    local posQ, posR = attacker.q, attacker.r
+    while true do
+        local nextQ, nextR = hex_utils.applyCubeStep(posQ, posR, stepX, stepY, stepZ)
+        if not hex:isActiveHex(nextQ, nextR) then
+            if plan.target then plan.collision = "edge" end
+            break
+        end
+        local occupant = combat.getEntityAtHex(nextQ, nextR, entities)
+        if not plan.target then
+            if occupant and occupant ~= attacker and occupant.health and occupant.health > 0 then
+                if occupant.isPushable == false then break end
+                plan.target = occupant
+                plan.startQ, plan.startR = nextQ, nextR
+                plan.endQ, plan.endR = nextQ, nextR
+            else
+                plan.heroQ, plan.heroR = nextQ, nextR
+            end
+        else
+            local fromElev = (elevationMap and elevationMap[plan.endQ] and elevationMap[plan.endQ][plan.endR]) == true
+            local toElev = (elevationMap and elevationMap[nextQ] and elevationMap[nextQ][nextR]) == true
+            if fromElev ~= toElev then
+                plan.collision = "elevation"
+                break
+            end
+            if occupant and occupant ~= attacker and occupant ~= plan.target and occupant.health and occupant.health > 0 then
+                if occupant.isHazard then
+                    plan.heroQ, plan.heroR = plan.endQ, plan.endR
+                    plan.endQ, plan.endR = nextQ, nextR
+                    plan.collision = "hazard"
+                else
+                    plan.collision = "obstacle"
+                end
+                break
+            else
+                plan.heroQ, plan.heroR = plan.endQ, plan.endR
+                plan.endQ, plan.endR = nextQ, nextR
+            end
+        end
+        posQ, posR = nextQ, nextR
+    end
+    return plan
+end
+
+function combat.HeavyChargeAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local plan = self:computeCharge(attacker, targetQ, targetR, hex, entities)
+    if not plan then return false, "Not a straight line!" end
+
+    -- Hero elevation safety (crash / fall), same as Dash
+    local endpointQ, endpointR = targetQ, targetR
+    if plan.target then endpointQ, endpointR = plan.startQ, plan.startR end
+    if self:checkElevationCrashOrFall(attacker, plan.stepX, plan.stepY, plan.stepZ, endpointQ, endpointR, hex, entities, sounds) then
+        return true
+    end
+
+    local attackerOldQ, attackerOldR = attacker.q, attacker.r
+
+    -- Apply logical moves immediately (the delayed attack fires right before
+    -- the enemy phase, so results must be final before the queue is built)
+    local heroMoved = plan.heroQ ~= attackerOldQ or plan.heroR ~= attackerOldR
+    if heroMoved then
+        attacker.q, attacker.r = plan.heroQ, plan.heroR
+        if selectedActor == attacker then
+            hex.selectedQ, hex.selectedR = attacker.q, attacker.r
+        end
+        if attacker.rootedTarget then
+            status.removeFromEntity(attacker.rootedTarget, "rooted")
+            attacker.rootedTarget = nil
+        end
+        if terrainMap then
+            local died = effects.applyAllCellEffects(attacker, plan.heroQ, plan.heroR, terrainMap, entities)
+            if died then combat.deferDeath(attacker) end
+        end
+    end
+
+    local t = plan.target
+    if t and t.health and t.health > 0 then
+        local tMoved = plan.endQ ~= plan.startQ or plan.endR ~= plan.startR
+        if tMoved then
+            t.q, t.r = plan.endQ, plan.endR
+        end
+        if plan.collision == "obstacle" or plan.collision == "elevation" then
+            t.health = 0
+            t:startDeath()
+            combat.notePushKill(t, true)
+            log.infof("combat", "%s pins %s against an obstacle! Instant death!", attacker.name, t.name)
+            if sounds then sounds.play("collision") end
+        elseif plan.collision == "edge" then
+            if t:isCharacter() then
+                local wasDestroyed = t:takeDamage(1)
+                combat.notePushKill(t, wasDestroyed)
+                log.infof("combat", "%s is slammed against the edge!", t.name)
+                if wasDestroyed then t:startDeath() end
+            end
+            if sounds then sounds.play("collision") end
+        else
+            if tMoved and terrainMap then
+                local died = effects.applyAllCellEffects(t, plan.endQ, plan.endR, terrainMap, entities)
+                if died then t:startDeath() end
+            end
+        end
+    end
+
+    -- Visuals: hero lunge, then the pinned target starts moving at the moment of contact
+    attack_effects.dash(attacker, t, plan.heroQ, plan.heroR, hex)
+    local fromX, fromY = getDrawCoords(attackerOldQ, attackerOldR)
+    local toX, toY = getDrawCoords(plan.heroQ, plan.heroR)
+
+    local function segDur(q1, r1, q2, r2)
+        return math.max(0.1, 0.1 * hex:getDistance(q1, r1, q2, r2))
+    end
+
+    local function startTargetSlide()
+        if t and (plan.endQ ~= plan.startQ or plan.endR ~= plan.startR) then
+            local tFromX, tFromY = getDrawCoords(plan.startQ, plan.startR)
+            local tToX, tToY = getDrawCoords(plan.endQ, plan.endR)
+            push_animator.addCustomMove(t, tFromX, tFromY, tToX, tToY,
+                segDur(plan.startQ, plan.startR, plan.endQ, plan.endR))
+        end
+    end
+
+    local contactQ, contactR = plan.heroQ, plan.heroR
+    if t and (plan.startQ ~= attackerOldQ or plan.startR ~= attackerOldR) then
+        contactQ, contactR = plan.startQ, plan.startR
+    end
+
+    if contactQ ~= attackerOldQ or contactR ~= attackerOldR then
+        -- Phase 1: hero charges to the contact cell (the pinned enemy's original cell)
+        local contactX, contactY = getDrawCoords(contactQ, contactR)
+        push_animator.addCustomMove(attacker, fromX, fromY, contactX, contactY,
+            segDur(attackerOldQ, attackerOldR, contactQ, contactR), function()
+                -- Contact: the pinned target starts being dragged, hero follows behind it
+                startTargetSlide()
+                if plan.heroQ ~= contactQ or plan.heroR ~= contactR then
+                    local finalX, finalY = getDrawCoords(plan.heroQ, plan.heroR)
+                    push_animator.addCustomMove(attacker, contactX, contactY, finalX, finalY,
+                        segDur(contactQ, contactR, plan.heroQ, plan.heroR))
+                end
+                push_animator._initNext()
+            end)
+        push_animator.start()
+    else
+        if heroMoved then
+            push_animator.addCustomMove(attacker, fromX, fromY, toX, toY,
+                segDur(attackerOldQ, attackerOldR, plan.heroQ, plan.heroR))
+        end
+        startTargetSlide()
+        push_animator.start()
+    end
+
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+-- ============================================================
+-- DEFLECT (player-only): delayed finisher. Arms a one-shot
+-- retaliation: the next attack within 1 cell deals 1 damage back.
+-- ============================================================
+combat.DeflectAttack = setmetatable({}, combat.DelayedAttack)
+combat.DeflectAttack.__index = combat.DeflectAttack
+
+function combat.DeflectAttack.new()
+    local self = combat.DelayedAttack.new("Deflect",
+        "Finisher: until your next turn, the next attack within 1 cell deals 1 damage back to the attacker",
+        math.huge, 0, {})
+    return setmetatable(self, combat.DeflectAttack)
+end
+
+function combat.DeflectAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    attacker.deflectArmed = true
+    attacker.hasActedThisTurn = true
+    log.infof("combat", "%s arms Deflect!", attacker.name)
+    return true
+end
+
+-- Deflect retaliation: if the target has deflect armed and the attacker is
+-- within 1 cell, the attacker takes 1 damage (one-shot).
+function combat.checkDeflect(target, attacker, sounds)
+    if not target or not target.deflectArmed then return false end
+    if not attacker or attacker == target then return false end
+    if not attacker.health or attacker.health <= 0 or attacker.indestructible or attacker.isDying then return false end
+    if hex and hex:getDistance(target.q, target.r, attacker.q, attacker.r) > 1 then return false end
+    target.deflectArmed = false
+    local wasKilled = attacker:takeDamage(1)
+    log.infof("combat", "%s deflects the attack! %s takes 1 damage!", target.name, attacker.name)
+    if wasKilled then attacker:startDeath() end
+    if sounds then sounds.play("collision") end
     return true
 end
 
@@ -1334,6 +1505,90 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
 
     attacker.hasActedThisTurn = true
     return true
+end
+
+-- Walk a charge line for elevation transitions; crash (low→high) or fall
+-- (high→low) if found. Returns true when the move was resolved that way.
+function combat.Attack:checkElevationCrashOrFall(attacker, stepX, stepY, stepZ, endpointQ, endpointR, hex, entities, sounds)
+    if not elevationMap then return false end
+    local walkQ, walkR = attacker.q, attacker.r
+    while walkQ ~= endpointQ or walkR ~= endpointR do
+        local nextQ, nextR = hex_utils.applyCubeStep(walkQ, walkR, stepX, stepY, stepZ)
+        if not hex:isActiveHex(nextQ, nextR) then break end
+        local walkElev = (elevationMap[walkQ] and elevationMap[walkQ][walkR]) == true
+        local nextElev = (elevationMap[nextQ] and elevationMap[nextQ][nextR]) == true
+        if walkElev ~= nextElev then
+            if not walkElev and nextElev then
+                -- Low → High: crash at walkQ
+                local crashQ, crashR = walkQ, walkR
+                local oldQ, oldR = attacker.q, attacker.r
+                attacker.q, attacker.r = crashQ, crashR
+                if selectedActor == attacker then
+                    hex.selectedQ, hex.selectedR = attacker.q, attacker.r
+                end
+                if attacker.rootedTarget then
+                    status.removeFromEntity(attacker.rootedTarget, "rooted")
+                    attacker.rootedTarget = nil
+                end
+                attack_effects.dash(attacker, nil, crashQ, crashR, hex)
+                local fromX, fromY = getDrawCoords(oldQ, oldR)
+                local toX, toY = getDrawCoords(crashQ, crashR)
+                push_animator.addCustomMove(attacker, fromX, fromY, toX, toY, 0.25, function()
+                    local fx, fy = getDrawCoords(crashQ, crashR)
+                    visual.addEffect(fx, fy, "collision", 0.3)
+                    if sounds then sounds.play("collision") end
+                end)
+                push_animator.start()
+                attacker.hasActedThisTurn = true
+                return true
+            else
+                -- High → Low: fall to next cell
+                local landingQ, landingR = nextQ, nextR
+                for _, e in ipairs(entities) do
+                    if e.health and e.health > 0 and not e.indestructible and not e:isEdge() and e.q == landingQ and e.r == landingR then
+                        e.health = 0
+                        e:startDeath()
+                    end
+                end
+                local oldQ, oldR = attacker.q, attacker.r
+                attacker.q, attacker.r = landingQ, landingR
+                if selectedActor == attacker then
+                    hex.selectedQ, hex.selectedR = attacker.q, attacker.r
+                end
+                if attacker.rootedTarget then
+                    status.removeFromEntity(attacker.rootedTarget, "rooted")
+                    attacker.rootedTarget = nil
+                end
+                if attacker.health and attacker.health > 0 then
+                    local wasDestroyed = attacker:takeDamage(1)
+                    combat.notePushKill(attacker, wasDestroyed)
+                    if wasDestroyed then attacker:startDeath() end
+                end
+                if terrainMap then
+                    local died = effects.applyAllCellEffects(attacker, landingQ, landingR, terrainMap, entities)
+                    if died then combat.deferDeath(attacker) end
+                end
+                local fromX, fromY = getDrawCoords(oldQ, oldR)
+                local toX, toY = getDrawCoords(landingQ, landingR)
+                local slideX = toX
+                local slideY = fromY + (toY - fromY) * 0.4
+                visual.addPushEffect(fromX, fromY, slideX, slideY, 0.15)
+                push_animator.addCustomMove(attacker, fromX, fromY, slideX, slideY, 0.15, function()
+                    push_animator.addCustomMove(attacker, slideX, slideY, toX, toY, 0.2, function()
+                        local fx, fy = getDrawCoords(landingQ, landingR)
+                        visual.addEffect(fx, fy, "collision", 0.3)
+                        if sounds then sounds.play("collision") end
+                    end)
+                    push_animator._initNext()
+                end, true)
+                push_animator.start()
+                attacker.hasActedThisTurn = true
+                return true
+            end
+        end
+        walkQ, walkR = nextQ, nextR
+    end
+    return false
 end
 
 -- ============================================================
@@ -2353,6 +2608,11 @@ function combat.Attack:dealDamageToTarget(target, attacker, damage, entities, so
     local wasDestroyed = target:takeDamage(finalDamage)
     sounds.play("attack")
 
+    -- Deflect: adjacent retaliation (one-shot)
+    if finalDamage > 0 then
+        combat.checkDeflect(target, attacker, sounds)
+    end
+
     if hex and visual then
         local x, y = getDrawCoords(target.q, target.r)
         visual.addEffect(x, y, "hit", 0.4)
@@ -2398,7 +2658,7 @@ function performMove(actor, targetQ, targetR)
          return false
      end
     if actor.soloActions then
-        if (actor.movesLeft or 0) <= 0 then
+        if (actor.movesLeft or 0) <= 0 or (actor.attacksLeft or 0) <= 0 then
             log.debugf("combat", "%s has no moves left!", actor.name)
             return false
         end
@@ -2573,9 +2833,18 @@ if attacker.hasActedThisTurn and not (attacker.soloActions and (attacker.attacks
 
     log.debug("combat", "Executing attack...")
     local success, message
-    combat.withDeferredDeaths(function()
-        success, message = attack:execute(attacker, targetQ, targetR, hex, entities, sounds)
-    end)
+    if hasTag(attack.tags, "delayed") then
+        if attack.visualType == "line" and not attack:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex) then
+            return false, "Not a straight line!"
+        end
+        attacker.pendingDelayedAttack = { q = targetQ, r = targetR, attack = attack }
+        success = true
+        log.debug("combat", "Delayed attack queued")
+    else
+        combat.withDeferredDeaths(function()
+            success, message = attack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+        end)
+    end
     log.debug("combat", "Attack result:", success, message)
 
     if success then
@@ -2585,6 +2854,9 @@ if attacker.hasActedThisTurn and not (attacker.soloActions and (attacker.attacks
             _G.objective_usedAttacks[attack.name] = true
             attacker.hasActedThisTurn = false
             attacker.attacksLeft = (attacker.attacksLeft or 2) - 1
+            if hasTag(attack.tags, "finisher") then
+                attacker.attacksLeft = 0
+            end
             if attacker.attacksLeft <= 0 then
                 attacker.hasActedThisTurn = true
             end
@@ -2657,7 +2929,7 @@ function combat.RampageAttack:execute(attacker, targetQ, targetR, hex, entities,
     local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
     if not stepX then return false, "Not a straight line!" end
 
-    local firstTarget, targetHex, lastFree = combat.DashAttack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
+    local firstTarget, targetHex, lastFree = combat.Attack:getFirstTargetAndLastFree(attacker, stepX, stepY, stepZ, hex, entities)
 
     -- Determine where the attacker will land
     local moveQ, moveR = attacker.q, attacker.r

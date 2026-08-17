@@ -422,6 +422,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         local wasDestroyed = target:takeDamage(damage)
         log.infof("ai", "%s attacks %s for %d damage!", enemy.name, target.name, damage)
         sounds.play("attack")
+        combat.checkDeflect(target, enemy, sounds)
         if wasDestroyed then
             target:startDeath()
         end
@@ -436,6 +437,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
         local wasDestroyed = extra:takeDamage(attack.damage)
         log.infof("ai", "%s also hits %s for %d damage!", enemy.name, extra.name, attack.damage)
         sounds.play("attack")
+        combat.checkDeflect(extra, enemy, sounds)
         if wasDestroyed then
             extra:startDeath()
         end
@@ -448,6 +450,8 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
             if ct.health > 0 then
                 local wasDestroyed = ct:takeDamage(attack.damage)
                     log.infof("ai", "%s cleaves %s for %d damage!", enemy.name, ct.name, attack.damage)
+                sounds.play("attack")
+                combat.checkDeflect(ct, enemy, sounds)
                 if wasDestroyed then
                     ct:startDeath()
                 end

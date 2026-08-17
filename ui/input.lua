@@ -151,7 +151,7 @@ end
         if turnState.phase == "player" then
             local hasActive = false
             for _, e in ipairs(entities) do
-                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0)
+                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0 and (e.attacksLeft or 0) > 0)
                 if e.isPlayable and e.health > 0 and not done then
                     hasActive = true
                     break

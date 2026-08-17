@@ -37,6 +37,7 @@ local function getHeroes()
                     { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Heavy strike, wounds and pushes. Lethal if empowered" },
                     { attack = c.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack. Wounds if empowered" },
                     { attack = c.BashAttack.new(), name = "Bash", description = "Heavy blow: wounds target and enemy behind attacker" },
+                    { attack = c.HeavyChargeAttack.new(), name = "Heavy Charge", description = "Finisher: after your turn ends, charge in a straight line and push the first enemy. Colliding with an obstacle is lethal" },
                 }
             end,
         },
@@ -57,6 +58,7 @@ local function getHeroes()
                     { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any cell, ignores obstacles, wounds" },
                     { attack = c.SummonAttack.new(), name = "Summon", description = "Summons a minion at target cell" },
                     { attack = c.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, wounds twice" },
+                    { attack = c.DeflectAttack.new(), name = "Deflect", description = "Finisher: until your next turn, the next attack within 1 cell deals 1 damage back to the attacker" },
                 }
             end,
         },

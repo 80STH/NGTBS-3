@@ -42,6 +42,19 @@ function turnManager.endPlayerTurn()
         end
     end
 
+    -- Delayed attacks fire right after the player's turn ends
+    for _, a in ipairs(entities) do
+        local pa = a.pendingDelayedAttack
+        if a.isPlayable and pa and a.health > 0 and not a.isDying then
+            a.pendingDelayedAttack = nil
+            local combat_mod = require("combat.combat")
+            combat_mod.withDeferredDeaths(function()
+                pa.attack:execute(a, pa.q, pa.r, hex, entities, sounds)
+            end)
+            checkGameEnd()
+        end
+    end
+
     strikeLightning()
     checkGameEnd()
 
@@ -175,6 +188,8 @@ function transitionToPlayerTurn()
                 a.canMoveAfterAttack = false
                 a.chainAttack = nil
                 a.redirectPending = nil
+                a.pendingDelayedAttack = nil
+                a.deflectArmed = false
                 if a.soloActions then
                     a.attacksLeft = 2
                     a.movesLeft = 2

@@ -6,6 +6,7 @@ return function(ui)
     local fonts = require("util.fonts")
     local buttonFont = fonts.get(14)
     local icon_cache = require("ui.icon_cache")
+    local combat = require("combat.combat")
 
     local rightCol = { x = 0, w = 190, btnH = 56, gap = 6, margin = 10 }
     local leftCol  = { x = 10, w = 190, itemH = 56, gap = 6, margin = 10 }
@@ -296,7 +297,7 @@ return function(ui)
         local hasActiveUnits = false
         if isPlayerTurn then
             for _, e in ipairs(entities) do
-                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0)
+                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0 and (e.attacksLeft or 0) > 0)
                 if e.isPlayable and e.health > 0 and not done then
                     hasActiveUnits = true
                     break
@@ -353,7 +354,7 @@ return function(ui)
         if btn.isHovered and isPlayerTurn and hasActiveUnits then
             local unitsLeft = {}
             for _, e in ipairs(entities) do
-                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0)
+                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0 and (e.attacksLeft or 0) > 0)
                 if e.isPlayable and e.health > 0 and not done then
                     table.insert(unitsLeft, e.name)
                 end
@@ -393,7 +394,21 @@ return function(ui)
             btn.width = ri.w
             btn.height = ri.h
             local isSelected = (selectedAttack == btn.attack and attackMode)
-            love.graphics.setColor(isSelected and 0.9 or 0.3, 0.7, 0.3, 0.8)
+            local isSecond = selectedActor.soloActions and (selectedActor.attacksLeft or 2) <= 1
+            -- Delayed attacks (finishers) end the turn: dark red signals "no more actions"
+            local isDelayed = combat.hasTag(btn.attack.tags, "delayed")
+            local r, g, b
+            if isDelayed then
+                r, g, b = 0.75, 0.15, 0.25
+            elseif isSecond then
+                r, g, b = 0.85, 0.45, 0.15
+            else
+                r, g, b = 0.3, 0.7, 0.3
+            end
+            if isSelected then
+                r, g, b = math.min(r + 0.2, 1), math.min(g + 0.2, 1), math.min(b + 0.2, 1)
+            end
+            love.graphics.setColor(r, g, b, 0.8)
             love.graphics.rectangle("fill", btn.x, btn.y, btn.width, btn.height, 5)
 
             local iconKey = icon_cache.keyForAttack(btn.name)

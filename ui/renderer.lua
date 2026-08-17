@@ -60,6 +60,17 @@ function renderer.draw(state)
             end
         end
     end
+    -- Pending delayed attacks: preview what they will do (e.g. Heavy Charge)
+    for _, e in ipairs(state.entities) do
+        local pa = e.pendingDelayedAttack
+        if e.isPlayable and pa and pa.attack and pa.attack.visualType == "line" and e.health and e.health > 0 then
+            local dmg = ui.collectPreviewDamagedEntities(hex, e, pa.attack, pa.q, pa.r, state.entities)
+            if dmg then state.previewDamaged = dmg end
+            previewCollisionIcons = ui.collectPreviewCollisionIcons(hex, e, pa.attack, pa.q, pa.r, state.entities) or previewCollisionIcons
+            previewPushArrows = ui.collectPreviewPushArrows(hex, e, pa.attack, pa.q, pa.r, state.entities) or previewPushArrows
+            drownCells = ui.collectPreviewDrownOverlays(hex, e, pa.attack, pa.q, pa.r, state.entities) or drownCells
+        end
+    end
     if drownCells then
         for _, c in ipairs(drownCells) do
             local key = c.q .. "," .. c.r
@@ -330,6 +341,7 @@ function renderer.draw(state)
     ui.drawPreviewIcons(hex, previewCollisionIcons)
     ui.drawPreviewPushArrows(previewPushArrows)
     visual.draw()
+    ui.drawDelayedHints(state.entities)
 
     if not state.attackMode then
         local sel = state.selectedActor
@@ -942,6 +954,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
         drawEntity(ally, state)
     end
 
+    local deployCells = {}
     for q = 0, 3 do
         for r = 0, hex.gridHeight - 1 do
             if hex:isActiveHex(q, r) then
@@ -971,18 +984,21 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
                             end
                         end
                         if not hasAlly then
+                            deployCells[q .. "," .. r] = true
                             local x, y = getDrawCoords(q, r)
                             local verts = hex:drawInsetHexagon(x, y, hexRadius, 0.92)
                             love.graphics.setColor(0.2, 0.8, 0.2, 0.15)
                             love.graphics.polygon("fill", verts)
-                            love.graphics.setColor(0.2, 0.8, 0.2, 0.4)
-                            love.graphics.polygon("line", verts)
                         end
                     end
                 end
             end
         end
     end
+    love.graphics.setLineWidth(2)
+    love.graphics.setColor(0.2, 0.8, 0.2, 1)
+    ui.drawSetOutline(hex, deployCells, 0.92)
+    love.graphics.setLineWidth(1)
 
     if deploySelectedIdx and placedAllies[deploySelectedIdx] then
         local sel = placedAllies[deploySelectedIdx]

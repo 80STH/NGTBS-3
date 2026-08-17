@@ -106,6 +106,8 @@ function undo.snapshot()
             preparedTargetCube = e.preparedTargetCube,
             chainAttack = e.chainAttack,
             redirectPending = e.redirectPending,
+            pendingDelayedAttack = e.pendingDelayedAttack,
+            deflectArmed = e.deflectArmed,
             upgradeLevel = e.upgradeLevel,
             maxDamagePerHit = e.maxDamagePerHit,
             summonCooldown = e.summonCooldown,
@@ -199,6 +201,8 @@ function undo.restore(snap)
             es.ref.preparedTargetCube = es.preparedTargetCube
             es.ref.chainAttack = es.chainAttack
             es.ref.redirectPending = es.redirectPending
+            es.ref.pendingDelayedAttack = es.pendingDelayedAttack
+            es.ref.deflectArmed = es.deflectArmed
             es.ref.upgradeLevel = es.upgradeLevel
             es.ref.maxDamagePerHit = es.maxDamagePerHit
             es.ref.summonCooldown = es.summonCooldown

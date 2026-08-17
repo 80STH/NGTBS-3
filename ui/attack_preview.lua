@@ -349,7 +349,7 @@ local function checkDrown(p, entity, toQ, toR)
 end
 
 -- Register damage + hint for a single push.
-function preview.applyPush(p, entity, fromQ, fromR, toQ, toR, hex, entities)
+function preview.applyPush(p, entity, fromQ, fromR, toQ, toR, hex, entities, lethal)
     if not entity then return end
     preview.markPushed(p, entity, toQ, toR)
 
@@ -360,7 +360,9 @@ function preview.applyPush(p, entity, fromQ, fromR, toQ, toR, hex, entities)
     if col.type then
         preview.addCollisionHint(p, fromQ, fromR, toQ, toR, col.type, entity, col.occupant, col.reason)
     end
-    if col.damage > 0 then
+    if lethal and col.occupant and col.reason ~= "hazard" and entity.health and entity.health > 0 then
+        preview.addCollisionDamage(p, entity, entity.health)
+    elseif col.damage > 0 then
         preview.addCollisionDamage(p, entity, preview.calculateEffectiveCollisionDamage(entity, col.damage))
     end
     if col.reason == "highground_fall" and entities then
@@ -370,7 +372,7 @@ function preview.applyPush(p, entity, fromQ, fromR, toQ, toR, hex, entities)
                 preview.addCollisionDamage(p, e, e.health)
             end
         end
-    elseif col.occupantDmg > 0 and col.occupant then
+    elseif col.occupantDmg > 0 and col.occupant and not lethal then
         preview.addCollisionDamage(p, col.occupant, preview.calculateEffectiveCollisionDamage(col.occupant))
     end
     if not col.type or col.reason == "highground_fall" then
@@ -436,7 +438,7 @@ local function handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities
     -- Push.
     if firstTarget.isPushable ~= false and firstTarget.health > 0 then
         local pushQ, pushR = hex_utils.applyCubeStep(firstHex.q, firstHex.r, stepX, stepY, stepZ)
-        preview.applyPush(p, firstTarget, firstHex.q, firstHex.r, pushQ, pushR, hex, entities)
+        preview.applyPush(p, firstTarget, firstHex.q, firstHex.r, pushQ, pushR, hex, entities, attack.lethalPush)
     end
 
     return true
@@ -565,6 +567,25 @@ handlers["Dash"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     end
     -- No elevation transition: use normal line shot logic.
     handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities)
+end
+handlers["Heavy Charge"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local plan = attack:computeCharge(attacker, hoverQ, hoverR, hex, entities)
+    if not plan then return end
+    preview.addLine(p, attacker.q, attacker.r, plan.heroQ, plan.heroR)
+    preview.addOverlay(p, plan.heroQ, plan.heroR, "target")
+    if plan.target and plan.target.health > 0 then
+        preview.markPushed(p, plan.target, plan.endQ, plan.endR)
+        preview.addPushArrow(p, plan.startQ, plan.startR, plan.endQ, plan.endR)
+        if plan.collision == "obstacle" or plan.collision == "elevation" then
+            preview.addCollisionHint(p, plan.endQ, plan.endR, plan.endQ, plan.endR,
+                "collision_damage", plan.target, nil, "collision")
+            preview.addCollisionDamage(p, plan.target, plan.target.health)
+        elseif plan.collision == "edge" and plan.target:isCharacter() then
+            preview.addCollisionHint(p, plan.endQ, plan.endR, plan.endQ, plan.endR,
+                "collision_damage", plan.target, nil, "edge")
+            preview.addCollisionDamage(p, plan.target, 1)
+        end
+    end
 end
 
 -- Melee single-target attacks without push: Bite / Magic Bolt
@@ -1111,7 +1132,7 @@ end
 
 function preview.compute(hex, attacker, attack, hoverQ, hoverR, entities)
     local p = preview.new()
-    if not attack or not attacker or attacker.hasActedThisTurn then return p end
+    if not attack or not attacker then return p end
     if not hex:isActiveHex(hoverQ, hoverR) then return p end
     if hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR) > attack.range then return p end
 

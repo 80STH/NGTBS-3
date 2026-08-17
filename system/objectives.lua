@@ -813,19 +813,29 @@ function objectives.restoreState(saved)
     end
 end
 
+-- Height of the objectives panel (0 when it would be empty), for stacking UI below it
+function objectives.getPanelHeight()
+    local titleH = 20
+    local lineH = 16
+    local padding = 6
+    local primaryH = activePrimaryObjective and (titleH + lineH + padding) or 0
+    local secondaryH = (#activeObjectives > 0) and (titleH + #activeObjectives * lineH + padding) or 0
+    local totalH = primaryH + secondaryH + padding
+    if totalH <= padding then return 0 end
+    return totalH
+end
+
 function objectives.draw()
     if not smallFont then smallFont = fonts.get(12) end
     local x = 10
-    local y = 80
+    local y = 46
     local w = 200
     local lineH = 16
     local padding = 6
     local titleH = 20
-    local primaryH = activePrimaryObjective and (titleH + lineH + padding) or 0
-    local secondaryH = (#activeObjectives > 0) and (titleH + #activeObjectives * lineH + padding) or 0
-    local totalH = primaryH + secondaryH + padding
+    local totalH = objectives.getPanelHeight()
 
-    if totalH <= padding then return end
+    if totalH == 0 then return end
 
     love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
     love.graphics.rectangle("fill", x, y, w, totalH, 5)
