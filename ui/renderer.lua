@@ -59,6 +59,29 @@ function renderer.draw(state)
                 end
             end
         end
+        -- StonePillar hover: show where it falls and what gets crushed
+        if hoverEntity and hoverEntity.name == "StonePillar" and not hoverEntity.isDying and hoverEntity.health > 0 then
+            local pv = previewPillarFall and previewPillarFall(hoverEntity) or nil
+            if pv then
+                local function markFallCell(c, primary)
+                    local key = c.q .. "," .. c.r
+                    local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 6)
+                    if primary then
+                        cellOverlays[key] = { fill = {0.9, 0.15, 0.1, 0.25 + 0.2 * pulse}, line = {1, 0.3, 0.15, 0.7 + 0.3 * pulse} }
+                    else
+                        cellOverlays[key] = { fill = {0.9, 0.45, 0.1, 0.12 + 0.08 * pulse}, line = {1, 0.55, 0.2, 0.35} }
+                    end
+                end
+                if pv.target then
+                    markFallCell(pv.target, true)
+                else
+                    for _, c in ipairs(pv.fallbacks) do markFallCell(c, false) end
+                end
+                for _, v in ipairs(pv.victims) do
+                    state.previewDamaged[v] = { totalDamage = (v.health or 1) + 9999, willKill = true }
+                end
+            end
+        end
     end
     -- Pending delayed attacks: preview what they will do (e.g. Heavy Charge)
     for _, e in ipairs(state.entities) do
@@ -774,6 +797,56 @@ function getEntityDrawPosition(entity, state)
     return getDrawCoords(entity.q, entity.r)
 end
 
+-- Into-the-Breach style health pips above a unit: thick cells on a black
+-- backing strip. Pips that would be lost to the hovered attack
+-- (state.previewDamaged) blink; shields absorb first.
+function drawHealthPips(entity, x, y, state)
+    if entity.isDying or entity:isEdge() or entity.indestructible then return end
+    if not entity.health or entity.maxHealth <= 1 then return end
+
+    local preview = state.previewDamaged and state.previewDamaged[entity]
+    local lost = 0
+    if preview then
+        local dmg = preview.totalDamage or 0
+        local lostShields = math.min(dmg, entity.shields or 0)
+        lost = math.min(dmg - lostShields, entity.health)
+    end
+
+    local pipW, pipH, gap = 8, 5, 2
+    local totalW = entity.maxHealth * pipW + (entity.maxHealth - 1) * gap
+    local px = x - totalW / 2
+    local py = y - 26
+    local t = love.timer.getTime()
+
+    -- black backing around the whole bar
+    love.graphics.setColor(0, 0, 0, 0.85)
+    love.graphics.rectangle("fill", px - 2, py - 2, totalW + 4, pipH + 4)
+
+    local r, g, b
+    if entity:isCharacter() then
+        if entity.isPlayable then r, g, b = 0.35, 0.85, 0.4
+        else r, g, b = 0.9, 0.25, 0.25 end
+    else
+        r, g, b = 0.75, 0.68, 0.55
+    end
+
+    for i = 1, entity.maxHealth do
+        local filled = i <= entity.health
+        if filled then
+            local pulse = 1
+            if i > entity.health - lost then
+                pulse = 0.55 + 0.45 * math.sin(t * 8)
+            end
+            love.graphics.setColor(r * pulse, g * pulse, b * pulse, 0.95)
+            love.graphics.rectangle("fill", px + (i - 1) * (pipW + gap), py, pipW, pipH)
+        else
+            love.graphics.setColor(0.15, 0.15, 0.18, 0.7)
+            love.graphics.rectangle("fill", px + (i - 1) * (pipW + gap), py, pipW, pipH)
+        end
+    end
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 function drawActionIndicator(entity, x, y)
     if not entity:isCharacter() then return end
     if entity.hasActedThisTurn then
@@ -831,27 +904,6 @@ function drawEntity(entity, state)
             love.graphics.setColor(1, 0.3, 0.3, alpha)
         elseif shuntHighlight then
             love.graphics.setColor(0.3, 0.6, 1, alpha)
-        end
-        local previewInfo = state.previewDamaged and state.previewDamaged[entity]
-        if previewInfo then
-            if previewInfo.willKill then
-                local killPulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 12)
-                local glowR = state.hex.radius * 0.55 * (1 + killPulse * 0.25)
-                love.graphics.setColor(0.85, 0, 0, 0.25 + 0.4 * killPulse)
-                if entity.cells then
-                    for _, c in ipairs(entity.cells) do
-                        local gx, gy = getDrawCoords(c.q, c.r)
-                        love.graphics.circle("fill", gx, gy, glowR)
-                    end
-                else
-                    love.graphics.circle("fill", x, drawY, glowR)
-                end
-                finalScale = finalScale * (1 + killPulse * 0.08)
-                love.graphics.setColor(0.9, 0.02, 0.02, 0.35 + 0.65 * killPulse)
-            else
-                local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
-                love.graphics.setColor(1, 0.5, 0.1, 0.5 + 0.5 * pulse)
-            end
         end
         -- Directional entities: rotate sprite to match direction
         local spriteRotation = 0
@@ -944,6 +996,7 @@ function drawEntity(entity, state)
         ui.drawEntityStatusEffects(x, y, entity, overlayRadius, love.timer.getTime())
     end
 
+    drawHealthPips(entity, x, y, state)
     drawActionIndicator(entity, x, y)
 end
 

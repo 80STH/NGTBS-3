@@ -77,7 +77,7 @@ function ai.canPrepareAttack(enemy, entities)
     local targets = ai.getAttackableTargets(entities)
     for _, t in ipairs(targets) do
         local dist = hex:getDistance(enemy.q, enemy.r, t.entity.q, t.entity.r)
-        if dist <= attack.range then
+        if dist <= attack.range and not (attack.minRange and dist < attack.minRange) then
             if not attackRequiresLine(attack) then
                 return true
             elseif isOnStraightLine(enemy.q, enemy.r, t.entity.q, t.entity.r, hex) then

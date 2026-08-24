@@ -80,11 +80,11 @@ local function livingEntityAt(q, r)
     return nil
 end
 
--- Pick landing hex for a collapsing pillar at (q,r): the faced cell when it
--- can be crushed, otherwise a random valid adjacent hex. Skips cells that
--- can't be crushed (indestructible occupants or another StonePillar —
--- prevents infinite collapse ping-pong).
-local function planPillarCollapse(q, r, dir)
+-- All valid collapse targets for a pillar at (q,r): faced cell first, then
+-- other adjacent active non-water hexes. Skips cells that can't be crushed
+-- (indestructible occupants or another StonePillar — prevents infinite
+-- collapse ping-pong).
+local function pillarCollapseTargets(q, r, dir)
     local faced, others = nil, {}
     for _, d in ipairs(hex_utils.CUBE_DIRECTIONS) do
         local nq, nr = hex_utils.applyCubeStep(q, r, d.dx, d.dy, d.dz)
@@ -100,9 +100,36 @@ local function planPillarCollapse(q, r, dir)
             end
         end
     end
+    return faced, others
+end
+
+local function planPillarCollapse(q, r, dir)
+    local faced, others = pillarCollapseTargets(q, r, dir)
     if faced then return faced end
     if #others == 0 then return nil end
     return others[love.math.random(#others)]
+end
+
+-- Hover preview: where would this pillar fall, who gets crushed?
+-- Deterministic when the faced cell is valid or only one option exists.
+function previewPillarFall(pillar)
+    local faced, others = pillarCollapseTargets(pillar.q, pillar.r, pillar.direction)
+    local result = { target = faced, fallbacks = others, victims = {} }
+    local cell = faced or (#others == 1 and others[1] or nil)
+    if cell then
+        for _, v in ipairs(entities) do
+            if not v.isDying and v.health > 0 and not v.indestructible then
+                local onCell = v.q == cell.q and v.r == cell.r
+                if not onCell and v.cells then
+                    for _, c in ipairs(v.cells) do
+                        if c.q == cell.q and c.r == cell.r then onCell = true break end
+                    end
+                end
+                if onCell then table.insert(result.victims, v) end
+            end
+        end
+    end
+    return result
 end
 
 local function crushCell(target)

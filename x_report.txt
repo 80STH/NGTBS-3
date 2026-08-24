@@ -1,8 +1,4 @@
-OK   deployed
-OK   found pillar+hero cells
-OK   crush triggered save (shields -2)
-OK   HP unchanged by crush
-OK   revive pending after crush
-OK   hero vanished after crush
-OK   no loss after crush
-OK   redeploy phase reached
+OK   adjacent lich repositions instead of idling
+OK   lich at range prepares
+OK   bolt actually wounds hero
+OK   melee adjacent still prepares
