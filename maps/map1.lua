@@ -104,6 +104,8 @@ return {
     ["6,5"] = "SmallBuilding",
     ["8,4"] = { name = "SlopeRange", cells = { {8, 2}, {8, 3}, {8, 4}, {8, 5}, {8, 6}, {8, 7}} },
     ["6,6"] = "BigBuilding",
+    ["7,4"] = "StonePillar",
+    ["1,5"] = "StonePillar",
   },
   statuses = {
   },

@@ -38,9 +38,15 @@ function effects.applyAllCellEffects(entity, q, r, terrainMap, entities)
         if entity:isCharacter() or entity.name == "Caravan" then
             log.infof("effects", "%s drowns in water!", entity.name)
             sounds.play("collision")
-            entity.health = 0
-            entity:startDeath()
-            died = true
+            if _G.soloMode and entity.isPlayable then
+                -- hero death-save path inside takeDamage handles lethal hits
+                entity:takeDamage(9999)
+                died = entity.isDying or (entity.health or 0) <= 0
+            else
+                entity.health = 0
+                entity:startDeath()
+                died = true
+            end
         end
     end
 
@@ -91,14 +97,18 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
             end
 
             -- Drowning check (characters + caravans on water, not dead, not hovering)
-            if not entity.hovering then
+            if not entity.hovering and entity.health > 0 and not entity.isDying then
                 if entity:isCharacter() or entity.name == "Caravan" then
                     local terrain = terrainMap and terrainMap[entity.q] and terrainMap[entity.q][entity.r] or "grass"
-                    if terrain == "water" and entity.health > 0 then
+                    if terrain == "water" then
                         log.infof("effects", "%s drowns at end of turn!", entity.name)
                         sounds.play("collision")
-                        entity.health = 0
-                        entity:startDeath()
+                        if _G.soloMode and entity.isPlayable then
+                            entity:takeDamage(9999)
+                        else
+                            entity.health = 0
+                            entity:startDeath()
+                        end
                     end
                 end
             end

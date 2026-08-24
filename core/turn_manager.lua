@@ -203,6 +203,20 @@ function transitionToPlayerTurn()
     _G.mechanismUsedThisTurn = false
     selectLightningTarget()
     log.info("turn", "=== PLAYER TURN ===")
+
+    -- Solo hero vanished (death-save): force a simple redeploy now
+    if _G.soloMode and _G.heroRevivePending and _G.hero then
+        local h = _G.hero
+        h.q, h.r = -1, -1
+        h.isMoving = false
+        h.path = {}
+        h.currentPathIndex = 0
+        unplacedAllies = { h }
+        placedAllies = {}
+        deploySelectedIdx = nil
+        gamePhase = "deploy"
+        log.info("turn", "=== REDEPLOY THE HERO ===")
+    end
 end
 
 function updateAttackPhase(dt)

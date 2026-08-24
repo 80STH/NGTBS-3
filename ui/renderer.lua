@@ -420,6 +420,20 @@ function renderer.draw(state)
 
     global_abilities.drawPreview(hex, state)
 
+    -- Dead-hero indicator: actions locked until redeploy, abilities still usable
+    if soloMode and heroRevivePending then
+        local msg = "The hero has fallen! Actions locked until redeploy next turn"
+        local f = fonts.get(18)
+        local tw = f:getWidth(msg)
+        local w = love.graphics.getWidth() / (state.dpiScale or 1)
+        love.graphics.setColor(0.12, 0.05, 0.05, 0.8)
+        love.graphics.rectangle("fill", w / 2 - tw / 2 - 14, 8, tw + 28, 32)
+        love.graphics.setColor(1, 0.4, 0.3, 1)
+        love.graphics.setFont(f)
+        love.graphics.print(msg, w / 2 - tw / 2, 15)
+        love.graphics.setColor(1, 1, 1, 1)
+    end
+
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
     if state.selectedActor then
         ui.drawSelectedStats(state.selectedActor, state.entities, hex)

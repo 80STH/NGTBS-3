@@ -8,6 +8,10 @@ local trains = require("system.trains")
 local Entity = require("entity.entity")
 local log = require("util.log")
 local cell_rules = require("grid.cell_rules")
+local hex_utils = require("grid.hex_utils")
+local visual = require("system.visual_effects")
+local environment = require("entity.environment")
+local status = require("system.status")
 
 _G.graveyard = {}
 
@@ -55,6 +59,93 @@ local function placeRubble(e)
     end
 end
 
+-- ============================================================
+-- STONE PILLAR: collapses onto an adjacent cell when destroyed,
+-- crushing everything there and re-forming as a new 1 HP pillar.
+-- ============================================================
+local pendingPillarSpawns = {}
+
+-- First living (non-dying) entity occupying a cell
+local function livingEntityAt(q, r)
+    for _, v in ipairs(entities) do
+        if not v.isDying then
+            if v.q == q and v.r == r then return v end
+            if v.cells then
+                for _, c in ipairs(v.cells) do
+                    if c.q == q and c.r == r then return v end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Pick landing hex for a collapsing pillar at (q,r): the faced cell when it
+-- can be crushed, otherwise a random valid adjacent hex. Skips cells that
+-- can't be crushed (indestructible occupants or another StonePillar —
+-- prevents infinite collapse ping-pong).
+local function planPillarCollapse(q, r, dir)
+    local faced, others = nil, {}
+    for _, d in ipairs(hex_utils.CUBE_DIRECTIONS) do
+        local nq, nr = hex_utils.applyCubeStep(q, r, d.dx, d.dy, d.dz)
+        if hex and hex:isActiveHex(nq, nr)
+            and not (terrainMap[nq] and terrainMap[nq][nr] == "water") then
+            local occ = livingEntityAt(nq, nr)
+            if not occ or (not occ.indestructible and occ.name ~= "StonePillar") then
+                if dir and d.dx == dir.dx and d.dy == dir.dy and d.dz == dir.dz then
+                    faced = { q = nq, r = nr }
+                else
+                    table.insert(others, { q = nq, r = nr })
+                end
+            end
+        end
+    end
+    if faced then return faced end
+    if #others == 0 then return nil end
+    return others[love.math.random(#others)]
+end
+
+local function crushCell(target)
+    -- Kill every living occupant, then queue the new pillar until corpses clear
+    local crushed = false
+    for _, v in ipairs(entities) do
+        if not v.isDying and v.health > 0 and not v.indestructible then
+            local onCell = v.q == target.q and v.r == target.r
+            if not onCell and v.cells then
+                for _, c in ipairs(v.cells) do
+                    if c.q == target.q and c.r == target.r then onCell = true break end
+                end
+            end
+            if onCell then
+                v:startDeath()
+                crushed = true
+            end
+        end
+    end
+    table.insert(pendingPillarSpawns, target)
+    if crushed then
+        local cx, cy = hex:hexToPixel(target.q, target.r)
+        visual.addEffect(cx, cy, "slam", 0.4)
+        log.infof("game", "StonePillar collapses onto (%d,%d), crushing occupants!", target.q, target.r)
+    end
+end
+
+-- Spawn queued pillars once their cell is free of dying corpses
+local function processPillarSpawns()
+    for i = #pendingPillarSpawns, 1, -1 do
+        local p = pendingPillarSpawns[i]
+        if not livingEntityAt(p.q, p.r) then
+            local pillar = Entity.new("StonePillar", Entity.TYPES.OBSTACLE, p.q, p.r, 1, false, 0, nil, nil, {})
+            pillar.sprite = environment.generateBuildingSprite("StonePillar", 12, 16)
+            if p.dir then
+                pillar.direction = { dx = p.dir.dx, dy = p.dir.dy, dz = p.dir.dz }
+            end
+            table.insert(entities, pillar)
+            table.remove(pendingPillarSpawns, i)
+        end
+    end
+end
+
 function restartGame(mapPath)
     mapPath = mapPath or selectedMapPath or 'maps/map1.lua'
     selectedMapPath = mapPath
@@ -63,6 +154,7 @@ function restartGame(mapPath)
     -- Guarantee a clean turnState on every restart.
     turnState = newTurnState()
     boundarySelected = nil
+    pendingPillarSpawns = {}
 
     local hexStatuses
     local deployableAllies
@@ -176,6 +268,7 @@ function restartGame(mapPath)
     -- Setup deploy phase
     local skipDeploy = mapPath:match("test_polygon_[12]")
     hero = nil
+    heroRevivePending = false
     if soloMode and selectedSoloHero then
         hero = require("system.solo_mode").createHero(selectedSoloHero, -1, -1)
         unplacedAllies = { hero }
@@ -316,6 +409,28 @@ function restartGame(mapPath)
 end
 
 function confirmDeploy()
+    -- Hero redeploy after a death-save: simple landing, no deploy effects,
+    -- no turn restart — the player turn is already running.
+    if soloMode and heroRevivePending and hero and #placedAllies == 1 and placedAllies[1] == hero then
+        table.insert(entities, hero)
+        heroRevivePending = false
+        hero.hasActedThisTurn = false
+        hero.hasMovedThisTurn = false
+        hero.canMoveAfterAttack = false
+        hero.attacksLeft = 2
+        hero.movesLeft = 2
+        selectedActor = hero
+        hex.selectedQ, hex.selectedR = hero.q, hero.r
+        unplacedAllies = {}
+        placedAllies = {}
+        deploySelectedIdx = nil
+        updateAttackButtons(hero)
+        rebuildEntityIndex()
+        gamePhase = "playing"
+        log.info("game", "=== HERO REDEPLOYED — TURN CONTINUES ===")
+        return
+    end
+
     local deploy_effects = require("system.deploy_effects")
     for _, ally in ipairs(placedAllies) do
         table.insert(entities, ally)
@@ -370,6 +485,52 @@ function damageHero(damage)
         if died then hero:startDeath() end
         checkGameEnd()
     end
+end
+
+-- Solo hero death-save (called from Entity.takeDamage on lethal hits):
+-- charge 2 damage with shields absorbing first, then vanish. If the pool
+-- empties the hero dies for real, otherwise he redeploys next player turn.
+-- Returns true when the hero is truly destroyed, false when saved.
+function heroDeathSave(h)
+    local dmg = 2
+    if h.shields and h.shields > 0 then
+        local absorbed = math.min(dmg, h.shields)
+        h.shields = h.shields - absorbed
+        dmg = dmg - absorbed
+        log.infof("game", "%s's shields absorb %d of the lethal blow!", h.name, absorbed)
+    end
+    h.health = h.health - dmg
+    log.infof("game", "%s cheats death! Loses %d HP (%d/%d left)", h.name, dmg, math.max(0, h.health), h.maxHealth)
+
+    if h.health <= 0 then
+        h._trueDeath = true
+        h.health = 0
+        h:startDeath()
+        checkGameEnd()
+        return true
+    end
+
+    -- Vanish from the field; mandatory simple redeploy next player turn
+    for i, e in ipairs(entities) do
+        if e == h then table.remove(entities, i) break end
+    end
+    if status.getEntityStatuses then
+        for _, s in ipairs(status.getEntityStatuses(h)) do
+            status.removeFromEntity(h, s)
+        end
+    end
+    heroRevivePending = true
+    selectedActor = nil
+    if hex then hex.selectedQ, hex.selectedR = -1, -1 end
+    if updateAttackButtons then updateAttackButtons(nil) end
+    if hex and hex.hexToPixel then
+        local cx, cy = hex:hexToPixel(h.q, h.r)
+        visual.addEffect(cx, cy, "slam", 0.5)
+    end
+    rebuildEntityIndex()
+    checkGameEnd()
+    log.info("game", "The hero retreats — redeploy him next turn!")
+    return false
 end
 
 -- The Mechanism button: one press drives every environment mechanism on
@@ -526,6 +687,15 @@ function updateDeathAnimations(dt)
                     table.insert(entities, ruined)
                 end
 
+                -- StonePillar: collapse onto an adjacent cell (faced if possible)
+                if e.name == "StonePillar" then
+                    local target = planPillarCollapse(e.q, e.r, e.direction)
+                    if target then
+                        target.dir = e.direction and { dx = e.direction.dx, dy = e.direction.dy, dz = e.direction.dz }
+                        crushCell(target)
+                    end
+                end
+
                 -- Place upper_terrain rubble for destroyed buildings/obstacles
                 placeRubble(e)
 
@@ -546,6 +716,8 @@ function updateDeathAnimations(dt)
             end
         end
     end
+
+    processPillarSpawns()
 end
 
 function countPlayableActors()

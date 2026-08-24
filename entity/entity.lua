@@ -160,6 +160,12 @@ function Entity:takeDamage(damage, ignoreShields)
     if self.indestructible or self:isEdge() then
         return false
     end
+    -- Solo hero death-save: a lethal hit doesn't kill outright — the hero
+    -- loses 2 HP (shields absorb first), vanishes and is redeployed next turn.
+    if _G.soloMode and self.isPlayable and _G.hero == self
+        and self.health > 0 and damage >= self.health + (self.shields or 0) then
+        return _G.heroDeathSave(self)
+    end
     if self.maxDamagePerHit then
         damage = math.min(damage, self.maxDamagePerHit)
     end
@@ -200,6 +206,9 @@ function Entity:takeDamage(damage, ignoreShields)
 
     -- Acid: any damage is lethal
     if actualDamage > 0 and status.hasEntityStatus(self, "acid") then
+        if _G.soloMode and self.isPlayable and _G.hero == self and self.health > 0 then
+            return _G.heroDeathSave(self)
+        end
         self.health = 0
         log.infof("entity", "%s dissolves in acid!", self.name)
         return true
@@ -224,7 +233,14 @@ end
 function Entity:startDeath()
      if self.isDying then return end
      if self:isEdge() then return end  -- map borders can never die
-     self.isDying = true
+    -- Solo hero: direct kills that skip takeDamage (pillar crush, etc.) still
+    -- go through the death-save. heroDeathSave marks _trueDeath for its own
+    -- real-death call so it passes through here exactly once.
+    if _G.soloMode and self.isPlayable and _G.hero == self and not self._trueDeath then
+        _G.heroDeathSave(self)
+        return
+    end
+    self.isDying = true
     self.deathTimer = 0
     self.health = 0
     if self.rootedTarget then

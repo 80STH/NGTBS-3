@@ -38,6 +38,7 @@ local nameToSpriteKey = {
     MountainRange = "obstacle_mountain_range",
     ReefRange = "obstacle_reef_range",
     SlopeRange = "obstacle_slope_range",
+    StonePillar = "obstacle_stone_pillar",
     -- Units
     Warrior = "unit_warrior",
     Puncher = "unit_puncher",
@@ -306,6 +307,7 @@ local gidToEntity = {
     [96] = { type = "character", name = "Colossus",  isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "colossus" },
     [97] = { type = "character", name = "Keeper",   isPlayable = true,  maxHealth = 1, moveRange = 2, attacks = "keeper" },
     [98] = { type = "character", name = "Provoker",  isPlayable = true,  maxHealth = 1, moveRange = 2, attacks = "provoker" },
+    [99] = { type = "obstacle",  name = "StonePillar", health = 1, direction = { dx = 1, dy = 0, dz = -1 } },
 }
 
 environment.enemySpriteCache = {}
