@@ -2220,6 +2220,87 @@ function combat.LungeAttack:getAffectedCells(attacker, targetQ, targetR, hex, en
 end
 
 -- ============================================================
+-- DOUBLE CLEAVE: melee. Each strike hits the aimed cell (adjacent to the
+-- attacker) AND the attacker's left-flank cell for 1 damage. After the
+-- first aim the player re-aims: allowed cells are the original target or
+-- the attacker's right-flank cell. Two strikes -> up to 4 damage total.
+-- ============================================================
+combat.DoubleCleaveAttack = setmetatable({}, combat.Attack)
+combat.DoubleCleaveAttack.__index = combat.DoubleCleaveAttack
+
+function combat.DoubleCleaveAttack.new()
+    local self = combat.Attack.new("Double Cleave", "Melee strike hits a target and your left flank. Re-aim for the second swing: same target or your right flank", 1, 1, {})
+    return setmetatable(self, combat.DoubleCleaveAttack)
+end
+
+function combat.DoubleCleaveAttack:strike(attacker, aimQ, aimR, hex, entities, sounds)
+    local function hit(q, r)
+        if not hex:isActiveHex(q, r) then return end
+        local target = combat.getEntityAtHex(q, r, entities)
+        if target and target ~= attacker and target.health > 0 then
+            local fx, fy = getDrawCoords(q, r)
+            visual.addEffect(fx, fy, "hit", 0.4)
+            self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
+        end
+    end
+    hit(aimQ, aimR)
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, aimQ, aimR, hex)
+    if stepX then
+        local lx, ly, lz = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
+        local lq, lr = hex_utils.applyCubeStep(attacker.q, attacker.r, lx, ly, lz)
+        hit(lq, lr)
+        return lq, lr
+    end
+end
+
+function combat.DoubleCleaveAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) ~= 1 then
+        return false, "Target must be adjacent!"
+    end
+    local second = self._cleaveSecondAim
+    if not second then return false, "No second aim" end
+
+    -- Second aim must be the original target cell or the attacker's right flank
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return false, "Not on a straight line" end
+    local rx, ry, rz = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+    local rq, rr = hex_utils.applyCubeStep(attacker.q, attacker.r, rx, ry, rz)
+    local validSecond = (second.q == targetQ and second.r == targetR)
+        or (second.q == rq and second.r == rr)
+    if not validSecond then return false, "Invalid second aim" end
+
+    log.infof("combat", "%s performs Double Cleave!", attacker.name)
+    local strikes = {}
+    local function doStrike(aq, ar)
+        local lq, lr = self:strike(attacker, aq, ar, hex, entities, sounds)
+        table.insert(strikes, { aimQ = aq, aimR = ar, leftQ = lq, leftR = lr })
+    end
+    doStrike(targetQ, targetR)
+    doStrike(second.q, second.r)
+
+    attack_effects.doubleCleave(attacker, strikes, hex)
+    if sounds then sounds.play("cleave") end
+    if _G.screenShake then _G.screenShake.timer = _G.screenShake.duration end
+
+    self._cleaveSecondAim = nil
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+-- Cells damaged when aiming at (targetQ,targetR): the cell + the attacker's
+-- left flank
+function combat.DoubleCleaveAttack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
+    local cells = {{q = targetQ, r = targetR, damage = self.damage}}
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local lx, ly, lz = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
+        local lq, lr = hex_utils.applyCubeStep(attacker.q, attacker.r, lx, ly, lz)
+        table.insert(cells, {q = lq, r = lr, damage = self.damage})
+    end
+    return cells
+end
+
+-- ============================================================
 -- HEAVY PUNCH: 2 damage + knockback
 -- ============================================================
 combat.HeavyPunchAttack = setmetatable({}, combat.Attack)

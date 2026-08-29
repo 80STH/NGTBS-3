@@ -203,4 +203,26 @@ function attack_effects.mightyThrow(attacker, thrownTarget, struckTarget, impact
     end
 end
 
+-- Double Cleave: two sweeping arcs through the attacker (alternating colors),
+-- shockwave on each aimed cell, sparks on each flank cell.
+function attack_effects.doubleCleave(attacker, strikes, hex)
+    local ax, ay = _G.getDrawCoords(attacker.q, attacker.r)
+    for i, s in ipairs(strikes) do
+        local tx, ty = _G.getDrawCoords(s.aimQ, s.aimR)
+        if i % 2 == 1 then
+            if s.leftQ then
+                local lx, ly = _G.getDrawCoords(s.leftQ, s.leftR)
+                visual.addArcEffect(lx, ly, tx, ty, 0.95, 0.95, 1.0, 0.25, ax, ay)
+            end
+            visual.addSpark(tx, ty, 5)
+        else
+            if s.leftQ then
+                local lx, ly = _G.getDrawCoords(s.leftQ, s.leftR)
+                visual.addArcEffect(tx, ty, lx, ly, 1.0, 0.55, 0.15, 0.25, ax, ay)
+            end
+            visual.addShockwave(tx, ty, 12)
+        end
+    end
+end
+
 return attack_effects

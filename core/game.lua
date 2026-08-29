@@ -331,6 +331,7 @@ function restartGame(mapPath)
     flipTargetActor = nil
     mightyThrowTarget = nil
     vortexTargetCell = nil
+    cleaveTargetCell = nil
     pushDirTargetCell = nil
     attackMode = false
     selectedAttack = nil

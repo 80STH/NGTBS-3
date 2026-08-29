@@ -240,6 +240,7 @@ local ATTACK_SETS = {
             { attack = c.LungeAttack.new(), name = "Lunge", description = "Lunge: wounds target and enemy behind it" },
             { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Heavy strike, wounds and pushes. Lethal if empowered" },
             { attack = c.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack. Wounds if empowered" },
+            { attack = c.DoubleCleaveAttack.new(), name = "Double Cleave", description = "Two swings: each hits a cell and the cell to its left" },
         }
     end,
 }

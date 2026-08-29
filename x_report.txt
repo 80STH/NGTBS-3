@@ -1,4 +1,4 @@
-OK   adjacent lich repositions instead of idling
-OK   lich at range prepares
-OK   bolt actually wounds hero
-OK   melee adjacent still prepares
+OK   execute with animations ok
+OK   screen shake triggered
+OK   visual effects queued
+OK   render with effects ok

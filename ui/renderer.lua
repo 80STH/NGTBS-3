@@ -83,6 +83,54 @@ function renderer.draw(state)
             end
         end
     end
+    -- Double Cleave re-aim: highlight the two allowed cells + total damage hints
+    if state.attackMode and state.selectedAttack and state.selectedAttack.name == "Double Cleave"
+        and cleaveTargetCell and state.selectedActor then
+        local t = cleaveTargetCell
+        local stepX, stepY, stepZ = state.selectedAttack:getLineDirection(state.selectedActor.q, state.selectedActor.r, t.q, t.r, hex)
+        if stepX then
+            local rx, ry, rz = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+            local rq, rr = hex_utils.applyCubeStep(state.selectedActor.q, state.selectedActor.r, rx, ry, rz)
+            local pulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 5)
+            cellOverlays[t.q .. "," .. t.r] = { fill = {1, 0.75, 0.2, 0.2 + 0.15 * pulse}, line = {1, 0.8, 0.3, 0.9} }
+            if hex:isActiveHex(rq, rr) then
+                cellOverlays[rq .. "," .. rr] = { fill = {1, 0.75, 0.2, 0.2 + 0.15 * pulse}, line = {1, 0.8, 0.3, 0.9} }
+            end
+
+            -- Damage hints across BOTH strikes: hovering an option previews its
+            -- total; a unit clipped by both swings shows 2 blinking pips.
+            local hoverAim = nil
+            if hex.hoverQ == t.q and hex.hoverR == t.r then
+                hoverAim = { q = t.q, r = t.r }
+            elseif hex.hoverQ == rq and hex.hoverR == rr then
+                hoverAim = { q = rq, r = rr }
+            end
+            if hoverAim then
+                local function strikeCells(aq, ar)
+                    local sx, sy, sz = state.selectedAttack:getLineDirection(state.selectedActor.q, state.selectedActor.r, aq, ar, hex)
+                    local list = { { q = aq, r = ar } }
+                    if sx then
+                        local lx, ly, lz = hex_utils.rotateCubeDir(sx, sy, sz, false)
+                        local lq, lr = hex_utils.applyCubeStep(state.selectedActor.q, state.selectedActor.r, lx, ly, lz)
+                        table.insert(list, { q = lq, r = lr })
+                    end
+                    return list
+                end
+                local totals = {}
+                for _, aim in ipairs({ { q = t.q, r = t.r }, hoverAim }) do
+                    for _, cc in ipairs(strikeCells(aim.q, aim.r)) do
+                        local e = getEntityAtHex(cc.q, cc.r, state.entities)
+                        if e and e ~= state.selectedActor and e.health > 0 then
+                            totals[e] = (totals[e] or 0) + 1
+                        end
+                    end
+                end
+                for e, n in pairs(totals) do
+                    state.previewDamaged[e] = { totalDamage = n, willKill = n >= e.health }
+                end
+            end
+        end
+    end
     -- Pending delayed attacks: preview what they will do (e.g. Heavy Charge)
     for _, e in ipairs(state.entities) do
         local pa = e.pendingDelayedAttack

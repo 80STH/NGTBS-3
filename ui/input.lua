@@ -253,6 +253,32 @@ end
                 end
             end
             return
+        elseif selectedAttack.name == "Double Cleave" then
+            if cleaveTargetCell then
+                -- Re-aim: allowed cells are the target cell or the attacker's right flank
+                local stepX, stepY, stepZ = selectedAttack:getLineDirection(selectedActor.q, selectedActor.r, cleaveTargetCell.q, cleaveTargetCell.r, hex)
+                local rightQ, rightR
+                if stepX then
+                    local rx, ry, rz = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+                    rightQ, rightR = hex_utils.applyCubeStep(selectedActor.q, selectedActor.r, rx, ry, rz)
+                end
+                local validSecond = (tq == cleaveTargetCell.q and tr == cleaveTargetCell.r)
+                    or (rightQ ~= nil and tq == rightQ and tr == rightR)
+                if validSecond then
+                    selectedAttack._cleaveSecondAim = {q = tq, r = tr}
+                    local success, msg = performAttackWithSelectedAttack(selectedActor, cleaveTargetCell.q, cleaveTargetCell.r, selectedAttack)
+                    if not success then log.warnf("input", "Attack failed: %s", msg) end
+                    attackMode = false
+                    selectedAttack = nil
+                    cleaveTargetCell = nil
+                end
+            else
+                -- any adjacent cell can be targeted, empty ones included
+                if hex:getDistance(selectedActor.q, selectedActor.r, tq, tr) == 1 then
+                    cleaveTargetCell = {q = tq, r = tr}
+                end
+            end
+            return
         elseif selectedAttack.name == "Vortex Strike" then
             if vortexTargetCell then
                 local destCells = selectedAttack:getShiftDestinations(selectedActor, vortexTargetCell.q, vortexTargetCell.r, hex)
@@ -367,6 +393,7 @@ end
         selectedAttack = nil
         global_abilities.showPanel = false
         mightyThrowTarget = nil
+        cleaveTargetCell = nil
         log.debugf("input", "Selected: %s%s", clicked.name, (clicked.hasActedThisTurn and " (acted)" or ""))
         return
     end
@@ -379,6 +406,7 @@ end
         selectedAttack = nil
         global_abilities.showPanel = false
         mightyThrowTarget = nil
+        cleaveTargetCell = nil
         log.debugf("input", "Boundary selected: %s", clicked.name)
         return
     end
@@ -394,6 +422,7 @@ end
             attackMode = false
             selectedAttack = nil
             mightyThrowTarget = nil
+            cleaveTargetCell = nil
         end
     end
 end
@@ -403,7 +432,12 @@ function input.keypressed(key)
         if (key == "return" or key == " ") and #unplacedAllies == 0 then
             confirmDeploy()
         elseif key == "escape" then
-            deploySelectedIdx = nil
+            if deploySelectedIdx then
+                deploySelectedIdx = nil
+            else
+                pause_menu.open()
+                log.debug("input", "Pause menu opened from deploy phase")
+            end
         elseif key == "r" or key == "R" then
             if isProgressionRun and win then return end
             restartGame()
@@ -429,6 +463,9 @@ function input.keypressed(key)
         elseif mightyThrowTarget then
             mightyThrowTarget = nil
             log.debug("input", "Mighty Throw target cancelled")
+        elseif cleaveTargetCell then
+            cleaveTargetCell = nil
+            log.debug("input", "Double Cleave aim cancelled")
         elseif vortexTargetCell then
             vortexTargetCell = nil
             log.debug("input", "Vortex target cancelled")

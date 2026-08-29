@@ -37,6 +37,7 @@ local function getHeroes()
                     { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Heavy strike, wounds and pushes. Lethal if empowered" },
                     { attack = c.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack. Wounds if empowered" },
                     { attack = c.BashAttack.new(), name = "Bash", description = "Heavy blow: wounds target and enemy behind attacker" },
+                    { attack = c.DoubleCleaveAttack.new(), name = "Double Cleave", description = "Two swings: each hits a cell and the cell to its left" },
                     { attack = c.HeavyChargeAttack.new(), name = "Heavy Charge", description = "Finisher: after your turn ends, charge in a straight line and push the first enemy. Colliding with an obstacle is lethal" },
                 }
             end,
