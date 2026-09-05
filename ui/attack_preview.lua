@@ -99,9 +99,6 @@ function preview.calculateEffectiveCollisionDamage(target, rawDamage)
     if target.healthCellSize and target.health > target.healthCellSize then
         damage = math.min(damage, target.health - target.healthCellSize)
     end
-    if target.shields and target.shields > 0 then
-        damage = math.max(0, damage - target.shields)
-    end
     return damage
 end
 
@@ -688,7 +685,10 @@ handlers["Flip"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     if not target or not target:isCharacter() or target.health <= 0 then return end
 
     local eff = preview.calculateEffectiveDamage(target, attacker, attack.damage or 1, nil, dist)
-    preview.addAttackDamage(p, target, eff)
+    -- Gentle Touch (Blade): flip moves the target but deals no direct damage.
+    if not attacker.gentleTouch then
+        preview.addAttackDamage(p, target, eff)
+    end
     preview.addOverlay(p, hoverQ, hoverR, "target")
 
     local cells = attack:getFlipCells(attacker, hoverQ, hoverR, hex, entities)

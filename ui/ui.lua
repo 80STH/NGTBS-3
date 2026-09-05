@@ -2669,37 +2669,32 @@ end
 
 function ui.drawChaosBar(mx, my)
     local solo = _G.soloMode
-    local barVal, barMax
     local hero = _G.hero
-    if solo then
-        barMax = (hero and hero.maxHealth) or 7
-        barVal = hero and hero.health or 0
-    else
-        barVal = _G.chaos or 0
-        barMax = (_G.chaosMax or 5) + (_G.chaosScaleBonus or 0)
-    end
+    local barVal = _G.chaos or 0
+    local barMax = (_G.chaosMax or 5) + (_G.chaosScaleBonus or 0)
     local surplus = _G.chaosSurplus or 0
-    local shieldMax = solo and hero and (hero.maxShields or 0) or 0
-    local shieldVal = solo and hero and (hero.shields or 0) or 0
 
-    -- Cells that would be lost to the hovered attack's damage: shields absorb
-    -- first, then health. Only these cells flicker.
+    -- Solo top bar shows SOUL POWER: a run resource drained by lost
+    -- buildings/objectives and by the hero's respawn. The hero's own combat
+    -- HP (3) is a separate quantity shown as pips above the unit.
+    -- Non-solo mode keeps the chaos meter.
+    if solo then
+        barVal = _G.soulPower or 0
+        barMax = _G.soulPowerMax or 5
+    end
+
+    -- Shields are gone; the body-HP flicker preview lives on the unit pips.
+    local shieldMax = 0
+    local shieldVal = 0
     local lostShields = 0
     local lostHealth = 0
-    if solo and hero and _G.state and _G.state.previewDamaged and _G.state.previewDamaged[hero] then
-        local dmg = _G.state.previewDamaged[hero].totalDamage or 0
-        lostShields = math.min(dmg, shieldVal)
-        lostHealth = math.min(dmg - lostShields, barVal)
-    end
 
     local cellW = 30
     local cellH = 8   -- squatter so bars of cells fit the top panel
     local gap = 3
     local pad = 3
-    local barGap = 4  -- vertical gap between the HP row and the Attack/Move row
-    -- Health and shields are drawn as two separate visual groups so spent shield
-    -- sockets read clearly apart from health.
-    local shGapPx = 10
+    local barGap = 4  -- vertical gap between the resource row and the Attack/Move row
+    local shGapPx = 10  -- (kept) spacing after the resource track
     local hpW = (cellW + gap) * barMax - gap + pad * 2
     local shW = (cellW + gap) * shieldMax - gap + pad * 2
     local apMax, mpMax = 2, 2
@@ -2755,7 +2750,7 @@ function ui.drawChaosBar(mx, my)
                 pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 0.5)
             end
             if solo then
-                love.graphics.setColor(0.35 * pulse, 0.85 * pulse, 0.4 * pulse, 0.9)
+                love.graphics.setColor(0.62 * pulse, 0.45 * pulse, 1 * pulse, 0.95)
             else
                 love.graphics.setColor(0.9 * pulse, 0.35 * pulse, 0.4 * pulse, 0.9)
             end
@@ -2764,35 +2759,6 @@ function ui.drawChaosBar(mx, my)
         end
         love.graphics.rectangle("fill", cx, cy, cellW, cellH, 2)
         love.graphics.setColor(0.4, 0.3, 0.5, 0.5)
-        love.graphics.rectangle("line", cx, cy, cellW, cellH, 2)
-    end
-
-    -- Shield group (solo): separate blue track. Spent shields stay as visible
-    -- empty blue sockets so the depletion reads clearly.
-    if shieldMax > 0 then
-        love.graphics.setColor(0.05, 0.09, 0.2, 0.95)
-        love.graphics.rectangle("fill", shX, barY, shW, cellH + pad * 2, 4)
-        love.graphics.setColor(0.3, 0.45, 0.75, 0.8)
-        love.graphics.rectangle("line", shX, barY, shW, cellH + pad * 2, 4)
-    end
-    for i = 1, shieldMax do
-        local cx = shX + pad + (i - 1) * (cellW + gap)
-        local cy = barY + pad
-        local filled = i <= shieldVal
-        if filled then
-            local t = love.timer.getTime()
-            local pulse = 1
-            if i > shieldVal - lostShields then
-                pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 0.5)
-            end
-            love.graphics.setColor(0.3 * pulse, 0.6 * pulse, 1 * pulse, 0.95)
-            love.graphics.rectangle("fill", cx, cy, cellW, cellH, 2)
-        else
-            -- empty socket: translucent fill + bright blue rim so spent is obvious
-            love.graphics.setColor(0.12, 0.16, 0.3, 0.75)
-            love.graphics.rectangle("fill", cx, cy, cellW, cellH, 2)
-        end
-        love.graphics.setColor(0.45, 0.62, 0.95, 0.9)
         love.graphics.rectangle("line", cx, cy, cellW, cellH, 2)
     end
 
@@ -2917,17 +2883,16 @@ function ui.drawChaosBar(mx, my)
         local lines
         if solo then
             lines = {
-                {text = "Health", color = {0.5, 0.9, 0.6, 1}},
+                {text = "Soul Power", color = {0.7, 0.55, 1, 1}},
                 {text = "", color = {1, 1, 1, 1}},
-                {text = "Your hero's life. Buildings", color = {0.8, 0.8, 0.8, 1}},
-                {text = "damaged and failed objectives", color = {0.8, 0.8, 0.8, 1}},
-                {text = "drain it. At zero, defeat.", color = {0.8, 0.8, 0.8, 1}},
+                {text = "Your run resource. Lost buildings,", color = {0.8, 0.8, 0.8, 1}},
+                {text = "failed objectives and a fallen hero", color = {0.8, 0.8, 0.8, 1}},
+                {text = "spend it. At zero, defeat.", color = {0.8, 0.8, 0.8, 1}},
                 {text = "", color = {1, 1, 1, 1}},
-                {text = "Blue cells are shields: they absorb", color = {0.7, 0.8, 1, 1}},
-                {text = "direct hero damage and refill", color = {0.7, 0.8, 1, 1}},
-                {text = "between levels.", color = {0.7, 0.8, 1, 1}},
+                {text = "Your hero's own HP (3) shows as", color = {0.7, 0.95, 0.8, 1}},
+                {text = "pips above the unit, like any other.", color = {0.7, 0.95, 0.8, 1}},
                 {text = "", color = {1, 1, 1, 1}},
-                {text = string.format("Current: %d / %d  Shields: %d", barVal, barMax, shieldVal), color = barVal <= 0 and {1, 0.3, 0.3, 1} or {0.5, 1, 0.6, 1}},
+                {text = string.format("Current: %d / %d", barVal, barMax), color = barVal <= 0 and {1, 0.3, 0.3, 1} or {0.9, 0.8, 1, 1}},
             }
         else
             lines = {

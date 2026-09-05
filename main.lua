@@ -85,6 +85,9 @@ spawnAllUnits = false
 unlimitedAbilities = false
 chaos = 0
 chaosMax = 4
+soulPower = nil          -- solo run resource; drains on building loss/respawn (persists between missions)
+soulPowerMax = 5
+soulPowerInit = function() soulPower = soulPowerMax end  -- default starting budget
 chaosSurplus = 0
 chaosScaleBonus = 0
 entityAt = {}
@@ -475,11 +478,21 @@ function getEnemyAttackOrder(entities, turnState)
         queue = turnManager.buildEnemyAttackQueue()
     end
 
+    -- Only alive, not-yet-dying enemies appear in the order. A target that
+    -- just died (or is mid-death-animation) drops out immediately, so the
+    -- remaining order numerals stay contiguous and their heat colors shift
+    -- the same frame — no ghost slot left behind for a corpse.
+    local function isAliveQueueMember(e)
+        return e and (e.health or 0) > 0 and not e.isDying
+    end
+
     local n = 0
     for _, g in ipairs(queue) do
         for _, e in ipairs(g.enemies) do
-            n = n + 1
-            order[e] = n
+            if isAliveQueueMember(e) then
+                n = n + 1
+                order[e] = n
+            end
         end
     end
     return order

@@ -406,17 +406,6 @@ local function definePool()
             end,
         },
         {
-            id = "shielded",
-            name = "Untouched",
-            desc = "Win without losing any shields",
-            heroOnly = true,
-            checkOnVictory = function(entities, state)
-                local hero = _G.hero
-                state["shielded"] = (hero and hero.shields and hero.maxShields
-                    and hero.shields >= hero.maxShields) and "completed" or "failed"
-            end,
-        },
-        {
             id = "all_attacks",
             name = "Full Arsenal",
             desc = "Use every hero attack in battle",

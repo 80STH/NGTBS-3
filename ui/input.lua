@@ -181,6 +181,17 @@ end
         return
     end
 
+    -- Gentle Touch toggle (Blade): free + unlimited; flips state in place,
+    -- never consumes an action or attack. Region is set each frame by drawGentleTouch.
+    if selectedActor and selectedActor.gentleAvailable and selectedActor._gentleRect then
+        local gr = selectedActor._gentleRect
+        if x >= gr.x and x <= gr.x + gr.w and y >= gr.y and y <= gr.y + gr.h then
+            selectedActor.gentleTouch = not selectedActor.gentleTouch
+            sounds.play("click")
+            return
+        end
+    end
+
     if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving then
         for _, btn in ipairs(attackButtons) do
             if x >= btn.x and x <= btn.x + btn.width and y >= btn.y and y <= btn.y + btn.height then

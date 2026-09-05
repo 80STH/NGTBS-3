@@ -307,6 +307,9 @@ function restartGame(mapPath)
 
     -- Setup deploy phase
     local skipDeploy = mapPath:match("test_polygon_[12]")
+    -- Soul Power resource: fresh runs get a full budget; subsequent level
+    -- restarts keep whatever survived (progress carries between missions).
+    if soulPower == nil then soulPower = soulPowerMax or 5 end
     hero = nil
     heroRevivePending = false
     heroDeathPos = nil
@@ -519,63 +522,68 @@ function confirmDeploy()
     log.info("game", "=== DEPLOY CONFIRMED — GAME STARTED ===")
 end
 
--- Damage the playable hero (solo mode: buildings drain the hero's health
--- instead of the chaos meter). Bypasses shields — shields absorb direct
--- hero damage only, not objective damage. No hero alive = nothing to damage.
-function damageHero(damage)
-    if hero and hero:isCharacter() and hero.health > 0 and not hero.isDying then
-        log.infof("game", "The realm suffers — %s loses %d health!", hero.name, damage)
-        local died = hero:takeDamage(damage, true)
-        if died then hero:startDeath() end
-        checkGameEnd()
+-- Solo losses (building damage, objectives, train cars) drain Soul Power
+-- instead of the chaos meter (non-solo keeps the chaos meter). Hitting zero
+-- ends the run unless the hero can still fight on borrowed time — see loss rules.
+function spendSoul(amount)
+    if _G.soloMode and soulPower ~= nil then
+        soulPower = math.max(0, soulPower - amount)
+        log.infof("game", "Soul Power -%d (now %d/%d)", amount, soulPower, soulPowerMax)
+        if soulPower <= 0 then
+            loss = true
+            gameActive = false
+            log.warn("game", "DEFEAT: Soul Power is spent! The realm has nothing left.")
+        end
     end
 end
 
--- Solo hero death-save (called from Entity.takeDamage on lethal hits):
--- charge 2 damage with shields absorbing first, then vanish. If the pool
--- empties the hero dies for real, otherwise he redeploys next player turn.
--- Returns true when the hero is truly destroyed, false when saved.
+-- Kept name so older call sites (Entity damage on buildings/trains and the
+-- objective failures) still work: those losses are now soul-power drains.
+function damageHero(amount)
+    spendSoul(amount)
+end
+
+-- Solo hero respawn (called from Entity.takeDamage/startDeath on a lethal
+-- hit). Costs 1 Soul Power; the hero comes back next player turn with only
+-- 1 HP. Without soul power the hero truly dies (run over).
+-- Returns true when the hero is truly destroyed, false when revived.
 function heroDeathSave(h)
-    local dmg = 2
-    if h.shields and h.shields > 0 then
-        local absorbed = math.min(dmg, h.shields)
-        h.shields = h.shields - absorbed
-        dmg = dmg - absorbed
-        log.infof("game", "%s's shields absorb %d of the lethal blow!", h.name, absorbed)
-    end
-    h.health = h.health - dmg
-    log.infof("game", "%s cheats death! Loses %d HP (%d/%d left)", h.name, dmg, math.max(0, h.health), h.maxHealth)
+    if (soulPower or 0) > 0 and h._trueDeath ~= true then
+        soulPower = soulPower - 1
+        h.health = 1                   -- revived hero appears with 1 HP
+        log.infof("game", "%s falls! A soul is spent (%d/%d left), he returns with 1 HP.",
+            h.name, soulPower, soulPowerMax)
 
-    if h.health <= 0 then
-        h._trueDeath = true
-        h.health = 0
-        h:startDeath()
-        checkGameEnd()
-        return true
-    end
-
-    -- Vanish from the field; mandatory simple redeploy next player turn
-    heroDeathPos = { q = h.q, r = h.r }
-    for i, e in ipairs(entities) do
-        if e == h then table.remove(entities, i) break end
-    end
-    if status.getEntityStatuses then
-        for _, s in ipairs(status.getEntityStatuses(h)) do
-            status.removeFromEntity(h, s)
+        -- Vanish from the field; mandatory simple redeploy next player turn
+        heroDeathPos = { q = h.q, r = h.r }
+        for i, e in ipairs(entities) do
+            if e == h then table.remove(entities, i) break end
         end
+        if status.getEntityStatuses then
+            for _, s in ipairs(status.getEntityStatuses(h)) do
+                status.removeFromEntity(h, s)
+            end
+        end
+        h.isDying = false
+        heroRevivePending = true
+        selectedActor = nil
+        if hex then hex.selectedQ, hex.selectedR = -1, -1 end
+        if updateAttackButtons then updateAttackButtons(nil) end
+        if hex and hex.hexToPixel then
+            local cx, cy = hex:hexToPixel(h.q, h.r)
+            visual.addEffect(cx, cy, "slam", 0.5)
+        end
+        rebuildEntityIndex()
+        log.info("game", "The hero drops — redeploy him next turn!")
+        return false
     end
-    heroRevivePending = true
-    selectedActor = nil
-    if hex then hex.selectedQ, hex.selectedR = -1, -1 end
-    if updateAttackButtons then updateAttackButtons(nil) end
-    if hex and hex.hexToPixel then
-        local cx, cy = hex:hexToPixel(h.q, h.r)
-        visual.addEffect(cx, cy, "slam", 0.5)
-    end
-    rebuildEntityIndex()
+
+    h._trueDeath = true
+    h.health = 0
+    h:startDeath()
     checkGameEnd()
-    log.info("game", "The hero retreats — redeploy him next turn!")
-    return false
+    log.info("game", "DEFEAT: the hero has no soul power left to return!")
+    return true
 end
 
 -- The Mechanism button: one press drives every environment mechanism on

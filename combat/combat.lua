@@ -519,7 +519,10 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     -- collision damage). The lunge animation below is purely visual.
     combat.withDeferredDeaths(function()
         if firstTarget and firstTarget.health > 0 then
-            self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
+            -- Blade "Gentle Touch": no direct damage, still pushes/slams.
+            if not attacker.gentleTouch then
+                self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
+            end
         end
         if firstTarget and firstTarget.health > 0 and targetHex and firstTarget.isPushable then
             self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
@@ -833,8 +836,10 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     attack_effects.flip(attacker, targetActor, destQ, destR, hex)
     combat.moveEntityWithAnimation(targetActor, targetQ, targetR, destQ, destR)
     combat.startPushAnimations(hex)
-    -- Deal 1 damage
-    self:dealDamageToTarget(targetActor, attacker, 1, entities, sounds, nil)
+    -- Deal 1 damage (Blade "Gentle Touch": flip only, no damage)
+    if not attacker.gentleTouch then
+        self:dealDamageToTarget(targetActor, attacker, 1, entities, sounds, nil)
+    end
     log.debugf("combat", "%s flips %s to (%d,%d)!", attacker.name, targetActor.name, destQ, destR)
     sounds.play("flip")
     attacker.hasActedThisTurn = true

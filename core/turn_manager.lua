@@ -391,12 +391,22 @@ function turnManager.buildEnemyAttackQueue()
             table.insert(enemies, e)
         end
     end
+    -- Stamp a stable ordinal so equal-priority enemies keep their original
+    -- relative order. table.sort is NOT stable: when a prepared enemy dies and
+    -- the queue is rebuilt, an equal-priority subset can reorder arbitrarily,
+    -- which makes a surviving attacker's shown order number jump by more than
+    -- one (e.g. #3 -> #1 instead of #2). The ordinal breaks those ties for good.
+    for ord, e in ipairs(enemies) do
+        e._attackQueueOrd = ord
+    end
     table.sort(enemies, function(a, b)
         local ta = a._preparedTargetType == "building" and 1 or 0
         local tb = b._preparedTargetType == "building" and 1 or 0
         if ta ~= tb then return ta < tb end
         if a.isLeader ~= b.isLeader then return a.isLeader and not b.isLeader end
-        return a.attacksFirst and not b.attacksFirst
+        if a.attacksFirst ~= b.attacksFirst then return a.attacksFirst end
+        local oa, ob = a._attackQueueOrd or 0, b._attackQueueOrd or 0
+        return oa < ob
     end)
     local trainGroups = trains_mod.getTrainGroups()
     for _, g in pairs(trainGroups) do

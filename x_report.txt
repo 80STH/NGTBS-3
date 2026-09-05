@@ -1,0 +1,4 @@
+OK   blade has gentle fields
+OK   blade dash starts damage 1
+OK   gentle toggle flips to ON
+OK   chip rect laid out

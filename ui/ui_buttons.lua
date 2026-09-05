@@ -136,7 +136,7 @@ return function(ui)
                                 if not isHole or e.waterWalker or e.hovering then
                                     ui.drawPushArrow(x1, y1, x2, y2, nil, nil, nil, nil,
                                         e.q, e.r, nq, nr, 0.55)
-                                end
+    end
                             end
                         end
                     end
@@ -486,6 +486,36 @@ return function(ui)
                 end
             end
         end
+    end
+
+    -- ═══ Gentle Touch toggle (Blade): free, unlimited, modifies attacks ═══
+    -- Sits after the attack squares on the bottom-left row.
+    function ui.gentleTouchRect(attackCount)
+        local tri = ui.getAbilitySquareRect(math.max(1, attackCount + 1))
+        return { x = tri.x, y = tri.y, w = tri.w, h = math.min(tri.h, 40) }
+    end
+
+    function ui.drawGentleTouch(actor)
+        if not (actor and actor.gentleAvailable) then return end
+        if _G.global_abilities and _G.global_abilities.showPanel then return end
+        local on = actor.gentleTouch
+        local gc = ui.gentleTouchRect(#(attackButtons or {}))
+        actor._gentleRect = gc
+        local mx, my = love.mouse.getPosition()
+        mx, my = mx / (_G.dpiScale or 1), my / (_G.dpiScale or 1)
+        local hover = mx >= gc.x and mx <= gc.x + gc.w and my >= gc.y and my <= gc.y + gc.h
+        love.graphics.setColor(on and 0.62 or 0.2, on and 0.42 or 0.18, on and 0.16 or 0.2, on and 0.95 or 0.7)
+        love.graphics.rectangle("fill", gc.x, gc.y, gc.w, gc.h, 5)
+        if hover then
+            love.graphics.setColor(on and 1 or 0.9, on and 0.8 or 0.85, on and 0.5 or 0.5, 1)
+            love.graphics.rectangle("line", gc.x - 2, gc.y - 2, gc.w + 4, gc.h + 4, 6)
+        else
+            love.graphics.setColor(on and 0.9 or 0.5, on and 0.7 or 0.5, on and 0.4 or 0.5, 0.6)
+            love.graphics.rectangle("line", gc.x, gc.y, gc.w, gc.h, 5)
+        end
+        love.graphics.setColor(1, on and 0.85 or 0.6, on and 0.5 or 0.5, 1)
+        love.graphics.setFont(fonts.get(9))
+        love.graphics.printf((on and "Gentle ON" or "Gentle off"), gc.x, gc.y + gc.h / 2 - 8, gc.w, "center")
     end
 
     -- ═══ Ability buttons (square, grouped in a bottom row when panel open) ═══

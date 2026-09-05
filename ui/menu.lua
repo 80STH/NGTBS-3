@@ -239,7 +239,7 @@ function menu.draw()
         love.graphics.printf(hero.name, card.x + 2, card.y + 3, card.w - 4, "center")
         love.graphics.setColor(0.8, 0.7, 0.5, 0.9)
         love.graphics.setFont(l.tinyFont)
-        love.graphics.printf("HP" .. hero.hp .. " SH" .. (hero.shields or 2) .. " Mv" .. hero.move, card.x + 2, card.y + 20, card.w - 4, "center")
+        love.graphics.printf("HP" .. hero.hp .. " Mv" .. hero.move, card.x + 2, card.y + 20, card.w - 4, "center")
         local names = {}
         for _, a in ipairs(hero.attacks()) do table.insert(names, a.name) end
         love.graphics.setColor(0.7, 0.8, 1, 0.85)
@@ -351,6 +351,7 @@ function menu.mousepressed(x, y)
             if not selectedSoloHero then selectedSoloHero = 1 end
             soloMode = true
             isProgressionRun = false
+            soulPowerInit()
             global_abilities.initWithCommander(selectedCommander)
             restartGame(btn.path)
             return true
@@ -372,6 +373,7 @@ function menu.mousepressed(x, y)
                 isProgressionRun = true
                 currentMapIndex = 1
                 progressionShopOpened = false
+                soulPowerInit()
                 global_abilities.initWithCommander(selectedCommander)
                 restartGame("maps/map1.lua")
                 return true
@@ -416,6 +418,7 @@ function menu.keypressed(key)
             if not selectedCommander then return true end
             if not selectedSoloHero then selectedSoloHero = 1 end
             soloMode = true
+            soulPowerInit()
             global_abilities.initWithCommander(selectedCommander)
             restartGame(mapList[1])
             return true

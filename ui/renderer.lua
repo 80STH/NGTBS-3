@@ -506,6 +506,7 @@ function renderer.draw(state)
     end
 
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
+    ui.drawGentleTouch(state.selectedActor)
     if state.selectedActor then
         ui.drawSelectedStats(state.selectedActor, state.entities, hex)
     elseif global_abilities.activeAbility then
@@ -847,7 +848,7 @@ end
 
 -- Into-the-Breach style health pips above a unit: thick cells on a black
 -- backing strip. Pips that would be lost to the hovered attack
--- (state.previewDamaged) blink; shields absorb first.
+-- (state.previewDamaged) blink.
 function drawHealthPips(entity, x, y, state)
     if entity.isDying or entity:isEdge() or entity.indestructible then return end
     if not entity.health or entity.maxHealth <= 1 then return end
@@ -855,9 +856,7 @@ function drawHealthPips(entity, x, y, state)
     local preview = state.previewDamaged and state.previewDamaged[entity]
     local lost = 0
     if preview then
-        local dmg = preview.totalDamage or 0
-        local lostShields = math.min(dmg, entity.shields or 0)
-        lost = math.min(dmg - lostShields, entity.health)
+        lost = math.min(preview.totalDamage or 0, entity.health)
     end
 
     local pipW, pipH, gap = 8, 5, 2

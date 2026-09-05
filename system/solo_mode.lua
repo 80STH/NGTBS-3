@@ -10,18 +10,21 @@ local function getHeroes()
     local c = require("combat.combat")
     HEROES = {
         {
-            id = "blade", name = "Blade", spriteGid = 34, hp = 5, shields = 2, move = 3, tags = {"fire", "push"},
+            id = "blade", name = "Blade", spriteGid = 34, hp = 3, move = 3, tags = {"fire", "push"},
             deployEffect = { type = "damage_nearby", damage = 1, radius = 1 },
             attacks = function()
+                -- Blade-only: Dash deals +1 damage (clash bonus over the base dash).
+                local dash = c.DashAttack.new()
+                dash.damage = (dash.damage or 0) + 1
                 return {
-                    { attack = c.DashAttack.new(), name = "Dash", description = "Charge forward, pushes enemy" },
+                    { attack = dash, name = "Dash", description = "Charge forward, pushes enemy" },
                     { attack = c.FlipAttack.new(), name = "Flip", description = "Flips enemy behind you" },
                     { attack = c.FireStompAttack.new(), name = "Fire Stomp", description = "Ignite the selected cell and two cells in front of it" },
                 }
             end,
         },
         {
-            id = "gunner", name = "Gunner", spriteGid = 31, hp = 5, shields = 2, move = 4, tags = {"push"},
+            id = "gunner", name = "Gunner", spriteGid = 31, hp = 3, move = 4, tags = {"push"},
             attacks = function()
                 return {
                     { attack = c.ShootAttack.new(), name = "Shoot", description = "Shoots and pushes first enemy in line" },
@@ -31,7 +34,7 @@ local function getHeroes()
             end,
         },
         {
-            id = "brute", name = "Brute", spriteGid = 30, hp = 5, shields = 2, move = 2, tags = {"push"},
+            id = "brute", name = "Brute", spriteGid = 30, hp = 3, move = 2, tags = {"push"},
             attacks = function()
                 return {
                     { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Heavy strike, wounds and pushes. Lethal if empowered" },
@@ -43,7 +46,7 @@ local function getHeroes()
             end,
         },
         {
-            id = "storm", name = "Storm", spriteGid = 27, hp = 5, shields = 2, move = 3, tags = {},
+            id = "storm", name = "Storm", spriteGid = 27, hp = 3, move = 3, tags = {},
             attacks = function()
                 return {
                     { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shifts an enemy left or right and wounds" },
@@ -53,7 +56,7 @@ local function getHeroes()
             end,
         },
         {
-            id = "warlock", name = "Warlock", spriteGid = 40, hp = 5, shields = 2, move = 3, tags = {},
+            id = "warlock", name = "Warlock", spriteGid = 40, hp = 3, move = 3, tags = {},
             attacks = function()
                 return {
                     { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any cell, ignores obstacles, wounds" },
@@ -64,7 +67,7 @@ local function getHeroes()
             end,
         },
         {
-            id = "hooker", name = "Hooker", spriteGid = 31, hp = 5, shields = 2, move = 3, tags = {},
+            id = "hooker", name = "Hooker", spriteGid = 31, hp = 3, move = 3, tags = {},
             attacks = function()
                 return {
                     { attack = c.CatchAttack.new(), name = "Catch", description = "Hook the first enemy in line, pull it to you and deal 1 damage" },
@@ -96,9 +99,12 @@ function solo_mode.createHero(defIdx, q, r)
     e.attacksLeft = 2
     e.movesLeft = 2
     e.deployEffect = def.deployEffect
-    -- 2 shield points: absorb direct hero damage only, refill between levels
-    e.shields = def.shields or 2
-    e.maxShields = e.shields
+    -- Toggle mechanics: Blade has "Gentle Touch" — when on, Dash/Flip lose
+    -- their direct damage. Flag lives on the hero so combat reads it live.
+    if def.id == "blade" then
+        e.gentleTouch = false
+        e.gentleAvailable = true
+    end
     return e
 end
 

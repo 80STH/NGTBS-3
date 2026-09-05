@@ -26,6 +26,9 @@ function undo.snapshot()
         upperTerrain = {},
         selectedActor = _G.selectedActor,
         chaos = _G.chaos or 0,
+        soulPower = _G.soulPower,
+        heroRevivePending = _G.heroRevivePending or false,
+        heroDeathPos = (_G.heroDeathPos and { q = _G.heroDeathPos.q, r = _G.heroDeathPos.r }) or nil,
         abilityMana = ga and ga.mana or 0,
         abilityUsedThisTurn = ga and ga.abilityUsedThisTurn or false,
         abilityStates = abilityStates,
@@ -82,7 +85,6 @@ function undo.snapshot()
             name = e.name,
             q = e.q, r = e.r,
             health = e.health, maxHealth = e.maxHealth,
-            shields = e.shields, maxShields = e.maxShields,
             attacksFirst = e.attacksFirst,
             hasActedThisTurn = e.hasActedThisTurn,
             hasMovedThisTurn = e.hasMovedThisTurn,
@@ -305,6 +307,16 @@ function undo.restore(snap)
     _G.attackMode = false
     _G.selectedAttack = nil
     _G.chaos = snap.chaos or 0
+    _G.soulPower = snap.soulPower ~= nil and snap.soulPower or _G.soulPower
+    -- Solo death bookkeeping must revert with the undo: if the hero was
+    -- knocked down by the undone action, put him back alive and NOT pending
+    -- revive (otherwise the next turn wrongly forces a redeploy).
+    _G.heroRevivePending = snap.heroRevivePending or false
+    if snap.heroDeathPos then
+        _G.heroDeathPos = { q = snap.heroDeathPos.q, r = snap.heroDeathPos.r }
+    else
+        _G.heroDeathPos = nil
+    end
     if snap.maxTurns then
         _G.maxTurns = snap.maxTurns
         if _G.state then _G.state.maxTurns = snap.maxTurns end
