@@ -505,8 +505,7 @@ function objectives.generate(entities, hex, forcedObjectives)
     -- Hero-exclusive objectives: only offer what the selected hero can do
     local heroTags = {}
     if _G.soloMode and _G.selectedSoloHero then
-        local sm = require("system.solo_mode")
-        local hdef = sm.getHeroDef(_G.selectedSoloHero)
+        local hdef = env.getSoloHeroDef(_G.selectedSoloHero)
         if hdef and hdef.tags then
             for _, t in ipairs(hdef.tags) do
                 heroTags[t] = true

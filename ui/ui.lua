@@ -301,7 +301,7 @@ end
 
 function ui.drawPreviewIcons(hex, icons)
     if not icons then return end
-    local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
+    local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
     local alpha = 0.4 + 0.6 * pulse
     for _, ic in ipairs(icons) do
         icon_cache.draw(ic.icon, ic.x, ic.y, alpha)
@@ -404,7 +404,7 @@ function ui.drawPreparedAttacks(hex, entities)
         local pulse = 1.0
         if threatCount <= 2 then
             local t = love.timer.getTime()
-            pulse = 0.7 + 0.3 * math.sin(t * (5 + threatCount * 3))
+                pulse = 0.7 + 0.3 * math.sin(t * 4)
             alpha = alpha * pulse
         end
         love.graphics.stencil(function()
@@ -948,7 +948,13 @@ end
             -- Damage to first target + possible knockback damage
             if firstTarget and not elevBlock and not elevFall then
                 local targetX, targetY = getDrawCoords(firstTarget.q, firstTarget.r)
-                local totalDamage = attack.damage or 1
+                -- "Gentle Touch" (Blade): the dash itself deals no direct damage,
+                -- so the preview must not count it either (only knockback/edge can).
+                local baseDamage = attack.damage or 1
+                if attacker.gentleTouch and attack.name == "Dash" then
+                    baseDamage = 0
+                end
+                local totalDamage = baseDamage
                 local pushQ, pushR, isEdge
                 if targetHex then
                     pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
@@ -1794,7 +1800,7 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
         end
         local dotRadius = hex.radius * 0.12
         local spacing = hex.radius * 0.4
-        -- Arc over elevation edges: dots follow low-ground -> curve -> high-ground
+        -- Path rises above elevation edges (arc over cliffs); plain otherwise.
         local path = getElevationCurve(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
         if not path then
             path = { fromX, fromY, toX, toY }
@@ -1807,10 +1813,12 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
             segLens[#segLens + 1] = l
             totalLen = totalLen + l
         end
-        local count = math.max(1, math.floor(totalLen / spacing))
-        local dotR, dotG, dotB = arcR, arcG, arcB
-        for i = 0, count do
-            local t = i / count * totalLen
+        if totalLen <= 0 then return end
+        -- Place dots at a CONSTANT pixel stride along the path. Splitting the
+        -- line into floor(totalLen/spacing) equal slices makes the real gap
+        -- totalLen/count drift with distance; a constant walk keeps the interval
+        -- identical on every straight line regardless of target distance.
+        local function sampleAt(t)
             local seg, acc = 1, 0
             for s = 1, #segLens do
                 if t <= acc + segLens[s] or s == #segLens then seg = s break end
@@ -1819,10 +1827,22 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
             local k = segLens[seg] > 0 and (t - acc) / segLens[seg] or 0
             local x = path[seg * 2 - 1] + (path[seg * 2 + 1] - path[seg * 2 - 1]) * k
             local y = path[seg * 2] + (path[seg * 2 + 2] - path[seg * 2]) * k
+            return x, y
+        end
+        -- Constant pixel stride from the attacker: dots land at k * spacing
+        -- while that stays short of the end. We never snap the last dot onto the
+        -- target cell (that would leave two dots almost on top of each other when
+        -- the leftover tail is much shorter than the stride). The target cell is
+        -- already marked by its own overlay, so this just avoids the double-mark.
+        local dotR, dotG, dotB = arcR, arcG, arcB
+        local d = 0
+        while d < totalLen - 1e-6 do
+            local x, y = sampleAt(d)
             love.graphics.setColor(0, 0, 0, alpha * 0.35)
             love.graphics.circle("fill", x + 2, y + 2, dotRadius)
             love.graphics.setColor(dotR, dotG, dotB, alpha)
             love.graphics.circle("fill", x, y, dotRadius)
+            d = d + spacing
         end
         return
     end
@@ -2538,7 +2558,7 @@ function ui.drawDelayedHints(entities)
             if label then
                 local x, y = getDrawCoords(e.q, e.r)
                 local t = love.timer.getTime()
-                local pulse = 0.5 + 0.5 * math.sin(t * 5)
+                local pulse = 0.5 + 0.5 * math.sin(t * 4)
                 love.graphics.setLineWidth(3)
                 love.graphics.setColor(r, g, b, 0.4 + 0.4 * pulse)
                 love.graphics.circle("line", x, y, hex.radius * (0.7 + 0.12 * pulse))
@@ -2668,20 +2688,13 @@ function ui.getPauseBtnRect()
 end
 
 function ui.drawChaosBar(mx, my)
-    local solo = _G.soloMode
     local hero = _G.hero
-    local barVal = _G.chaos or 0
-    local barMax = (_G.chaosMax or 5) + (_G.chaosScaleBonus or 0)
-    local surplus = _G.chaosSurplus or 0
-
-    -- Solo top bar shows SOUL POWER: a run resource drained by lost
-    -- buildings/objectives and by the hero's respawn. The hero's own combat
-    -- HP (3) is a separate quantity shown as pips above the unit.
-    -- Non-solo mode keeps the chaos meter.
-    if solo then
-        barVal = _G.soulPower or 0
-        barMax = _G.soulPowerMax or 5
-    end
+    -- Hero-only: the top bar is always the hero's Soul Power — a run resource
+    -- drained by lost buildings/objectives and by the hero's respawn. The
+    -- hero's own combat HP (3) is a separate quantity shown as pips above him.
+    local barVal = _G.soulPower or 0
+    local barMax = _G.soulPowerMax or 5
+    local surplus = 0
 
     -- Shields are gone; the body-HP flicker preview lives on the unit pips.
     local shieldMax = 0
@@ -2699,7 +2712,7 @@ function ui.drawChaosBar(mx, my)
     local shW = (cellW + gap) * shieldMax - gap + pad * 2
     local apMax, mpMax = 2, 2
     local apVal, mpVal = 0, 0
-    if solo and hero then
+    if hero then
         apVal = hero.attacksLeft or 0
         mpVal = hero.movesLeft or 0
     end
@@ -2747,13 +2760,9 @@ function ui.drawChaosBar(mx, my)
             local t = love.timer.getTime()
             local pulse = 1
             if i > barVal - lostHealth then
-                pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 0.5)
+                pulse = 0.8 + 0.2 * math.sin(t * 4)
             end
-            if solo then
-                love.graphics.setColor(0.62 * pulse, 0.45 * pulse, 1 * pulse, 0.95)
-            else
-                love.graphics.setColor(0.9 * pulse, 0.35 * pulse, 0.4 * pulse, 0.9)
-            end
+            love.graphics.setColor(0.62 * pulse, 0.45 * pulse, 1 * pulse, 0.95)
         else
             love.graphics.setColor(0.2, 0.2, 0.25, 0.6)
         end
@@ -2975,7 +2984,7 @@ function ui.drawLeaderHPBar(mx, my)
                 local t = love.timer.getTime()
                 local pulse = 1
                 if idx > leader.health - lostHealth then
-                    pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 1.5 + j * 0.8)
+                    pulse = 0.8 + 0.2 * math.sin(t * 4)
                 end
                 love.graphics.setColor(0.9 * pulse, 0.1 * pulse, 0.2 * pulse, 0.9)
                 love.graphics.rectangle("fill", scx, cy, subCellW, cellH, 2)

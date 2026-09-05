@@ -2,7 +2,7 @@ local menu = {}
 local shop = require("ui.shop")
 local commanders = require("system.commanders")
 local fonts = require("util.fonts")
-local solo_mode = require("system.solo_mode")
+local soloHeroes = require("entity.environment")
 
 local function loadMapList()
     local items = love.filesystem.getDirectoryItems("maps")
@@ -81,11 +81,11 @@ local function computeLayout(w, h)
     -- Heroes (solo mode)
     l.heroLabelY = y
     y = y + 24
-    local heroCount = #solo_mode.getHeroes()
+    local heroCount = #soloHeroes.getSoloHeroes()
     local heroCardW = math.floor((contentW - (heroCount - 1) * 6) / heroCount)
     local heroCardH = 68
     l.heroCards = {}
-    for i, hero in ipairs(solo_mode.getHeroes()) do
+    for i, hero in ipairs(soloHeroes.getSoloHeroes()) do
         l.heroCards[i] = {
             x = cx + (i - 1) * (heroCardW + 6),
             y = y,
@@ -216,7 +216,7 @@ function menu.draw()
     love.graphics.printf("Hero (solo: 2 atk + 2 move per turn)", l.cx, l.heroLabelY, l.contentW, "center")
 
     -- Hero cards
-    local heroes = solo_mode.getHeroes()
+    local heroes = soloHeroes.getSoloHeroes()
     for i, hero in ipairs(heroes) do
         local card = l.heroCards[i]
         local hover = mx >= card.x and mx <= card.x + card.w and my >= card.y and my <= card.y + card.h

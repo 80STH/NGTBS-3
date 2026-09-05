@@ -314,7 +314,7 @@ function restartGame(mapPath)
     heroRevivePending = false
     heroDeathPos = nil
     if soloMode and selectedSoloHero then
-        hero = require("system.solo_mode").createHero(selectedSoloHero, -1, -1)
+        hero = environment.createSoloHero(selectedSoloHero, -1, -1)
         unplacedAllies = { hero }
     else
         unplacedAllies = deployableAllies or {}

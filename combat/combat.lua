@@ -2080,8 +2080,97 @@ function combat.FireStompAttack:getAffectedCells(attacker, targetQ, targetR, hex
 end
 
 -- ============================================================
--- CLEAVE: melee, 1 damage to three targets in front
+-- WIDE STRIKE (Blade): cleave of three cells in front. Normally it
+-- deals 1 damage to every target there; with "Gentle Touch" active it
+-- instead shoves all three away from the hero — one shared forward
+-- direction — dealing no direct damage.
 -- ============================================================
+combat.WideStrikeAttack = setmetatable({}, combat.Attack)
+combat.WideStrikeAttack.__index = combat.WideStrikeAttack
+
+function combat.WideStrikeAttack.new()
+    local self = combat.Attack.new("Wide Strike", "Cleave, 1 damage to three targets in front", 1, 1, {})
+    return setmetatable(self, combat.WideStrikeAttack)
+end
+
+function combat.WideStrikeAttack:forwardCells(attacker, targetQ, targetR, hex)
+    -- Central target + two side cells, like Cleave / Fire Stomp.
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if not stepX then return {} end
+    local cells = { {q = targetQ, r = targetR, stepX = stepX, stepY = stepY, stepZ = stepZ} }
+    local sx1, sy1, sz1 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+    local sx2, sy2, sz2 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
+    local s1Q, s1R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx1, sy1, sz1)
+    local s2Q, s2R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx2, sy2, sz2)
+    table.insert(cells, {q = s1Q, r = s1R, stepX = stepX, stepY = stepY, stepZ = stepZ})
+    table.insert(cells, {q = s2Q, r = s2R, stepX = stepX, stepY = stepY, stepZ = stepZ})
+    return cells
+end
+
+function combat.WideStrikeAttack:liveTargetAt(q, r, attacker, entities)
+    for _, e in ipairs(entities) do
+        if e ~= attacker and e ~= self and e.q == q and e.r == r and e.health > 0 then
+            return e
+        end
+    end
+    return nil
+end
+
+function combat.WideStrikeAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
+    if distance ~= 1 then return false, "Target must be adjacent!" end
+
+    local cells = self:forwardCells(attacker, targetQ, targetR, hex)
+    if #cells == 0 then return false, "Not on a straight line" end
+
+    attacker.hasActedThisTurn = true
+    combat.withDeferredDeaths(function()
+        for _, cell in ipairs(cells) do
+            if hex:isActiveHex(cell.q, cell.r) then
+                local target = self:liveTargetAt(cell.q, cell.r, attacker, entities)
+                if target then
+                    if attacker.gentleTouch then
+                        -- Gentle: push every hit unit by the same forward step.
+                        local pushQ, pushR = hex_utils.applyCubeStep(cell.q, cell.r, cell.stepX, cell.stepY, cell.stepZ)
+                        if hex:isActiveHex(pushQ, pushR) then
+                            self:pushTargetInDirection(target, cell.q, cell.r, cell.stepX, cell.stepY, cell.stepZ,
+                                hex, entities, sounds, function()
+                                    local ox, oy = getDrawCoords(cell.q, cell.r)
+                                    sounds.play("push")
+                                end)
+                        end
+                    else
+                        self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
+                    end
+                end
+            end
+        end
+    end)
+    return true
+end
+
+function combat.WideStrikeAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) == 1 then
+        return {q = targetQ, r = targetR}
+    end
+    return nil
+end
+
+function combat.WideStrikeAttack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
+    local cells = { {q = targetQ, r = targetR} }
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local sx1, sy1, sz1 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+        local sx2, sy2, sz2 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
+        local s1Q, s1R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx1, sy1, sz1)
+        local s2Q, s2R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx2, sy2, sz2)
+        table.insert(cells, {q = s1Q, r = s1R})
+        table.insert(cells, {q = s2Q, r = s2R})
+    end
+    return cells
+end
+
+
 combat.CleaveAttack = setmetatable({}, combat.Attack)
 combat.CleaveAttack.__index = combat.CleaveAttack
 

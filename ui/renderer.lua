@@ -65,7 +65,7 @@ function renderer.draw(state)
             if pv then
                 local function markFallCell(c, primary)
                     local key = c.q .. "," .. c.r
-                    local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 6)
+                    local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
                     if primary then
                         cellOverlays[key] = { fill = {0.9, 0.15, 0.1, 0.25 + 0.2 * pulse}, line = {1, 0.3, 0.15, 0.7 + 0.3 * pulse} }
                     else
@@ -91,7 +91,7 @@ function renderer.draw(state)
         if stepX then
             local rx, ry, rz = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
             local rq, rr = hex_utils.applyCubeStep(state.selectedActor.q, state.selectedActor.r, rx, ry, rz)
-            local pulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 5)
+            local pulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 4)
             cellOverlays[t.q .. "," .. t.r] = { fill = {1, 0.75, 0.2, 0.2 + 0.15 * pulse}, line = {1, 0.8, 0.3, 0.9} }
             if hex:isActiveHex(rq, rr) then
                 cellOverlays[rq .. "," .. rr] = { fill = {1, 0.75, 0.2, 0.2 + 0.15 * pulse}, line = {1, 0.8, 0.3, 0.9} }
@@ -179,7 +179,7 @@ function renderer.draw(state)
             end
             local baseA = fillA
             if threatCount <= 2 then
-                local pulse = 0.7 + 0.3 * math.sin(t * (5 + threatCount * 3))
+                local pulse = 0.7 + 0.3 * math.sin(t * 4)
                 fillA = fillA * pulse
             end
             info.draw = function(vertices, ox, oy)
@@ -226,7 +226,7 @@ function renderer.draw(state)
             local pulse = 0.6 + 0.4 * math.sin(t * 4)
             cellOverlays[key] = {fill = {0.2, 0.7, 1, 0.25 * pulse}, line = {0.2, 0.7, 1, 0.8 * pulse}}
         elseif info.drownDest then
-            local pulse = 0.5 + 0.5 * math.sin(t * 6)
+            local pulse = 0.5 + 0.5 * math.sin(t * 4)
             cellOverlays[key] = {fill = {0.1, 0.35, 0.85, 0.25 + 0.2 * pulse}, line = {0.2, 0.5, 1, 0.6 + 0.3 * pulse}}
         elseif info.windTorrentDest then
             cellOverlays[key] = {fill = {0.3, 0.6, 1, 0.4}, line = {0.3, 0.6, 1, 0.8}}
@@ -404,11 +404,6 @@ function renderer.draw(state)
         end
     end
     drawAllEntities(state)
-    for _, entity in ipairs(state.entities) do
-        if (entity:isCharacter() and not entity.isPlayable or entity.isTrainAttack) and entity.hasPreparedAttack and entity.health > 0 then
-            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
-        end
-    end
     ui.drawPreviewIcons(hex, previewCollisionIcons)
     ui.drawPreviewPushArrows(previewPushArrows)
     visual.draw()
@@ -426,6 +421,14 @@ function renderer.draw(state)
                     ui.drawPathPreview(hex, sel, hex.hoverQ, hex.hoverR, state.entities, state.terrainMap)
                 end
             end
+        end
+    end
+
+    -- Enemy prepared-attack previews draw ABOVE the green move-range fill so
+    -- their direction/overlay stays readable over cells the hero can reach.
+    for _, entity in ipairs(state.entities) do
+        if (entity:isCharacter() and not entity.isPlayable or entity.isTrainAttack) and entity.hasPreparedAttack and entity.health > 0 then
+            ui.drawPreparedAttackDirection(hex, entity, love.timer.getTime(), state.entities)
         end
     end
 
@@ -882,7 +885,7 @@ function drawHealthPips(entity, x, y, state)
         if filled then
             local pulse = 1
             if i > entity.health - lost then
-                pulse = 0.55 + 0.45 * math.sin(t * 8)
+                pulse = 0.55 + 0.45 * math.sin(t * 4)
             end
             love.graphics.setColor(r * pulse, g * pulse, b * pulse, 0.95)
             love.graphics.rectangle("fill", px + (i - 1) * (pipW + gap), py, pipW, pipH)
