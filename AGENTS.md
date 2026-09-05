@@ -12,7 +12,7 @@ Love2D 11.5 installed. The game window will open — close it manually when done
 ## Architecture map (read this first — saves exploration tokens)
 
 - **Solo-only game**: one playable hero (`hero` global, `selectedSoloHero` = hero def index in
-  `system/solo_mode.lua`; `solo_mode.createHero(def, q, r)`). Squad code was fully deleted.
+  `entity/environment.lua`; `environment.createSoloHero(def, q, r)`). Squad code was fully deleted.
 - **Deploy**: `gamePhase == "deploy"` → player places hero → `confirmDeploy()` (core/game.lua)
   applies landing effects via `system/deploy_effects.lua` (`entity.deployEffect` registry).
 - **Entity types** (entity/entity.lua): CHARACTER / OBSTACLE / BUILDING / EDGE (map borders,

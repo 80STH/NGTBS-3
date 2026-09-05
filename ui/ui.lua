@@ -948,7 +948,13 @@ end
             -- Damage to first target + possible knockback damage
             if firstTarget and not elevBlock and not elevFall then
                 local targetX, targetY = getDrawCoords(firstTarget.q, firstTarget.r)
-                local totalDamage = attack.damage or 1
+                -- "Gentle Touch" (Blade): the dash itself deals no direct damage,
+                -- so the preview must not count it either (only knockback/edge can).
+                local baseDamage = attack.damage or 1
+                if attacker.gentleTouch and attack.name == "Dash" then
+                    baseDamage = 0
+                end
+                local totalDamage = baseDamage
                 local pushQ, pushR, isEdge
                 if targetHex then
                     pushQ, pushR = hex_utils.applyCubeStep(targetHex.q, targetHex.r, stepX, stepY, stepZ)
@@ -1794,7 +1800,7 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
         end
         local dotRadius = hex.radius * 0.12
         local spacing = hex.radius * 0.4
-        -- Arc over elevation edges: dots follow low-ground -> curve -> high-ground
+        -- Path rises above elevation edges (arc over cliffs); plain otherwise.
         local path = getElevationCurve(enemy.q, enemy.r, targetQ, targetR, fromX, fromY, toX, toY)
         if not path then
             path = { fromX, fromY, toX, toY }
@@ -1807,10 +1813,12 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
             segLens[#segLens + 1] = l
             totalLen = totalLen + l
         end
-        local count = math.max(1, math.floor(totalLen / spacing))
-        local dotR, dotG, dotB = arcR, arcG, arcB
-        for i = 0, count do
-            local t = i / count * totalLen
+        if totalLen <= 0 then return end
+        -- Place dots at a CONSTANT pixel stride along the path. Splitting the
+        -- line into floor(totalLen/spacing) equal slices makes the real gap
+        -- totalLen/count drift with distance; a constant walk keeps the interval
+        -- identical on every straight line regardless of target distance.
+        local function sampleAt(t)
             local seg, acc = 1, 0
             for s = 1, #segLens do
                 if t <= acc + segLens[s] or s == #segLens then seg = s break end
@@ -1819,10 +1827,22 @@ function ui.drawPreparedAttackDirection(hex, enemy, time, entities)
             local k = segLens[seg] > 0 and (t - acc) / segLens[seg] or 0
             local x = path[seg * 2 - 1] + (path[seg * 2 + 1] - path[seg * 2 - 1]) * k
             local y = path[seg * 2] + (path[seg * 2 + 2] - path[seg * 2]) * k
+            return x, y
+        end
+        -- Constant pixel stride from the attacker: dots land at k * spacing
+        -- while that stays short of the end. We never snap the last dot onto the
+        -- target cell (that would leave two dots almost on top of each other when
+        -- the leftover tail is much shorter than the stride). The target cell is
+        -- already marked by its own overlay, so this just avoids the double-mark.
+        local dotR, dotG, dotB = arcR, arcG, arcB
+        local d = 0
+        while d < totalLen - 1e-6 do
+            local x, y = sampleAt(d)
             love.graphics.setColor(0, 0, 0, alpha * 0.35)
             love.graphics.circle("fill", x + 2, y + 2, dotRadius)
             love.graphics.setColor(dotR, dotG, dotB, alpha)
             love.graphics.circle("fill", x, y, dotRadius)
+            d = d + spacing
         end
         return
     end
