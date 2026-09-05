@@ -38,6 +38,7 @@ local nameToSpriteKey = {
     MountainRange = "obstacle_mountain_range",
     ReefRange = "obstacle_reef_range",
     SlopeRange = "obstacle_slope_range",
+    MapBorder = "obstacle_mountain_range",
     StonePillar = "obstacle_stone_pillar",
     -- Units
     Warrior = "unit_warrior",
@@ -308,7 +309,15 @@ local gidToEntity = {
     [96] = { type = "character", name = "Colossus",  isPlayable = true,  maxHealth = 2, moveRange = 3, attacks = "colossus" },
     [97] = { type = "character", name = "Keeper",   isPlayable = true,  maxHealth = 1, moveRange = 2, attacks = "keeper" },
     [98] = { type = "character", name = "Provoker",  isPlayable = true,  maxHealth = 1, moveRange = 2, attacks = "provoker" },
-    [99] = { type = "obstacle",  name = "StonePillar", health = 1, direction = { dx = 1, dy = 0, dz = -1 } },
+    [99] = { type = "obstacle",  name = "StonePillar", health = 1, noSidedPush = true, direction = { dx = 1, dy = 0, dz = -1 } },
+}
+
+-- One border object per map (kind varies between maps). The border covers the
+-- whole map perimeter; its kind selects sprite + collision behaviour.
+environment.BORDER_KINDS = {
+    mountain = { sprite = "obstacle_mountain_range" },
+    reef     = { sprite = "obstacle_reef_range",    lethalCollision = true },
+    slope    = { sprite = "obstacle_slope_range",   noCollisionDamage = true },
 }
 
 environment.enemySpriteCache = {}
@@ -692,6 +701,7 @@ function environment.loadNativeMap(data)
                             if def.maxDamagePerHit then entity.maxDamagePerHit = def.maxDamagePerHit end
                             if def.indestructible then entity.indestructible = true end
                             if def.noCollisionDamage then entity.noCollisionDamage = true end
+                            if def.noSidedPush then entity.noSidedPush = true end
                             if def.isHazard then entity.isHazard = true end
                             if def.lethalCollision then entity.lethalCollision = true end
                             if entityDir then
@@ -756,6 +766,40 @@ function environment.loadNativeMap(data)
             end
         end
     end
+
+    -- === Map border: one object covering the whole perimeter ===
+    -- Kind varies per map (data.border), selects sprite + collision behaviour.
+    -- data.borderGaps lets a map punch holes in the border (e.g. train tunnels).
+    local borderKind = data.border or "mountain"
+    local borderSpec = environment.BORDER_KINDS[borderKind] or environment.BORDER_KINDS.mountain
+    local borderGaps = {}
+    if data.borderGaps then
+        for _, c in ipairs(data.borderGaps) do
+            borderGaps[c[1] .. "," .. c[2]] = true
+        end
+    end
+    local borderCells = {}
+    for r = 0, tempHex.gridHeight - 1 do
+        for q = 0, tempHex.gridWidth - 1 do
+            if tempHex:isActiveHex(q, r) and not borderGaps[q .. "," .. r] then
+                for _, nb in ipairs(tempHex:getNeighbors(q, r)) do
+                    if not tempHex:isActiveHex(nb.q, nb.r) then
+                        table.insert(borderCells, {q = q, r = r})
+                        break
+                    end
+                end
+            end
+        end
+    end
+    local borderEntity = Entity.new("MapBorder", Entity.TYPES.EDGE, borderCells[1] and borderCells[1].q or 0,
+        borderCells[1] and borderCells[1].r or 0, 1, false, 0, nil, nil, {})
+    borderEntity.cells = borderCells
+    if borderSpec.lethalCollision then borderEntity.lethalCollision = true end
+    if borderSpec.noCollisionDamage then borderEntity.noCollisionDamage = true end
+    local borderSprite = loadSpritePNG(borderSpec.sprite)
+    if borderSprite then borderEntity.sprite = borderSprite end
+    table.insert(entities, borderEntity)
+    log.debugf("env", "Created MapBorder (%s) with %d cells", borderKind, #borderCells)
 
     -- Separate playable characters for deployment phase
     local deployableAllies = {}
@@ -970,9 +1014,11 @@ end
 function environment.getAvailableEntityDefs()
     local list = {}
     for name, def in pairs(nameToEntityDef) do
-        local entry = { id = name, name = name, type = def.type, health = def.health }
-        if def.direction then entry.hasDirection = true end
-        table.insert(list, entry)
+        if def.type ~= "edge" then
+            local entry = { id = name, name = name, type = def.type, health = def.health }
+            if def.direction then entry.hasDirection = true end
+            table.insert(list, entry)
+        end
     end
     table.sort(list, function(a, b) return a.name < b.name end)
     return list

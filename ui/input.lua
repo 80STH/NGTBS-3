@@ -28,7 +28,15 @@ function input.mousepressed(x, y, button)
     local tq, tr = hex:pixelToHex(x, y)
     if not hex or not hex:isValidHex(tq, tr) then return end
     if not hex:isActiveHex(tq, tr) then return end
-    if tq > 3 then return end
+    -- Normal deploy lets allies only land on the left; a revived hero may come
+    -- back near where it fell (radius of 2 around the death cell).
+    if heroRevivePending then
+        if heroDeathPos then
+            if hex:getDistance(tq, tr, heroDeathPos.q, heroDeathPos.r) > 2 then return end
+        end
+    else
+        if tq > 3 then return end
+    end
 
     -- Check if deploying entity has deployAnywhere (Warrior lvl2)
     local deployingEntity = nil
@@ -40,7 +48,10 @@ function input.mousepressed(x, y, button)
     local canDeployAnywhere = deployingEntity and deployingEntity.deployAnywhere
 
     if not canDeployAnywhere then
-        if terrainMap and terrainMap[tq] and terrainMap[tq][tr] == "water" then return end
+        if terrainMap and terrainMap[tq] and terrainMap[tq][tr] then
+            local t = terrainMap[tq][tr]
+            if t == "water" or t == "emptiness" then return end
+        end
         local occupant = getEntityAtHex(tq, tr)
         if occupant and not occupant.isPlayable then return end
     end
@@ -102,8 +113,8 @@ end
 
     if global_abilities.handleClick(x, y, state) then return end
 
-    -- Abilities toggle (right column, top)
-    local ar = ui.getRightBtnRect(3)
+    -- Abilities toggle (bottom-left, above the square ability buttons)
+    local ar = ui.getAbilitiesToggleRect()
     if x >= ar.x and x <= ar.x + ar.w and y >= ar.y and y <= ar.y + ar.h then
         global_abilities.showPanel = not global_abilities.showPanel
         if global_abilities.showPanel then
@@ -119,8 +130,9 @@ end
 
     -- Mechanism button (right column, topmost): highground + teleporters + conveyors
     if #retractableCells > 0 or next(conveyorCells or {}) ~= nil
-        or require("system.teleporters").hasActivePair() then
-        local hr = ui.getRightBtnRect(4)
+        or require("system.teleporters").hasActivePair()
+        or (#mechanismTrapCells or 0) > 0 then
+        local hr = ui.getRightBtnRect(3)
         if x >= hr.x and x <= hr.x + hr.w and y >= hr.y and y <= hr.y + hr.h then
             if turnState.phase == "player" then
                 if not activateMechanisms() then sounds.play("cant") end

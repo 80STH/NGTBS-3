@@ -70,9 +70,10 @@ function ui.isCellReachable(actor, targetQ, targetR, entities, terrainMap, hex)
         return true
     end
     
-    -- Water is impassable (except for hovering)
-    if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
-        if not (actor and actor.hovering) then
+    -- Pits (water / void-emptiness) are impassable except for hovering
+    if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] then
+        local t = terrainMap[targetQ][targetR]
+        if (t == "water" or t == "emptiness") and not (actor and actor.hovering) then
             return false
         end
     end
@@ -921,11 +922,23 @@ end
                 love.graphics.setColor(1, 0.7, 0.1, alpha)
                 love.graphics.setLineWidth(2)
                 love.graphics.circle("line", toX, toY, hex.radius * 0.35)
-                -- Down arrow
+                -- Direction chevron at the fall cell: down when the move drops
+                -- along the screen (top -> bottom), mirrored up when it rises
+                -- (bottom -> top). Same drawing logic, applied both ways.
+                local down = (toY - fromY) >= 0
+                local sh = hex.radius * 0.2
                 love.graphics.setLineWidth(2)
-                love.graphics.line(toX, toY - hex.radius * 0.2, toX, toY + hex.radius * 0.2)
-                love.graphics.line(toX - hex.radius * 0.12, toY + hex.radius * 0.08, toX, toY + hex.radius * 0.2)
-                love.graphics.line(toX + hex.radius * 0.12, toY + hex.radius * 0.08, toX, toY + hex.radius * 0.2)
+                if down then
+                    -- downward arrow, tip at bottom
+                    love.graphics.line(toX, toY - sh, toX, toY + sh)
+                    love.graphics.line(toX - hex.radius * 0.12, toY + sh * 0.4, toX, toY + sh)
+                    love.graphics.line(toX + hex.radius * 0.12, toY + sh * 0.4, toX, toY + sh)
+                else
+                    -- upward arrow, tip at top
+                    love.graphics.line(toX, toY + sh, toX, toY - sh)
+                    love.graphics.line(toX - hex.radius * 0.12, toY - sh * 0.4, toX, toY - sh)
+                    love.graphics.line(toX + hex.radius * 0.12, toY - sh * 0.4, toX, toY - sh)
+                end
             else
                 love.graphics.setColor(1, 1, 0.4, alpha)
                 love.graphics.setLineWidth(2)
@@ -1597,8 +1610,10 @@ function ui.drawMovementRange(hex, actor, entities, terrainMap)
     for _, cell in ipairs(ui._moveRangeCache) do
         set[cell.q .. "," .. cell.r] = true
         local x, y = getDrawCoords(cell.q, cell.r)
-        local vertices = hex:drawInsetHexagon(x, y, hex.radius, 1.0)
-        love.graphics.setColor(0.2, 0.8, 0.2, 0.2)
+        local vertices = hex:drawHexagon(x, y, hex.radius)
+        -- Solid fill up to the cell borders; the black grid between cells in the
+        -- region stays visible. Only the outer region border is drawn green.
+        love.graphics.setColor(0.2, 0.8, 0.2, 0.3)
         love.graphics.polygon("fill", vertices)
     end
     love.graphics.setLineWidth(2)
@@ -1969,14 +1984,14 @@ function ui.drawEnemyMovementRange(hex, enemy, entities, terrainMap)
             if hex:isActiveHex(q, r) and ui.isCellReachableForEnemy(enemy, q, r, entities, terrainMap, hex) then
                 set[q .. "," .. r] = true
                 local x, y = getDrawCoords(q, r)
-                local vertices = hex:drawInsetHexagon(x, y, hex.radius, 1.0)
-                love.graphics.setColor(0.8, 0.2, 0.2, 0.2)
+                local vertices = hex:drawHexagon(x, y, hex.radius)
+                love.graphics.setColor(0.8, 0.2, 0.2, 0.3)
                 love.graphics.polygon("fill", vertices)
             end
         end
     end
     love.graphics.setLineWidth(2)
-    love.graphics.setColor(0.8, 0.2, 0.2, 1)
+    love.graphics.setColor(0.9, 0.3, 0.3, 1)
     ui.drawSetOutline(hex, set)
     love.graphics.setLineWidth(1)
 end
@@ -1992,8 +2007,9 @@ function ui.isCellReachableForEnemy(enemy, targetQ, targetR, entities, terrainMa
         return true
     end
     
-    if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
-        if not (enemy and enemy.hovering) then
+    if terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] then
+        local t = terrainMap[targetQ][targetR]
+        if (t == "water" or t == "emptiness") and not (enemy and enemy.hovering) then
             return false
         end
     end
@@ -2677,14 +2693,28 @@ function ui.drawChaosBar(mx, my)
     end
 
     local cellW = 30
-    local cellH = 14
+    local cellH = 8   -- squatter so bars of cells fit the top panel
     local gap = 3
-    local pad = 4
-    local totalW = (cellW + gap) * (barMax + shieldMax) + pad * 2
+    local pad = 3
+    local barGap = 4  -- vertical gap between the HP row and the Attack/Move row
+    -- Health and shields are drawn as two separate visual groups so spent shield
+    -- sockets read clearly apart from health.
+    local shGapPx = 10
+    local hpW = (cellW + gap) * barMax - gap + pad * 2
+    local shW = (cellW + gap) * shieldMax - gap + pad * 2
+    local apMax, mpMax = 2, 2
+    local apVal, mpVal = 0, 0
+    if solo and hero then
+        apVal = hero.attacksLeft or 0
+        mpVal = hero.movesLeft or 0
+    end
+    -- No attacks left means the actions are done, so Move is spent too.
+    if apVal <= 0 then mpVal = 0 end
 
     if not smallFont then smallFont = fonts.get(12) end
 
-    local panelH = 36
+    -- Top panel: HP row, then a shared row with Attack and Move bars side by side.
+    local panelH = 6 + 2 * (cellH + pad * 2) + barGap + 6
     love.graphics.setColor(0.06, 0.06, 0.12, 0.9)
     love.graphics.rectangle("fill", 0, 0, logicalW, panelH)
     love.graphics.setColor(0.3, 0.2, 0.4, 0.4)
@@ -2702,19 +2732,23 @@ function ui.drawChaosBar(mx, my)
     love.graphics.print(decayText, math.floor((logicalW - decayW) / 2), math.floor((panelH - 14) / 2))
 
     local barX = 10
-    local barY = math.floor((panelH - (cellH + pad * 2)) / 2)
+    local barY = 6   -- top of the HP bar
+    local shX = barX + hpW + shGapPx
+    local totalEnd = shX + shW   -- right edge of the whole gauges (tooltip hover)
 
-    love.graphics.setColor(0.08, 0.08, 0.15, 0.85)
-    love.graphics.rectangle("fill", barX, barY, totalW, cellH + pad * 2, 4)
-    love.graphics.setColor(0.3, 0.2, 0.4, 0.6)
-    love.graphics.rectangle("line", barX, barY, totalW, cellH + pad * 2, 4)
+    -- Health group (solid green cells)
+    if barMax > 0 then
+        love.graphics.setColor(0.08, 0.07, 0.12, 0.9)
+        love.graphics.rectangle("fill", barX, barY, hpW, cellH + pad * 2, 4)
+        love.graphics.setColor(0.35, 0.28, 0.4, 0.7)
+        love.graphics.rectangle("line", barX, barY, hpW, cellH + pad * 2, 4)
+    end
 
     for i = 1, barMax do
         local cx = barX + pad + (i - 1) * (cellW + gap)
         local cy = barY + pad
         local filled = i <= barVal
         if filled then
-            -- Static bar; only the cells that would be lost pulse
             local t = love.timer.getTime()
             local pulse = 1
             if i > barVal - lostHealth then
@@ -2733,9 +2767,16 @@ function ui.drawChaosBar(mx, my)
         love.graphics.rectangle("line", cx, cy, cellW, cellH, 2)
     end
 
-    -- Shield cells (solo): blue, right after the health cells
+    -- Shield group (solo): separate blue track. Spent shields stay as visible
+    -- empty blue sockets so the depletion reads clearly.
+    if shieldMax > 0 then
+        love.graphics.setColor(0.05, 0.09, 0.2, 0.95)
+        love.graphics.rectangle("fill", shX, barY, shW, cellH + pad * 2, 4)
+        love.graphics.setColor(0.3, 0.45, 0.75, 0.8)
+        love.graphics.rectangle("line", shX, barY, shW, cellH + pad * 2, 4)
+    end
     for i = 1, shieldMax do
-        local cx = barX + pad + (barMax + i - 1) * (cellW + gap)
+        local cx = shX + pad + (i - 1) * (cellW + gap)
         local cy = barY + pad
         local filled = i <= shieldVal
         if filled then
@@ -2744,20 +2785,68 @@ function ui.drawChaosBar(mx, my)
             if i > shieldVal - lostShields then
                 pulse = 0.8 + 0.2 * math.sin(t * 3 + i * 0.5)
             end
-            love.graphics.setColor(0.3 * pulse, 0.55 * pulse, 1 * pulse, 0.9)
+            love.graphics.setColor(0.3 * pulse, 0.6 * pulse, 1 * pulse, 0.95)
+            love.graphics.rectangle("fill", cx, cy, cellW, cellH, 2)
         else
-            love.graphics.setColor(0.2, 0.2, 0.25, 0.6)
+            -- empty socket: translucent fill + bright blue rim so spent is obvious
+            love.graphics.setColor(0.12, 0.16, 0.3, 0.75)
+            love.graphics.rectangle("fill", cx, cy, cellW, cellH, 2)
         end
-        love.graphics.rectangle("fill", cx, cy, cellW, cellH, 2)
-        love.graphics.setColor(0.35, 0.45, 0.65, 0.5)
+        love.graphics.setColor(0.45, 0.62, 0.95, 0.9)
         love.graphics.rectangle("line", cx, cy, cellW, cellH, 2)
     end
 
     if surplus > 0 then
-        local surplusX = barX + totalW + 8
+        local surplusX = totalEnd + 8
         love.graphics.setColor(0.6, 0.9, 0.6, 0.9)
         love.graphics.setFont(fonts.get(10))
         love.graphics.print("+" .. surplus, surplusX, barY + 6)
+    end
+
+    -- Unified action row under HP: each of N cells shows an MP *shell* (outer
+    -- ring) wrapping an AP *core* (inner bubble), read left-to-right.
+    -- Shells run as moves are spent, cores as attacks are spent.
+    local actionMax = math.max(apMax or 0, mpMax or 0)
+    if actionMax < 1 then actionMax = 1 end
+    local actY = barY + (cellH + pad * 2) + barGap
+    -- Each combined cell spans the width of two HP cells (like a 2-cell pool).
+    local shellW = cellW * 2 + gap
+    local inset = math.max(3, shellW * 0.12)
+    local insetV = math.max(2, cellH * 0.25)
+    local coreR = math.max(3, math.min(6, shellW * 0.10))
+
+    local shellOnAt = function(i) return i <= (mpVal or 0) end
+    local coreOnAt = function(i) return i <= (apVal or 0) end
+    -- Outer container across all cells
+    local actW = (shellW + gap) * actionMax + pad * 2
+    love.graphics.setColor(0.08, 0.08, 0.15, 0.85)
+    love.graphics.rectangle("fill", barX, actY, actW, cellH + pad * 2, 4)
+    love.graphics.setColor(0.3, 0.28, 0.36, 0.7)
+    love.graphics.rectangle("line", barX, actY, actW, cellH + pad * 2, 4)
+    for i = 1, actionMax do
+        local cx = barX + pad + (i - 1) * (shellW + gap)
+        local cy = actY + pad
+        -- MP shell = tall ring (hollow reservoir) around the AP core
+        if shellOnAt(i) then
+            love.graphics.setColor(0.3, 0.55, 0.95, 0.92)
+            love.graphics.rectangle("fill", cx, cy, shellW, cellH)
+            love.graphics.setColor(0.09, 0.11, 0.2, 0.95)
+            love.graphics.rectangle("fill", cx + inset, cy + insetV, shellW - inset * 2, cellH - insetV * 2)
+        else
+            love.graphics.setColor(0.2, 0.2, 0.26, 0.55)
+            love.graphics.rectangle("fill", cx, cy, shellW, cellH)
+        end
+        -- AP core = inner filled bubble
+        local ccx = cx + shellW / 2
+        local ccy = cy + cellH / 2
+        local coreOn = coreOnAt(i)
+        love.graphics.setColor(coreOn and 0.96 or 0.24, coreOn and 0.58 or 0.2,
+            coreOn and 0.18 or 0.2, coreOn and 0.95 or 0.55)
+        love.graphics.circle("fill", ccx, ccy, coreR)
+        if coreOn then
+            love.graphics.setColor(1, 0.85, 0.5, 0.8)
+            love.graphics.circle("line", ccx, ccy, coreR)
+        end
     end
 
     local pb = ui.getPauseBtnRect()
@@ -2815,7 +2904,7 @@ function ui.drawChaosBar(mx, my)
     love.graphics.setFont(fonts.get(16))
     love.graphics.printf("II", pb.x, pbY + pb.h / 2 - 8, pb.w, "center")
 
-    if mx >= barX and mx <= barX + totalW and my >= barY and my <= barY + cellH + pad * 2 then
+    if mx >= barX and mx <= totalEnd and my >= barY and my <= barY + cellH + pad * 2 then
         local ttW = 220
         local ttH = solo and 185 or 110
         local ttx = barX

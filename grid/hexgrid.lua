@@ -450,7 +450,12 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y, elevationMap)
      local extrude = 36
      local waterExtrude = 18
      local highGroundExtrude = 72
-     local isLowTerrain = terrainType == "water"
+     -- Void/emptiness renders as a sunken pit: the "top face" (the visible
+     -- well floor) sits well below the surrounding ground, the interior
+     -- slopes is drawn as a radial gradient so the hole reads as volumetric.
+     local voidPitDrop = 30
+     local isLowTerrain = terrainType == "water" or terrainType == "emptiness"
+     local isVoidPit = terrainType == "emptiness"
      local isHighGround = terrainType == "stone"
      if elevationMap then
          local elv = elevationMap[q] and elevationMap[q][r]
@@ -458,11 +463,13 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y, elevationMap)
              isHighGround = true
          end
      end
-     local actualExtrude = isLowTerrain and waterExtrude or (isHighGround and highGroundExtrude or extrude)
+     local actualExtrude = isLowTerrain
+         and (isVoidPit and (extrude - voidPitDrop) or waterExtrude)
+         or (isHighGround and highGroundExtrude or extrude)
 
      local yOffset = 0
      if isLowTerrain then
-         yOffset = extrude - waterExtrude
+         yOffset = isVoidPit and voidPitDrop or (extrude - waterExtrude)
      elseif isHighGround then
          yOffset = extrude - highGroundExtrude + 6
      end
@@ -579,6 +586,24 @@ function HexGrid:drawTerrainHex(q, r, terrainType, x, y, elevationMap)
 		love.graphics.draw(stoneMesh, x, y + yOffset)
 		love.graphics.setColor(1, 1, 1, 0.15)
 		love.graphics.polygon("fill", topVertices)
+	elseif terrainType == "emptiness" then
+		-- Sunken pit interior: concentric hex rings fading from a pale rim down
+		-- to a deep abyss at the centre reads as a volumetric hole in the ground.
+		local cx, cy = x, y + yOffset
+		local rings = { {0.55, 0.36, 0.45, 0.97}, {0.30, 0.18, 0.26, 0.82},
+			{0.16, 0.10, 0.15, 0.62}, {0.09, 0.06, 0.09, 0.40} }
+		-- base rim under everything so there are no see-through gaps
+		love.graphics.setColor(0.13, 0.11, 0.16, 1)
+		love.graphics.polygon("fill", self:drawInsetHexagon(cx, cy, radius, 1.0))
+		for i, rk in ipairs(rings) do
+			love.graphics.setColor(rk[1], rk[2], rk[3], 1)
+			love.graphics.polygon("fill", self:drawInsetHexagon(cx, cy, radius, rk[4]))
+		end
+		love.graphics.setColor(0.02, 0.01, 0.05, 1)
+		love.graphics.circle("fill", cx, cy, radius * 0.12)
+		-- restore full-size top hex into the shared vertex buffer for the
+		-- generic outline/shadow pass below (it reads the same buffer).
+		self:drawHexagon(cx, cy, radius)
 	else
 		love.graphics.setColor(topColor)
 		love.graphics.polygon("fill", topVertices)
@@ -706,6 +731,59 @@ function HexGrid:drawUpperTerrain(q, r, terrainType, x, y, yOffset)
 		love.graphics.setColor(0.72, 0.75, 0.8, 1)
 		for i = 0, 5 do
 			love.graphics.circle("fill", bv[i * 2 + 1], bv[i * 2 + 2], radius * 0.07)
+		end
+	elseif terrainType == "spikes" or terrainType == "burner" or terrainType == "oxidizer" then
+		-- button-activated hazard plates. Shared dark base with a per-type emblem.
+		local cy = y + yOffset
+		local plate = self:drawInsetHexagon(x, cy, radius * 0.8)
+		love.graphics.setColor(0.13, 0.13, 0.17, 0.9)
+		love.graphics.polygon("fill", plate)
+		if terrainType == "spikes" then
+			love.graphics.setColor(0.3, 0.32, 0.38, 0.9)
+			love.graphics.setLineWidth(1.5)
+			love.graphics.polygon("line", plate)
+			-- retracted / standby spikes: short flat studs in a ring
+			love.graphics.setColor(0.62, 0.64, 0.7, 0.95)
+			local bv = self:drawHexagon(x, cy, radius * 0.52)
+			for i = 0, 5 do
+				local px, py = bv[i * 2 + 1], bv[i * 2 + 2]
+				local cx, cyy = (x + px) / 2, (cy + py) / 2
+				love.graphics.line(cx, cyy, cx, cyy - radius * 0.12)
+				love.graphics.line(cx - radius * 0.06, cyy, cx, cyy - radius * 0.12)
+				love.graphics.line(cx + radius * 0.06, cyy, cx, cyy - radius * 0.12)
+			end
+			love.graphics.setLineWidth(1)
+			love.graphics.setColor(0.95, 0.95, 1, 1)
+			-- center spike cap
+			love.graphics.circle("fill", x, cy, radius * 0.06)
+		elseif terrainType == "burner" then
+			-- burner nozzle ring, breathes as if warm
+			local t = love.timer.getTime()
+			local glow = 0.5 + 0.35 * math.sin(t * 2.2)
+			local r = radius * 0.34
+			love.graphics.setColor(0.42, 0.3, 0.22, 0.95)
+			love.graphics.circle("fill", x, cy, r)
+			love.graphics.setColor(1, 0.55 + 0.3 * glow, 0.1 + 0.3 * glow, 0.95)
+			love.graphics.setLineWidth(2.5)
+			love.graphics.circle("line", x, cy, r)
+			love.graphics.setColor(1, 0.7 + 0.3 * glow, 0.2, 0.85)
+			love.graphics.circle("fill", x, cy, r * 0.45)
+			love.graphics.setLineWidth(1)
+		elseif terrainType == "oxidizer" then
+			-- green caustic vent, gently bubbling
+			local verts = self:drawInsetHexagon(x, cy, radius * 0.62)
+			love.graphics.setColor(0.18, 0.42, 0.2, 0.9)
+			love.graphics.polygon("fill", verts)
+			love.graphics.setColor(0.4, 0.85, 0.4, 0.9)
+			love.graphics.setLineWidth(2)
+			love.graphics.polygon("line", verts)
+			love.graphics.setColor(0.6, 1, 0.55, 0.9)
+			for i = 0, 5 do
+				love.graphics.circle("fill", verts[i * 2 + 1], verts[i * 2 + 2], radius * 0.05)
+			end
+			love.graphics.setLineWidth(1)
+			love.graphics.setColor(0.7, 1, 0.65, 1)
+			love.graphics.circle("fill", x, cy, radius * 0.12)
 		end
 	elseif terrainType == "mountain_rubble" then
 		for i = 0, 5 do

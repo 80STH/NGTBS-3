@@ -765,7 +765,7 @@ function drawHexGrid(state, cellOverlays)
         end
 
         -- Directional entities: edge color marking (green = safe, red = dangerous)
-        if cellEntity and cellEntity.direction then
+        if cellEntity and cellEntity.direction and not cellEntity.noSidedPush then
             local edgeVerts = hex:drawHexagon(cell.x, drawY + yOffset, hex.radius - 1)
             local edgeDirs = {
                 {dx = 0,  dy = 1,  dz = -1},  -- edge 0: SE
@@ -1054,12 +1054,81 @@ function drawAllEntities(state)
     end
 end
 
+-- Preview of the landing-damage an ally would deal if dropped at the given
+-- cell: returns a map enemy -> {totalDamage, willKill} for every non-playable
+-- character within `radius` of (q,r). Empty/dead excluded.
+local function computeDeployDamagePreview(ally, entities, hex, q, r)
+    local out = {}
+    local eff = ally and ally.deployEffect
+    if not eff or eff.type ~= "damage_nearby" then return out end
+    if not q or not r then return out end
+    local rad = eff.radius or 1
+    local dmg = eff.damage or 1
+    for _, e in ipairs(entities) do
+        if e ~= ally and e:isCharacter() and not e.isPlayable and e.health > 0 and not e.isDying
+            and e.q ~= nil and hex:getDistance(q, r, e.q, e.r) <= rad then
+            out[e] = { totalDamage = dmg, willKill = dmg >= e.health }
+        end
+    end
+    return out
+end
+renderer.computeDeployDamagePreview = computeDeployDamagePreview
+
 function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySelectedIdx)
     if not state or not state.hex then return end
     local hex = state.hex
     local hexRadius = hex.radius
 
     drawHexGrid(state, {})
+
+    -- Landing-damage hint: if the ally about to be placed damages enemies near
+    -- the hovered cell, mark those enemies so their health pips blink. Only for
+    -- cells the unit can actually be dropped on (empty + in the deployable zone).
+    state.previewDamaged = {}
+    local pendingLand = nil
+    local function inAllowedDeployZone(q, r)
+        if heroRevivePending then
+            if heroDeathPos then
+                return hex:getDistance(q, r, heroDeathPos.q, heroDeathPos.r) <= 2
+            end
+            return hex:isActiveHex(q, r)
+        end
+        -- normal deploy is limited to the left columns
+        return q >= 0 and q <= (state.config and state.config.DEPLOY_COLS or 3)
+    end
+    do
+        local function isLandable(q, r)
+            if not hex:isActiveHex(q, r) then return false end
+            if not inAllowedDeployZone(q, r) then return false end
+            local terr = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
+            if terr == "water" then return false end
+            for _, e in ipairs(state.entities) do
+                if (e.q == q and e.r == r) then return false end
+                if e.cells then
+                    for _, c in ipairs(e.cells) do
+                        if c.q == q and c.r == r then return false end
+                    end
+                end
+            end
+            for _, p in ipairs(placedAllies) do
+                if p.q == q and p.r == r then return false end
+            end
+            return true
+        end
+
+        local hq, hr = hex.hoverQ, hex.hoverR
+        local ally = nil
+        if #unplacedAllies > 0 then
+            ally = unplacedAllies[1]
+        elseif deploySelectedIdx and placedAllies[deploySelectedIdx] then
+            ally = placedAllies[deploySelectedIdx]
+        end
+        if ally and ally.deployEffect and ally.deployEffect.type == "damage_nearby"
+            and hq ~= nil and hr ~= nil and isLandable(hq, hr) then
+            state.previewDamaged = computeDeployDamagePreview(ally, state.entities, hex, hq, hr)
+            pendingLand = { q = hq, r = hr, radius = ally.deployEffect.radius or 1 }
+        end
+    end
 
     for _, entity in ipairs(state.entities) do
         drawEntity(entity, state)
@@ -1069,10 +1138,21 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
         drawEntity(ally, state)
     end
 
+    -- A revived hero comes back only within radius 2 of the cell it fell on.
+    local reviveRange = (heroRevivePending and heroDeathPos) and heroDeathPos or nil
+    local qLo, qHi = 0, 3
+    if reviveRange then qLo, qHi = 0, hex.gridWidth - 1 end
+    local function cellAllowed(q, r)
+        if reviveRange then
+            if hex:getDistance(q, r, reviveRange.q, reviveRange.r) > 2 then return false end
+        end
+        return true
+    end
+
     local deployCells = {}
-    for q = 0, 3 do
+    for q = qLo, qHi do
         for r = 0, hex.gridHeight - 1 do
-            if hex:isActiveHex(q, r) then
+            if hex:isActiveHex(q, r) and cellAllowed(q, r) then
                 local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
                 if terrain ~= "water" then
                     local occupied = false
@@ -1101,8 +1181,8 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
                         if not hasAlly then
                             deployCells[q .. "," .. r] = true
                             local x, y = getDrawCoords(q, r)
-                            local verts = hex:drawInsetHexagon(x, y, hexRadius, 0.92)
-                            love.graphics.setColor(0.2, 0.8, 0.2, 0.15)
+                            local verts = hex:drawHexagon(x, y, hexRadius)
+                            love.graphics.setColor(0.2, 0.8, 0.2, 0.3)
                             love.graphics.polygon("fill", verts)
                         end
                     end
@@ -1112,8 +1192,29 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
     end
     love.graphics.setLineWidth(2)
     love.graphics.setColor(0.2, 0.8, 0.2, 1)
-    ui.drawSetOutline(hex, deployCells, 0.92)
+    ui.drawSetOutline(hex, deployCells, 1.0)
     love.graphics.setLineWidth(1)
+
+    -- Landing-damage threat area: tint every cell that the drop would hit.
+    if pendingLand then
+        local rad = pendingLand.radius
+        love.graphics.setLineWidth(2)
+        for q = 0, hex.gridWidth - 1 do
+            for r = 0, hex.gridHeight - 1 do
+                if hex:isActiveHex(q, r) and hex:getDistance(q, r, pendingLand.q, pendingLand.r) <= rad then
+                    local x, y = getDrawCoords(q, r)
+                    local verts = hex:drawHexagon(x, y, hexRadius)
+                    love.graphics.setColor(0.9, 0.25, 0.2, 0.28)
+                    love.graphics.polygon("fill", verts)
+                end
+            end
+        end
+        -- ring around the landing cell marks the centre of the blast
+        local lx, ly = getDrawCoords(pendingLand.q, pendingLand.r)
+        love.graphics.setColor(0.95, 0.4, 0.3, 0.9)
+        love.graphics.polygon("line", hex:drawInsetHexagon(lx, ly, hexRadius, 0.82))
+        love.graphics.setLineWidth(1)
+    end
 
     if deploySelectedIdx and placedAllies[deploySelectedIdx] then
         local sel = placedAllies[deploySelectedIdx]

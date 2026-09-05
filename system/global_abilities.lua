@@ -130,6 +130,7 @@ function global_abilities.reset()
 end
 
 function global_abilities.handleAbilityButtonClick(x, y, state)
+    if not global_abilities.showPanel then return false end
     local displayOrder = global_abilities.getDisplayOrder(state)
     for _, name in ipairs(displayOrder) do
         local ab = global_abilities.registry[name]
@@ -363,6 +364,7 @@ function MindControlAbility:onClickHex(q, r, hex, state)
         end
         self.target.q = q
         self.target.r = r
+        combat.unrootForcedMove(self.target)
         global_abilities.spendAbility(self)
         undo.snapshot()
         log.infof("abilities", "%s moved by mind control!", tostring(self.target.name))
@@ -604,8 +606,9 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
         end
         -- Check terrain
         local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
-        if terrain == "water" and not (self.target.waterWalker or self.target.hovering) then
-            log.warn("abilities", "Cannot shift into water!")
+        if (terrain == "water" and not (self.target.waterWalker or self.target.hovering))
+            or (terrain == "emptiness" and not self.target.hovering) then
+            log.warn("abilities", "Cannot shift into water or a void pit!")
             return true
         end
         -- Check occupancy
@@ -632,6 +635,7 @@ function ExtraMoveAbility:onClickHex(q, r, hex, state)
         local fromQ, fromR = self.target.q, self.target.r
         self.target.q = q
         self.target.r = r
+        combat.unrootForcedMove(self.target)
         if _G.hex then _G.hex.selectedQ, _G.hex.selectedR = q, r end
 
         global_abilities.spendAbility(self)
@@ -940,10 +944,7 @@ function WindTorrent:executeGlobalWithAnimation(direction, hex, entities, sounds
                 else
                     obj.q = newQ
                     obj.r = newR
-                    if obj.rootedTarget then
-                        status.removeFromEntity(obj.rootedTarget, "rooted")
-                        obj.rootedTarget = nil
-                    end
+                    combat.unrootForcedMove(obj)
                     if terrainMap then
                         local died = effects.applyAllCellEffects(obj, newQ, newR, terrainMap, entities)
                         if died then obj:startDeath() end
@@ -2270,10 +2271,7 @@ local function executeVortex(self, centerQ, centerR, radius, clockwise, hex, ent
                 local entity = m.entity
                 entity.q = m.toQ
                 entity.r = m.toR
-                if entity.rootedTarget then
-                    status.removeFromEntity(entity.rootedTarget, "rooted")
-                    entity.rootedTarget = nil
-                end
+                combat.unrootForcedMove(entity)
                 if terrainMap then
                     local died = effects.applyAllCellEffects(entity, m.toQ, m.toR, terrainMap, collisionEntities)
                     if died then entity:startDeath() end
@@ -2989,6 +2987,9 @@ function RespawnAllyAbility:onClickHex(q, r, hex, state)
     local terrain = state.terrainMap and state.terrainMap[q] and state.terrainMap[q][r] or "grass"
     if terrain == "water" then
         log.warn("abilities", "Cannot summon on water!")
+        return true
+    elseif terrain == "emptiness" then
+        log.warn("abilities", "Cannot summon into a void pit!")
         return true
     end
 

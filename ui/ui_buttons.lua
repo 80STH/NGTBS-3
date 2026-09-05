@@ -9,7 +9,9 @@ return function(ui)
     local combat = require("combat.combat")
 
     local rightCol = { x = 0, w = 190, btnH = 56, gap = 6, margin = 10 }
-    local leftCol  = { x = 10, w = 190, itemH = 56, gap = 6, margin = 10 }
+    -- Bottom-left "ability block": a row of square ability buttons whose top sits
+    -- under the Abilities toggle button.
+    local abBlock  = { x = 10, square = 62, gap = 8, toggleW = 190, toggleH = 42, toggleGap = 10, margin = 12 }
 
     function ui.getRightBtnRect(index)
         -- index: 1=Undo, 2=Order, 3=Abilities (bottom→top)
@@ -26,25 +28,32 @@ return function(ui)
 
     ui.endTurnHoldTime = 0.7
 
+    -- End Turn sits on the right, just left of the right column (Undo/Order/Mechanism).
     function ui.getEndTurnRect()
         local w, h = 220, 64
+        local rcLeft = logicalW - rightCol.w - rightCol.margin - 10
         return {
-            x = math.floor((logicalW - w) / 2),
+            x = math.floor(rcLeft - w - 10),
             y = logicalH - h - 10,
             w = w,
             h = h,
         }
     end
 
-    function ui.getLeftItemRect(index)
-        local cb = leftCol
-        local baseY = logicalH - cb.margin
-        local off = (index - 1) * (cb.itemH + cb.gap)
+    -- Abilities toggle: bottom-left, directly above the square ability buttons.
+    function ui.getAbilitiesToggleRect()
+        local y = logicalH - abBlock.margin - abBlock.square - abBlock.toggleGap - abBlock.toggleH
+        return { x = abBlock.x, y = y, w = abBlock.toggleW, h = abBlock.toggleH }
+    end
+
+    -- Square ability button #index, one per unlocked ability, grouped in a bottom row.
+    function ui.getAbilitySquareRect(index)
+        local y = logicalH - abBlock.margin - abBlock.square
         return {
-            x = cb.x,
-            y = baseY - cb.itemH - off,
-            w = cb.w,
-            h = cb.itemH,
+            x = abBlock.x + (index - 1) * (abBlock.square + abBlock.gap),
+            y = y,
+            w = abBlock.square,
+            h = abBlock.square,
         }
     end
 
@@ -54,9 +63,10 @@ return function(ui)
     function ui.drawMechanismButton(state)
         local hasHighground = #(_G.retractableCells or {}) > 0
         local hasConveyor = next(_G.conveyorCells or {}) ~= nil
+        local hasTrap = (_G.mechanismTrapCells and #_G.mechanismTrapCells > 0)
         local hasTeleporter = require("system.teleporters").hasActivePair()
-        if not (hasHighground or hasConveyor or hasTeleporter) then return end
-        local r = ui.getRightBtnRect(4)
+        if not (hasHighground or hasConveyor or hasTeleporter or hasTrap) then return end
+        local r = ui.getRightBtnRect(3)
         local mx, my = love.mouse.getPosition()
         mx, my = mx / (_G.dpiScale or 1), my / (_G.dpiScale or 1)
         local isHover = mx >= r.x and mx <= r.x + r.w and my >= r.y and my <= r.y + r.h
@@ -95,6 +105,11 @@ return function(ui)
                 local q, r = key:match("^(%d+),(%d+)$")
                 if q then cellHint(tonumber(q), tonumber(r), {0.95, 0.8, 0.25}) end
             end
+            local trapCols = { spikes = {0.8, 0.82, 0.9}, burner = {1, 0.5, 0.1}, oxidizer = {0.3, 0.95, 0.4} }
+            for _, c in ipairs(_G.mechanismTrapCells or {}) do
+                local col = trapCols[c.type] or {0.8, 0.8, 0.8}
+                cellHint(c.q, c.r, col)
+            end
 
             -- Simulate the belts: push arrows for free moves, collision icons
             -- (like the regular push preview) where a unit would be slammed
@@ -117,7 +132,8 @@ return function(ui)
                                 }
                             else
                                 local terrain = _G.terrainMap and _G.terrainMap[nq] and _G.terrainMap[nq][nr] or "grass"
-                                if terrain ~= "water" or e.waterWalker or e.hovering then
+                                local isHole = terrain == "water" or terrain == "emptiness"
+                                if not isHole or e.waterWalker or e.hovering then
                                     ui.drawPushArrow(x1, y1, x2, y2, nil, nil, nil, nil,
                                         e.q, e.r, nq, nr, 0.55)
                                 end
@@ -154,6 +170,15 @@ return function(ui)
             if hasHighground then lines[#lines + 1] = _G.highgroundRaised and "- Lower the highground" or "- Raise the highground" end
             if hasTeleporter then lines[#lines + 1] = "- Activate the teleporters" end
             if hasConveyor then lines[#lines + 1] = "- Run the conveyor belts" end
+            if hasTrap then
+                local present = {}
+                for _, c in ipairs(_G.mechanismTrapCells or {}) do
+                    present[c.type] = true
+                end
+                if present.spikes then lines[#lines + 1] = "-Spikes: 1 dmg on the cell" end
+                if present.burner then lines[#lines + 1] = "-Burners: ignite occupants" end
+                if present.oxidizer then lines[#lines + 1] = "-Oxidizers: acidize occupants" end
+            end
             lines[#lines + 1] = "Cooldown: 1 turn."
             if _G.mechanismUsedThisTurn then lines[#lines + 1] = "(used this turn)" end
             local ttW, ttH = 250, 36 + #lines * 16
@@ -173,9 +198,9 @@ return function(ui)
         end
     end
 
-    -- ═══ Abilities Toggle Button (index 3) ═══
+    -- ═══ Abilities Toggle Button (bottom-left, above the square ability buttons) ═══
     function ui.drawAbilitiesToggleButton(state, mouseX, mouseY)
-        local r = ui.getRightBtnRect(3)
+        local r = ui.getAbilitiesToggleRect()
         local isHover = mouseX and mouseX >= r.x and mouseX <= r.x + r.w and mouseY >= r.y and mouseY <= r.y + r.h
         local open = global_abilities.showPanel
 
@@ -375,20 +400,24 @@ return function(ui)
         end
     end
 
-    -- ═══ Attack Panel (left column, only when abilities hidden) ═══
+    -- ═══ Hero skill buttons (square, bottom-left row, only when abilities hidden) ═══
     function ui.drawAttackPanel(selectedActor, attackButtons, selectedAttack, attackMode)
         if global_abilities.showPanel then return end
         if not selectedActor or selectedActor.hasActedThisTurn then return end
         if #attackButtons == 0 then return end
 
+        local mx, my = love.mouse.getPosition()
+        mx, my = mx / (_G.dpiScale or 1), my / (_G.dpiScale or 1)
+        local old = love.graphics.getFont()
+
         if selectedActor.chainAttack then
             love.graphics.setColor(1, 0.8, 0.2, 1)
-            local cy = logicalH - leftCol.margin - #attackButtons * (leftCol.itemH + leftCol.gap) - leftCol.itemH - 20
-            love.graphics.print("Chain: " .. selectedActor.chainAttack, leftCol.x, cy)
+            local cy = logicalH - abBlock.margin - abBlock.square - abBlock.toggleGap - 26
+            love.graphics.print("Chain: " .. selectedActor.chainAttack, abBlock.x, cy)
         end
 
         for i, btn in ipairs(attackButtons) do
-            local ri = ui.getLeftItemRect(i)
+            local ri = ui.getAbilitySquareRect(i)
             btn.x = ri.x
             btn.y = ri.y
             btn.width = ri.w
@@ -413,45 +442,53 @@ return function(ui)
 
             local iconKey = icon_cache.keyForAttack(btn.name)
             if iconKey then
-                icon_cache.drawSmall(iconKey, btn.x + 22, btn.y + leftCol.itemH / 2, 36)
+                icon_cache.drawSmall(iconKey, btn.x + btn.width / 2, btn.y + btn.height / 2 - 6, 30)
             end
             love.graphics.setColor(1, 1, 1, 1)
-            local old = love.graphics.getFont()
             love.graphics.setFont(buttonFont)
-            local prefix = ""
-            love.graphics.printf(prefix .. btn.name .. (isSelected and " ✓" or ""), btn.x + 42, btn.y + leftCol.itemH / 2 - 10, leftCol.w - 42, "center")
+            love.graphics.printf((isSelected and "✓ " or "") .. btn.name, btn.x + 3, btn.y + btn.height - 38, btn.width - 6, "center")
             love.graphics.setFont(old)
-        end
 
-        for _, btn in ipairs(attackButtons) do
-            if selectedAttack == btn.attack and attackMode then
+            -- Desc tooltip on hover / when selected, drawn to the right
+            local showTip = isSelected
+                or (mx >= btn.x and mx <= btn.x + btn.width and my >= btn.y and my <= btn.y + btn.height)
+            if showTip then
                 love.graphics.setColor(1, 1, 0.5, 0.9)
                 local font = love.graphics.getFont()
-                local descX = leftCol.x + leftCol.w + 10
-                local descY = btn.y
-                local maxW = 200
+                local ttW = 220
+                local maxW = ttW - 16
+                local words = {}
+                for w in (btn.name .. " — " .. btn.desc):gmatch("%S+") do table.insert(words, w) end
                 local lines = {}
-                for word in btn.desc:gmatch("%S+") do
+                for _, w in ipairs(words) do
                     if #lines == 0 then
-                        table.insert(lines, word)
+                        table.insert(lines, w)
                     else
-                        local candidate = lines[#lines] .. " " .. word
+                        local candidate = lines[#lines] .. " " .. w
                         if font:getWidth(candidate) <= maxW then
                             lines[#lines] = candidate
                         else
-                            table.insert(lines, word)
+                            table.insert(lines, w)
                         end
                     end
                 end
-                for i, line in ipairs(lines) do
-                    love.graphics.print(line, descX, descY + (i - 1) * 16)
+                local ttH = 16 + #lines * 15
+                local ttx = btn.x + btn.width + 8
+                local tty = btn.y
+                if ttx + ttW > logicalW - 10 then ttx = btn.x - ttW - 8 end
+                love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
+                love.graphics.rectangle("fill", ttx, tty, ttW, ttH, 6)
+                love.graphics.setColor(0.8, 0.8, 0.8, 1)
+                love.graphics.rectangle("line", ttx, tty, ttW, ttH, 6)
+                love.graphics.setColor(1, 1, 0.6, 1)
+                for l, line in ipairs(lines) do
+                    love.graphics.print(line, ttx + 8, tty + 8 + (l - 1) * 15)
                 end
-                break
             end
         end
     end
 
-    -- ═══ Ability buttons (left column, only when panel open) ═══
+    -- ═══ Ability buttons (square, grouped in a bottom row when panel open) ═══
     function ui.drawAbilityButtons(state)
         if not global_abilities.showPanel then return end
         local displayOrder = global_abilities.getDisplayOrder(state)
@@ -459,68 +496,63 @@ return function(ui)
 
         local mx, my = love.mouse.getPosition()
         mx, my = mx / (state.dpiScale or 1), my / (state.dpiScale or 1)
+        local old = love.graphics.getFont()
 
         for i, name in ipairs(displayOrder) do
             local ab = global_abilities.registry[name]
-            if not ab then goto continue end
+            if ab then
+                local ri = ui.getAbilitySquareRect(i)
+                ab.button.x = ri.x
+                ab.button.y = ri.y
+                ab.button.width = ri.w
+                ab.button.height = ri.h
 
-            local ri = ui.getLeftItemRect(i)
-            ab.button.x = ri.x
-            ab.button.y = ri.y
-            ab.button.width = ri.w
-            ab.button.height = ri.h
-            ab:drawButton(mx, my, state)
+                local unlimited = state.unlimitedAbilities
+                local available = (state.turnState.phase == "player"
+                    and (unlimited or (not ab.hasBeenUsed and not global_abilities.abilityUsedThisTurn
+                    and global_abilities.mana >= ab.manaCost)))
+                local isActive = (global_abilities.activeAbility == ab)
 
-            local unlimited = state.unlimitedAbilities
-            local available = (state.turnState.phase == "player"
-                and (unlimited or (not ab.hasBeenUsed and not global_abilities.abilityUsedThisTurn
-                and global_abilities.mana >= ab.manaCost)))
-            local isActive = (global_abilities.activeAbility == ab)
+                local cr, cg, cb = 0.22, 0.22, 0.32
+                if isActive then
+                    cr, cg, cb = 0.4, 0.25, 0.7
+                elseif available then
+                    cr, cg, cb = 0.28, 0.28, 0.45
+                end
+                love.graphics.setColor(cr, cg, cb, available and 0.9 or 0.35)
+                love.graphics.rectangle("fill", ri.x, ri.y, ri.w, ri.h, 5)
 
-            local cr, cg, cb = 0.22, 0.22, 0.32
-            if isActive then
-                cr, cg, cb = 0.4, 0.25, 0.7
-            elseif available then
-                cr, cg, cb = 0.28, 0.28, 0.45
-            end
-            love.graphics.setColor(cr, cg, cb, available and 0.9 or 0.35)
-            love.graphics.rectangle("fill", ri.x, ri.y, ri.w, ri.h, 5)
+                local iconKey = icon_cache.keyForAbility(name) or "abil_heal"
+                icon_cache.drawSmall(iconKey, ri.x + ri.w / 2, ri.y + ri.h / 2 - 7, 30)
 
-            local iconKey = icon_cache.keyForAbility(name) or "abil_heal"
-            icon_cache.drawSmall(iconKey, ri.x + 22, ri.y + ri.h / 2, 36)
+                love.graphics.setFont(buttonFont)
+                love.graphics.setColor(1, 1, 1, (global_abilities.mana >= ab.manaCost) and 1 or 0.4)
+                love.graphics.print(ab.manaCost, ri.x + ri.w / 2 - 5, ri.y + ri.h - 18)
+                love.graphics.setFont(old)
+                love.graphics.setColor(1, 1, 1, 1)
 
-            love.graphics.setColor(1, 1, 1, available and 1 or 0.5)
-            local old = love.graphics.getFont()
-            love.graphics.setFont(buttonFont)
-            local label = (isActive and "[ " .. name .. " ]" or name)
-            love.graphics.printf(label, ri.x + 42, ri.y + ri.h / 2 - 10, ri.w - 65, "left")
-            love.graphics.setColor(1, 1, 1, (global_abilities.mana >= ab.manaCost) and 1 or 0.4)
-            love.graphics.print("[" .. ab.manaCost .. "]", ri.x + ri.w - 34, ri.y + ri.h / 2 - 10)
-            love.graphics.setFont(old)
-
-            -- Tooltip on hover
-            if mx >= ri.x and mx <= ri.x + ri.w and my >= ri.y and my <= ri.y + ri.h then
-                local ttW = 240
-                local ttH = 36 + #(ab._cfg and ab._cfg.tooltipLines or {}) * 16
-                local ttx = ri.x + ri.w + 8
-                local tty = ri.y + ri.h / 2 - ttH / 2
-                if ttx + ttW > logicalW - 10 then ttx = ri.x - ttW - 8 end
-                love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
-                love.graphics.rectangle("fill", ttx, tty, ttW, ttH, 6)
-                love.graphics.setColor(0.8, 0.8, 0.8, 1)
-                love.graphics.rectangle("line", ttx, tty, ttW, ttH, 6)
-                love.graphics.setColor(1, 1, 0.6, 1)
-                local usedText = ab.hasBeenUsed and " (used)" or ""
-                love.graphics.print((ab._cfg and ab._cfg.tooltipTitle or name) .. usedText, ttx + 8, tty + 6)
-                love.graphics.setColor(0.8, 0.8, 0.8, 1)
-                if ab._cfg then
-                    for j, line in ipairs(ab._cfg.tooltipLines or {}) do
-                        love.graphics.print(line, ttx + 8, tty + 22 + (j - 1) * 16)
+                -- Tooltip to the right of the square
+                if mx >= ri.x and mx <= ri.x + ri.w and my >= ri.y and my <= ri.y + ri.h then
+                    local ttW = 240
+                    local ttH = 36 + #(ab._cfg and ab._cfg.tooltipLines or {}) * 16
+                    local ttx = ri.x + ri.w + 8
+                    local tty = ri.y + ri.h / 2 - ttH / 2
+                    if ttx + ttW > logicalW - 10 then ttx = ri.x - ttW - 8 end
+                    love.graphics.setColor(0.1, 0.1, 0.2, 0.95)
+                    love.graphics.rectangle("fill", ttx, tty, ttW, ttH, 6)
+                    love.graphics.setColor(0.8, 0.8, 0.8, 1)
+                    love.graphics.rectangle("line", ttx, tty, ttW, ttH, 6)
+                    love.graphics.setColor(1, 1, 0.6, 1)
+                    local usedText = ab.hasBeenUsed and " (used)" or ""
+                    love.graphics.print((ab._cfg and ab._cfg.tooltipTitle or name) .. usedText, ttx + 8, tty + 6)
+                    love.graphics.setColor(0.8, 0.8, 0.8, 1)
+                    if ab._cfg then
+                        for j, line in ipairs(ab._cfg.tooltipLines or {}) do
+                            love.graphics.print(line, ttx + 8, tty + 22 + (j - 1) * 16)
+                        end
                     end
                 end
             end
-
-            ::continue::
         end
     end
 end

@@ -88,14 +88,16 @@ local function pillarCollapseTargets(q, r, dir)
     local faced, others = nil, {}
     for _, d in ipairs(hex_utils.CUBE_DIRECTIONS) do
         local nq, nr = hex_utils.applyCubeStep(q, r, d.dx, d.dy, d.dz)
-        if hex and hex:isActiveHex(nq, nr)
-            and not (terrainMap[nq] and terrainMap[nq][nr] == "water") then
-            local occ = livingEntityAt(nq, nr)
-            if not occ or (not occ.indestructible and occ.name ~= "StonePillar") then
-                if dir and d.dx == dir.dx and d.dy == dir.dy and d.dz == dir.dz then
-                    faced = { q = nq, r = nr }
-                else
-                    table.insert(others, { q = nq, r = nr })
+        if hex and hex:isActiveHex(nq, nr) then
+            local t = terrainMap and terrainMap[nq] and terrainMap[nq][nr]
+            if not cell_rules.isHoleTerrain(t) then
+                local occ = livingEntityAt(nq, nr)
+                if not occ or (not occ.indestructible and occ.name ~= "StonePillar") then
+                    if dir and d.dx == dir.dx and d.dy == dir.dy and d.dz == dir.dz then
+                        faced = { q = nq, r = nr }
+                    else
+                        table.insert(others, { q = nq, r = nr })
+                    end
                 end
             end
         end
@@ -164,6 +166,7 @@ local function processPillarSpawns()
         if not livingEntityAt(p.q, p.r) then
             local pillar = Entity.new("StonePillar", Entity.TYPES.OBSTACLE, p.q, p.r, 1, false, 0, nil, nil, {})
             pillar.sprite = environment.generateBuildingSprite("StonePillar", 12, 16)
+            pillar.noSidedPush = true
             if p.dir then
                 pillar.direction = { dx = p.dir.dx, dy = p.dir.dy, dz = p.dir.dz }
             end
@@ -234,6 +237,16 @@ function restartGame(mapPath)
             end
         end
     end
+    -- Button-activated hazard plates: "spikes", "burner", "oxidizer" markers.
+    -- Stored as an ordered list so the Mechanism press ticks each occupied cell once.
+    mechanismTrapCells = {}
+    for q, row in pairs(upperTerrainMap or {}) do
+        for r, val in pairs(row) do
+            if val == "spikes" or val == "burner" or val == "oxidizer" then
+                table.insert(mechanismTrapCells, { q = q, r = r, type = val })
+            end
+        end
+    end
     mapActiveRadius = mapData and mapData.activeRadius or config.ACTIVE_RADIUS
     mapCenterQ = mapData and mapData.centerQ or config.CENTER_Q or math.floor(width / 2)
     mapCenterR = mapData and mapData.centerR or config.CENTER_R or math.floor(height / 2)
@@ -296,6 +309,7 @@ function restartGame(mapPath)
     local skipDeploy = mapPath:match("test_polygon_[12]")
     hero = nil
     heroRevivePending = false
+    heroDeathPos = nil
     if soloMode and selectedSoloHero then
         hero = require("system.solo_mode").createHero(selectedSoloHero, -1, -1)
         unplacedAllies = { hero }
@@ -442,11 +456,13 @@ function confirmDeploy()
     if soloMode and heroRevivePending and hero and #placedAllies == 1 and placedAllies[1] == hero then
         table.insert(entities, hero)
         heroRevivePending = false
+        -- Coming back from a death-save costs 1 move point (not an attack).
+        heroDeathPos = nil
         hero.hasActedThisTurn = false
         hero.hasMovedThisTurn = false
         hero.canMoveAfterAttack = false
         hero.attacksLeft = 2
-        hero.movesLeft = 2
+        hero.movesLeft = math.max(1, (hero.movesLeft or 2) - 1)
         selectedActor = hero
         hex.selectedQ, hex.selectedR = hero.q, hero.r
         unplacedAllies = {}
@@ -539,6 +555,7 @@ function heroDeathSave(h)
     end
 
     -- Vanish from the field; mandatory simple redeploy next player turn
+    heroDeathPos = { q = h.q, r = h.r }
     for i, e in ipairs(entities) do
         if e == h then table.remove(entities, i) break end
     end
@@ -567,7 +584,7 @@ end
 function activateMechanisms()
     local teleporters = require("system.teleporters")
     local anyMechanism = (#retractableCells > 0) or teleporters.hasActivePair()
-        or next(conveyorCells or {}) ~= nil
+        or next(conveyorCells or {}) ~= nil or (mechanismTrapCells and #mechanismTrapCells > 0)
     if not anyMechanism then return false end
     if mechanismUsedThisTurn then return false end
 
@@ -617,10 +634,41 @@ function activateMechanisms()
                             log.infof("game", "Conveyor slams %s into %s at (%d,%d)!", e.name, occupant.name, nq, nr)
                         else
                             local terrain = terrainMap and terrainMap[nq] and terrainMap[nq][nr] or "grass"
-                            if terrain ~= "water" or e.waterWalker or e.hovering then
+                            if not cell_rules.isHoleTerrain(terrain) or e.waterWalker or e.hovering then
                                 combat.moveEntityWithAnimation(e, e.q, e.r, nq, nr)
                                 log.infof("game", "Conveyor moves %s to (%d,%d)", e.name, nq, nr)
                             end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- 4. Hazard plates: spikes deal 1 damage, burners ignite, oxidizers
+    --    coat in acid — to every living character standing on a marked cell.
+    if mechanismTrapCells and #mechanismTrapCells > 0 then
+        for _, cell in ipairs(mechanismTrapCells) do
+            for _, e in ipairs(entities) do
+                if e:isCharacter() and e.health > 0 and not e.isDying and not e.isMoving
+                    and e.q == cell.q and e.r == cell.r then
+                    if cell.type == "spikes" then
+                        local x, y = hex:hexToPixel(cell.q, cell.r)
+                        local wasDestroyed = e:takeDamage(1)
+                        visual.addEffect(x, y, "slam", 0.35)
+                        sounds.play("collision")
+                        log.infof("game", "Spikes hit %s for 1 damage!", e.name)
+                        if wasDestroyed then e:startDeath() end
+                    elseif cell.type == "burner" then
+                        if not status.hasEntityStatus(e, "fire") then
+                            status.applyToEntity(e, "fire")
+                            sounds.play("fire")
+                            log.infof("game", "Burner ignites %s!", e.name)
+                        end
+                    elseif cell.type == "oxidizer" then
+                        if not status.hasEntityStatus(e, "acid") then
+                            status.applyToEntity(e, "acid")
+                            log.infof("game", "Oxidizer coats %s in acid!", e.name)
                         end
                     end
                 end
@@ -784,7 +832,7 @@ function findRandomEmptyCells(count, excludeFn, qMin)
                 end
                 if not occupied then
                     local terrain = terrainMap and terrainMap[q] and terrainMap[q][r] or "grass"
-                    if terrain ~= "water" and not cell_rules.isRailway(q, r) then
+                    if not cell_rules.isHoleTerrain(terrain) and not cell_rules.isRailway(q, r) then
                         if not excludeFn or not excludeFn(q, r) then
                             if q >= qMin then
                                 table.insert(candidatesBias, {q = q, r = r})
@@ -843,7 +891,7 @@ function processDigSites()
             end
         end
         local terrain = terrainMap and terrainMap[dig.q] and terrainMap[dig.q][dig.r] or "grass"
-        if not occupied and terrain ~= "water" and not cell_rules.isRailway(dig.q, dig.r) and not status.hasNegativeHexStatus(dig.q, dig.r) then
+        if not occupied and not cell_rules.isHoleTerrain(terrain) and not cell_rules.isRailway(dig.q, dig.r) and not status.hasNegativeHexStatus(dig.q, dig.r) then
             local newEnemy = environment.createRandomEnemy(dig.q, dig.r)
             table.insert(entities, newEnemy)
             local x, y = hex:hexToPixel(dig.q, dig.r)

@@ -89,6 +89,55 @@ local suite = {
             end,
         },
         {
+            name = "isPassable: emptiness blocks ground unit",
+            fn = function()
+                local hex = makeHexMock()
+                local terrainMap = { [2] = { [2] = "emptiness" } }
+                local mover = makeChar(1, 2, true)
+                local ok = cell_rules.isPassable(2, 2, mover, {
+                    entities = {}, terrainMap = terrainMap, hex = hex,
+                })
+                return assertEq(ok, false, "emptiness blocks ground unit")
+            end,
+        },
+        {
+            name = "isPassable: emptiness passable ONLY for hovering",
+            fn = function()
+                local hex = makeHexMock()
+                local terrainMap = { [2] = { [2] = "emptiness" } }
+                local hover = makeChar(1, 2, true)
+                hover.hovering = true
+                local okHover = cell_rules.isPassable(2, 2, hover, {
+                    entities = {}, terrainMap = terrainMap, hex = hex,
+                })
+                local walker = makeChar(1, 2, true)
+                walker.waterWalker = true
+                local okWalker = cell_rules.isPassable(2, 2, walker, {
+                    entities = {}, terrainMap = terrainMap, hex = hex,
+                })
+                if okHover ~= true then return false, "hovering should cross emptiness" end
+                return assertEq(okWalker, false, "waterWalker must NOT cross emptiness")
+            end,
+        },
+        {
+            name = "isOccupied: emptiness occupied for ground, free for hovering",
+            fn = function()
+                local hex = makeHexMock()
+                local terrainMap = { [2] = { [2] = "emptiness" } }
+                local mover = makeChar(1, 2, true)
+                local occ = cell_rules.isOccupied(2, 2, mover, {
+                    entities = {}, terrainMap = terrainMap, hex = hex,
+                })
+                local hover = makeChar(1, 2, true)
+                hover.hovering = true
+                local free = cell_rules.isOccupied(2, 2, hover, {
+                    entities = {}, terrainMap = terrainMap, hex = hex,
+                })
+                if occ ~= true then return false, "ground unit counts emptiness as occupied" end
+                return assertEq(free, false, "hovering ignores emptiness")
+            end,
+        },
+        {
             name = "isPassable: same-side character passable",
             fn = function()
                 local hex = makeHexMock()

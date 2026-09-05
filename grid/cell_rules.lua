@@ -36,6 +36,13 @@ local function defaultOpts(opts, mover)
     }
 end
 
+-- Terrain that swallows ground units like a pit or body of water:
+-- walking/pushing into it kills, and only hovering / water-walking can cross.
+-- Emptiness (the Void-ability pit) behaves exactly like water mechanically.
+function cell_rules.isHoleTerrain(terrainType)
+    return terrainType == "water" or terrainType == "emptiness"
+end
+
 -- Same side as mover?
 local function sameSide(e, mover, side)
     if not (e:isCharacter() and mover) then return false end
@@ -55,12 +62,16 @@ function cell_rules.isPassable(q, r, mover, opts)
 
     if not o.ignoreWater then
         local terrain = o.terrainMap and o.terrainMap[q] and o.terrainMap[q][r] or "grass"
-        if terrain == "water" then
-            if mover and (mover.waterWalker or mover.hovering) then
-                -- ok
-            else
-                return false
+        if cell_rules.isHoleTerrain(terrain) then
+            -- Water: crossed by water-walkers or hovering. Void/emptiness is a
+            -- bottomless pit — only hovering may pass over it.
+            local canCross
+            if mover then
+                canCross = terrain == "water"
+                        and (mover.waterWalker or mover.hovering)
+                        or (terrain == "emptiness" and mover.hovering)
             end
+            if not canCross then return false end
         end
     end
 
@@ -124,12 +135,14 @@ function cell_rules.isOccupied(q, r, mover, opts)
 
     if o.terrainMap and o.terrainMap[q] and o.terrainMap[q][r] then
         local terrain = o.terrainMap[q][r]
-        if terrain == "water" then
-            if mover and (mover.waterWalker or mover.hovering) then
-                -- ok
-            else
-                return true
+        if cell_rules.isHoleTerrain(terrain) then
+            local canStand
+            if mover then
+                canStand = terrain == "water"
+                        and (mover.waterWalker or mover.hovering)
+                        or (terrain == "emptiness" and mover.hovering)
             end
+            if not canStand then return true end
         end
     end
 

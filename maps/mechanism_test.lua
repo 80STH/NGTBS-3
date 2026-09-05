@@ -32,32 +32,21 @@ return {
     ["7,5"] = "water",
   },
   entities = {
-    -- Enemies: some standing on the belt, some off it
-    ["3,4"] = "Zombie",
-    ["5,4"] = "Zombie",
-    ["2,3"] = "Zombie",
-    ["6,3"] = "Lich",
-    ["4,6"] = "Zombie",
+    -- Enemies standing on each hazard plate (easy to catch with the button)
+    ["2,3"] = "Zombie",      -- on spikes
+    ["4,3"] = "Zombie",      -- on oxidizer
+    ["6,3"] = "Zombie",      -- on burner
     ["2,6"] = "SmallBuilding",
     ["6,6"] = "SmallBuilding",
   },
   statuses = {},
   upper_terrain = {
-    -- Conveyor belt along row 4, pushing eastward along the row (screen: south-east)
-    ["2,4"] = "conveyor:se",
-    ["3,4"] = "conveyor:se",
-    ["4,4"] = "conveyor:se",
-    ["5,4"] = "conveyor:se",
-    ["6,4"] = "conveyor:se",
-    -- Return belt along row 2, pushing westward along the row (screen: north-west)
-    ["2,2"] = "conveyor:nw",
-    ["3,2"] = "conveyor:nw",
-    ["4,2"] = "conveyor:nw",
-    ["5,2"] = "conveyor:nw",
-    ["6,2"] = "conveyor:nw",
+    -- Button-activated hazard plates: spikes / burner / oxidizer
+    ["2,3"] = "spikes",
+    ["3,3"] = "spikes",
+    ["4,3"] = "oxidizer",
+    ["5,3"] = "burner",
+    ["6,3"] = "burner",
   },
-  elevation = {
-    ["1,2"] = true,
-    ["7,2"] = true,
-  },
+  elevation = {},
 }

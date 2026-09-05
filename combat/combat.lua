@@ -139,10 +139,7 @@ end
 local function finalizeMove(entity, toQ, toR)
     entity.q = toQ
     entity.r = toR
-    if entity.rootedTarget then
-        status.removeFromEntity(entity.rootedTarget, "rooted")
-        entity.rootedTarget = nil
-    end
+    combat.unrootForcedMove(entity)
     if terrainMap then
         local died = effects.applyAllCellEffects(entity, toQ, toR, terrainMap, entities)
         if died then entity:startDeath() end
@@ -255,8 +252,9 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
             if onComplete then onComplete(false) end
             return
         end
-        -- Directional entity (MountainSlope) — side check
-        if occupant.direction then
+        -- Directional entity (MountainSlope) — side check (StonePillar is not a
+        -- directional push: it always takes normal collision damage.)
+        if occupant.direction and not occupant.noSidedPush then
             local safe = hex_utils.isPushFromSafeSide(occupant, fromQ, fromR)
             combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant, safe)
             if not safe then
@@ -493,10 +491,7 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
         if selectedActor == attacker then
             hex.selectedQ, hex.selectedR = attacker.q, attacker.r
         end
-        if attacker.rootedTarget then
-            status.removeFromEntity(attacker.rootedTarget, "rooted")
-            attacker.rootedTarget = nil
-        end
+        combat.unrootForcedMove(attacker)
         if terrainMap then
             local died = effects.applyAllCellEffects(attacker, moveQ, moveR, terrainMap, entities)
             if died then combat.deferDeath(attacker) end
@@ -650,10 +645,7 @@ function combat.HeavyChargeAttack:execute(attacker, targetQ, targetR, hex, entit
         if selectedActor == attacker then
             hex.selectedQ, hex.selectedR = attacker.q, attacker.r
         end
-        if attacker.rootedTarget then
-            status.removeFromEntity(attacker.rootedTarget, "rooted")
-            attacker.rootedTarget = nil
-        end
+        combat.unrootForcedMove(attacker)
         if terrainMap then
             local died = effects.applyAllCellEffects(attacker, plan.heroQ, plan.heroR, terrainMap, entities)
             if died then combat.deferDeath(attacker) end
@@ -665,6 +657,7 @@ function combat.HeavyChargeAttack:execute(attacker, targetQ, targetR, hex, entit
         local tMoved = plan.endQ ~= plan.startQ or plan.endR ~= plan.startR
         if tMoved then
             t.q, t.r = plan.endQ, plan.endR
+            combat.unrootForcedMove(t)
         end
         if plan.collision == "obstacle" or plan.collision == "elevation" then
             t.health = 0
@@ -983,11 +976,12 @@ function combat.AoePushAttack:execute(attacker, targetQ, targetR, hex, entities,
         return false, "Cannot target outside the active area"
     end
 
-    -- Create stone at target cell (if free)
+    -- Create stone at target cell (if free); a pit (water / void) can't hold it.
     local centerEntity = combat.getEntityAtHex(targetQ, targetR, entities)
     if centerEntity then
         self:dealDamageToTarget(centerEntity, attacker, 1, entities, sounds, nil)
-    elseif terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR] == "water" then
+    elseif terrainMap and terrainMap[targetQ] and terrainMap[targetQ][targetR]
+        and (terrainMap[targetQ][targetR] == "water" or terrainMap[targetQ][targetR] == "emptiness") then
         local cx, cy = hex:hexToPixel(targetQ, targetR)
         visual.addEffect(cx, cy, "drown", 0.3)
     else
@@ -1526,10 +1520,7 @@ function combat.Attack:checkElevationCrashOrFall(attacker, stepX, stepY, stepZ, 
                 if selectedActor == attacker then
                     hex.selectedQ, hex.selectedR = attacker.q, attacker.r
                 end
-                if attacker.rootedTarget then
-                    status.removeFromEntity(attacker.rootedTarget, "rooted")
-                    attacker.rootedTarget = nil
-                end
+                combat.unrootForcedMove(attacker)
                 attack_effects.dash(attacker, nil, crashQ, crashR, hex)
                 local fromX, fromY = getDrawCoords(oldQ, oldR)
                 local toX, toY = getDrawCoords(crashQ, crashR)
@@ -1555,10 +1546,7 @@ function combat.Attack:checkElevationCrashOrFall(attacker, stepX, stepY, stepZ, 
                 if selectedActor == attacker then
                     hex.selectedQ, hex.selectedR = attacker.q, attacker.r
                 end
-                if attacker.rootedTarget then
-                    status.removeFromEntity(attacker.rootedTarget, "rooted")
-                    attacker.rootedTarget = nil
-                end
+                combat.unrootForcedMove(attacker)
                 if attacker.health and attacker.health > 0 then
                     local wasDestroyed = attacker:takeDamage(1)
                     combat.notePushKill(attacker, wasDestroyed)
@@ -2500,10 +2488,13 @@ function combat.triggerTeleporter(entity)
     local fromQ, fromR = entity.q, entity.r
     if otherEntity then
         otherEntity.q, otherEntity.r = fromQ, fromR
+        combat.unrootForcedMove(otherEntity)
         entity.q, entity.r = other.q, other.r
+        combat.unrootForcedMove(entity)
     else
         -- One-way teleport to the empty paired portal
         entity.q, entity.r = other.q, other.r
+        combat.unrootForcedMove(entity)
     end
 
     if visual then
@@ -2551,16 +2542,46 @@ function combat.addDirectPushAnimation(obj, fromQ, fromR, toQ, toR, onComplete)
 end
 
 -- Apply immediate move logic and queue a move animation.
+-- Root is a two-way bond: when EITHER side is forcibly displaced the effect
+-- breaks. As a victim (has the "rooted" debuff) or as the attacker holding
+-- someone via rootedTarget — the moved entity frees itself and/or its pin.
+-- Called from every forced-move choke point (knockbacks, pulls, teleports…).
+function combat.unrootForcedMove(entity)
+    if not entity then return end
+    -- As the victim: the pinned unit wrenches free.
+    if status.hasEntityStatus(entity, "rooted") then
+        status.removeFromEntity(entity, "rooted")
+        log.infof("combat", "%s shakes free of Root after being moved!", entity.name)
+    end
+    -- As the attacker: it loses its grip on whoever it had rooted.
+    if entity.rootedTarget then
+        status.removeFromEntity(entity.rootedTarget, "rooted")
+        entity.rootedTarget = nil
+        log.infof("combat", "%s is wrenched off its rooted victim by the move!", entity.name)
+    end
+    -- Any OTHER attacker still pinning this entity releases it too.
+    if entities then
+        for _, e in ipairs(entities) do
+            if e ~= entity and e.rootedTarget == entity then
+                status.removeFromEntity(entity, "rooted")
+                e.rootedTarget = nil
+            end
+        end
+    end
+    -- Just in case an entity has both roles (it rooted someone but some other
+    -- attacker rooted it) — strip any remaining root mark after the sweep.
+    if status.hasEntityStatus(entity, "rooted") then
+        status.removeFromEntity(entity, "rooted")
+    end
+end
+
 function combat.moveEntityWithAnimation(entity, fromQ, fromR, toQ, toR, onComplete)
     entity.q = toQ
     entity.r = toR
     if selectedActor == entity then
         hex.selectedQ, hex.selectedR = entity.q, entity.r
     end
-    if entity.rootedTarget then
-        status.removeFromEntity(entity.rootedTarget, "rooted")
-        entity.rootedTarget = nil
-    end
+    combat.unrootForcedMove(entity)
     if terrainMap then
         local died = effects.applyAllCellEffects(entity, toQ, toR, terrainMap, entities)
         if died then entity:startDeath() end
@@ -2608,17 +2629,30 @@ end
 
 -- Temporarily redirect Entity.startDeath into pendingDeaths while fn runs.
 -- If no push animations were queued, deaths are processed immediately.
+-- Nested calls (e.g. an attack that itself wraps withDeferredDeaths inside the
+-- player-action wrapper) must NOT process mid-way: the inner _processPendingDeaths
+-- would re-defer into the outer's override and then clear the list, losing the
+-- deaths for good. Only the outermost call defers and processes.
 function combat.withDeferredDeaths(fn)
     local Entity = require("entity.entity")
-    local oldStartDeath = Entity.startDeath
-    Entity.startDeath = function(self)
-        combat.deferDeath(self)
+    local depth = (combat._deferDepth or 0) + 1
+    combat._deferDepth = depth
+    local outer = depth == 1
+    local oldStartDeath
+    if outer then
+        oldStartDeath = Entity.startDeath
+        Entity.startDeath = function(self)
+            combat.deferDeath(self)
+        end
     end
     local ok, result = pcall(function() return {fn()} end)
-    Entity.startDeath = oldStartDeath
-    if not push_animator.isActive() then
-        combat._processPendingDeaths()
+    if outer then
+        Entity.startDeath = oldStartDeath
+        if not push_animator.isActive() then
+            combat._processPendingDeaths()
+        end
     end
+    combat._deferDepth = depth - 1
     if not ok then error(result) end
     return unpack(result)
 end
@@ -2937,6 +2971,12 @@ if attacker.hasActedThisTurn and not (attacker.soloActions and (attacker.attacks
             attacker.attacksLeft = (attacker.attacksLeft or 2) - 1
             if hasTag(attack.tags, "finisher") then
                 attacker.attacksLeft = 0
+            end
+            -- Unified MP/AP: an attack spends the AP core of its cell — and any
+            -- still-unspent MP shell can't outlast its core, so movement remaining
+            -- drops to what the surviving cores allow.
+            if (attacker.movesLeft or 0) > (attacker.attacksLeft or 0) then
+                attacker.movesLeft = attacker.attacksLeft
             end
             if attacker.attacksLeft <= 0 then
                 attacker.hasActedThisTurn = true

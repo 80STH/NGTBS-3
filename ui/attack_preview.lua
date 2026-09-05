@@ -284,7 +284,7 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
         end
 
         -- Directional barrier: safe side = no damage, dangerous side = damage.
-        if occupant.direction then
+        if occupant.direction and not occupant.noSidedPush then
             local safe = hex_utils.isPushFromSafeSide(occupant, fromQ, fromR)
             if safe then
                 result.type = "collision_no_damage"
@@ -338,11 +338,12 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
     return result
 end
 
--- Check whether a push destination is water that would drown the entity.
+-- Check whether a push destination is a pit (water / void) that would drown the entity.
 local function checkDrown(p, entity, toQ, toR)
     if entity.hovering then return end
     if not (entity:isCharacter() or entity.name == "Caravan") then return end
-    if terrainMap and terrainMap[toQ] and terrainMap[toQ][toR] == "water" then
+    local t = terrainMap and terrainMap[toQ] and terrainMap[toQ][toR]
+    if t == "water" or t == "emptiness" then
         preview.addOverlay(p, toQ, toR, "drown_dest")
         preview.addCollisionDamage(p, entity, entity.health)
     end

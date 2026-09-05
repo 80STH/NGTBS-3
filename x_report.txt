@@ -1,4 +1,0 @@
-OK   execute with animations ok
-OK   screen shake triggered
-OK   visual effects queued
-OK   render with effects ok

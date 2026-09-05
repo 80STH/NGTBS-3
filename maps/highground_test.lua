@@ -6,6 +6,7 @@ return {
   centerQ = 4,
   centerR = 4,
   orientation = "flat",
+  border = "mountain",
   activeRows = {
     [0] = {3, 5},
     [1] = {1, 7},
@@ -31,10 +32,6 @@ return {
     ["7,5"] = "water",
   },
   entities = {
-    ["4,0"] = { name = "MountainRange", cells = { {1,1},{2,1},{3,0},{4,0},{5,0},{6,1},{7,1} } },
-    ["0,4"] = { name = "SlopeRange", cells = { {0,2},{0,3},{0,4},{0,5},{0,6},{0,7} } },
-    ["8,4"] = { name = "SlopeRange", cells = { {8,2},{8,3},{8,4},{8,5},{8,6},{8,7} } },
-    ["3,8"] = { name = "ReefRange", cells = { {1,7},{2,8},{3,8},{4,9},{5,8},{6,8},{7,7} } },
     -- Enemies around the retractable highground
     ["2,2"] = "Zombie",
     ["6,2"] = "Zombie",

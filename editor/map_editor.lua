@@ -399,52 +399,9 @@ function editor.generateMap()
         end
     end
 
-    -- === Edge barriers (randomised) ===
-    -- Top: always MountainRange (the classic top wall)
-    local topCells = {{1,1}, {2,1}, {3,0}, {4,0}, {5,0}, {6,1}, {7,1}}
-    for _, c in ipairs(topCells) do
-        editor.entityData[c[1] .. "," .. c[2]] = nil
-    end
-    editor.entityData["4,0"] = { name = "MountainRange", cells = topCells }
-    for _, c in ipairs(topCells) do
-        editor.terrainData[c[1] .. "," .. c[2]] = "stone"
-    end
-
-    -- Left side: always full barrier, vary only the type
-    local leftCells = {}
-    for r = 2, 7 do leftCells[#leftCells + 1] = {0, r} end
-    local leftName = love.math.random() < 0.5 and "SlopeRange" or "MountainRange"
-    editor.entityData["0,4"] = { name = leftName, cells = leftCells }
-    for _, c in ipairs(leftCells) do
-        editor.terrainData[c[1] .. "," .. c[2]] = "stone"
-    end
-
-    -- Right side: same, independently randomised
-    local rightCells = {}
-    for r = 2, 7 do rightCells[#rightCells + 1] = {8, r} end
-    local rightName = love.math.random() < 0.5 and "SlopeRange" or "MountainRange"
-    editor.entityData["8,4"] = { name = rightName, cells = rightCells }
-    for _, c in ipairs(rightCells) do
-        editor.terrainData[c[1] .. "," .. c[2]] = "stone"
-    end
-
-    -- Bottom: ReefRange or SharpReefs (single-cell placement)
-    local bottomCells = {{1,7}, {2,8}, {3,8}, {4,9}, {5,8}, {6,8}, {7,7}}
-    local bottomName = love.math.random() < 0.4 and "SharpReefs" or "ReefRange"
-    if bottomName == "ReefRange" then
-        for _, c in ipairs(bottomCells) do
-            editor.entityData[c[1] .. "," .. c[2]] = nil
-        end
-        editor.entityData["4,9"] = { name = "ReefRange", cells = bottomCells }
-    else
-        -- SharpReefs: place single-cell obstacles
-        for _, c in ipairs(bottomCells) do
-            editor.entityData[c[1] .. "," .. c[2]] = "SharpReefs"
-        end
-    end
-    for _, c in ipairs(bottomCells) do
-        editor.terrainData[c[1] .. "," .. c[2]] = "stone"
-    end
+    -- === Map border: one object, kind varies per generated map ===
+    editor.borderKind = ({ "mountain", "reef", "slope" })[love.math.random(1, 3)]
+    editor.borderGaps = {}
 
     -- === Water: exactly one body, must touch the map edge ===
     -- ponytail: blob grows from a random edge cell inward; incompatible with highgrounds (elevation forced off)
@@ -492,19 +449,9 @@ function editor.generateMap()
     }
     local line = railLines[love.math.random(1, #railLines)]
     local leftCell, rightCell = line[1], line[#line]
-    local leftWall = editor.entityData["0,4"]
-    local rightWall = editor.entityData["8,4"]
-    local function removeCell(wall, cell)
-        if not wall then return end
-        for i = #wall.cells, 1, -1 do
-            if wall.cells[i][1] == cell[1] and wall.cells[i][2] == cell[2] then
-                table.remove(wall.cells, i)
-                return
-            end
-        end
-    end
-    removeCell(leftWall, leftCell)
-    removeCell(rightWall, rightCell)
+    -- Punch border gaps where the tunnel crosses the perimeter
+    editor.borderGaps[leftCell[1] .. "," .. leftCell[2]] = true
+    editor.borderGaps[rightCell[1] .. "," .. rightCell[2]] = true
     local leftTunnel, rightTunnel = "TunnelEntrance", "TunnelExit"
     -- direction 1 = down-right (+30 deg), 2 = up-right (-30 deg); travel direction
     local dir = (leftCell[2] < rightCell[2]) and 1 or 2
@@ -515,8 +462,6 @@ function editor.generateMap()
     -- tunnel endpoints are never on the walls' home row 4, so no re-home needed
     editor.entityData[leftCell[1] .. "," .. leftCell[2]] = leftTunnel
     editor.entityData[rightCell[1] .. "," .. rightCell[2]] = rightTunnel
-    if leftWall then editor.entityData["0,4"] = leftWall end
-    if rightWall then editor.entityData["8,4"] = rightWall end
     for _, c in ipairs(line) do
         editor.upperTerrainData[c[1] .. "," .. c[2]] = "railway:" .. dir
         railTrackCells[#railTrackCells + 1] = {c[1], c[2]}
@@ -875,6 +820,13 @@ function editor.loadMap(data)
     editor.statusData = {}
     editor.upperTerrainData = {}
     editor.elevationData = {}
+    editor.borderKind = data.border or "mountain"
+    editor.borderGaps = {}
+    if data.borderGaps then
+        for _, c in ipairs(data.borderGaps) do
+            editor.borderGaps[c[1] .. "," .. c[2]] = true
+        end
+    end
 
     -- Use map's grid parameters (same as game does in restartGame)
     local mapWidth = data.width or EDITOR_GRID_WIDTH
@@ -953,6 +905,7 @@ function editor.getMapData()
         centerQ = editor.hex.centerQ,
         centerR = editor.hex.centerR,
         orientation = editor.hex.orientation,
+        border = editor.borderKind or "mountain",
         terrain = {},
         entities = {},
         statuses = {},
@@ -970,6 +923,14 @@ function editor.getMapData()
     end
     for key, val in pairs(editor.entityData) do
         data.entities[key] = val
+    end
+    data.border = editor.borderKind or "mountain"
+    if editor.borderGaps then
+        data.borderGaps = {}
+        for key in pairs(editor.borderGaps) do
+            local q, r = key:match("^(%d+),(%d+)$")
+            if q and r then table.insert(data.borderGaps, { tonumber(q), tonumber(r) }) end
+        end
     end
     for key, val in pairs(editor.statusData) do
         data.statuses[key] = val
@@ -1007,6 +968,14 @@ function editor.saveMap()
     table.insert(lines, string.format("  centerQ = %d,", data.centerQ))
     table.insert(lines, string.format("  centerR = %d,", data.centerR))
     table.insert(lines, string.format('  orientation = "%s",', data.orientation))
+    table.insert(lines, string.format('  border = "%s",', data.border or "mountain"))
+    if data.borderGaps and #data.borderGaps > 0 then
+        local gapStrs = {}
+        for _, c in ipairs(data.borderGaps) do
+            table.insert(gapStrs, string.format(" {%d, %d}", c[1], c[2]))
+        end
+        table.insert(lines, string.format("  borderGaps = {%s},", table.concat(gapStrs, ",")))
+    end
 
     -- Active rows (custom active area shape)
     if data.activeRows then
@@ -1262,28 +1231,7 @@ function editor.paintCell(q, r)
             end
         else
             local name = (editor.customEntityName ~= "" and editor.customEntityName or editor.selectedEntity)
-            -- Boundary entities: fill entire group
-            if name == "MountainRange" or name == "ReefRange" or name == "SlopeRange" then
-                local groupName, cells = getBoundaryGroup(editor.hex, q, r)
-                if groupName and cells then
-                    local cellsList = {}
-                    for _, cell in ipairs(cells) do
-                        table.insert(cellsList, {cell.q, cell.r})
-                    end
-                    local anchor = cellsList[1]
-                    editor.entityData[anchor[1] .. "," .. anchor[2]] = { name = name, cells = cellsList }
-                    -- Clear any existing entities on group cells (except anchor)
-                    for _, c in ipairs(cellsList) do
-                        local ck = c[1] .. "," .. c[2]
-                        if ck ~= anchor[1] .. "," .. anchor[2] then
-                            editor.entityData[ck] = nil
-                        end
-                    end
-                else
-                    editor.message = "No boundary group here"
-                    editor.messageTimer = 2
-                end
-            elseif isDirectionalEntity(name) then
+            if isDirectionalEntity(name) then
                 editor.entityData[k] = { name = name, dir = editor.directionIndex }
             else
                 editor.entityData[k] = name
