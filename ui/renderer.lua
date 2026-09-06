@@ -9,6 +9,7 @@ local hex_utils = require("grid.hex_utils")
 local global_abilities = require("system.global_abilities")
 local objectives = require("system.objectives")
 local fonts = require("util.fonts")
+local icon_cache = require("ui.icon_cache")
 
 function renderer.draw(state)
     if not state or not state.hex then return end
@@ -29,7 +30,12 @@ function renderer.draw(state)
         ui.collectAttackPreviewOverlays(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities, ovCells)
         for _, c in ipairs(ovCells) do
             local key = c.q .. "," .. c.r
-            if not cellOverlays[key] then
+            -- Whole impact area pops orange on hover. Overwrite the plain
+            -- "attackable" (gold) marker on affected cells so area attacks
+            -- (Wide Strike, Cleave...) light up their full reach, not just the
+            -- aimed single cell.
+            local existing = cellOverlays[key]
+            if existing == nil or existing == true then
                 cellOverlays[key] = {preview = true}
             end
         end
@@ -681,7 +687,7 @@ function drawHexGrid(state, cellOverlays)
     local hoveredBoundaryEntity = nil
     if hex.hoverQ >= 0 then
         local he = getEntityAtHex(hex.hoverQ, hex.hoverR)
-        if he and he.cells and he:isObstacle() then
+        if he and he.cells and he:isEdge() then
             hoveredBoundaryEntity = he
         end
     end
@@ -903,7 +909,7 @@ function drawActionIndicator(entity, x, y)
         love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
         love.graphics.circle("fill", x + 15, y - 15, 8)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print("\xE2\x9C\x93", x + 11, y - 20)
+        icon_cache.drawSmall("check", x + 15, y - 15, 13, 1, {0.95, 0.95, 0.95})
     elseif entity.isPlayable and not entity.hasMovedThisTurn then
         local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(entity, "rooted") and not entity.rootImmune
         if isRooted then

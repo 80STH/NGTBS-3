@@ -7,6 +7,7 @@ return function(ui)
     local buttonFont = fonts.get(14)
     local icon_cache = require("ui.icon_cache")
     local combat = require("combat.combat")
+    local config = require("core.config")
 
     local rightCol = { x = 0, w = 190, btnH = 56, gap = 6, margin = 10 }
     -- Bottom-left "ability block": a row of square ability buttons whose top sits
@@ -299,6 +300,13 @@ return function(ui)
 
         love.graphics.setColor(canUndo and 0.2 or 0.5, 0.2, 0.8, 0.8)
         love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 5)
+        if undoButton.isHeld then
+            -- Hold-to-undo-all: fill the button while charging.
+            local hTime = config.HOLD_TIME or 0.7
+            local progress = math.min((undoButton.holdTimer or 0) / hTime, 1)
+            love.graphics.setColor(0.9, 0.3, 0.8, 0.5)
+            love.graphics.rectangle("fill", r.x, r.y, r.w * progress, r.h, 5)
+        end
         icon_cache.drawSmall("btn_undo", r.x + 20, r.y + r.h / 2, 36)
         love.graphics.setColor(1, 1, 1, 1)
         local old = love.graphics.getFont()
@@ -446,7 +454,14 @@ return function(ui)
             end
             love.graphics.setColor(1, 1, 1, 1)
             love.graphics.setFont(buttonFont)
-            love.graphics.printf((isSelected and "✓ " or "") .. btn.name, btn.x + 3, btn.y + btn.height - 38, btn.width - 6, "center")
+            local nameText = btn.name
+            local nameW = buttonFont:getWidth(nameText)
+            local labelX = btn.x + (btn.width - nameW) / 2
+            if isSelected then
+                icon_cache.drawSmall("check", labelX - 8, btn.y + btn.height - 38 + 9, 12, 1, {0.4, 1, 0.4})
+                labelX = labelX + 4
+            end
+            love.graphics.print(nameText, labelX, btn.y + btn.height - 38)
             love.graphics.setFont(old)
 
             -- Desc tooltip on hover / when selected, drawn to the right

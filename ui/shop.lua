@@ -4,6 +4,7 @@
 local shop = {}
 local fonts = require("util.fonts")
 local log = require("util.log")
+local icon_cache = require("ui.icon_cache")
 
 shop.isOpen = false
 shop.autoOpened = false
@@ -17,14 +18,14 @@ local function buildGenericCategory()
     local takenSet = {}
     for _, g in ipairs(takenGeneric) do takenSet[g] = true end
     local pool = {
-        { id = "fireImmune", name = "Fire Immunity", desc = "All units immune to fire", icon = "🔥" },
-        { id = "acidImmune", name = "Acid Immunity", desc = "All units immune to acid", icon = "☣" },
-        { id = "rootImmune", name = "Iron Will", desc = "All units immune to roots/slowing auras", icon = "◆" },
-        { id = "armor", name = "Fortress", desc = "All units take -1 damage", icon = "🛡" },
-        { id = "moveSpeed", name = "Swift Boots", desc = "All units gain +1 move range", icon = "👢" },
-        { id = "deployAnywhere", name = "Scout", desc = "All units deploy on any terrain", icon = "👁" },
-        { id = "canMoveAfterAttack", name = "Hit & Run", desc = "All units move after attacking", icon = "↔" },
-        { id = "phaseThroughEnemies", name = "Ghost Cloak", desc = "All units phase through enemies", icon = "👻" },
+        { id = "fireImmune", name = "Fire Immunity", desc = "All units immune to fire", icon = "fire_icon" },
+        { id = "acidImmune", name = "Acid Immunity", desc = "All units immune to acid", icon = "shop_acid" },
+        { id = "rootImmune", name = "Iron Will", desc = "All units immune to roots/slowing auras", icon = "shop_root" },
+        { id = "armor", name = "Fortress", desc = "All units take -1 damage", icon = "shop_armor" },
+        { id = "moveSpeed", name = "Swift Boots", desc = "All units gain +1 move range", icon = "move" },
+        { id = "deployAnywhere", name = "Scout", desc = "All units deploy on any terrain", icon = "shop_eye" },
+        { id = "canMoveAfterAttack", name = "Hit & Run", desc = "All units move after attacking", icon = "trait_move_after_attack" },
+        { id = "phaseThroughEnemies", name = "Ghost Cloak", desc = "All units phase through enemies", icon = "shop_ghost" },
     }
     local available = {}
     for _, item in ipairs(pool) do
@@ -71,7 +72,7 @@ local function buildSpellCategory()
             id = name,
             name = name,
             desc = "Unlocks the " .. name .. " ability.",
-            icon = "~",
+            icon = "shop_spell",
             taken = false,
         })
     end
@@ -99,7 +100,7 @@ local function buildHeroicCategory()
             id = name,
             name = name,
             desc = "Heroic: " .. name,
-            icon = "★",
+            icon = "shop_star",
             taken = false,
         })
     end
@@ -124,7 +125,7 @@ local function buildCommanderCategory()
                 id = cart.id,
                 name = cart.name,
                 desc = cart.desc,
-                icon = "★",
+                icon = "shop_star",
                 apply = cart.apply,
                 taken = false,
             })
@@ -307,7 +308,11 @@ function shop.draw()
 
                 love.graphics.setColor(color[1], color[2], color[3], slot.taken and 0.3 or 0.8)
                 love.graphics.setFont(fonts.get(14))
-                love.graphics.print(slot.icon, contentX + 8, y + 8)
+                if slot.icon and icon_cache and icon_cache.get(slot.icon) then
+                    icon_cache.drawSmall(slot.icon, contentX + 14, y + rowH / 2, 22, slot.taken and 0.35 or 0.9)
+                else
+                    love.graphics.print(slot.icon or "", contentX + 8, y + 8)
+                end
 
                 love.graphics.setColor(slot.taken and 0.4 or 1, slot.taken and 0.4 or 1, slot.taken and 0.4 or 1, slot.taken and 0.5 or 1)
                 love.graphics.setFont(fonts.get(12))
@@ -382,6 +387,7 @@ local function finishProgression()
     if nextMap <= #progression then
         _G.currentMapIndex = nextMap
         _G.progressionShopOpened = false
+        beginCurrentMission()
         _G.restartGame(progression[nextMap])
     else
         _G.progressionOverlay = "complete"

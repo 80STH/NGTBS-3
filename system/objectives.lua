@@ -4,6 +4,7 @@ local status = require("system.status")
 local env = require("entity.environment")
 local fonts = require("util.fonts")
 local combat = require("combat.combat")
+local icon_cache = require("ui.icon_cache")
 
 local objectives = {}
 
@@ -56,6 +57,15 @@ primaryObjectiveDefs.protect_caravans = {
             end
         end
     end,
+    progress = function()
+        local alive = 0
+        for _, e in ipairs(_G.entities or {}) do
+            if e.name == "Caravan" and e.health and e.health > 0 then
+                alive = alive + 1
+            end
+        end
+        return tostring(alive) .. "/" .. tostring(_G.caravanCount or 0)
+    end,
 }
 
 primaryObjectiveDefs.protect_railway = {
@@ -100,6 +110,9 @@ primaryObjectiveDefs.protect_railway = {
         end
         _G.occupiedTunnelCount = aliveOcc
     end,
+    progress = function()
+        return tostring(_G.railwayTakenDamage or 0) .. " dmg"
+    end,
 }
 
 primaryObjectiveDefs.protect_buildings = {
@@ -123,6 +136,9 @@ primaryObjectiveDefs.protect_buildings = {
             _G.buildingDamageTracked = totalDamage
             log.infof("objectives", "Buildings damaged! (total: %d)", totalDamage)
         end
+    end,
+    progress = function()
+        return tostring(_G.buildingDamageTracked or 0) .. " dmg"
     end,
 }
 
@@ -228,6 +244,14 @@ local function definePool()
             end,
             checkOnVictory = function(entities, state)
                 state["protect_blockpost"] = "completed"
+            end,
+            progress = function()
+                for _, e in ipairs(_G.entities or {}) do
+                    if e.name == "Blockpost" and e.maxHealth then
+                        return tostring(math.max(0, e.health or 0)) .. "/" .. tostring(e.maxHealth)
+                    end
+                end
+                return nil
             end,
         },
         {
@@ -335,6 +359,9 @@ local function definePool()
                 local killed = _G.objective_enemiesKilled or 0
                 state["slaughter"] = (killed >= 7) and "completed" or "failed"
             end,
+            progress = function()
+                return tostring(_G.objective_enemiesKilled or 0) .. "/7"
+            end,
         },
         {
             id = "block_dig",
@@ -352,6 +379,9 @@ local function definePool()
             checkOnVictory = function(entities, state)
                 local blocked = _G.objective_digBlocks or 0
                 state["block_dig"] = (blocked >= 2) and "completed" or "failed"
+            end,
+            progress = function()
+                return tostring(_G.objective_digBlocks or 0) .. "/2"
             end,
         },
         -- Hero-exclusive objectives (solo mode): only offered when the hero
@@ -378,6 +408,11 @@ local function definePool()
                 for _ in pairs(_G.objective_burnCells or {}) do n = n + 1 end
                 state["burn_sites"] = (n >= 5) and "completed" or "failed"
             end,
+            progress = function()
+                local n = 0
+                for _ in pairs(_G.objective_burnCells or {}) do n = n + 1 end
+                return tostring(n) .. "/5"
+            end,
         },
         {
             id = "burn_kill",
@@ -388,8 +423,16 @@ local function definePool()
             onGenerate = function(entities, hex)
                 _G.objective_burnKills = 0
             end,
+            check = function(entities, state)
+                if (_G.objective_burnKills or 0) >= 2 then
+                    state["burn_kill"] = "completed"
+                end
+            end,
             checkOnVictory = function(entities, state)
                 state["burn_kill"] = ((_G.objective_burnKills or 0) >= 2) and "completed" or "failed"
+            end,
+            progress = function()
+                return tostring(_G.objective_burnKills or 0) .. "/2"
             end,
         },
         {
@@ -401,8 +444,16 @@ local function definePool()
             onGenerate = function(entities, hex)
                 _G.objective_fatalPushes = 0
             end,
+            check = function(entities, state)
+                if (_G.objective_fatalPushes or 0) >= 1 then
+                    state["fatal_push"] = "completed"
+                end
+            end,
             checkOnVictory = function(entities, state)
                 state["fatal_push"] = ((_G.objective_fatalPushes or 0) >= 1) and "completed" or "failed"
+            end,
+            progress = function()
+                return tostring(_G.objective_fatalPushes or 0) .. "/1"
             end,
         },
         {
@@ -413,12 +464,29 @@ local function definePool()
             onGenerate = function(entities, hex)
                 _G.objective_usedAttacks = {}
             end,
+            check = function(entities, state)
+                local hero = _G.hero
+                local used = 0
+                for _ in pairs(_G.objective_usedAttacks or {}) do used = used + 1 end
+                if hero and #hero.attacks > 0 and used >= #hero.attacks then
+                    state["all_attacks"] = "completed"
+                end
+            end,
             checkOnVictory = function(entities, state)
                 local hero = _G.hero
                 local used = 0
                 for _ in pairs(_G.objective_usedAttacks or {}) do used = used + 1 end
                 state["all_attacks"] = (hero and #hero.attacks > 0 and used >= #hero.attacks)
                     and "completed" or "failed"
+            end,
+            progress = function()
+                local hero = _G.hero
+                local used = 0
+                for _ in pairs(_G.objective_usedAttacks or {}) do used = used + 1 end
+                if hero and #hero.attacks > 0 then
+                    return tostring(used) .. "/" .. tostring(#hero.attacks)
+                end
+                return nil
             end,
         },
         {
@@ -710,6 +778,15 @@ function objectives.getState(id)
     return objectiveStates[id] or "pending"
 end
 
+-- Tracking string for an objective (e.g. "3/7" for slaughter), or nil when
+-- the objective is binary and needs no counter.
+function objectives.getProgress(obj)
+    if obj and obj.progress then
+        return obj.progress()
+    end
+    return nil
+end
+
 function objectives.getCompletedCount()
     local count = 0
     for _, obj in ipairs(activeObjectives) do
@@ -758,8 +835,17 @@ function objectives.update(entities)
     -- Check secondary objectives
     for _, obj in ipairs(activeObjectives) do
         if objectiveStates[obj.id] == "pending" then
-            -- Certain objectives check immediately; others wait for decay
-            local canCheck = decayApplied or obj.id == "protect_tower" or obj.id == "protect_blockpost" or obj.id == "burn_sites"
+            -- Certain objectives check immediately (achievements that flip the
+            -- moment their condition is met); others wait for decay (turn-limit
+            -- "before decay" goals). fatal_push / burn_kill / burn_sites /
+            -- all_attacks are pure kill/use achievements -> live detection.
+            local canCheck = decayApplied
+                or obj.id == "protect_tower"
+                or obj.id == "protect_blockpost"
+                or obj.id == "burn_sites"
+                or obj.id == "burn_kill"
+                or obj.id == "fatal_push"
+                or obj.id == "all_attacks"
             if canCheck and obj.check then
                 local prevState = objectiveStates[obj.id]
                 obj.check(entities, objectiveStates)
@@ -803,14 +889,13 @@ end
 
 -- Height of the objectives panel (0 when it would be empty), for stacking UI below it
 function objectives.getPanelHeight()
-    local titleH = 20
     local lineH = 16
     local padding = 6
-    local primaryH = activePrimaryObjective and (titleH + lineH + padding) or 0
-    local secondaryH = (#activeObjectives > 0) and (titleH + #activeObjectives * lineH + padding) or 0
-    local totalH = primaryH + secondaryH + padding
-    if totalH <= padding then return 0 end
-    return totalH
+    local count = 0
+    if activePrimaryObjective then count = count + 1 end
+    count = count + #activeObjectives
+    if count == 0 then return 0 end
+    return padding * 2 + count * lineH
 end
 
 function objectives.draw()
@@ -820,7 +905,6 @@ function objectives.draw()
     local w = 200
     local lineH = 16
     local padding = 6
-    local titleH = 20
     local totalH = objectives.getPanelHeight()
 
     if totalH == 0 then return end
@@ -833,48 +917,54 @@ function objectives.draw()
     love.graphics.setFont(smallFont)
     local curY = y + padding
 
-    -- Primary objective
-    if activePrimaryObjective then
-        love.graphics.setColor(0.9, 0.6, 0.2, 1)
-        love.graphics.print("Primary", x + padding, curY)
-        curY = curY + titleH
-        local state = objectiveStates[activePrimaryObjective.id] or "pending"
-        local icon, color
-        if state == "failed" then
-            icon = "\xc3\x97"
-            color = {1, 0.4, 0.4, 1}
+    local function drawObjective(obj, isPrimary)
+        local state = objectiveStates[obj.id] or "pending"
+        local iconKey, txtColor
+        -- A state equals "completed" only for objectives that can actually be
+        -- cleared (kill/collect types resolve to completed; protect-types do too,
+        -- on victory). Completed -> green, failed -> red, in-progress -> neutral.
+        if state == "completed" then
+            iconKey = "check"
+            txtColor = {0.35, 1, 0.35}
+        elseif state == "failed" then
+            iconKey = "cross"
+            txtColor = {1, 0.45, 0.45}
         else
-            icon = "\xe2\x97\x8b"
-            color = {0.9, 0.6, 0.2, 1}
+            iconKey = "circle"
+            txtColor = isPrimary and {0.9, 0.65, 0.2} or {0.92, 0.92, 0.92}
         end
-        love.graphics.setColor(unpack(color))
-        love.graphics.print(icon .. " " .. activePrimaryObjective.name, x + padding, curY)
-        curY = curY + lineH + padding
+        local name = obj.name or obj.id or ""
+        -- Reserve room for a right-aligned progress counter.
+        local prog = objectives.getProgress(obj)
+        local rightW = prog and (smallFont:getWidth(prog) + 4) or 0
+        local maxNameW = w - padding * 2 - rightW - 22 -- icon + space
+        while name ~= "" and smallFont:getWidth(name) > maxNameW do
+            name = name:sub(1, -2)
+        end
+        if name ~= (obj.name or obj.id or "") then name = name .. "…" end
+        local nameX = x + padding
+        if icon_cache and icon_cache.get(iconKey) then
+            icon_cache.drawSmall(iconKey, nameX + 7, curY + lineH / 2, 14, 1, txtColor)
+            nameX = nameX + 16
+        end
+        -- drawSmall resets to white; re-apply the status color to the name.
+        love.graphics.setColor(txtColor[1], txtColor[2], txtColor[3], 1)
+        love.graphics.print(name, nameX, curY)
+        if prog then
+            love.graphics.setColor(0.7, 0.7, 0.8, 1)
+            love.graphics.print(prog, x + w - padding - smallFont:getWidth(prog), curY)
+        end
+        curY = curY + lineH
+    end
+
+    -- Primary objective (if any)
+    if activePrimaryObjective then
+        drawObjective(activePrimaryObjective, true)
     end
 
     -- Secondary objectives
-    if #activeObjectives > 0 then
-        love.graphics.setColor(0.9, 0.9, 0.6, 1)
-        love.graphics.print("Secondary", x + padding, curY)
-        curY = curY + titleH
-
-        for i, obj in ipairs(activeObjectives) do
-            local sy = curY + (i - 1) * lineH
-            local state = objectiveStates[obj.id] or "pending"
-            local icon, color
-            if state == "completed" then
-                icon = "\xe2\x9c\x93"
-                color = {0.4, 1, 0.4, 1}
-            elseif state == "failed" then
-                icon = "\xc3\x97"
-                color = {1, 0.4, 0.4, 1}
-            else
-                icon = "\xe2\x97\x8b"
-                color = {0.8, 0.8, 0.8, 1}
-            end
-            love.graphics.setColor(unpack(color))
-            love.graphics.print(icon .. " " .. obj.name, x + padding, sy)
-        end
+    for _, obj in ipairs(activeObjectives) do
+        drawObjective(obj, false)
     end
 end
 

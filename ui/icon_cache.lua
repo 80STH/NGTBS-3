@@ -23,6 +23,9 @@ local icon_names = {
     "abil_invulnerability", "abil_vortex", "abil_hex",
     "abil_upside_down", "abil_teleport", "abil_speed_boost",
     "fire_icon",
+    "shop_acid", "shop_root", "shop_armor", "shop_eye", "shop_ghost",
+    "shop_star", "shop_spell",
+    "check", "cross", "circle",
 }
 
 function icon_cache.loadAll()
@@ -51,12 +54,16 @@ function icon_cache.draw(name, x, y, alpha)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function icon_cache.drawSmall(name, x, y, size, alpha)
+function icon_cache.drawSmall(name, x, y, size, alpha, tint)
     local img = icon_cache[name]
     if not img then return end
     local w, h = img:getDimensions()
     local scale = (size or 28) / math.max(w, h)
-    love.graphics.setColor(1, 1, 1, alpha or 1)
+    if tint then
+        love.graphics.setColor(tint[1], tint[2], tint[3], alpha or 1)
+    else
+        love.graphics.setColor(1, 1, 1, alpha or 1)
+    end
     love.graphics.draw(img, x, y, 0, scale, scale, w/2, h/2)
     love.graphics.setColor(1, 1, 1, 1)
 end

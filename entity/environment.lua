@@ -794,6 +794,7 @@ function environment.loadNativeMap(data)
     local borderEntity = Entity.new("MapBorder", Entity.TYPES.EDGE, borderCells[1] and borderCells[1].q or 0,
         borderCells[1] and borderCells[1].r or 0, 1, false, 0, nil, nil, {})
     borderEntity.cells = borderCells
+    borderEntity.borderKind = borderKind
     if borderSpec.lethalCollision then borderEntity.lethalCollision = true end
     if borderSpec.noCollisionDamage then borderEntity.noCollisionDamage = true end
     local borderSprite = loadSpritePNG(borderSpec.sprite)

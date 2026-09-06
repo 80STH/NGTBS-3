@@ -353,6 +353,7 @@ function menu.mousepressed(x, y)
             isProgressionRun = false
             soulPowerInit()
             global_abilities.initWithCommander(selectedCommander)
+            beginCurrentMission()
             restartGame(btn.path)
             return true
         end
@@ -375,6 +376,7 @@ function menu.mousepressed(x, y)
                 progressionShopOpened = false
                 soulPowerInit()
                 global_abilities.initWithCommander(selectedCommander)
+                beginCurrentMission()
                 restartGame("maps/map1.lua")
                 return true
             elseif btn.key == "shop" then
@@ -420,6 +422,7 @@ function menu.keypressed(key)
             soloMode = true
             soulPowerInit()
             global_abilities.initWithCommander(selectedCommander)
+            beginCurrentMission()
             restartGame(mapList[1])
             return true
         end

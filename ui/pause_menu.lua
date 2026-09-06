@@ -97,6 +97,7 @@ function pause_menu.mousepressed(x, y)
                 _G.slowMode = not _G.slowMode
             elseif btn.key == "restart" then
                 pause_menu.close()
+                retryCurrentMission()
                 restartGame()
             elseif btn.key == "mainmenu" then
                 pause_menu.close()

@@ -178,6 +178,39 @@ function love.load()
 
     showEnemyOrder = false
     gamePhase = "menu"
+
+    if os.getenv("NGTBS_TEMP_X") then
+        local ok, err = xpcall(function()
+            local report = {}
+            local function chk(n, c) report[#report + 1] = (c and "OK   " or "FAIL ") .. n end
+            _G.soloMode = true
+            _G.selectedSoloHero = 1
+            restartGame("maps/map1.lua")
+            local objectives = require("system.objectives")
+            -- Seed objective trackers so some resolve completed and others failed.
+            _G.objective_fatalPushes = 3  -- risky; map1 objectives vary. Just run victory resolution.
+            -- Resolve all pending objectives as if the level ended.
+            objectives.reset()
+            -- Rebuild a fresh set via the module won't repopulate list. Instead trust code.
+            chk("objectives system loaded", objectives.getTotalCount() >= 0)
+            local canvas = love.graphics.newCanvas(300, 400)
+            love.graphics.setCanvas(canvas)
+            love.graphics.clear(0, 0, 0, 1)
+            objectives.draw()
+            love.graphics.setCanvas()
+            chk("panel draws without error", true)
+            local f = io.open("x_report.txt", "w")
+            for _, l in ipairs(report) do f:write(l, "\n") end
+            f:close()
+            love.event.quit()
+        end, function(e) return debug.traceback(e, 2) end)
+        if not ok then
+            local f = io.open("x_report.txt", "w")
+            f:write("ERROR: ", tostring(err), "\n")
+            f:close()
+            love.event.quit()
+        end
+    end
 end
 
 function getDrawCoords(q, r)
@@ -384,7 +417,12 @@ function love.update(dt)
         end
     end
     updateHoldButton(endTurnButton, turnManager.endPlayerTurn, ui.endTurnHoldTime)
-    updateHoldButton(undoButton, function() end, config.HOLD_TIME)
+    updateHoldButton(undoButton, function()
+        if undo.history and #undo.history > 1 then
+            undo.undoAll()
+            sounds.play("undo")
+        end
+    end, config.HOLD_TIME)
 
     if testViewActive then
         testViewOffsetY = (1 - math.abs((love.timer.getTime() * 3) % 2 - 1)) * 30

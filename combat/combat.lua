@@ -1664,6 +1664,23 @@ function combat.WideVortexAttack.new()
     local self = combat.Attack.new("Wide Vortex", "Shift target enemy and a second enemy right or left", 1, 0, {})
     return setmetatable(self, combat.WideVortexAttack)
 end
+function combat.WideVortexAttack.getAffectedCells(self, attacker, targetQ, targetR, hex, entities)
+    -- Shifts up to three front enemies: highlight the aimed cell and its two
+    -- flanking cells around the attacker (mirrors Cleave's shape) so the whole
+    -- actionable area is visible while aiming.
+    local dmg = self and self.damage
+    local cells = {{q = targetQ, r = targetR, damage = dmg}}
+    local stepX, stepY, stepZ = self:getLineDirection(attacker.q, attacker.r, targetQ, targetR, hex)
+    if stepX then
+        local sx1, sy1, sz1 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, true)
+        local sx2, sy2, sz2 = hex_utils.rotateCubeDir(stepX, stepY, stepZ, false)
+        local s1Q, s1R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx1, sy1, sz1)
+        local s2Q, s2R = hex_utils.applyCubeStep(attacker.q, attacker.r, sx2, sy2, sz2)
+        table.insert(cells, {q = s1Q, r = s1R, damage = dmg})
+        table.insert(cells, {q = s2Q, r = s2R, damage = dmg})
+    end
+    return cells
+end
 
 function combat.WideVortexAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)

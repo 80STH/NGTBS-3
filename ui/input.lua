@@ -421,7 +421,7 @@ end
         return
     end
 
-    if clicked and clicked.cells and clicked:isObstacle() and not clicked.isHazard then
+    if clicked and clicked.cells and clicked:isEdge() and clicked.name == "MapBorder" then
         boundarySelected = clicked
         selectedActor = nil
         hex.selectedQ, hex.selectedR = tq, tr
@@ -463,6 +463,7 @@ function input.keypressed(key)
             end
         elseif key == "r" or key == "R" then
             if isProgressionRun and win then return end
+            retryCurrentMission()
             restartGame()
         end
         return
@@ -470,7 +471,11 @@ function input.keypressed(key)
 
     if not gameActive then
         if isProgressionRun and win then return end
-        if key == "return" or key == " " or key == "r" or key == "R" then
+        if key == "return" or key == " " then
+            retryCurrentMission()
+            restartGame()
+        elseif key == "r" or key == "R" then
+            retryCurrentMission()
             restartGame()
         end
         return
@@ -528,6 +533,7 @@ function input.keypressed(key)
     end
 
     if key == "r" or key == "R" then
+        retryCurrentMission()
         restartGame()
         return
     end

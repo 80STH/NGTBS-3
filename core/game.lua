@@ -537,6 +537,25 @@ function spendSoul(amount)
     end
 end
 
+-- Souls you entered the current mission with. A mission (map) retry via R
+-- restores to this baseline, while a finished mission banks whatever souls
+-- actually survived into the next mission.
+
+-- Mark the start of a brand-new mission (fresh run / next map): bank the
+-- current (carried) soul total as the value a retry of this mission returns to.
+function beginCurrentMission()
+    _G.soulAttemptStart = _G.soulPower
+    log.infof("game", "Current mission soul baseline: %s/%s", tostring(_G.soulAttemptStart), tostring(_G.soulPowerMax))
+end
+
+-- R retry: refund souls spent within this attempt back to the mission start.
+function retryCurrentMission()
+    if _G.soulAttemptStart ~= nil then
+        soulPower = _G.soulAttemptStart
+        log.infof("game", "Mission retry: Soul Power restored to %d/%d", soulPower, soulPowerMax)
+    end
+end
+
 -- Kept name so older call sites (Entity damage on buildings/trains and the
 -- objective failures) still work: those losses are now soul-power drains.
 function damageHero(amount)

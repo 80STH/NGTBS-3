@@ -1970,7 +1970,25 @@ function ui.drawCellTooltip(q, r, terrain, hex)
         hasSpecial = true
     end
     if not hasSpecial then
-        table.insert(content, { text = "Ground Tile", color = {0.7, 0.7, 0.7} })
+        local borderEntity = getEntityAtHex(q, r)
+        if borderEntity and borderEntity.cells and borderEntity:isEdge() then
+            local kind = borderEntity.borderKind or "mountain"
+            local kindName = ({ mountain = "Mountain Range", reef = "Sharp Reefs", slope = "Mountain Slope" })[kind] or "Map Border"
+            table.insert(content, { text = "Map Border", color = {0.9, 0.7, 0.35} })
+            table.insert(content, { text = kindName, color = {0.7, 0.6, 0.45} })
+            table.insert(content, { text = "Impassable — nothing can enter or cross it.", color = {0.8, 0.8, 0.8} })
+            table.insert(content, { text = "Invulnerable — cannot be damaged or pushed.", color = {0.8, 0.8, 0.8} })
+            if borderEntity.lethalCollision then
+                table.insert(content, { text = "Collisions with it are lethal!", color = {1, 0.5, 0.4} })
+            elseif borderEntity.noCollisionDamage then
+                table.insert(content, { text = "Collisions deal no damage (just stops you).", color = {0.6, 0.9, 0.6} })
+            else
+                table.insert(content, { text = "Pushing into it deals collision damage.", color = {0.9, 0.8, 0.5} })
+            end
+            hasSpecial = true
+        else
+            table.insert(content, { text = "Ground Tile", color = {0.7, 0.7, 0.7} })
+        end
     end
     local minWidth = 160
     local maxWidth = 280
@@ -2342,9 +2360,18 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
         if distance >= 1 and distance <= attack.range then
             local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
             if stepX then
-                local occupant = getEntityAtHex(hoverQ, hoverR, entities)
-                if occupant and occupant:isCharacter() and occupant.health > 0 and not occupant.isPlayable then
-                    table.insert(out, {q = hoverQ, r = hoverR})
+                if attack.name == "Wide Vortex" and attack.getAffectedCells then
+                    -- Whole area: highlight the aimed cell plus every flanking
+                    -- cell the wide shift can touch while aiming.
+                    local cells = attack:getAffectedCells(attacker, hoverQ, hoverR, hex, entities)
+                    for _, c in ipairs(cells) do
+                        table.insert(out, {q = c.q, r = c.r})
+                    end
+                else
+                    local occupant = getEntityAtHex(hoverQ, hoverR, entities)
+                    if occupant and occupant:isCharacter() and occupant.health > 0 and not occupant.isPlayable then
+                        table.insert(out, {q = hoverQ, r = hoverR})
+                    end
                 end
             end
         end
@@ -2663,8 +2690,7 @@ love.graphics.print(ally.name, x + 5, by + 2)
          local indX = x + btnW - 16
          local indY = by + btnH / 2 - 1
          if ally.hasActedThisTurn then
-            love.graphics.setColor(0.5, 0.5, 0.5, 1)
-            love.graphics.print("✗", indX, indY - 2)
+            icon_cache.drawSmall("cross", indX + 2, indY + 4, 12, 1, {0.5, 0.5, 0.5})
         elseif not ally.hasMovedThisTurn then
             local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(ally, "rooted") and not ally.rootImmune
             if isRooted then
