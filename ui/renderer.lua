@@ -937,8 +937,6 @@ function drawEntity(entity, state)
         love.graphics.setColor(1, 1, 1, alpha)
     end
 
-    local wounded = entity:isCharacter() and entity.health > 0 and entity.health < entity.maxHealth
-
     -- Highlight shuntable train cars
     local shuntHighlight = false
     if entity.isTrainCar and state.turnState and state.turnState.phase == "player" then
@@ -956,9 +954,7 @@ function drawEntity(entity, state)
         if entity:isObstacle() or entity:isBuilding() or entity:isEdge() then
             drawY = y - 6
         end
-        if wounded then
-            love.graphics.setColor(1, 0.3, 0.3, alpha)
-        elseif shuntHighlight then
+        if shuntHighlight then
             love.graphics.setColor(0.3, 0.6, 1, alpha)
         end
         -- Directional entities: rotate sprite to match direction

@@ -1056,59 +1056,6 @@ local function buildSoloHeroes()
                 }
             end,
         },
-        {
-            id = "gunner", name = "Gunner", spriteGid = 31, hp = 3, move = 4, tags = {"push"},
-            attacks = function()
-                return {
-                    { attack = c.ShootAttack.new(), name = "Shoot", description = "Shoots and pushes first enemy in line" },
-                    { attack = c.PiercingShootAttack.new(), name = "Piercing Shot", description = "Pierces first enemy, wounds and pushes the second" },
-                    { attack = c.PushAttack.new(5), name = "Push", description = "Pushes first enemy in line, no damage" },
-                }
-            end,
-        },
-        {
-            id = "brute", name = "Brute", spriteGid = 30, hp = 3, move = 2, tags = {"push"},
-            attacks = function()
-                return {
-                    { attack = c.HeavyPunchAttack.new(), name = "Heavy Punch", description = "Heavy strike, wounds and pushes. Lethal if empowered" },
-                    { attack = c.EmpowerPunchAttack.new(), name = "Empower Punch", description = "Pushes target, doubles next attack. Wounds if empowered" },
-                    { attack = c.BashAttack.new(), name = "Bash", description = "Heavy blow: wounds target and enemy behind attacker" },
-                    { attack = c.DoubleCleaveAttack.new(), name = "Double Cleave", description = "Two swings: each hits a cell and the cell to its left" },
-                    { attack = c.HeavyChargeAttack.new(), name = "Heavy Charge", description = "Finisher: after your turn ends, charge in a straight line and push the first enemy. Colliding with an obstacle is lethal" },
-                }
-            end,
-        },
-        {
-            id = "storm", name = "Storm", spriteGid = 27, hp = 3, move = 3, tags = {},
-            attacks = function()
-                return {
-                    { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shifts an enemy left or right and wounds" },
-                    { attack = c.WideVortexAttack.new(), name = "Wide Vortex", description = "Shifts 3 enemies in front left or right" },
-                    { attack = c.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning, wounds everyone on the line" },
-                }
-            end,
-        },
-        {
-            id = "warlock", name = "Warlock", spriteGid = 40, hp = 3, move = 3, tags = {},
-            attacks = function()
-                return {
-                    { attack = c.LichBoltAttack.new(5), name = "Magic Bolt", description = "Hits any cell, ignores obstacles, wounds" },
-                    { attack = c.SummonAttack.new(), name = "Summon", description = "Summons a minion at target cell" },
-                    { attack = c.GhostBoltAttack.new(), name = "Ghost Bolt", description = "Piercing shot, unlimited range, wounds twice" },
-                    { attack = c.DeflectAttack.new(), name = "Deflect", description = "Finisher: until your next turn, the next attack within 1 cell deals 1 damage back to the attacker" },
-                }
-            end,
-        },
-        {
-            id = "hooker", name = "Hooker", spriteGid = 31, hp = 3, move = 3, tags = {},
-            attacks = function()
-                return {
-                    { attack = c.CatchAttack.new(), name = "Catch", description = "Hook the first enemy in line, pull it to you and deal 1 damage" },
-                    { attack = c.GrappleAttack.new(), name = "Grapple", description = "Pull yourself to the first enemy in line and deal 1 damage. Lethal beyond 3 cells" },
-                    { attack = c.WarpPrismAttack.new(), name = "Warp Prism", description = "Swap places with the first enemy in line. Works on grounded units" },
-                }
-            end,
-        },
     }
     return soloHeroes
 end
