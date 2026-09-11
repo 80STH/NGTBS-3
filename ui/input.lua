@@ -128,6 +128,23 @@ end
         return
     end
 
+    -- Unit selector squares (bottom-left, slots 1-3): select hero/summon.
+    -- Slot 4 ("Abilities") is handled by the toggle block above.
+    do
+        local sel = turnState.phase == "player" and ui.unitSelectHit(x, y)
+        local list = ui._unitSelectEntities
+        if type(sel) == "number" and list and list[sel] and not (selectedActor and selectedActor.isMoving) then
+            selectedActor = list[sel]
+            hex.selectedQ, hex.selectedR = selectedActor.q, selectedActor.r
+            updateAttackButtons(selectedActor)
+            attackMode = false
+            selectedAttack = nil
+            global_abilities.showPanel = false
+            sounds.play("click")
+            return
+        end
+    end
+
     -- Mechanism button (right column, topmost): highground + teleporters + conveyors
     if #retractableCells > 0 or next(conveyorCells or {}) ~= nil
         or require("system.teleporters").hasActivePair()

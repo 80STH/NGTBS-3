@@ -271,6 +271,20 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
             end)
             return
         end
+        -- Spiked summon (Bulwark): the shoved unit takes +1 extra damage and
+        -- the summon itself is unharmed by the collision.
+        if occupant.pushSpike then
+            if target.health and target.health > 0 then
+                local wasDestroyed = target:takeDamage(2)
+                combat.notePushKill(target, wasDestroyed)
+                if wasDestroyed then target:startDeath() end
+            end
+            _G.objective_spikes = (_G.objective_spikes or 0) + 1
+            if sounds then sounds.play("collision") end
+            combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant)
+            if onComplete then onComplete(false) end
+            return
+        end
         -- Collision → bounce + damage
         applyCollisionDamage(target, occupant, sounds)
         combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant)
@@ -800,8 +814,13 @@ function combat.FlipAttack:getFlipCells(attacker, targetQ, targetR, hex, entitie
     for _, d in ipairs(dirs) do
         local flipX, flipY, flipZ = aX + d[1], aY + d[2], aZ + d[3]
         local flipQ, flipR = hex_utils.cubeToAxial(flipX, flipY, flipZ)
-        if hex:isActiveHex(flipQ, flipR) and not combat.getEntityAtHex(flipQ, flipR, entities) then
-            table.insert(cells, {q = flipQ, r = flipR})
+        if hex:isActiveHex(flipQ, flipR) then
+            local occupant = combat.getEntityAtHex(flipQ, flipR, entities)
+            -- A cell is a legal flip destination when empty, or occupied by a
+            -- "flip pad" summon (the flipped enemy dies on landing there).
+            if not occupant or occupant.flipPad then
+                table.insert(cells, {q = flipQ, r = flipR, flipPad = occupant})
+            end
         end
     end
     return cells
@@ -829,8 +848,21 @@ function combat.FlipAttack:execute(attacker, targetQ, targetR, hex, entities, so
     if not hex:isActiveHex(destQ, destR) then
         return false, "Destination cell is not active!"
     end
-    if combat.getEntityAtHex(destQ, destR, entities) then
+    local destOccupant = combat.getEntityAtHex(destQ, destR, entities)
+    if destOccupant and not destOccupant.flipPad then
         return false, "Destination cell is occupied!"
+    end
+    -- Landing on a flip pad summon: the flipped unit is impaled and dies; the
+    -- summon is unharmed and stays put.
+    if destOccupant and destOccupant.flipPad then
+        attack_effects.flip(attacker, targetActor, destQ, destR, hex)
+        targetActor.health = 0
+        targetActor:startDeath()
+        combat.notePushKill(targetActor, true)
+        _G.objective_impales = (_G.objective_impales or 0) + 1
+        sounds.play("flip")
+        attacker.hasActedThisTurn = true
+        return true
     end
     -- Movement
     attack_effects.flip(attacker, targetActor, destQ, destR, hex)
@@ -898,6 +930,46 @@ combat.PushAttack = setmetatable({}, combat.LineShotAttack)
 combat.PushAttack.__index = combat.PushAttack
 function combat.PushAttack.new(range)
     return setmetatable(combat.LineShotAttack.new("Push", "Push the first enemy in line (no damage)", range or 999, 0), combat.PushAttack)
+end
+
+-- ============================================================
+-- SUMMON ATTACKS (Blade's two player-controlled summons)
+-- ============================================================
+-- Adjacent shove: push the neighbouring enemy away, no damage.
+combat.ShoveAttack = setmetatable({}, combat.LineShotAttack)
+combat.ShoveAttack.__index = combat.ShoveAttack
+function combat.ShoveAttack.new()
+    return setmetatable(combat.LineShotAttack.new("Shove", "Push the adjacent enemy away (no damage)", 1, 0), combat.ShoveAttack)
+end
+
+-- Adjacent strike: 1 damage, no push.
+combat.SummonStrikeAttack = setmetatable({}, combat.Attack)
+combat.SummonStrikeAttack.__index = combat.SummonStrikeAttack
+function combat.SummonStrikeAttack.new()
+    local self = combat.Attack.new("Strike", "Deal 1 damage to the adjacent enemy", 1, 1, {})
+    return setmetatable(self, combat.SummonStrikeAttack)
+end
+
+function combat.SummonStrikeAttack:execute(attacker, targetQ, targetR, hex, entities, sounds)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) ~= 1 then
+        return false, "Target must be adjacent!"
+    end
+    local target = combat.getEntityAtHex(targetQ, targetR, entities)
+    if not target or target.health <= 0 then return false, "No target at that hex" end
+    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
+    attacker.hasActedThisTurn = true
+    return true
+end
+
+function combat.SummonStrikeAttack:getTargetCell(attacker, targetQ, targetR, hex, entities)
+    if hex:getDistance(attacker.q, attacker.r, targetQ, targetR) == 1 then
+        return {q = targetQ, r = targetR}
+    end
+    return nil
+end
+
+function combat.SummonStrikeAttack:getAffectedCells(attacker, targetQ, targetR, hex, entities)
+    return {{q = targetQ, r = targetR, damage = self.damage}}
 end
 
 -- 4. PIERCING SHOT
@@ -3051,6 +3123,12 @@ if attacker.hasActedThisTurn and not (attacker.soloActions and (attacker.attacks
         return false, "No attack selected"
     end
 
+    -- Per-battle attack charges (Blade's Wide Strike has 1 per battle).
+    if attacker.attackCharges and attacker.attackCharges[attack.name] ~= nil
+        and attacker.attackCharges[attack.name] <= 0 then
+        return false, "No charges left for " .. attack.name
+    end
+
     local distance = hex:getDistance(attacker.q, attacker.r, targetQ, targetR)
     log.debug("combat", "Distance to target:", distance, "Attack range:", attack.range)
     if distance > attack.range then
@@ -3080,6 +3158,9 @@ if attacker.hasActedThisTurn and not (attacker.soloActions and (attacker.attacks
             _G.objective_usedAttacks[attack.name] = true
             attacker.hasActedThisTurn = false
             attacker.attacksLeft = (attacker.attacksLeft or 2) - 1
+            if attacker.attackCharges and attacker.attackCharges[attack.name] then
+                attacker.attackCharges[attack.name] = math.max(0, attacker.attackCharges[attack.name] - 1)
+            end
             if hasTag(attack.tags, "finisher") then
                 attacker.attacksLeft = 0
             end

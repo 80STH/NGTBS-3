@@ -316,6 +316,12 @@ function restartGame(mapPath)
     if soloMode and selectedSoloHero then
         hero = environment.createSoloHero(selectedSoloHero, -1, -1)
         unplacedAllies = { hero }
+        -- Blade brings two player-controlled summons to the deploy phase.
+        if hero and hero.name == "Blade" then
+            local s1, s2 = environment.createBladeSummons()
+            table.insert(unplacedAllies, s1)
+            table.insert(unplacedAllies, s2)
+        end
     else
         unplacedAllies = deployableAllies or {}
     end

@@ -2249,8 +2249,12 @@ function updateAttackButtons(actor)
     local startY = 100
     local idx = 0
     for i, attackInfo in ipairs(actor.attacks) do
+        -- Attacks with per-battle charges (Wide Strike) disappear once spent.
+        local charges = actor.attackCharges and actor.attackCharges[attackInfo.name]
+        if charges ~= nil and charges <= 0 then
+            -- skip
         -- If chain is active, only show the chained attack
-        if actor.chainAttack and actor.chainAttack ~= attackInfo.name then
+        elseif actor.chainAttack and actor.chainAttack ~= attackInfo.name then
             -- skip
         else
             idx = idx + 1

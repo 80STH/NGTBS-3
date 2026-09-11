@@ -494,7 +494,7 @@ function renderer.draw(state)
     local hoverOrder = ui.drawEnemyOrderButton(mx, my)
     ui.drawUndoButton(undo.history, state.maxUndoCount, state.selectedActor)
     ui.drawEndTurnButton(state.turnState, state.entities, state.turnCount, state.maxTurns, state)
-    ui.drawAbilitiesToggleButton(state, mx, my)
+    ui.drawUnitSelectButtons(state, mx, my)
     ui.drawMechanismButton(state)
     ui.drawAbilityButtons(state)
 

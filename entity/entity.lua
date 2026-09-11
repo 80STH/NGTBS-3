@@ -257,6 +257,9 @@ function Entity:startDeath()
     if not self.isPlayable and self:isCharacter() then
         _G.objective_enemiesKilled = (_G.objective_enemiesKilled or 0) + 1
     end
+    if self.isSummon then
+        _G.objective_summonsLost = (_G.objective_summonsLost or 0) + 1
+    end
     if sounds and sounds.death then
         sounds.play("death")
     end

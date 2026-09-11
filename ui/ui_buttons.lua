@@ -41,13 +41,30 @@ return function(ui)
         }
     end
 
-    -- Abilities toggle: bottom-left, directly above the square ability buttons.
+    -- Bottom-left selector stack (3 rows up from the attack row):
+    --   row 1 (top):   [Abilities]
+    --   row 2:         [hero][summon][summon]
+    --   row 3 (bottom): attack / ability squares
+    local SELECT_ROW_STEP = abBlock.square + abBlock.gap
+
+    -- Abilities toggle: top selector row.
     function ui.getAbilitiesToggleRect()
-        local y = logicalH - abBlock.margin - abBlock.square - abBlock.toggleGap - abBlock.toggleH
-        return { x = abBlock.x, y = y, w = abBlock.toggleW, h = abBlock.toggleH }
+        local y = logicalH - abBlock.margin - abBlock.square - 2 * SELECT_ROW_STEP
+        return { x = abBlock.x, y = y, w = abBlock.square, h = abBlock.square }
     end
 
-    -- Square ability button #index, one per unlocked ability, grouped in a bottom row.
+    -- Square selector button #index (1..3): hero/summons, in the middle row.
+    function ui.getUnitSelectRect(index)
+        local y = logicalH - abBlock.margin - abBlock.square - SELECT_ROW_STEP
+        return {
+            x = abBlock.x + (index - 1) * (abBlock.square + abBlock.gap),
+            y = y,
+            w = abBlock.square,
+            h = abBlock.square,
+        }
+    end
+
+    -- Square attack/ability button #index, on the bottom row.
     function ui.getAbilitySquareRect(index)
         local y = logicalH - abBlock.margin - abBlock.square
         return {
@@ -56,6 +73,105 @@ return function(ui)
             w = abBlock.square,
             h = abBlock.square,
         }
+    end
+
+    -- Vertical HP column (pips) drawn along a button's right inner edge.
+    local function drawHPColumn(rect, health, maxHealth)
+        maxHealth = math.max(1, maxHealth or 1)
+        local pipH = math.floor(rect.h / maxHealth)
+        for i = 1, maxHealth do
+            local py = rect.y + rect.h - i * pipH
+            if i <= health then
+                love.graphics.setColor(0.25, 0.85, 0.3, 1)
+            else
+                love.graphics.setColor(0.18, 0.18, 0.18, 0.9)
+            end
+            love.graphics.rectangle("fill", rect.x + rect.w - 6, py + 2, 4, pipH - 4)
+        end
+    end
+
+    -- ═══ Unit / Abilities selector row (bottom-left, 4 squares) ═══
+    -- [hero][summon][summon][Abilities]; unit buttons show an HP column and
+    -- select that unit. The last button toggles the abilities panel.
+    function ui.drawUnitSelectButtons(state, mouseX, mouseY)
+        if global_abilities.showPanel == nil then return end
+        local allies = {}
+        for _, e in ipairs(entities) do
+            if e:isCharacter() and e.isPlayable and e.health and e.health > 0 and not e.isDying then
+                table.insert(allies, e)
+            end
+        end
+        -- Stable order: hero first, then by name.
+        table.sort(allies, function(a, b)
+            if (a == _G.hero) ~= (b == _G.hero) then return a == _G.hero end
+            return (a.name or "") < (b.name or "")
+        end)
+        ui._unitSelectEntities = allies
+
+        -- Units occupy slots 1..3; Abilities is always slot 4.
+        for i = 1, 3 do
+            local ally = allies[i]
+            if ally then
+                local rect = ui.getUnitSelectRect(i)
+                local hover = mouseX and mouseX >= rect.x and mouseX <= rect.x + rect.w
+                    and mouseY >= rect.y and mouseY <= rect.y + rect.h
+                local sel = state.selectedActor == ally
+                local cr, cg, cb
+                if sel then cr, cg, cb = 0.3, 0.45, 0.3
+                elseif hover then cr, cg, cb = 0.32, 0.28, 0.4
+                else cr, cg, cb = 0.22, 0.22, 0.3 end
+                love.graphics.setColor(cr, cg, cb, 0.9)
+                love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 5)
+                love.graphics.setColor(0.5, 0.5, 0.5, 0.6)
+                love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h, 5)
+                -- Sprite preview
+                if ally.sprite then
+                    local sw, sh = ally.sprite:getDimensions()
+                    love.graphics.setColor(1, 1, 1, 1)
+                    love.graphics.draw(ally.sprite, rect.x + 6, rect.y + rect.h - 6, 0, 2.2, 2.2, 0, sh)
+                end
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.setFont(fonts.get(9))
+                love.graphics.printf(ally.name, rect.x, rect.y + 2, rect.w - 8, "center")
+                drawHPColumn(rect, ally.health, ally.maxHealth)
+                -- Done marker
+                local done = ally.hasActedThisTurn and not (ally.soloActions and (ally.movesLeft or 0) > 0 and (ally.attacksLeft or 0) > 0)
+                if done then
+                    icon_cache.drawSmall("cross", rect.x + rect.w - 14, rect.y + 12, 12, 1, {0.55, 0.55, 0.55})
+                end
+            end
+        end
+
+        -- Abilities button (top selector row)
+        local ar = ui.getAbilitiesToggleRect()
+        local hover = mouseX and mouseX >= ar.x and mouseX <= ar.x + ar.w
+            and mouseY >= ar.y and mouseY <= ar.y + ar.h
+        local open = global_abilities.showPanel
+        local cr, cg, cb = open and {0.35, 0.2, 0.6} or {0.25, 0.25, 0.4}
+        love.graphics.setColor(cr, cg, cb, hover and 0.95 or 0.85)
+        love.graphics.rectangle("fill", ar.x, ar.y, ar.w, ar.h, 5)
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.6)
+        love.graphics.rectangle("line", ar.x, ar.y, ar.w, ar.h, 5)
+        local iconKey = icon_cache.keyForAbility("Heal") or "abil_heal"
+        icon_cache.drawSmall(iconKey, ar.x + ar.w / 2, ar.y + ar.h / 2 - 6, 30)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setFont(fonts.get(9))
+        love.graphics.printf("Abilities", ar.x, ar.y + ar.h - 16, ar.w, "center")
+    end
+
+    -- Selector click hit-test. Returns the chosen unit index, "abilities", or nil.
+    function ui.unitSelectHit(mouseX, mouseY)
+        local ar = ui.getAbilitiesToggleRect()
+        if mouseX >= ar.x and mouseX <= ar.x + ar.w and mouseY >= ar.y and mouseY <= ar.y + ar.h then
+            return "abilities"
+        end
+        for i = 1, 3 do
+            local rect = ui.getUnitSelectRect(i)
+            if mouseX >= rect.x and mouseX <= rect.x + rect.w and mouseY >= rect.y and mouseY <= rect.y + rect.h then
+                return i
+            end
+        end
+        return nil
     end
 
     -- ═══ Mechanism Button (index 4, top of right column) ═══
@@ -500,6 +616,54 @@ return function(ui)
                     love.graphics.print(line, ttx + 8, tty + 8 + (l - 1) * 15)
                 end
             end
+        end
+
+        -- Passive info (informational only): listed to the right of the attack
+        -- squares for the selected actor. Never affects combat.
+        local passives = selectedActor.passives
+        if passives and #passives > 0 then
+            local small = fonts.get(11)
+            local titleFont = fonts.get(12)
+            local boxW = 250
+            local pad = 8
+            local lineH = 14
+            local bx = abBlock.x + #attackButtons * (abBlock.square + abBlock.gap) + 16
+            local by = logicalH - abBlock.margin - abBlock.square
+            if bx + boxW > logicalW - 10 then bx = logicalW - boxW - 10 end
+
+            -- Wrap each passive into "Name: desc" lines.
+            local lines = {}
+            love.graphics.setFont(small)
+            for _, p in ipairs(passives) do
+                local text = p.name .. ": " .. (p.desc or "")
+                local cur = ""
+                for word in text:gmatch("%S+") do
+                    local cand = (cur == "") and word or (cur .. " " .. word)
+                    if small:getWidth(cand) <= boxW - 2 * pad then
+                        cur = cand
+                    else
+                        table.insert(lines, cur)
+                        cur = word
+                    end
+                end
+                if cur ~= "" then table.insert(lines, cur) end
+            end
+
+            local boxH = 24 + #lines * lineH
+            love.graphics.setColor(0.08, 0.1, 0.16, 0.92)
+            love.graphics.rectangle("fill", bx, by, boxW, boxH, 6)
+            love.graphics.setColor(0.45, 0.55, 0.75, 0.8)
+            love.graphics.rectangle("line", bx, by, boxW, boxH, 6)
+            love.graphics.setFont(titleFont)
+            love.graphics.setColor(0.6, 0.85, 1, 1)
+            love.graphics.print("Passives", bx + pad, by + 5)
+            love.graphics.setFont(small)
+            love.graphics.setColor(0.85, 0.9, 0.85, 1)
+            for l, line in ipairs(lines) do
+                love.graphics.print(line, bx + pad, by + 22 + (l - 1) * lineH)
+            end
+            love.graphics.setFont(old)
+            love.graphics.setColor(1, 1, 1, 1)
         end
     end
 

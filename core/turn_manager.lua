@@ -191,8 +191,8 @@ function transitionToPlayerTurn()
                 a.pendingDelayedAttack = nil
                 a.deflectArmed = false
                 if a.soloActions then
-                    a.attacksLeft = 2
-                    a.movesLeft = 2
+                    a.attacksLeft = a.maxAttacks or 2
+                    a.movesLeft = a.maxMoves or 2
                 end
             end
         end

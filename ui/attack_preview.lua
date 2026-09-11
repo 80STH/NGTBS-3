@@ -302,6 +302,15 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
             return result
         end
 
+        -- Spiked summon: pushed unit takes +1 extra (2 total), summon unharmed.
+        if occupant.pushSpike then
+            result.damage = 2
+            result.occupantDmg = 0
+            result.type = "collision_damage"
+            result.reason = "push_spike"
+            return result
+        end
+
         -- Collision with another character: both take 1 damage.
         if occupant:isCharacter() then
             result.damage = 1
@@ -520,6 +529,19 @@ end
 handlers["Push"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities)
 end
+handlers["Shove"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities)
+end
+handlers["Strike"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+    if dist ~= 1 then return end
+    local target = getEntity(hoverQ, hoverR, entities)
+    if target and target.health > 0 and not target.indestructible then
+        local eff = preview.calculateEffectiveDamage(target, attacker, attack.damage or 1, nil, dist)
+        preview.addAttackDamage(p, target, eff)
+        preview.addOverlay(p, hoverQ, hoverR, "target")
+    end
+end
 handlers["Dash"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
     if not stepX then return end
@@ -692,13 +714,21 @@ handlers["Flip"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     preview.addOverlay(p, hoverQ, hoverR, "target")
 
     local cells = attack:getFlipCells(attacker, hoverQ, hoverR, hex, entities)
-    -- Default flip destination is straight behind attacker.
-    if cells and #cells > 0 then
-        local dest = cells[1]
+    -- Prefer a free cell; fall back to a flip-pad cell (enemy dies on landing).
+    local dest = nil
+    for _, c in ipairs(cells) do
+        if not c.flipPad then dest = c; break end
+    end
+    dest = dest or cells[1]
+    if dest then
         preview.markPushed(p, target, dest.q, dest.r)
         preview.addPushArrow(p, hoverQ, hoverR, dest.q, dest.r)
         preview.addOverlay(p, dest.q, dest.r, "push_dest")
-        checkDrown(p, target, dest.q, dest.r)
+        if dest.flipPad then
+            preview.addAttackDamage(p, target, 99)
+        else
+            checkDrown(p, target, dest.q, dest.r)
+        end
     end
 end
 

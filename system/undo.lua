@@ -51,6 +51,9 @@ function undo.snapshot()
             burnSites = _G.objective_burnSites or 0,
             burnKills = _G.objective_burnKills or 0,
             fatalPushes = _G.objective_fatalPushes or 0,
+            impales = _G.objective_impales or 0,
+            spikes = _G.objective_spikes or 0,
+            summonsLost = _G.objective_summonsLost or 0,
         },
         burnCells = (function()
             local bc = {}
@@ -92,6 +95,12 @@ function undo.snapshot()
             soloActions = e.soloActions,
             attacksLeft = e.attacksLeft,
             movesLeft = e.movesLeft,
+            attackCharges = (function()
+                if not e.attackCharges then return nil end
+                local c = {}
+                for k, v in pairs(e.attackCharges) do c[k] = v end
+                return c
+            end)(),
             isMoving = e.isMoving,
             isDying = e.isDying,
             deathTimer = e.deathTimer,
@@ -187,6 +196,11 @@ function undo.restore(snap)
             es.ref.soloActions = es.soloActions
             es.ref.attacksLeft = es.attacksLeft
             es.ref.movesLeft = es.movesLeft
+            es.ref.attackCharges = es.attackCharges and (function()
+                local c = {}
+                for k, v in pairs(es.attackCharges) do c[k] = v end
+                return c
+            end)() or nil
             es.ref.isMoving = es.isMoving
             es.ref.isDying = es.isDying
             es.ref.deathTimer = es.deathTimer
@@ -359,6 +373,9 @@ function undo.restore(snap)
         _G.objective_burnSites = snap.objectiveTracking.burnSites or 0
         _G.objective_burnKills = snap.objectiveTracking.burnKills or 0
         _G.objective_fatalPushes = snap.objectiveTracking.fatalPushes or 0
+        _G.objective_impales = snap.objectiveTracking.impales or 0
+        _G.objective_spikes = snap.objectiveTracking.spikes or 0
+        _G.objective_summonsLost = snap.objectiveTracking.summonsLost or 0
     end
     _G.objective_burnCells = {}
     for k in pairs(snap.burnCells or {}) do _G.objective_burnCells[k] = true end

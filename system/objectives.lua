@@ -386,11 +386,74 @@ local function definePool()
         },
         -- Hero-exclusive objectives (solo mode): only offered when the hero
         -- has the required capabilities (see solo_mode.lua hero `tags`).
+        -- ponytail: disabled by request — kept intact (flip `disabled` to re-enable).
+        {
+            id = "impale",
+            name = "Impale",
+            desc = "Kill an enemy by flipping it onto the Spikebound summon",
+            heroOnly = true,
+            onGenerate = function(entities, hex)
+                _G.objective_impales = 0
+            end,
+            check = function(entities, state)
+                if (_G.objective_impales or 0) >= 1 then
+                    state["impale"] = "completed"
+                end
+            end,
+            checkOnVictory = function(entities, state)
+                state["impale"] = ((_G.objective_impales or 0) >= 1) and "completed" or "failed"
+            end,
+            progress = function()
+                return tostring(_G.objective_impales or 0) .. "/1"
+            end,
+        },
+        {
+            id = "spiked",
+            name = "Spiked",
+            desc = "Slam an enemy into the Bulwark summon's spikes",
+            heroOnly = true,
+            onGenerate = function(entities, hex)
+                _G.objective_spikes = 0
+            end,
+            check = function(entities, state)
+                if (_G.objective_spikes or 0) >= 1 then
+                    state["spiked"] = "completed"
+                end
+            end,
+            checkOnVictory = function(entities, state)
+                state["spiked"] = ((_G.objective_spikes or 0) >= 1) and "completed" or "failed"
+            end,
+            progress = function()
+                return tostring(_G.objective_spikes or 0) .. "/1"
+            end,
+        },
+        {
+            id = "no_losses",
+            name = "No Losses",
+            desc = "Win the battle losing at most one summon",
+            heroOnly = true,
+            onGenerate = function(entities, hex)
+                _G.objective_summonsLost = 0
+            end,
+            check = function(entities, state)
+                if (_G.objective_summonsLost or 0) > 1 then
+                    state["no_losses"] = "failed"
+                end
+            end,
+            checkOnVictory = function(entities, state)
+                state["no_losses"] = ((_G.objective_summonsLost or 0) <= 1) and "completed" or "failed"
+            end,
+            progress = function()
+                local lost = _G.objective_summonsLost or 0
+                return (lost <= 1) and "OK" or (lost .. "/1 lost")
+            end,
+        },
         {
             id = "burn_sites",
             name = "Scorched Earth",
             desc = "Ignite 5 different cells",
             heroOnly = true,
+            disabled = true,
             requires = {"fire"},
             onGenerate = function(entities, hex)
                 _G.objective_burnCells = {}
@@ -419,6 +482,7 @@ local function definePool()
             name = "Burn Them",
             desc = "Kill 2 enemies with fire damage",
             heroOnly = true,
+            disabled = true,
             requires = {"fire"},
             onGenerate = function(entities, hex)
                 _G.objective_burnKills = 0
@@ -440,6 +504,7 @@ local function definePool()
             name = "Deadly Push",
             desc = "Kill an enemy with push damage",
             heroOnly = true,
+            disabled = true,
             requires = {"push"},
             onGenerate = function(entities, hex)
                 _G.objective_fatalPushes = 0
@@ -461,6 +526,7 @@ local function definePool()
             name = "Full Arsenal",
             desc = "Use every hero attack in battle",
             heroOnly = true,
+            disabled = true,
             onGenerate = function(entities, hex)
                 _G.objective_usedAttacks = {}
             end,
@@ -632,7 +698,7 @@ function objectives.generate(entities, hex, forcedObjectives)
                     end
                 end
             end
-            if def then
+            if def and not def.disabled then
                 table.insert(activeObjectives, def)
                 objectiveStates[def.id] = "pending"
                 if def.onGenerate then
@@ -670,6 +736,11 @@ function objectives.generate(entities, hex, forcedObjectives)
             if count >= maxObj then break end
             local def = shuffled[i]
             local skip = false
+
+            -- Disabled objectives are kept in the pool but never offered.
+            if def.disabled then
+                skip = true
+            end
 
             -- Hero-exclusive: skip in non-solo modes or when the hero lacks the tags
             if not skip and def.heroOnly then

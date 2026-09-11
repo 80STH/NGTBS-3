@@ -1084,8 +1084,58 @@ function environment.createSoloHero(defIdx, q, r)
     if def.id == "blade" then
         e.gentleTouch = false
         e.gentleAvailable = true
+        -- Wide Strike is a once-per-battle ability: charge is refilled every
+        -- time the hero is (re)built, i.e. on restart and at each new level.
+        e.attackCharges = { ["Wide Strike"] = 1 }
+        -- Informational only (shown in the attack panel); not read by combat.
+        e.passives = {
+            { name = "Gentle Touch", desc = "While ON: Dash, Flip and Wide Strike deal no direct damage, only push/shove." },
+            { name = "Wide Strike", desc = "One use per battle; refills on restart and each new level." },
+        }
     end
     return e
+end
+
+-- The two player-controlled summons Blade brings to the field. They are
+-- deployed alongside the hero (same deploy phase), have 1 AP each, 1 HP, no
+-- landing effect, and are never revived once dead.
+function environment.createBladeSummons()
+    local c = combatModule()
+    local spriteA = environment.unitSpriteCache and environment.unitSpriteCache[42]
+    local spriteB = environment.unitSpriteCache and environment.unitSpriteCache[44]
+
+    local function buildSummon(name, sprite, q, r, attacks)
+        local e = Entity.new(name, Entity.TYPES.CHARACTER, q, r, 1, true, 1, sprite, nil, attacks)
+        e.soloActions = true
+        e.attacksLeft = 1
+        e.movesLeft = 1
+        e.maxAttacks = 1
+        e.maxMoves = 1
+        e.isSummon = true
+        return e
+    end
+
+    -- Summon A: adjacent no-damage shove. Passive: immune to push collision
+    -- damage; a unit pushed into it takes +1 (spiked).
+    local a = buildSummon("Bulwark", spriteA, -1, -1, {
+        { attack = c.ShoveAttack.new(), name = "Shove", description = "Push the adjacent enemy away, no damage" },
+    })
+    a.pushSpike = true
+    a.passives = {
+        { name = "Spiked", desc = "Immune to push collision damage; a unit shoved into it takes +1." },
+    }
+
+    -- Summon B: adjacent 1-damage hit. Passive: valid Flip destination; an
+    -- enemy flipped onto it is killed.
+    local b = buildSummon("Spikebound", spriteB, -1, -1, {
+        { attack = c.SummonStrikeAttack.new(), name = "Strike", description = "Deal 1 damage to the adjacent enemy" },
+    })
+    b.flipPad = true
+    b.passives = {
+        { name = "Flip Pad", desc = "Valid Flip destination; enemies flipped onto it are impaled and die." },
+    }
+
+    return a, b
 end
 
 return environment
