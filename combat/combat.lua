@@ -285,6 +285,20 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
             if onComplete then onComplete(false) end
             return
         end
+        -- Spiked summon being pushed into someone: the victim takes +1 extra
+        -- damage, the spiked summon itself is unharmed.
+        if target.pushSpike then
+            if occupant.health and occupant.health > 0 then
+                local wasDestroyed = occupant:takeDamage(2)
+                combat.notePushKill(occupant, wasDestroyed)
+                if wasDestroyed then occupant:startDeath() end
+            end
+            _G.objective_spikes = (_G.objective_spikes or 0) + 1
+            if sounds then sounds.play("collision") end
+            combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant)
+            if onComplete then onComplete(false) end
+            return
+        end
         -- Collision → bounce + damage
         applyCollisionDamage(target, occupant, sounds)
         combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant)
@@ -942,11 +956,12 @@ function combat.ShoveAttack.new()
     return setmetatable(combat.LineShotAttack.new("Shove", "Push the adjacent enemy away (no damage)", 1, 0), combat.ShoveAttack)
 end
 
--- Adjacent strike: 1 damage, no push.
+-- Adjacent strike: 1 damage to the front target, plus a shockwave that shoves
+-- whatever stands directly behind the attacker one cell further back.
 combat.SummonStrikeAttack = setmetatable({}, combat.Attack)
 combat.SummonStrikeAttack.__index = combat.SummonStrikeAttack
 function combat.SummonStrikeAttack.new()
-    local self = combat.Attack.new("Strike", "Deal 1 damage to the adjacent enemy", 1, 1, {})
+    local self = combat.Attack.new("Strike", "Deal 1 damage to the adjacent enemy and shove whoever stands behind the attacker", 1, 1, {})
     return setmetatable(self, combat.SummonStrikeAttack)
 end
 
@@ -957,6 +972,19 @@ function combat.SummonStrikeAttack:execute(attacker, targetQ, targetR, hex, enti
     local target = combat.getEntityAtHex(targetQ, targetR, entities)
     if not target or target.health <= 0 then return false, "No target at that hex" end
     self:dealDamageToTarget(target, attacker, self.damage, entities, sounds, nil)
+
+    -- Shockwave behind the attacker: direction from the front target through the
+    -- attacker, one more step past it. Push the occupant there further back.
+    local stepX, stepY, stepZ = self:getLineDirection(targetQ, targetR, attacker.q, attacker.r, hex)
+    if stepX then
+        local behindQ, behindR = hex_utils.applyCubeStep(attacker.q, attacker.r, stepX, stepY, stepZ)
+        local behindEntity = combat.getEntityAtHex(behindQ, behindR, entities)
+        if behindEntity and behindEntity.health > 0 then
+            self:pushTargetInDirection(behindEntity, behindQ, behindR, stepX, stepY, stepZ, hex, entities, sounds)
+            combat.startPushAnimations(hex)
+        end
+    end
+
     attacker.hasActedThisTurn = true
     return true
 end
@@ -1662,7 +1690,7 @@ end
 combat.VortexStrikeAttack = setmetatable({}, combat.Attack)
 combat.VortexStrikeAttack.__index = combat.VortexStrikeAttack
 function combat.VortexStrikeAttack.new()
-    local self = combat.Attack.new("Vortex Strike", "Shift an enemy right or left and deal 1 damage", 1, 1, {})
+    local self = combat.Attack.new("Vortex Strike", "Shift an enemy right or left, no damage", 1, 0, {})
     return setmetatable(self, combat.VortexStrikeAttack)
 end
 
@@ -1718,7 +1746,9 @@ function combat.VortexStrikeAttack:execute(attacker, targetQ, targetR, hex, enti
         end
         combat.startPushAnimations(hex)
     end
-    self:dealDamageToTarget(target, attacker, self.damage, entities, sounds)
+    if self.damage > 0 then
+        self:dealDamageToTarget(target, attacker, self.damage, entities, sounds)
+    end
     attacker.hasActedThisTurn = true
     return true
 end

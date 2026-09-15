@@ -177,7 +177,7 @@ local ATTACK_SETS = {
     vortex = function()
         local c = require("combat.combat")
         return {
-            { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shifts an enemy left or right and wounds" },
+            { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shifts an enemy left or right, no damage" },
             { attack = c.WideVortexAttack.new(), name = "Wide Vortex", description = "Shifts 3 enemies in front left or right" },
         }
     end,
@@ -233,7 +233,7 @@ local ATTACK_SETS = {
             { attack = c.ZombieBiteAttack.new(), name = "Bite", description = "Melee bite, wounds thrice" },
             { attack = c.SummonAttack.new(), name = "Summon", description = "Summons a minion at target cell" },
             { attack = c.DividerAttack.new(), name = "Split", description = "Splits into two Divided units" },
-            { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shifts an enemy left or right and wounds" },
+            { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shifts an enemy left or right, no damage" },
             { attack = c.WideVortexAttack.new(), name = "Wide Vortex", description = "Shifts 3 enemies in front left or right" },
             { attack = c.ElectricHookAttack.new(), name = "Electric Hook", description = "Arc lightning, wounds everyone on the line" },
             { attack = c.BashAttack.new(), name = "Bash", description = "Heavy blow: wounds target and enemy behind attacker" },
@@ -1097,7 +1097,7 @@ function environment.createSoloHero(defIdx, q, r)
 end
 
 -- The two player-controlled summons Blade brings to the field. They are
--- deployed alongside the hero (same deploy phase), have 1 AP each, 1 HP, no
+-- deployed alongside the hero (same deploy phase), have 1 AP each, 2 HP, no
 -- landing effect, and are never revived once dead.
 function environment.createBladeSummons()
     local c = combatModule()
@@ -1105,7 +1105,7 @@ function environment.createBladeSummons()
     local spriteB = environment.unitSpriteCache and environment.unitSpriteCache[44]
 
     local function buildSummon(name, sprite, q, r, attacks)
-        local e = Entity.new(name, Entity.TYPES.CHARACTER, q, r, 1, true, 1, sprite, nil, attacks)
+        local e = Entity.new(name, Entity.TYPES.CHARACTER, q, r, 2, true, 3, sprite, nil, attacks)
         e.soloActions = true
         e.attacksLeft = 1
         e.movesLeft = 1
@@ -1116,19 +1116,19 @@ function environment.createBladeSummons()
     end
 
     -- Summon A: adjacent no-damage shove. Passive: immune to push collision
-    -- damage; a unit pushed into it takes +1 (spiked).
+    -- damage; a unit pushed into it (or it into) takes +1 (spiked).
     local a = buildSummon("Bulwark", spriteA, -1, -1, {
-        { attack = c.ShoveAttack.new(), name = "Shove", description = "Push the adjacent enemy away, no damage" },
+        { attack = c.VortexStrikeAttack.new(), name = "Vortex Strike", description = "Shifts an adjacent enemy left or right, no damage" },
     })
     a.pushSpike = true
     a.passives = {
-        { name = "Spiked", desc = "Immune to push collision damage; a unit shoved into it takes +1." },
+        { name = "Spiked", desc = "Immune to push collision damage; a unit it collides with takes +1." },
     }
 
     -- Summon B: adjacent 1-damage hit. Passive: valid Flip destination; an
     -- enemy flipped onto it is killed.
     local b = buildSummon("Spikebound", spriteB, -1, -1, {
-        { attack = c.SummonStrikeAttack.new(), name = "Strike", description = "Deal 1 damage to the adjacent enemy" },
+        { attack = c.SummonStrikeAttack.new(), name = "Strike", description = "Deal 1 damage to the adjacent enemy and shove whoever stands behind you" },
     })
     b.flipPad = true
     b.passives = {

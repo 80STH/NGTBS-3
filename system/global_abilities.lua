@@ -826,11 +826,11 @@ function WindTorrent:drawPreview(hex, state)
             attack_preview.addCollisionHint(p, proxy.q, proxy.r, newQ, newR, col.type, obj, realOccupant, col.reason)
         end
         if col.damage > 0 then
-            attack_preview.addCollisionDamage(p, obj, attack_preview.calculateEffectiveCollisionDamage(obj))
+            attack_preview.addCollisionDamage(p, obj, attack_preview.calculateEffectiveCollisionDamage(obj, col.damage))
         end
         if col.occupantDmg > 0 and col.occupant then
             local realOccupant = proxyToReal[col.occupant] or col.occupant
-            attack_preview.addCollisionDamage(p, realOccupant, attack_preview.calculateEffectiveCollisionDamage(realOccupant))
+            attack_preview.addCollisionDamage(p, realOccupant, attack_preview.calculateEffectiveCollisionDamage(realOccupant, col.occupantDmg))
         end
 
         if not col.type then
@@ -2405,10 +2405,10 @@ function VortexAbility:drawPreview(hex, state)
                 attack_preview.addCollisionHint(p, m.fromQ, m.fromR, m.toQ, m.toR, col.type, m.entity, col.occupant, col.reason)
             end
             if col.damage > 0 then
-                attack_preview.addCollisionDamage(p, m.entity, attack_preview.calculateEffectiveCollisionDamage(m.entity))
+                attack_preview.addCollisionDamage(p, m.entity, attack_preview.calculateEffectiveCollisionDamage(m.entity, col.damage))
             end
             if col.occupantDmg > 0 and col.occupant then
-                attack_preview.addCollisionDamage(p, col.occupant, attack_preview.calculateEffectiveCollisionDamage(col.occupant))
+                attack_preview.addCollisionDamage(p, col.occupant, attack_preview.calculateEffectiveCollisionDamage(col.occupant, col.occupantDmg))
             end
         else
             attack_preview.addCollisionHint(p, m.fromQ, m.fromR, m.fromQ, m.fromR, "collision_no_damage", m.entity, nil, "blocked")

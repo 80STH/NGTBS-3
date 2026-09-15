@@ -207,11 +207,14 @@ end
 -- ============================================================
 
 -- Returns a collision descriptor:
---   damage       - 0 or 1 (damage that the *pushed* entity will receive)
---   occupantDmg  - 0 or 1 (damage that the *occupant* will receive)
+--   damage       - damage that the *pushed* entity will receive (0, 1, 2 or 99)
+--   occupantDmg  - damage that the *occupant* will receive (0, 1, 2 or 99)
 --   type         - "collision_damage" or "collision_no_damage"
---   reason       - "edge", "collision_both", "collision_immovable"
+--   reason       - "edge", "collision_both", "collision_immovable", "push_spike", ...
 --   occupant     - the entity being collided with (may be nil for edge)
+-- NOTE: this is the SINGLE source of truth for collision hints. Whenever combat
+-- collision logic changes (combat.lua pushTargetToHex / applyCollisionDamage),
+-- mirror the change here so previews/icons/bars stay in sync.
 function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
     local result = {
         damage      = 0,
@@ -311,6 +314,16 @@ function preview.predictCollision(entity, fromQ, fromR, toQ, toR, hex, entities)
             return result
         end
 
+        -- Spiked summon being pushed into someone: victim takes +1 extra
+        -- (2 total), the spiked summon itself is unharmed.
+        if entity.pushSpike then
+            result.damage = 0
+            result.occupantDmg = 2
+            result.type = "collision_damage"
+            result.reason = "push_spike"
+            return result
+        end
+
         -- Collision with another character: both take 1 damage.
         if occupant:isCharacter() then
             result.damage = 1
@@ -380,7 +393,7 @@ function preview.applyPush(p, entity, fromQ, fromR, toQ, toR, hex, entities, let
             end
         end
     elseif col.occupantDmg > 0 and col.occupant and not lethal then
-        preview.addCollisionDamage(p, col.occupant, preview.calculateEffectiveCollisionDamage(col.occupant))
+        preview.addCollisionDamage(p, col.occupant, preview.calculateEffectiveCollisionDamage(col.occupant, col.occupantDmg))
     end
     if not col.type or col.reason == "highground_fall" then
         checkDrown(p, entity, toQ, toR)
@@ -540,6 +553,17 @@ handlers["Strike"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities
         local eff = preview.calculateEffectiveDamage(target, attacker, attack.damage or 1, nil, dist)
         preview.addAttackDamage(p, target, eff)
         preview.addOverlay(p, hoverQ, hoverR, "target")
+    end
+
+    -- Shockwave behind the attacker: push the occupant there one cell further back.
+    local stepX, stepY, stepZ = attack:getLineDirection(hoverQ, hoverR, attacker.q, attacker.r, hex)
+    if stepX then
+        local behindQ, behindR = hex_utils.applyCubeStep(attacker.q, attacker.r, stepX, stepY, stepZ)
+        local behindEntity = getEntity(behindQ, behindR, entities)
+        if behindEntity and behindEntity.health > 0 and behindEntity.isPushable ~= false then
+            local pushQ, pushR = hex_utils.applyCubeStep(behindQ, behindR, stepX, stepY, stepZ)
+            preview.applyPush(p, behindEntity, behindQ, behindR, pushQ, pushR, hex, entities)
+        end
     end
 end
 handlers["Dash"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
@@ -812,10 +836,10 @@ handlers["Wide Vortex"] = function(p, attacker, attack, hoverQ, hoverR, hex, ent
                 preview.addCollisionHint(p, hoverQ, hoverR, dc.q, dc.r, colA.type, target, colA.occupant, colA.reason)
             end
             if colA.damage > 0 then
-                preview.addCollisionDamage(p, target, preview.calculateEffectiveCollisionDamage(target))
+                preview.addCollisionDamage(p, target, preview.calculateEffectiveCollisionDamage(target, colA.damage))
             end
             if colA.occupantDmg > 0 and colA.occupant then
-                preview.addCollisionDamage(p, colA.occupant, preview.calculateEffectiveCollisionDamage(colA.occupant))
+                preview.addCollisionDamage(p, colA.occupant, preview.calculateEffectiveCollisionDamage(colA.occupant, colA.occupantDmg))
             end
             if not colA.type or colA.reason == "highground_fall" then
                 checkDrown(p, target, dc.q, dc.r)
@@ -829,10 +853,10 @@ handlers["Wide Vortex"] = function(p, attacker, attack, hoverQ, hoverR, hex, ent
                     preview.addCollisionHint(p, dc.q, dc.r, b2q, b2r, colB.type, occupantB, colB.occupant, colB.reason)
                 end
                 if colB.damage > 0 then
-                    preview.addCollisionDamage(p, occupantB, preview.calculateEffectiveCollisionDamage(occupantB))
+                    preview.addCollisionDamage(p, occupantB, preview.calculateEffectiveCollisionDamage(occupantB, colB.damage))
                 end
                 if colB.occupantDmg > 0 and colB.occupant then
-                    preview.addCollisionDamage(p, colB.occupant, preview.calculateEffectiveCollisionDamage(colB.occupant))
+                    preview.addCollisionDamage(p, colB.occupant, preview.calculateEffectiveCollisionDamage(colB.occupant, colB.occupantDmg))
                 end
                 if not colB.type or colB.reason == "highground_fall" then
                     checkDrown(p, occupantB, b2q, b2r)

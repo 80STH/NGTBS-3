@@ -42,6 +42,18 @@ Love2D 11.5 installed. The game window will open — close it manually when done
   Neighbors = N/NE/SE/S/SW/NW (screen). Cube↔axial via grid/hex_utils.lua.
 - **HP bars** (`ui.drawChaosBar` hero, `ui.drawLeaderHPBar` map4): static; only the
   potentially-lost cells flicker when `state.previewDamaged[entity]` (hovered attack threat).
+- **Attacks + visual hints MUST stay in sync (hard rule)**: any change to an attack's
+  gameplay (new attack, damage/push/collision/status change, passive like Bulwark's
+  `pushSpike`/Spikebound's `flipPad`) MUST be mirrored in the preview/hint layer, or the
+  UI lies to the player. The single source of truth for collision prediction is
+  `attack_preview.predictCollision` (`ui/attack_preview.lua`) — update BOTH the execute
+  path (`combat/combat.lua`, e.g. `pushTargetToHex`/`applyCollisionDamage`) and this
+  predictor, plus the attack's `attack_preview` handler if it has one. `ui.checkCollisionDamage`
+  and the AI/threat + global-ability previews all route through `predictCollision`, so fixing
+  it there covers them. Attack damage/push icons are derived from the computed preview
+  (`preview.compute` → `applyPush`/`addCollisionDamage`/`getDamageIcon`); conveyor-belt
+  collision hints (`ui/ui_buttons.lua` mechanism panel) are a separate coarse path. Keep the
+  doc comment above `predictCollision` (`damage`/`occupantDmg`/`reason`) accurate.
 - **Menu** auto-lists every `maps/*.lua` (no registration needed).
 
 ## Temp verification block pattern (env-gated, always remove after)

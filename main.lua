@@ -366,6 +366,7 @@ end
 
 function love.update(dt)
     if pause_menu.isOpen then return end
+    if ui and ui.updateMessage then ui.updateMessage(dt) end
     if gamePhase == "editor" then
         map_editor.dpiScale = dpiScale
         map_editor.update(dt)

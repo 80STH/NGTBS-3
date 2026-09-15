@@ -557,6 +557,7 @@ function renderer.draw(state)
     ui.drawChaosBar(mx, my)
     ui.drawLeaderHPBar(mx, my)
     objectives.draw()
+    ui.drawMessage()
 
     if not state.gameActive then
         local width = logicalW
@@ -860,7 +861,7 @@ end
 -- (state.previewDamaged) blink.
 function drawHealthPips(entity, x, y, state)
     if entity.isDying or entity:isEdge() or entity.indestructible then return end
-    if not entity.health or entity.maxHealth <= 1 then return end
+    if not entity.health or not entity.maxHealth then return end
 
     local preview = state.previewDamaged and state.previewDamaged[entity]
     local lost = 0

@@ -90,6 +90,48 @@ return function(ui)
         end
     end
 
+    -- Per-unit action points along the bottom of a unit button: one combined
+    -- cell per action, MP as an outer shell ring wrapping an AP core bubble.
+    -- Shells run as moves are spent, cores as attacks are spent.
+    local function drawUnitActionBar(actor, rect)
+        local apMax = actor.maxAttacks or 2
+        local mpMax = actor.maxMoves or 2
+        local apVal = actor.attacksLeft or 0
+        local mpVal = actor.movesLeft or 0
+        -- No attacks left means the actions are done, so Move is spent too.
+        if apVal <= 0 then mpVal = 0 end
+
+        local n = math.max(apMax, mpMax)
+        if n < 1 then n = 1 end
+        local x = rect.x + 4
+        local w = rect.w - 10
+        local cellH = 8
+        local gap = 2
+        local y = rect.y + rect.h - cellH - 3
+        local cellW = (w - (n - 1) * gap) / n
+        local inset = math.max(1, cellW * 0.14)
+        local insetV = math.max(1, cellH * 0.22)
+        local coreR = math.max(1.5, math.min(3, cellW * 0.16))
+
+        for i = 1, n do
+            local cx = x + (i - 1) * (cellW + gap)
+            if i <= mpVal then
+                love.graphics.setColor(0.3, 0.55, 0.95, 0.92)
+                love.graphics.rectangle("fill", cx, y, cellW, cellH, 2)
+                love.graphics.setColor(0.09, 0.11, 0.2, 0.95)
+                love.graphics.rectangle("fill", cx + inset, y + insetV, cellW - inset * 2, cellH - insetV * 2, 2)
+            else
+                love.graphics.setColor(0.2, 0.2, 0.26, 0.55)
+                love.graphics.rectangle("fill", cx, y, cellW, cellH, 2)
+            end
+            local coreOn = i <= apVal
+            love.graphics.setColor(coreOn and 0.96 or 0.24, coreOn and 0.58 or 0.2,
+                coreOn and 0.18 or 0.2, coreOn and 0.95 or 0.55)
+            love.graphics.circle("fill", cx + cellW / 2, y + cellH / 2, coreR)
+        end
+        love.graphics.setColor(1, 1, 1, 1)
+    end
+
     -- ═══ Unit / Abilities selector row (bottom-left, 4 squares) ═══
     -- [hero][summon][summon][Abilities]; unit buttons show an HP column and
     -- select that unit. The last button toggles the abilities panel.
@@ -134,6 +176,7 @@ return function(ui)
                 love.graphics.setFont(fonts.get(9))
                 love.graphics.printf(ally.name, rect.x, rect.y + 2, rect.w - 8, "center")
                 drawHPColumn(rect, ally.health, ally.maxHealth)
+                drawUnitActionBar(ally, rect)
                 -- Done marker
                 local done = ally.hasActedThisTurn and not (ally.soloActions and (ally.movesLeft or 0) > 0 and (ally.attacksLeft or 0) > 0)
                 if done then

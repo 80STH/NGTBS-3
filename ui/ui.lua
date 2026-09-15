@@ -2718,7 +2718,6 @@ function ui.getPauseBtnRect()
 end
 
 function ui.drawChaosBar(mx, my)
-    local hero = _G.hero
     -- Hero-only: the top bar is always the hero's Soul Power — a run resource
     -- drained by lost buildings/objectives and by the hero's respawn. The
     -- hero's own combat HP (3) is a separate quantity shown as pips above him.
@@ -2736,23 +2735,14 @@ function ui.drawChaosBar(mx, my)
     local cellH = 8   -- squatter so bars of cells fit the top panel
     local gap = 3
     local pad = 3
-    local barGap = 4  -- vertical gap between the resource row and the Attack/Move row
     local shGapPx = 10  -- (kept) spacing after the resource track
     local hpW = (cellW + gap) * barMax - gap + pad * 2
     local shW = (cellW + gap) * shieldMax - gap + pad * 2
-    local apMax, mpMax = 2, 2
-    local apVal, mpVal = 0, 0
-    if hero then
-        apVal = hero.attacksLeft or 0
-        mpVal = hero.movesLeft or 0
-    end
-    -- No attacks left means the actions are done, so Move is spent too.
-    if apVal <= 0 then mpVal = 0 end
 
     if not smallFont then smallFont = fonts.get(12) end
 
-    -- Top panel: HP row, then a shared row with Attack and Move bars side by side.
-    local panelH = 6 + 2 * (cellH + pad * 2) + barGap + 6
+    -- Top panel: HP row only (per-unit action points live in the ally panel).
+    local panelH = 6 + (cellH + pad * 2) + 6
     love.graphics.setColor(0.06, 0.06, 0.12, 0.9)
     love.graphics.rectangle("fill", 0, 0, logicalW, panelH)
     love.graphics.setColor(0.3, 0.2, 0.4, 0.4)
@@ -2806,52 +2796,6 @@ function ui.drawChaosBar(mx, my)
         love.graphics.setColor(0.6, 0.9, 0.6, 0.9)
         love.graphics.setFont(fonts.get(10))
         love.graphics.print("+" .. surplus, surplusX, barY + 6)
-    end
-
-    -- Unified action row under HP: each of N cells shows an MP *shell* (outer
-    -- ring) wrapping an AP *core* (inner bubble), read left-to-right.
-    -- Shells run as moves are spent, cores as attacks are spent.
-    local actionMax = math.max(apMax or 0, mpMax or 0)
-    if actionMax < 1 then actionMax = 1 end
-    local actY = barY + (cellH + pad * 2) + barGap
-    -- Each combined cell spans the width of two HP cells (like a 2-cell pool).
-    local shellW = cellW * 2 + gap
-    local inset = math.max(3, shellW * 0.12)
-    local insetV = math.max(2, cellH * 0.25)
-    local coreR = math.max(3, math.min(6, shellW * 0.10))
-
-    local shellOnAt = function(i) return i <= (mpVal or 0) end
-    local coreOnAt = function(i) return i <= (apVal or 0) end
-    -- Outer container across all cells
-    local actW = (shellW + gap) * actionMax + pad * 2
-    love.graphics.setColor(0.08, 0.08, 0.15, 0.85)
-    love.graphics.rectangle("fill", barX, actY, actW, cellH + pad * 2, 4)
-    love.graphics.setColor(0.3, 0.28, 0.36, 0.7)
-    love.graphics.rectangle("line", barX, actY, actW, cellH + pad * 2, 4)
-    for i = 1, actionMax do
-        local cx = barX + pad + (i - 1) * (shellW + gap)
-        local cy = actY + pad
-        -- MP shell = tall ring (hollow reservoir) around the AP core
-        if shellOnAt(i) then
-            love.graphics.setColor(0.3, 0.55, 0.95, 0.92)
-            love.graphics.rectangle("fill", cx, cy, shellW, cellH)
-            love.graphics.setColor(0.09, 0.11, 0.2, 0.95)
-            love.graphics.rectangle("fill", cx + inset, cy + insetV, shellW - inset * 2, cellH - insetV * 2)
-        else
-            love.graphics.setColor(0.2, 0.2, 0.26, 0.55)
-            love.graphics.rectangle("fill", cx, cy, shellW, cellH)
-        end
-        -- AP core = inner filled bubble
-        local ccx = cx + shellW / 2
-        local ccy = cy + cellH / 2
-        local coreOn = coreOnAt(i)
-        love.graphics.setColor(coreOn and 0.96 or 0.24, coreOn and 0.58 or 0.2,
-            coreOn and 0.18 or 0.2, coreOn and 0.95 or 0.55)
-        love.graphics.circle("fill", ccx, ccy, coreR)
-        if coreOn then
-            love.graphics.setColor(1, 0.85, 0.5, 0.8)
-            love.graphics.circle("line", ccx, ccy, coreR)
-        end
     end
 
     local pb = ui.getPauseBtnRect()
@@ -3051,6 +2995,77 @@ function ui.drawLeaderHPBar(mx, my)
             curY = curY + 14
         end
     end
+end
+
+-- ============================================================
+-- TRANSIENT FLOATING MESSAGE (e.g. "no valid target for X")
+-- Spawns at a unit and drifts upward while fading out.
+-- ============================================================
+local MESSAGE_DURATION = 0.4
+local MESSAGE_RISE = 46        -- pixels travelled upward over the lifetime
+local MESSAGE_START_OFFSET = -34  -- how far above the unit it starts
+ui._message = nil
+
+function ui.flashMessage(text, entity, duration)
+    local x, y
+    if entity then
+        x, y = getDrawCoords(entity.q, entity.r)
+        y = y + MESSAGE_START_OFFSET
+    else
+        x, y = logicalW / 2, 120
+    end
+    ui._message = {
+        text = tostring(text),
+        timer = duration or MESSAGE_DURATION,
+        elapsed = 0,
+        entity = entity,
+        x = x,
+        y = y,
+    }
+end
+
+function ui.updateMessage(dt)
+    local m = ui._message
+    if not m then return end
+    m.elapsed = m.elapsed + dt
+    m.timer = m.timer - dt
+    -- Follow the unit while it is still on the field.
+    if m.entity and m.entity.health and m.entity.health > 0 then
+        local x, y = getDrawCoords(m.entity.q, m.entity.r)
+        m.x, m.y = x, y + MESSAGE_START_OFFSET
+    end
+    if m.timer <= 0 then ui._message = nil end
+end
+
+function ui.drawMessage()
+    local m = ui._message
+    if not m then return end
+    local total = m.timer + m.elapsed
+    local p = total > 0 and (m.elapsed / total) or 1
+    -- Fade: hold full alpha for the first ~40%, then fade out.
+    local alpha = p < 0.4 and 1 or (1 - (p - 0.4) / 0.6)
+    alpha = math.max(0, math.min(1, alpha))
+    -- Ease-out rise.
+    local rise = MESSAGE_RISE * (1 - (1 - p) * (1 - p))
+    local x = m.x
+    local y = m.y - rise
+    local f = fonts.get(20)
+    local tw = f:getWidth(m.text)
+    local tx = math.floor(x - tw / 2)
+    local ty = math.floor(y)
+    love.graphics.setFont(f)
+    -- Dark outline for readability over any terrain.
+    love.graphics.setColor(0, 0, 0, 0.85 * alpha)
+    for ox = -1, 1 do
+        for oy = -1, 1 do
+            if ox ~= 0 or oy ~= 0 then
+                love.graphics.print(m.text, tx + ox, ty + oy)
+            end
+        end
+    end
+    love.graphics.setColor(1, 0.75, 0.75, alpha)
+    love.graphics.print(m.text, tx, ty)
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 return ui

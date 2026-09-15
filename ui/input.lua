@@ -6,6 +6,15 @@ local turnManager = require("core.turn_manager")
 local hex_utils = require("grid.hex_utils")
 local log = require("util.log")
 
+-- An attack can only be aimed if at least one cell is a legal target for it.
+-- When none is, the player gets a message instead of a dead target cursor.
+local function hasAnyValidTarget(actor, attack)
+    if not actor or not attack then return false end
+    local ui = require("ui.ui")
+    local keys = ui.getAttackableCellKeys(hex, actor, attack, entities)
+    return next(keys) ~= nil
+end
+
 -- Guard to prevent undo from being triggered twice by both mouse and keyboard
 -- release handlers in the same event cycle
 local undoTriggeredThisCycle = false
@@ -212,9 +221,14 @@ end
     if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving then
         for _, btn in ipairs(attackButtons) do
             if x >= btn.x and x <= btn.x + btn.width and y >= btn.y and y <= btn.y + btn.height then
-                selectedAttack = btn.attack
-                attackMode = true
-                log.debugf("input", "Attack selected: %s (attackMode = true)", btn.name)
+                if hasAnyValidTarget(selectedActor, btn.attack) then
+                    selectedAttack = btn.attack
+                    attackMode = true
+                    log.debugf("input", "Attack selected: %s (attackMode = true)", btn.name)
+                else
+                    require("ui.ui").flashMessage("No valid target for " .. btn.name, selectedActor)
+                    log.debugf("input", "Attack %s has no valid target", btn.name)
+                end
                 return
             end
         end
@@ -574,9 +588,13 @@ function input.keypressed(key)
         local btn = attackButtons[#attackButtons - hotkeyIdx + 1]
         if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn
             and not selectedActor.isMoving and btn then
-            selectedAttack = btn.attack
-            attackMode = true
-            log.debugf("input", "Attack selected: %s", btn.name)
+            if hasAnyValidTarget(selectedActor, btn.attack) then
+                selectedAttack = btn.attack
+                attackMode = true
+                log.debugf("input", "Attack selected: %s", btn.name)
+            else
+                require("ui.ui").flashMessage("No valid target for " .. btn.name, selectedActor)
+            end
         end
         return
     end
