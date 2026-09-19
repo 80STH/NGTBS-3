@@ -92,7 +92,7 @@ function undo.snapshot()
             hasActedThisTurn = e.hasActedThisTurn,
             hasMovedThisTurn = e.hasMovedThisTurn,
             canMoveAfterAttack = e.canMoveAfterAttack,
-            soloActions = e.soloActions,
+            multiAction = e.multiAction,
             attacksLeft = e.attacksLeft,
             movesLeft = e.movesLeft,
             attackCharges = (function()
@@ -193,7 +193,7 @@ function undo.restore(snap)
             es.ref.hasActedThisTurn = es.hasActedThisTurn
             es.ref.hasMovedThisTurn = es.hasMovedThisTurn
             es.ref.canMoveAfterAttack = es.canMoveAfterAttack
-            es.ref.soloActions = es.soloActions
+            es.ref.multiAction = es.multiAction
             es.ref.attacksLeft = es.attacksLeft
             es.ref.movesLeft = es.movesLeft
             es.ref.attackCharges = es.attackCharges and (function()
@@ -322,7 +322,7 @@ function undo.restore(snap)
     _G.selectedAttack = nil
     _G.chaos = snap.chaos or 0
     _G.soulPower = snap.soulPower ~= nil and snap.soulPower or _G.soulPower
-    -- Solo death bookkeeping must revert with the undo: if the hero was
+    -- Hero death bookkeeping must revert with the undo: if the hero was
     -- knocked down by the undone action, put him back alive and NOT pending
     -- revive (otherwise the next turn wrongly forces a redeploy).
     _G.heroRevivePending = snap.heroRevivePending or false

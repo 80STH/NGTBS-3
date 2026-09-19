@@ -11,8 +11,8 @@ Love2D 11.5 installed. The game window will open — close it manually when done
 
 ## Architecture map (read this first — saves exploration tokens)
 
-- **Solo-only game**: one playable hero (`hero` global, `selectedSoloHero` = hero def index in
-  `entity/environment.lua`; `environment.createSoloHero(def, q, r)`). Squad code was fully deleted.
+- **Hero-only game**: one playable hero (`hero` global, `selectedHero` = hero def index in
+  `entity/environment.lua`; `environment.createHero(def, q, r)`). Squad code was fully deleted.
 - **Deploy**: `gamePhase == "deploy"` → player places hero → `confirmDeploy()` (core/game.lua)
   applies landing effects via `system/deploy_effects.lua` (`entity.deployEffect` registry).
 - **Entity types** (entity/entity.lua): CHARACTER / OBSTACLE / BUILDING / EDGE (map borders,
@@ -54,6 +54,11 @@ Love2D 11.5 installed. The game window will open — close it manually when done
   (`preview.compute` → `applyPush`/`addCollisionDamage`/`getDamageIcon`); conveyor-belt
   collision hints (`ui/ui_buttons.lua` mechanism panel) are a separate coarse path. Keep the
   doc comment above `predictCollision` (`damage`/`occupantDmg`/`reason`) accurate.
+  Player-attack previews also show the BASE attack damage as a number on the aimed cell
+  (`preview.addDamageNumber` → `damageNumbers` → `ui.collectPreviewDamageNumbers` →
+  `ui.drawPreviewDamageNumbers`); it is the raw `attack.damage` (0 skipped), never the summed
+  total. Push arrows are shown by geometry even when the aimed cell is empty (Blade squad:
+  Dash/Flip/Wide Strike/Vortex Strike/Strike).
 - **Menu** auto-lists every `maps/*.lua` (no registration needed).
 
 ## Temp verification block pattern (env-gated, always remove after)
@@ -63,7 +68,7 @@ Insert at the end of `love.load` in main.lua, run with lovec.exe, read report fi
 ```lua
 if os.getenv("NGTBS_TEMP_X") then
     local ok, err = xpcall(function()
-        restartGame("maps/<map>.lua")     -- set soloMode/selectedSoloHero before if needed
+        restartGame("maps/<map>.lua")     -- set selectedHero before if needed
         local report = {}
         local function chk(n, c) report[#report+1] = (c and "OK   " or "FAIL ") .. n end
         -- ...assert via chk(...)...

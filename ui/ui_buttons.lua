@@ -9,16 +9,29 @@ return function(ui)
     local combat = require("combat.combat")
     local config = require("core.config")
 
-    local rightCol = { x = 0, w = 190, btnH = 56, gap = 6, margin = 10 }
+    local rightCol = { x = 0, w = 190, btnH = 56, gap = 6, margin = 10, lift = 84 }
     -- Bottom-left "ability block": a row of square ability buttons whose top sits
     -- under the Abilities toggle button.
-    local abBlock  = { x = 10, square = 62, gap = 8, toggleW = 190, toggleH = 42, toggleGap = 10, margin = 12 }
+    local abBlock  = { x = 10, square = 84, gap = 10, toggleW = 190, toggleH = 42, toggleGap = 10, margin = 12 }
+
+    -- Unit buttons: slot 1 (the hero) is double width so Gentle Touch lives on
+    -- its right half; the other slots are single-width.
+    local UNIT_DOUBLE = 2
+
+    -- Left-to-right x of unit button #index. Only the hero (index 1) is double
+    -- width, so every slot after it shifts right by one extra single slot.
+    local function unitRectX(index)
+        local single = abBlock.square + abBlock.gap
+        local extra = index > 1 and (UNIT_DOUBLE - 1) * single or 0
+        return abBlock.x + (index - 1) * single + extra
+    end
 
     function ui.getRightBtnRect(index)
-        -- index: 1=Undo, 2=Order, 3=Abilities (bottom→top)
+        -- index: 1=Undo, 2=Order, 3=Abilities (bottom→top). The stack sits above
+        -- the End Turn button, which owns the bottom-right corner.
         local cb = rightCol
         cb.x = logicalW - cb.w - cb.margin
-        local baseY = logicalH - cb.margin
+        local baseY = logicalH - cb.margin - cb.lift
         return {
             x = cb.x,
             y = baseY - cb.btnH * index - cb.gap * (index - 1),
@@ -29,13 +42,42 @@ return function(ui)
 
     ui.endTurnHoldTime = 0.7
 
-    -- End Turn sits on the right, just left of the right column (Undo/Order/Mechanism).
+    -- Shared: does the player still have anything to do this turn?
+    -- hasActiveUnits = an unmoved/unacted unit; canUseAbility = an affordable,
+    -- unused ability. Used by both the button and its click handling.
+    function ui.getEndTurnActionState(entities, state)
+        local hasActiveUnits = false
+        for _, e in ipairs(entities or {}) do
+            local done = e.hasActedThisTurn and not (e.multiAction and (e.movesLeft or 0) > 0 and (e.attacksLeft or 0) > 0)
+            if e.isPlayable and e.health > 0 and not done then
+                hasActiveUnits = true
+                break
+            end
+        end
+        local canUseAbility = false
+        if state and global_abilities then
+            for _, name in ipairs(global_abilities.getDisplayOrder(state)) do
+                local ab = global_abilities.registry[name]
+                if ab and not ab.hasBeenUsed and not global_abilities.abilityUsedThisTurn
+                    and global_abilities.mana >= ab.manaCost then
+                    canUseAbility = true
+                    break
+                end
+            end
+        end
+        return {
+            hasActiveUnits = hasActiveUnits,
+            canUseAbility = canUseAbility,
+            nothingLeft = not hasActiveUnits and not canUseAbility,
+        }
+    end
+
+    -- End Turn: bottom-right corner of the screen.
     function ui.getEndTurnRect()
         local w, h = 220, 64
-        local rcLeft = logicalW - rightCol.w - rightCol.margin - 10
         return {
-            x = math.floor(rcLeft - w - 10),
-            y = logicalH - h - 10,
+            x = math.floor(logicalW - w - rightCol.margin),
+            y = math.floor(logicalH - h - rightCol.margin),
             w = w,
             h = h,
         }
@@ -54,12 +96,15 @@ return function(ui)
     end
 
     -- Square selector button #index (1..3): hero/summons, in the middle row.
+    -- The hero (index 1) is double width (Gentle Touch shares it).
     function ui.getUnitSelectRect(index)
         local y = logicalH - abBlock.margin - abBlock.square - SELECT_ROW_STEP
+        local w = abBlock.square
+        if index == 1 then w = abBlock.square * UNIT_DOUBLE + abBlock.gap end
         return {
-            x = abBlock.x + (index - 1) * (abBlock.square + abBlock.gap),
+            x = unitRectX(index),
             y = y,
-            w = abBlock.square,
+            w = w,
             h = abBlock.square,
         }
     end
@@ -132,7 +177,7 @@ return function(ui)
         love.graphics.setColor(1, 1, 1, 1)
     end
 
-    -- ═══ Unit / Abilities selector row (bottom-left, 4 squares) ═══
+    -- в•ђв•ђв•ђ Unit / Abilities selector row (bottom-left, 4 squares) в•ђв•ђв•ђ
     -- [hero][summon][summon][Abilities]; unit buttons show an HP column and
     -- select that unit. The last button toggles the abilities panel.
     function ui.drawUnitSelectButtons(state, mouseX, mouseY)
@@ -150,12 +195,13 @@ return function(ui)
         end)
         ui._unitSelectEntities = allies
 
-        -- Units occupy slots 1..3; Abilities is always slot 4.
+        -- Units occupy slots 1..3; the hero (slot 1) is double width.
         for i = 1, 3 do
             local ally = allies[i]
             if ally then
                 local rect = ui.getUnitSelectRect(i)
-                local hover = mouseX and mouseX >= rect.x and mouseX <= rect.x + rect.w
+                local selectW = abBlock.square  -- clickable "select unit" width
+                local hover = mouseX and mouseX >= rect.x and mouseX <= rect.x + selectW
                     and mouseY >= rect.y and mouseY <= rect.y + rect.h
                 local sel = state.selectedActor == ally
                 local cr, cg, cb
@@ -163,9 +209,9 @@ return function(ui)
                 elseif hover then cr, cg, cb = 0.32, 0.28, 0.4
                 else cr, cg, cb = 0.22, 0.22, 0.3 end
                 love.graphics.setColor(cr, cg, cb, 0.9)
-                love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 5)
+                love.graphics.rectangle("fill", rect.x, rect.y, selectW, rect.h, 5)
                 love.graphics.setColor(0.5, 0.5, 0.5, 0.6)
-                love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h, 5)
+                love.graphics.rectangle("line", rect.x, rect.y, selectW, rect.h, 5)
                 -- Sprite preview
                 if ally.sprite then
                     local sw, sh = ally.sprite:getDimensions()
@@ -174,13 +220,17 @@ return function(ui)
                 end
                 love.graphics.setColor(1, 1, 1, 1)
                 love.graphics.setFont(fonts.get(9))
-                love.graphics.printf(ally.name, rect.x, rect.y + 2, rect.w - 8, "center")
+                love.graphics.printf(ally.name, rect.x, rect.y + 2, selectW - 8, "center")
                 drawHPColumn(rect, ally.health, ally.maxHealth)
                 drawUnitActionBar(ally, rect)
                 -- Done marker
-                local done = ally.hasActedThisTurn and not (ally.soloActions and (ally.movesLeft or 0) > 0 and (ally.attacksLeft or 0) > 0)
+                local done = ally.hasActedThisTurn and not (ally.multiAction and (ally.movesLeft or 0) > 0 and (ally.attacksLeft or 0) > 0)
                 if done then
-                    icon_cache.drawSmall("cross", rect.x + rect.w - 14, rect.y + 12, 12, 1, {0.55, 0.55, 0.55})
+                    icon_cache.drawSmall("cross", rect.x + selectW - 14, rect.y + 12, 12, 1, {0.55, 0.55, 0.55})
+                end
+                -- Hero: right half of the double button is the Gentle Touch toggle.
+                if i == 1 and ally.gentleAvailable then
+                    ui.drawGentleTouchHalf(ally, rect, abBlock.square)
                 end
             end
         end
@@ -202,7 +252,8 @@ return function(ui)
         love.graphics.printf("Abilities", ar.x, ar.y + ar.h - 16, ar.w, "center")
     end
 
-    -- Selector click hit-test. Returns the chosen unit index, "abilities", or nil.
+    -- Selector click hit-test. Returns the chosen unit index, "abilities",
+    -- "gentle" (hero's Gentle Touch half), or nil.
     function ui.unitSelectHit(mouseX, mouseY)
         local ar = ui.getAbilitiesToggleRect()
         if mouseX >= ar.x and mouseX <= ar.x + ar.w and mouseY >= ar.y and mouseY <= ar.y + ar.h then
@@ -210,14 +261,18 @@ return function(ui)
         end
         for i = 1, 3 do
             local rect = ui.getUnitSelectRect(i)
-            if mouseX >= rect.x and mouseX <= rect.x + rect.w and mouseY >= rect.y and mouseY <= rect.y + rect.h then
+            if mouseY >= rect.y and mouseY <= rect.y + rect.h and mouseX >= rect.x and mouseX <= rect.x + rect.w then
+                -- Hero's right half is the Gentle Touch toggle.
+                if i == 1 and rect.w > abBlock.square then
+                    if mouseX >= rect.x + rect.w - abBlock.square then return "gentle" end
+                end
                 return i
             end
         end
         return nil
     end
 
-    -- ═══ Mechanism Button (index 4, top of right column) ═══
+    -- в•ђв•ђв•ђ Mechanism Button (index 4, top of right column) в•ђв•ђв•ђ
     -- One press drives every environment mechanism on the map:
     -- retractable highground, teleporters, conveyor belts.
     function ui.drawMechanismButton(state)
@@ -358,7 +413,7 @@ return function(ui)
         end
     end
 
-    -- ═══ Abilities Toggle Button (bottom-left, above the square ability buttons) ═══
+    -- в•ђв•ђв•ђ Abilities Toggle Button (bottom-left, above the square ability buttons) в•ђв•ђв•ђ
     function ui.drawAbilitiesToggleButton(state, mouseX, mouseY)
         local r = ui.getAbilitiesToggleRect()
         local isHover = mouseX and mouseX >= r.x and mouseX <= r.x + r.w and mouseY >= r.y and mouseY <= r.y + r.h
@@ -374,13 +429,13 @@ return function(ui)
         love.graphics.setColor(1, 1, 1, 1)
         local old = love.graphics.getFont()
         love.graphics.setFont(buttonFont)
-        local arrow = open and "▲" or "▼"
+        local arrow = open and "в–І" or "в–ј"
         love.graphics.printf("Abilities " .. arrow, r.x + 40, r.y + r.h / 2 - 10, r.w - 40, "center")
         love.graphics.setFont(old)
         love.graphics.setColor(1, 1, 1, 1)
     end
 
-    -- ═══ Order Button (index 3) ═══
+    -- в•ђв•ђв•ђ Order Button (index 3) в•ђв•ђв•ђ
     function ui.drawEnemyOrderButton(mouseX, mouseY)
         local r = ui.getRightBtnRect(2)
         local isHover = mouseX >= r.x and mouseX <= r.x + r.w and mouseY >= r.y and mouseY <= r.y + r.h
@@ -451,7 +506,7 @@ return function(ui)
         return isHover
     end
 
-    -- ═══ Undo Button (index 1) ═══
+    -- в•ђв•ђв•ђ Undo Button (index 1) в•ђв•ђв•ђ
     function ui.drawUndoButton(actionHistory, maxUndoCount, selectedActor)
         local canUndo = #undo.history > 1
         local count = #undo.history - 1
@@ -478,7 +533,7 @@ return function(ui)
             end
     end
 
-    -- ═══ End Turn Button (bottom center) ═══
+    -- в•ђв•ђв•ђ End Turn Button (bottom center) в•ђв•ђв•ђ
     function ui.drawEndTurnButton(turnState, entities, turnCount, maxTurns, state)
         local isPlayerTurn = (turnState.phase == "player")
         local btn = endTurnButton
@@ -487,28 +542,15 @@ return function(ui)
         local r = ui.getEndTurnRect()
 
         local hasActiveUnits = false
+        local nothingLeft = not isPlayerTurn
         if isPlayerTurn then
-            for _, e in ipairs(entities) do
-                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0 and (e.attacksLeft or 0) > 0)
-                if e.isPlayable and e.health > 0 and not done then
-                    hasActiveUnits = true
-                    break
-                end
-            end
+            local act = ui.getEndTurnActionState(entities, state)
+            hasActiveUnits = act.hasActiveUnits
+            nothingLeft = act.nothingLeft
         end
-        local canUseAbility = false
-        if isPlayerTurn and state and global_abilities then
-            for _, name in ipairs(global_abilities.getDisplayOrder(state)) do
-                local ab = global_abilities.registry[name]
-                if ab and not ab.hasBeenUsed and not global_abilities.abilityUsedThisTurn
-                    and global_abilities.mana >= ab.manaCost then
-                    canUseAbility = true
-                    break
-                end
-            end
-        end
-        local nothingLeft = isPlayerTurn and not hasActiveUnits and not canUseAbility
-        ui.endTurnHoldTime = nothingLeft and 0.3 or 0.7
+        -- Nobody left to act: quick 0.7s confirm. Actions still available: long
+        -- 2s confirm (to stop accidental turn skips).
+        ui.endTurnHoldTime = nothingLeft and 0.7 or 2.0
 
         local baseR, baseG, baseB = 0.8, 0.2, 0.2
         if nothingLeft then
@@ -543,10 +585,28 @@ return function(ui)
             love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 8)
         end
 
+        -- While holding End Turn with actions still available, blink a big
+        -- on-screen warning so the player does not skip their turn by accident.
+        if isPressed and isPlayerTurn and not nothingLeft then
+            local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 10)
+            local msg = "You still have moves available!"
+            local f = fonts.get(28)
+            local cx = logicalW / 2
+            local cy = logicalH / 2 - 40
+            local tw = f:getWidth(msg)
+            love.graphics.setFont(f)
+            love.graphics.setColor(0, 0, 0, 0.65 * pulse)
+            love.graphics.rectangle("fill", cx - tw / 2 - 18, cy - 12, tw + 36, f:getHeight() + 24, 8)
+            love.graphics.setColor(1, 0.35 + 0.4 * pulse, 0.25, 0.5 + 0.5 * pulse)
+            love.graphics.print(msg, cx - tw / 2, cy)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.setFont(old)
+        end
+
         if btn.isHovered and isPlayerTurn and hasActiveUnits then
             local unitsLeft = {}
             for _, e in ipairs(entities) do
-                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0 and (e.attacksLeft or 0) > 0)
+                local done = e.hasActedThisTurn and not (e.multiAction and (e.movesLeft or 0) > 0 and (e.attacksLeft or 0) > 0)
                 if e.isPlayable and e.health > 0 and not done then
                     table.insert(unitsLeft, e.name)
                 end
@@ -567,7 +627,7 @@ return function(ui)
         end
     end
 
-    -- ═══ Hero skill buttons (square, bottom-left row, only when abilities hidden) ═══
+    -- в•ђв•ђв•ђ Hero skill buttons (square, bottom-left row, only when abilities hidden) в•ђв•ђв•ђ
     function ui.drawAttackPanel(selectedActor, attackButtons, selectedAttack, attackMode)
         if global_abilities.showPanel then return end
         if not selectedActor or selectedActor.hasActedThisTurn then return end
@@ -590,14 +650,11 @@ return function(ui)
             btn.width = ri.w
             btn.height = ri.h
             local isSelected = (selectedAttack == btn.attack and attackMode)
-            local isSecond = selectedActor.soloActions and (selectedActor.attacksLeft or 2) <= 1
             -- Delayed attacks (finishers) end the turn: dark red signals "no more actions"
             local isDelayed = combat.hasTag(btn.attack.tags, "delayed")
             local r, g, b
             if isDelayed then
                 r, g, b = 0.75, 0.15, 0.25
-            elseif isSecond then
-                r, g, b = 0.85, 0.45, 0.15
             else
                 r, g, b = 0.3, 0.7, 0.3
             end
@@ -632,7 +689,7 @@ return function(ui)
                 local ttW = 220
                 local maxW = ttW - 16
                 local words = {}
-                for w in (btn.name .. " — " .. btn.desc):gmatch("%S+") do table.insert(words, w) end
+                for w in (btn.name .. " вЂ” " .. btn.desc):gmatch("%S+") do table.insert(words, w) end
                 local lines = {}
                 for _, w in ipairs(words) do
                     if #lines == 0 then
@@ -710,19 +767,18 @@ return function(ui)
         end
     end
 
-    -- ═══ Gentle Touch toggle (Blade): free, unlimited, modifies attacks ═══
-    -- Sits after the attack squares on the bottom-left row.
-    function ui.gentleTouchRect(attackCount)
-        local tri = ui.getAbilitySquareRect(math.max(1, attackCount + 1))
-        return { x = tri.x, y = tri.y, w = tri.w, h = math.min(tri.h, 40) }
+    -- в•ђв•ђв•ђ Gentle Touch toggle (Blade): free, unlimited, modifies attacks в•ђв•ђв•ђ
+    -- Merged into the hero's double-width unit button: right half toggles it.
+    function ui.gentleTouchRect(unitRect)
+        if not unitRect then return nil end
+        return { x = unitRect.x + unitRect.w - abBlock.square, y = unitRect.y,
+                 w = abBlock.square, h = unitRect.h }
     end
 
-    function ui.drawGentleTouch(actor)
-        if not (actor and actor.gentleAvailable) then return end
-        if _G.global_abilities and _G.global_abilities.showPanel then return end
-        local on = actor.gentleTouch
-        local gc = ui.gentleTouchRect(#(attackButtons or {}))
+    function ui.drawGentleTouchHalf(actor, unitRect, unitW)
+        local gc = ui.gentleTouchRect(unitRect)
         actor._gentleRect = gc
+        local on = actor.gentleTouch
         local mx, my = love.mouse.getPosition()
         mx, my = mx / (_G.dpiScale or 1), my / (_G.dpiScale or 1)
         local hover = mx >= gc.x and mx <= gc.x + gc.w and my >= gc.y and my <= gc.y + gc.h
@@ -740,7 +796,7 @@ return function(ui)
         love.graphics.printf((on and "Gentle ON" or "Gentle off"), gc.x, gc.y + gc.h / 2 - 8, gc.w, "center")
     end
 
-    -- ═══ Ability buttons (square, grouped in a bottom row when panel open) ═══
+    -- в•ђв•ђв•ђ Ability buttons (square, grouped in a bottom row when panel open) в•ђв•ђв•ђ
     function ui.drawAbilityButtons(state)
         if not global_abilities.showPanel then return end
         local displayOrder = global_abilities.getDisplayOrder(state)

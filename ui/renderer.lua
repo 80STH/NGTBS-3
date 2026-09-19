@@ -44,12 +44,14 @@ function renderer.draw(state)
     -- Collect preview damaged entities (for entity blinking), collision icons, drown overlays, and push arrows
     local previewPushArrows = nil
     local previewCollisionIcons = nil
+    local previewDamageNumbers = nil
     local drownCells = nil
     state.previewDamaged = {}
     if state.attackMode and state.selectedAttack and state.selectedActor and not state.selectedActor.hasActedThisTurn and not state.flipTargetActor and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         state.previewDamaged = ui.collectPreviewDamagedEntities(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities) or {}
         previewCollisionIcons = ui.collectPreviewCollisionIcons(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities)
         previewPushArrows = ui.collectPreviewPushArrows(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities)
+        previewDamageNumbers = ui.collectPreviewDamageNumbers(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities)
         drownCells = ui.collectPreviewDrownOverlays(hex, state.selectedActor, state.selectedAttack, hex.hoverQ, hex.hoverR, state.entities)
     elseif not state.attackMode and hex.hoverQ >= 0 and hex.hoverR >= 0 then
         local hoverEntity = getEntityAtHex(hex.hoverQ, hex.hoverR)
@@ -89,6 +91,20 @@ function renderer.draw(state)
             end
         end
     end
+    -- Chaos (Soul Power) threat: sum the soul-power drain for all previewed
+    -- targets that would lose health and whose loss drains the team resource
+    -- (buildings, objective buildings, train cars). The bar blinks ONLY the
+    -- cells that would actually be lost (clamped to the current value).
+    local chaosDamage = 0
+    for entity, info in pairs(state.previewDamaged) do
+        if info.totalDamage and info.totalDamage > 0 and entity
+            and (entity:isBuilding() or entity.isTrainCar) then
+            chaosDamage = chaosDamage + info.totalDamage
+        end
+    end
+    state.previewChaosThreat = chaosDamage > 0
+    state.previewChaosDamage = state.previewChaosThreat and chaosDamage or 0
+
     -- Double Cleave re-aim: highlight the two allowed cells + total damage hints
     if state.attackMode and state.selectedAttack and state.selectedAttack.name == "Double Cleave"
         and cleaveTargetCell and state.selectedActor then
@@ -312,7 +328,7 @@ function renderer.draw(state)
                 love.graphics.setLineWidth(2)
                 love.graphics.polygon("line", dv)
                 love.graphics.setLineWidth(1)
-                -- Second target B: 60° further around attacker
+                -- Second target B: 60В° further around attacker
                 local occupant = getEntityAtHex(dc.q, dc.r)
                 if occupant and occupant:isCharacter() and occupant.health > 0 then
                     local bq, br
@@ -412,6 +428,7 @@ function renderer.draw(state)
     drawAllEntities(state)
     ui.drawPreviewIcons(hex, previewCollisionIcons)
     ui.drawPreviewPushArrows(previewPushArrows)
+    ui.drawPreviewDamageNumbers(previewDamageNumbers)
     visual.draw()
     ui.drawDelayedHints(state.entities)
 
@@ -420,7 +437,7 @@ function renderer.draw(state)
         if sel and not sel.isMoving and state.turnState.phase == "player" then
             local isRooted = status and status.hasEntityStatus and status.hasEntityStatus(sel, "rooted") and not sel.rootImmune
             local canShowMove = not isRooted and (not sel.hasActedThisTurn or sel.canMoveAfterAttack) and (not sel.hasMovedThisTurn or sel.canMoveAfterAttack)
-                and (not sel.soloActions or (sel.movesLeft or 0) > 0)
+                and (not sel.multiAction or (sel.movesLeft or 0) > 0)
             if canShowMove then
                 ui.drawMovementRange(hex, sel, state.entities, state.terrainMap)
                 if sel.isPlayable and hex.hoverQ >= 0 and hex.hoverR >= 0 then
@@ -501,7 +518,7 @@ function renderer.draw(state)
     global_abilities.drawPreview(hex, state)
 
     -- Dead-hero indicator: actions locked until redeploy, abilities still usable
-    if soloMode and heroRevivePending then
+    if heroRevivePending then
         local msg = "The hero has fallen! Actions locked until redeploy next turn"
         local f = fonts.get(18)
         local tw = f:getWidth(msg)
@@ -515,7 +532,6 @@ function renderer.draw(state)
     end
 
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
-    ui.drawGentleTouch(state.selectedActor)
     if state.selectedActor then
         ui.drawSelectedStats(state.selectedActor, state.entities, hex)
     elseif global_abilities.activeAbility then
@@ -1290,7 +1306,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
     state.deployConfirmBtn = canConfirm and {x = btnX, y = btnY, w = btnW, h = btnH} or nil
 
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("DEPLOYMENT PHASE — Place your units", 10, 55)
+    love.graphics.print("DEPLOYMENT PHASE вЂ” Place your units", 10, 55)
 end
 
 return renderer

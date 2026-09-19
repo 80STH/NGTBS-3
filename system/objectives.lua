@@ -8,9 +8,9 @@ local icon_cache = require("ui.icon_cache")
 
 local objectives = {}
 
--- Solo mode: chaos sources drain the hero's health instead of the chaos meter.
+-- Chaos sources drain the hero's health instead of the chaos meter.
 local function addChaos(amount, msg)
-    if _G.soloMode and _G.damageHero then
+    if _G.damageHero then
         _G.damageHero(amount)
         return
     end
@@ -188,7 +188,7 @@ local killLeaderDef = {
     name = "Destroy the Leader",
     desc = "Find and eliminate the enemy leader!",
     onGenerate = function(entities, hex)
-        -- Power Lich already placed in game.lua — just mark it
+        -- Power Lich already placed in game.lua Р Р†Р вЂљРІР‚Сњ just mark it
         for _, e in ipairs(entities) do
             if e:isCharacter() and not e.isPlayable and e.name == "PowerLich" then
                 e.isLeader = true
@@ -384,9 +384,9 @@ local function definePool()
                 return tostring(_G.objective_digBlocks or 0) .. "/2"
             end,
         },
-        -- Hero-exclusive objectives (solo mode): only offered when the hero
-        -- has the required capabilities (see solo_mode.lua hero `tags`).
-        -- ponytail: disabled by request — kept intact (flip `disabled` to re-enable).
+        -- Hero-exclusive objectives: only offered when the hero
+        -- has the required capabilities (see the hero `tags`).
+        -- ponytail: disabled by request Р Р†Р вЂљРІР‚Сњ kept intact (flip `disabled` to re-enable).
         {
             id = "impale",
             name = "Impale",
@@ -638,8 +638,8 @@ function objectives.generate(entities, hex, forcedObjectives)
 
     -- Hero-exclusive objectives: only offer what the selected hero can do
     local heroTags = {}
-    if _G.soloMode and _G.selectedSoloHero then
-        local hdef = env.getSoloHeroDef(_G.selectedSoloHero)
+    if _G.selectedHero then
+        local hdef = env.getHeroDef(_G.selectedHero)
         if hdef and hdef.tags then
             for _, t in ipairs(hdef.tags) do
                 heroTags[t] = true
@@ -742,14 +742,12 @@ function objectives.generate(entities, hex, forcedObjectives)
                 skip = true
             end
 
-            -- Hero-exclusive: skip in non-solo modes or when the hero lacks the tags
+            -- Hero-exclusive: skip when the hero lacks the required tags
             if not skip and def.heroOnly then
-                if not _G.soloMode then
-                    skip = true
-                elseif def.requires then
+                if def.requires then
                     for _, t in ipairs(def.requires) do
                         if not heroTags[t] then
-                            log.debugf("objectives", "Skipping '%s' — hero lacks '%s' capability", def.id, t)
+                            log.debugf("objectives", "Skipping '%s' РІР‚вЂќ hero lacks '%s' capability", def.id, t)
                             skip = true
                             break
                         end
@@ -888,7 +886,7 @@ function objectives.update(entities)
         if activePrimaryObjective.check then
             activePrimaryObjective.check(entities, objectiveStates)
         end
-        -- kill_leader (Power Lich boss) — completion/defeat
+        -- kill_leader (Power Lich boss) Р Р†Р вЂљРІР‚Сњ completion/defeat
         if activePrimaryObjective.id == "kill_leader" then
             local state = objectiveStates["kill_leader"]
             if state == "failed" then
@@ -1012,7 +1010,7 @@ function objectives.draw()
         while name ~= "" and smallFont:getWidth(name) > maxNameW do
             name = name:sub(1, -2)
         end
-        if name ~= (obj.name or obj.id or "") then name = name .. "…" end
+        if name ~= (obj.name or obj.id or "") then name = name .. "Р Р†Р вЂљР’В¦" end
         local nameX = x + padding
         if icon_cache and icon_cache.get(iconKey) then
             icon_cache.drawSmall(iconKey, nameX + 7, curY + lineH / 2, 14, 1, txtColor)

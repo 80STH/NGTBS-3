@@ -141,7 +141,15 @@ function preview.new()
         pushArrows = {}, -- { fromQ, fromR, toQ, toR }
         lines      = {}, -- { fromQ, fromR, toQ, toR }
         overlays   = {}, -- [key] -> { q, r, kind }
+        damageNumbers = {}, -- { q, r, amount } base attack damage shown on the cell
     }
+end
+
+-- Base attack damage number drawn on a cell (not the total: no collision
+-- damage, no multipliers). Zero is skipped.
+function preview.addDamageNumber(p, q, r, amount)
+    if not amount or amount <= 0 then return end
+    p.damageNumbers[#p.damageNumbers + 1] = { q = q, r = r, amount = amount }
 end
 
 local function ensureDamageEntry(p, entity)
@@ -431,6 +439,22 @@ local function handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities
 
     preview.addLine(p, attacker.q, attacker.r, hoverQ, hoverR)
 
+    -- Push direction arrow is always shown, even when the aimed cell is empty:
+    -- it reflects where the attack would shove, based on its geometry.
+    local pushFromQ, pushFromR = hoverQ, hoverR
+    local arrowQ, arrowR = hex_utils.applyCubeStep(hoverQ, hoverR, stepX, stepY, stepZ)
+    if isActive(arrowQ, arrowR, hex) then
+        preview.addPushArrow(p, pushFromQ, pushFromR, arrowQ, arrowR)
+    end
+
+    -- Direct damage (base attack damage, not the total). Shown on the aimed
+    -- cell even when it is empty; zero is skipped.
+    local baseDamage = 0
+    if attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Ghost Bolt" then
+        baseDamage = attack.damage or 1
+    end
+    preview.addDamageNumber(p, hoverQ, hoverR, baseDamage)
+
     local firstTarget, firstHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
     if not firstTarget or not firstHex then
         -- No target: just draw line to farthest active cell.
@@ -442,12 +466,6 @@ local function handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities
     end
 
     preview.addOverlay(p, firstHex.q, firstHex.r, "target")
-
-    -- Direct damage.
-    local baseDamage = 0
-    if attack.name == "Shoot" or attack.name == "Dash" or attack.name == "Ghost Bolt" then
-        baseDamage = attack.damage or 1
-    end
 
     if baseDamage > 0 then
         local dist = hex:getDistance(attacker.q, attacker.r, firstHex.q, firstHex.r)
@@ -549,27 +567,68 @@ handlers["Strike"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities
     local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
     if dist ~= 1 then return end
     local target = getEntity(hoverQ, hoverR, entities)
+    -- Base damage number on the aimed cell, even when it is empty (zero skipped).
+    preview.addDamageNumber(p, hoverQ, hoverR, attack.damage or 1)
     if target and target.health > 0 and not target.indestructible then
         local eff = preview.calculateEffectiveDamage(target, attacker, attack.damage or 1, nil, dist)
         preview.addAttackDamage(p, target, eff)
         preview.addOverlay(p, hoverQ, hoverR, "target")
     end
 
-    -- Shockwave behind the attacker: push the occupant there one cell further back.
+    -- Shockwave behind the attacker: always show its direction, even when the
+    -- cell behind is empty.
     local stepX, stepY, stepZ = attack:getLineDirection(hoverQ, hoverR, attacker.q, attacker.r, hex)
     if stepX then
         local behindQ, behindR = hex_utils.applyCubeStep(attacker.q, attacker.r, stepX, stepY, stepZ)
+        local pushQ, pushR = hex_utils.applyCubeStep(behindQ, behindR, stepX, stepY, stepZ)
         local behindEntity = getEntity(behindQ, behindR, entities)
         if behindEntity and behindEntity.health > 0 and behindEntity.isPushable ~= false then
-            local pushQ, pushR = hex_utils.applyCubeStep(behindQ, behindR, stepX, stepY, stepZ)
             preview.applyPush(p, behindEntity, behindQ, behindR, pushQ, pushR, hex, entities)
+        elseif isActive(behindQ, behindR, hex) and isActive(pushQ, pushR, hex) then
+            preview.addPushArrow(p, behindQ, behindR, pushQ, pushR)
+        end
+    end
+end
+-- Wide Strike (Blade): 1 damage to three front cells, or (Gentle Touch) shove
+-- all three forward with no damage. Always shows the base damage numbers and,
+-- with Gentle Touch, the push direction for each cell.
+handlers["Wide Strike"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
+    if dist ~= 1 then return end
+    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+    if not stepX then return end
+
+    local cells = attack:getAffectedCells(attacker, hoverQ, hoverR, hex, entities)
+    for _, c in ipairs(cells) do
+        if isActive(c.q, c.r, hex) then
+            local e = getEntity(c.q, c.r, entities)
+            local hasTarget = e and e.health > 0 and not e.indestructible
+            local pushQ, pushR = hex_utils.applyCubeStep(c.q, c.r, stepX, stepY, stepZ)
+            if attacker.gentleTouch then
+                -- Gentle Touch: shove every hit unit forward; damage number is 0
+                -- so it is skipped. Arrows show even on empty cells.
+                if hasTarget then
+                    preview.applyPush(p, e, c.q, c.r, pushQ, pushR, hex, entities)
+                elseif isActive(pushQ, pushR, hex) then
+                    preview.addPushArrow(p, c.q, c.r, pushQ, pushR)
+                end
+                if hasTarget then preview.addOverlay(p, c.q, c.r, "target") end
+            else
+                -- Normal: base damage number on every cell, regardless of occupancy.
+                local d = hex:getDistance(attacker.q, attacker.r, c.q, c.r)
+                preview.addDamageNumber(p, c.q, c.r, attack.damage or 1)
+                if hasTarget then
+                    local eff = preview.calculateEffectiveDamage(e, attacker, attack.damage or 1, nil, d)
+                    preview.addAttackDamage(p, e, eff)
+                    preview.addOverlay(p, c.q, c.r, "target")
+                end
+            end
         end
     end
 end
 handlers["Dash"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
     if not stepX then return end
-
     -- Elevation walk: Dash stops at elevation boundaries, just like execution.
     local elevMap = _G.elevationMap or elevationMap
     if elevMap then
@@ -728,7 +787,22 @@ handlers["Flip"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
     if dist ~= 1 then return end
     local target = getEntity(hoverQ, hoverR, entities)
-    if not target or not target:isCharacter() or target.health <= 0 then return end
+    -- Base damage number on the aimed cell, even when empty. Gentle Touch
+    -- deals no direct damage, so the number is skipped there (zero).
+    if not attacker.gentleTouch then
+        preview.addDamageNumber(p, hoverQ, hoverR, attack.damage or 1)
+    end
+    if not target or not target:isCharacter() or target.health <= 0 then
+        -- No target: still show the flip direction (mirror of the aimed cell
+        -- across the attacker) so the shove is readable on an empty cell.
+        local aX, aY, aZ = hex_utils.axialToCube(attacker.q, attacker.r)
+        local hX, hY, hZ = hex_utils.axialToCube(hoverQ, hoverR)
+        local flipQ, flipR = hex_utils.cubeToAxial(aX + (aX - hX), aY + (aY - hY), aZ + (aZ - hZ))
+        if isActive(flipQ, flipR, hex) then
+            preview.addPushArrow(p, hoverQ, hoverR, flipQ, flipR)
+        end
+        return
+    end
 
     local eff = preview.calculateEffectiveDamage(target, attacker, attack.damage or 1, nil, dist)
     -- Gentle Touch (Blade): flip moves the target but deals no direct damage.
@@ -761,10 +835,20 @@ handlers["Vortex Strike"] = function(p, attacker, attack, hoverQ, hoverR, hex, e
     local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
     if dist ~= 1 then return end
     local target = getEntity(hoverQ, hoverR, entities)
-    if not target or not target:isCharacter() or target.health <= 0 then return end
+    if not target or not target:isCharacter() or target.health <= 0 then
+        -- No target: still show both shift directions from the aimed cell.
+        local dests = attack:getShiftDestinations(attacker, hoverQ, hoverR, hex)
+        for _, dc in ipairs(dests) do
+            if isActive(dc.q, dc.r, hex) then
+                preview.addPushArrow(p, hoverQ, hoverR, dc.q, dc.r)
+            end
+        end
+        return
+    end
 
     local eff = preview.calculateEffectiveDamage(target, attacker, attack.damage or 1, nil, dist)
     preview.addAttackDamage(p, target, eff)
+    preview.addDamageNumber(p, hoverQ, hoverR, attack.damage or 1)
     preview.addOverlay(p, hoverQ, hoverR, "target")
 
     if target.isPushable ~= false then
@@ -1240,6 +1324,16 @@ function preview.buildCollisionIcons(p, hex)
         end
     end
     return icons
+end
+
+-- Build base-damage number list (screen coords) from a computed preview.
+function preview.buildDamageNumbers(p, hex)
+    local out = {}
+    for _, n in ipairs(p.damageNumbers or {}) do
+        local x, y = getDrawCoords(n.q, n.r)
+        out[#out + 1] = { x = x, y = y, amount = n.amount }
+    end
+    return out
 end
 
 -- Build push arrow list from a computed preview.

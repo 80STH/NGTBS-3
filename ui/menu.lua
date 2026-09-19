@@ -2,7 +2,7 @@ local menu = {}
 local shop = require("ui.shop")
 local commanders = require("system.commanders")
 local fonts = require("util.fonts")
-local soloHeroes = require("entity.environment")
+local heroDefs = require("entity.environment")
 
 local function loadMapList()
     local items = love.filesystem.getDirectoryItems("maps")
@@ -78,14 +78,14 @@ local function computeLayout(w, h)
     end
     y = y + cmdCardH + 14
 
-    -- Heroes (solo mode)
+    -- Heroes
     l.heroLabelY = y
     y = y + 24
-    local heroCount = #soloHeroes.getSoloHeroes()
+    local heroCount = #heroDefs.getHeroes()
     local heroCardW = math.floor((contentW - (heroCount - 1) * 6) / heroCount)
     local heroCardH = 68
     l.heroCards = {}
-    for i, hero in ipairs(soloHeroes.getSoloHeroes()) do
+    for i, hero in ipairs(heroDefs.getHeroes()) do
         l.heroCards[i] = {
             x = cx + (i - 1) * (heroCardW + 6),
             y = y,
@@ -213,14 +213,14 @@ function menu.draw()
     -- Hero label
     love.graphics.setFont(l.cardFont)
     love.graphics.setColor(0.6, 0.8, 1, 0.9)
-    love.graphics.printf("Hero (solo: 2 atk + 2 move per turn)", l.cx, l.heroLabelY, l.contentW, "center")
+    love.graphics.printf("Hero (2 atk + 2 move per turn)", l.cx, l.heroLabelY, l.contentW, "center")
 
     -- Hero cards
-    local heroes = soloHeroes.getSoloHeroes()
+    local heroes = heroDefs.getHeroes()
     for i, hero in ipairs(heroes) do
         local card = l.heroCards[i]
         local hover = mx >= card.x and mx <= card.x + card.w and my >= card.y and my <= card.y + card.h
-        local sel = selectedSoloHero == i
+        local sel = selectedHero == i
 
         love.graphics.setColor(hover and 0.2 or 0.1, hover and 0.16 or 0.12, hover and 0.3 or (sel and 0.25 or 0.15), 0.95)
         love.graphics.rectangle("fill", card.x, card.y, card.w, card.h, 5)
@@ -334,12 +334,11 @@ function menu.mousepressed(x, y)
         end
     end
 
-    -- Heroes (solo mode)
+    -- Heroes
     for i, card in ipairs(l.heroCards) do
         if x >= card.x and x <= card.x + card.w and y >= card.y and y <= card.y + card.h then
             if not selectedCommander then return true end
-            selectedSoloHero = i
-            soloMode = true
+            selectedHero = i
             return true
         end
     end
@@ -348,8 +347,7 @@ function menu.mousepressed(x, y)
     for i, btn in ipairs(l.mapBtns) do
         if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
             if not selectedCommander then return true end
-            if not selectedSoloHero then selectedSoloHero = 1 end
-            soloMode = true
+            if not selectedHero then selectedHero = 1 end
             isProgressionRun = false
             soulPowerInit()
             global_abilities.initWithCommander(selectedCommander)
@@ -364,8 +362,7 @@ function menu.mousepressed(x, y)
         if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
             if btn.key == "progression" then
                 if not selectedCommander then return true end
-                selectedSoloHero = 1
-                soloMode = true
+                selectedHero = 1
                 commanderArtifacts = {}
                 genericUpgrades = {}
                 progressionChoices = {}
@@ -418,8 +415,7 @@ function menu.keypressed(key)
     if key == "return" or key == " " then
         if #mapList > 0 then
             if not selectedCommander then return true end
-            if not selectedSoloHero then selectedSoloHero = 1 end
-            soloMode = true
+            if not selectedHero then selectedHero = 1 end
             soulPowerInit()
             global_abilities.initWithCommander(selectedCommander)
             beginCurrentMission()

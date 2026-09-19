@@ -142,6 +142,15 @@ end
     do
         local sel = turnState.phase == "player" and ui.unitSelectHit(x, y)
         local list = ui._unitSelectEntities
+        if sel == "gentle" then
+            -- Hero's Gentle Touch half: free toggle, no action cost.
+            local hero = _G.hero
+            if hero and hero.gentleAvailable then
+                hero.gentleTouch = not hero.gentleTouch
+                sounds.play("click")
+            end
+            return
+        end
         if type(sel) == "number" and list and list[sel] and not (selectedActor and selectedActor.isMoving) then
             selectedActor = list[sel]
             hex.selectedQ, hex.selectedR = selectedActor.q, selectedActor.r
@@ -187,35 +196,17 @@ end
     local er = ui.getEndTurnRect()
     if x >= er.x and x <= er.x + er.w and y >= er.y and y <= er.y + er.h then
         if turnState.phase == "player" then
-            local hasActive = false
-            for _, e in ipairs(entities) do
-                local done = e.hasActedThisTurn and not (e.soloActions and (e.movesLeft or 0) > 0 and (e.attacksLeft or 0) > 0)
-                if e.isPlayable and e.health > 0 and not done then
-                    hasActive = true
-                    break
-                end
-            end
-            if hasActive then
+            local act = ui.getEndTurnActionState(entities, state)
+            if act.nothingLeft then
+                turnManager.endPlayerTurn()
+            else
                 endTurnButton.isHeld = true
                 endTurnButton.holdTimer = 0
-            else
-                turnManager.endPlayerTurn()
             end
         else
             log.debug("input", "Not your turn")
         end
         return
-    end
-
-    -- Gentle Touch toggle (Blade): free + unlimited; flips state in place,
-    -- never consumes an action or attack. Region is set each frame by drawGentleTouch.
-    if selectedActor and selectedActor.gentleAvailable and selectedActor._gentleRect then
-        local gr = selectedActor._gentleRect
-        if x >= gr.x and x <= gr.x + gr.w and y >= gr.y and y <= gr.y + gr.h then
-            selectedActor.gentleTouch = not selectedActor.gentleTouch
-            sounds.play("click")
-            return
-        end
     end
 
     if turnState.phase == "player" and selectedActor and not selectedActor.hasActedThisTurn and not selectedActor.isMoving then
@@ -380,7 +371,8 @@ end
                 vortexTargetCell = nil
             else
                 local target = selectedAttack:getLineTarget(selectedActor, tq, tr, hex, entities)
-                if target then
+                -- Wide Vortex stays enemies-only.
+                if target and not target.entity.isPlayable then
                     vortexTargetCell = {q = target.q, r = target.r}
                 end
             end
@@ -552,7 +544,16 @@ function input.keypressed(key)
     end
 
     if key == "e" or key == "E" then
-        if turnState.phase == "player" then turnManager.endPlayerTurn() end
+        if turnState.phase == "player" then
+            local act = ui.getEndTurnActionState(entities, state)
+            if act.nothingLeft then
+                turnManager.endPlayerTurn()
+            else
+                -- Hold E to confirm while actions remain (mirrors the button).
+                endTurnButton.isHeld = true
+                endTurnButton.holdTimer = 0
+            end
+        end
         return
     end
 

@@ -124,7 +124,7 @@ function updatePreparePhase(dt)
             if anyMoving then
                 turnState._waitingForMoves = true
             else
-                -- No enemies moved — prepare all attacks now
+                -- No enemies moved вЂ” prepare all attacks now
                 for _, e in ipairs(entities) do
                     if e:isCharacter() and not e.isPlayable and e.health > 0 then
                         if e._willPrepareAfterMove or not e.hasPreparedAttack then
@@ -190,7 +190,7 @@ function transitionToPlayerTurn()
                 a.redirectPending = nil
                 a.pendingDelayedAttack = nil
                 a.deflectArmed = false
-                if a.soloActions then
+                if a.multiAction then
                     a.attacksLeft = a.maxAttacks or 2
                     a.movesLeft = a.maxMoves or 2
                 end
@@ -204,8 +204,8 @@ function transitionToPlayerTurn()
     selectLightningTarget()
     log.info("turn", "=== PLAYER TURN ===")
 
-    -- Solo hero vanished (death-save): force a simple redeploy now
-    if _G.soloMode and _G.heroRevivePending and _G.hero then
+    -- Hero vanished (death-save): force a simple redeploy now
+    if _G.heroRevivePending and _G.hero then
         local h = _G.hero
         h.q, h.r = -1, -1
         h.isMoving = false

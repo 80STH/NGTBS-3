@@ -63,7 +63,7 @@ local nameToSpriteKey = {
 }
 -- CONTENT REGISTRY: attack sets and enemy types.
 -- Previously there were 19 get*Attacks() functions + long if/elseif
--- in three places. Now — two tables.
+-- in three places. Now Р Р†Р вЂљРІР‚Сњ two tables.
 -- ============================================================
 
 -- Each set is a function returning a list of attacks.
@@ -881,7 +881,7 @@ function environment.loadUnitSprites()
 end
 
 function environment.createEnemyByType(enemyType, q, r)
-    -- Specification from registry; fallback — Zombie.
+    -- Specification from registry; fallback Р Р†Р вЂљРІР‚Сњ Zombie.
     local spec = ENEMY_TYPES[enemyType] or ENEMY_TYPES.Zombie
     local name = (ENEMY_TYPES[enemyType] and enemyType) or "Zombie"
     local attacks = environment.getAttacks(spec.attackSet)
@@ -1025,23 +1025,23 @@ function environment.getAvailableEntityDefs()
     return list
 end
 
--- ───────────────────────────────────────────────────────────
--- SOLO HERO roster (was system/solo_mode.lua)
+-- Р Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљ
+-- HERO roster
 -- Menu = list heroes + their attacks; game spawns one chosen hero;
 -- objectives read a hero def for capability tags.
 -- The registry is built lazily so combat (whose attack classes these defs
 -- reference) is only required once everything else has loaded.
--- ───────────────────────────────────────────────────────────
-local soloHeroes = nil
+-- Р Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљ
+local heroDefs = nil
 
 local function combatModule()
     return require("combat.combat")
 end
 
-local function buildSoloHeroes()
-    if soloHeroes then return soloHeroes end
+local function buildHeroes()
+    if heroDefs then return heroDefs end
     local c = combatModule()
-    soloHeroes = {
+    heroDefs = {
         {
             id = "blade", name = "Blade", spriteGid = 34, hp = 3, move = 3, tags = {"fire", "push"},
             deployEffect = { type = "damage_nearby", damage = 1, radius = 1 },
@@ -1057,29 +1057,29 @@ local function buildSoloHeroes()
             end,
         },
     }
-    return soloHeroes
+    return heroDefs
 end
 
-function environment.getSoloHeroes()
-    return buildSoloHeroes()
+function environment.getHeroes()
+    return buildHeroes()
 end
 
-function environment.getSoloHeroDef(idx)
-    return buildSoloHeroes()[idx]
+function environment.getHeroDef(idx)
+    return buildHeroes()[idx]
 end
 
--- Build the chosen playable solo hero entity. q/r = -1 until placed.
-function environment.createSoloHero(defIdx, q, r)
-    local def = buildSoloHeroes()[defIdx]
+-- Build the chosen playable hero entity. q/r = -1 until placed.
+function environment.createHero(defIdx, q, r)
+    local def = buildHeroes()[defIdx]
     if not def then return nil end
     local sprite = environment.unitSpriteCache and environment.unitSpriteCache[def.spriteGid]
     local e = Entity.new(def.name, Entity.TYPES.CHARACTER, q or -1, r or -1,
         def.hp, true, def.move, sprite, nil, def.attacks())
-    e.soloActions = true
+    e.multiAction = true
     e.attacksLeft = 2
     e.movesLeft = 2
     e.deployEffect = def.deployEffect
-    -- Toggle mechanics: Blade has "Gentle Touch" — when on, Dash/Flip lose
+    -- Toggle mechanics: Blade has "Gentle Touch" Р Р†Р вЂљРІР‚Сњ when on, Dash/Flip lose
     -- their direct damage. Flag lives on the hero so combat reads it live.
     if def.id == "blade" then
         e.gentleTouch = false
@@ -1106,7 +1106,7 @@ function environment.createBladeSummons()
 
     local function buildSummon(name, sprite, q, r, attacks)
         local e = Entity.new(name, Entity.TYPES.CHARACTER, q, r, 2, true, 3, sprite, nil, attacks)
-        e.soloActions = true
+        e.multiAction = true
         e.attacksLeft = 1
         e.movesLeft = 1
         e.maxAttacks = 1

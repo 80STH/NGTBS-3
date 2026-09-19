@@ -70,9 +70,8 @@ testViewOffsetY = 0
 gamePhase = "menu"
 selectedMapPath = nil
 selectedCommander = nil
-soloMode = false
-selectedSoloHero = nil
-hero = nil  -- solo mode: the single playable hero entity
+selectedHero = nil
+hero = nil  -- the single playable hero entity
 
 -- Environment mechanisms (single Mechanism button): retractable highground,
 -- teleporters, conveyor belts. 1-turn shared cooldown.
@@ -85,7 +84,7 @@ spawnAllUnits = false
 unlimitedAbilities = false
 chaos = 0
 chaosMax = 4
-soulPower = nil          -- solo run resource; drains on building loss/respawn (persists between missions)
+soulPower = nil          -- run resource; drains on building loss/respawn (persists between missions)
 soulPowerMax = 5
 soulPowerInit = function() soulPower = soulPowerMax end  -- default starting budget
 chaosSurplus = 0
@@ -183,8 +182,7 @@ function love.load()
         local ok, err = xpcall(function()
             local report = {}
             local function chk(n, c) report[#report + 1] = (c and "OK   " or "FAIL ") .. n end
-            _G.soloMode = true
-            _G.selectedSoloHero = 1
+            _G.selectedHero = 1
             restartGame("maps/map1.lua")
             local objectives = require("system.objectives")
             -- Seed objective trackers so some resolve completed and others failed.

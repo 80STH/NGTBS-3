@@ -99,7 +99,7 @@ end
 function ui.drawPathPreview(hex, actor, hoverQ, hoverR, entities, terrainMap)
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then return end
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return end
-    if actor.soloActions and ((actor.movesLeft or 0) <= 0 or (actor.attacksLeft or 0) <= 0) then return end
+    if actor.multiAction and ((actor.movesLeft or 0) <= 0 or (actor.attacksLeft or 0) <= 0) then return end
     if not hex:isActiveHex(hoverQ, hoverR) then return end
     if actor.teleporting then return end
     local effectiveRange = ui.getEffectiveMoveRange(actor, entities, hex)
@@ -315,6 +315,32 @@ function ui.drawPreviewPushArrows(arrows)
     end
 end
 
+-- Base attack damage numbers on affected cells (see attack_preview.addDamageNumber).
+function ui.drawPreviewDamageNumbers(numbers)
+    if not numbers then return end
+    local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
+    local alpha = 0.55 + 0.45 * pulse
+    local f = fonts.get(20)
+    love.graphics.setFont(f)
+    for _, n in ipairs(numbers) do
+        local text = tostring(n.amount)
+        local tw = f:getWidth(text)
+        local tx = math.floor(n.x - tw / 2)
+        local ty = math.floor(n.y - f:getHeight() / 2)
+        love.graphics.setColor(0, 0, 0, 0.85 * alpha)
+        for ox = -1, 1 do
+            for oy = -1, 1 do
+                if ox ~= 0 or oy ~= 0 then
+                    love.graphics.print(text, tx + ox, ty + oy)
+                end
+            end
+        end
+        love.graphics.setColor(1, 0.85, 0.3, alpha)
+        love.graphics.print(text, tx, ty)
+    end
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 function ui.collectPreviewIcons(hex, attacker, attack, hoverQ, hoverR, entities)
     if not attack or not attacker then return nil end
     local p = attack_preview.compute(hex, attacker, attack, hoverQ, hoverR, entities)
@@ -325,6 +351,14 @@ function ui.collectPreviewPushArrows(hex, attacker, attack, hoverQ, hoverR, enti
     if not attack or not attacker then return nil end
     local p = attack_preview.compute(hex, attacker, attack, hoverQ, hoverR, entities)
     return attack_preview.buildPushArrows(p, hex)
+end
+
+function ui.collectPreviewDamageNumbers(hex, attacker, attack, hoverQ, hoverR, entities)
+    if not attack or not attacker then return nil end
+    local p = attack_preview.compute(hex, attacker, attack, hoverQ, hoverR, entities)
+    local nums = attack_preview.buildDamageNumbers(p, hex)
+    if #nums == 0 then return nil end
+    return nums
 end
 
 function ui.collectPreviewDamagedEntities(hex, attacker, attack, hoverQ, hoverR, entities)
@@ -540,7 +574,7 @@ function ui.collectFlipDestOverlays(hex, selectedActor, flipTargetActor, attack,
     end
 end
 -- Where a dash toward (targetQ, targetR) actually ends, mirroring
--- combat.DashAttack:execute — first elevation boundary (crash/fall) or the
+-- combat.DashAttack:execute РІР‚вЂќ first elevation boundary (crash/fall) or the
 -- first target on the line. Returns endQ, endR, reason ("crash" | "fall" |
 -- "target" | "free").
 local function dashEndpoint(attacker, targetQ, targetR, stepX, stepY, stepZ, hex, entities)
@@ -616,7 +650,7 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
                 end
             elseif attack.name == "Dash" or attack.name == "Heavy Charge" then
                 -- Elevation-aware: only highlight cells the dash can actually
-                -- reach (target, crash or fall landing) — nothing beyond a cliff.
+                -- reach (target, crash or fall landing) РІР‚вЂќ nothing beyond a cliff.
                 local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
                 if stepX then
                     local endQ, endR, reason = dashEndpoint(attacker, q, r, stepX, stepY, stepZ, hex, entities)
@@ -641,7 +675,11 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
                     local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
                     if stepX then
                         local occupant = getEntityAtHex(q, r, entities)
-                        if occupant and occupant:isCharacter() and occupant.health > 0 and not occupant.isPlayable then
+                        -- Vortex Strike may shift allies too; Wide Vortex stays
+                        -- enemies-only.
+                        local allyAllowed = (attack.name == "Vortex Strike")
+                        if occupant and occupant:isCharacter() and occupant.health > 0
+                            and (allyAllowed or not occupant.isPlayable) then
                             canApply = true
                         end
                     end
@@ -1001,7 +1039,8 @@ end
         if not vortexTargetCell then
             -- First click phase: show direction cells only (no damage preview)
             local target = getEntityAtHex(hoverQ, hoverR, entities)
-            if target and target:isCharacter() and target.health > 0 and not target.isPlayable then
+            -- Vortex Strike may also target allies.
+            if target and target:isCharacter() and target.health > 0 then
                 local tx, ty = getDrawCoords(hoverQ, hoverR)
                 local dests = attack:getShiftDestinations(attacker, hoverQ, hoverR, hex)
                 for _, dc in ipairs(dests) do
@@ -1086,7 +1125,7 @@ end
                 end
             end
         elseif vortexTargetCell then
-            -- Second click phase: show arrows for A→dest and B→further + damage preview
+            -- Second click phase: show arrows for AРІвЂ вЂ™dest and BРІвЂ вЂ™further + damage preview
             local target = getEntityAtHex(vortexTargetCell.q, vortexTargetCell.r, entities)
             if target then
                 local dests = attack:getShiftDestinations(attacker, vortexTargetCell.q, vortexTargetCell.r, hex)
@@ -1103,7 +1142,7 @@ end
                     local tx, ty = getDrawCoords(vortexTargetCell.q, vortexTargetCell.r)
                     local hx, hy = getDrawCoords(hoverQ, hoverR)
                     local occupant = getEntityAtHex(hoverQ, hoverR, entities)
-                    -- Arrow: A → destination
+                    -- Arrow: A РІвЂ вЂ™ destination
                     ui.drawPushArrow(tx, ty, hx, hy, nil, nil, nil, nil, vortexTargetCell.q, vortexTargetCell.r, hoverQ, hoverR)
                     local hasCollision = false
                     local occDamaged = false
@@ -1597,7 +1636,7 @@ end
 function ui.drawMovementRange(hex, actor, entities, terrainMap)
     if actor.hasMovedThisTurn and not actor.canMoveAfterAttack then return end
     if actor.hasActedThisTurn and not actor.canMoveAfterAttack then return end
-    if actor.soloActions and ((actor.movesLeft or 0) <= 0 or (actor.attacksLeft or 0) <= 0) then return end
+    if actor.multiAction and ((actor.movesLeft or 0) <= 0 or (actor.attacksLeft or 0) <= 0) then return end
 
     -- Cache: recompute only when actor/position changes
     local cacheKey = actor.q .. "," .. actor.r .. "," .. tostring(actor)
@@ -1976,8 +2015,8 @@ function ui.drawCellTooltip(q, r, terrain, hex)
             local kindName = ({ mountain = "Mountain Range", reef = "Sharp Reefs", slope = "Mountain Slope" })[kind] or "Map Border"
             table.insert(content, { text = "Map Border", color = {0.9, 0.7, 0.35} })
             table.insert(content, { text = kindName, color = {0.7, 0.6, 0.45} })
-            table.insert(content, { text = "Impassable — nothing can enter or cross it.", color = {0.8, 0.8, 0.8} })
-            table.insert(content, { text = "Invulnerable — cannot be damaged or pushed.", color = {0.8, 0.8, 0.8} })
+            table.insert(content, { text = "Impassable РІР‚вЂќ nothing can enter or cross it.", color = {0.8, 0.8, 0.8} })
+            table.insert(content, { text = "Invulnerable РІР‚вЂќ cannot be damaged or pushed.", color = {0.8, 0.8, 0.8} })
             if borderEntity.lethalCollision then
                 table.insert(content, { text = "Collisions with it are lethal!", color = {1, 0.5, 0.4} })
             elseif borderEntity.noCollisionDamage then
@@ -2373,7 +2412,8 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
                     end
                 else
                     local occupant = getEntityAtHex(hoverQ, hoverR, entities)
-                    if occupant and occupant:isCharacter() and occupant.health > 0 and not occupant.isPlayable then
+                    -- Vortex Strike may also target allies.
+                    if occupant and occupant:isCharacter() and occupant.health > 0 then
                         table.insert(out, {q = hoverQ, r = hoverR})
                     end
                 end
@@ -2464,7 +2504,7 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
 end
 function ui.drawSelectedStats(actor, entities, hex)
     if not actor then return end
-    if actor.soloActions then return end -- the solo hero has no stats panel
+    if actor.multiAction then return end -- the hero has no stats panel
     if not actor:isCharacter() and not (actor:isBuilding() and actor.moveRange > 0) then return end
     local font = love.graphics.getFont()
     local pad = 8
@@ -2718,7 +2758,7 @@ function ui.getPauseBtnRect()
 end
 
 function ui.drawChaosBar(mx, my)
-    -- Hero-only: the top bar is always the hero's Soul Power — a run resource
+    -- Hero-only: the top bar is always the hero's Soul Power РІР‚вЂќ a run resource
     -- drained by lost buildings/objectives and by the hero's respawn. The
     -- hero's own combat HP (3) is a separate quantity shown as pips above him.
     local barVal = _G.soulPower or 0
@@ -2772,17 +2812,30 @@ function ui.drawChaosBar(mx, my)
         love.graphics.rectangle("line", barX, barY, hpW, cellH + pad * 2, 4)
     end
 
+    -- Chaos threat: the hovered action would drain this resource. Blink only
+    -- the cells that would actually be lost (clamped to the current value).
+    local chaosThreat = state and state.previewChaosThreat
+    local lostChaosCells = math.max(0, math.min(barVal, (state and state.previewChaosDamage) or 0))
+    local threatPulse = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(love.timer.getTime() * 8))
+
     for i = 1, barMax do
         local cx = barX + pad + (i - 1) * (cellW + gap)
         local cy = barY + pad
         local filled = i <= barVal
+        -- The last cells of the filled run are the ones lost.
+        local cellLost = chaosThreat and filled and i > (barVal - lostChaosCells)
         if filled then
             local t = love.timer.getTime()
             local pulse = 1
             if i > barVal - lostHealth then
                 pulse = 0.8 + 0.2 * math.sin(t * 4)
             end
-            love.graphics.setColor(0.62 * pulse, 0.45 * pulse, 1 * pulse, 0.95)
+            if cellLost then
+                -- Warning tint over the threat pulse, only on lost cells.
+                love.graphics.setColor(1 * threatPulse, 0.35 * threatPulse, 0.35 * threatPulse, 0.98)
+            else
+                love.graphics.setColor(0.62 * pulse, 0.45 * pulse, 1 * pulse, 0.95)
+            end
         else
             love.graphics.setColor(0.2, 0.2, 0.25, 0.6)
         end
@@ -2855,7 +2908,7 @@ function ui.drawChaosBar(mx, my)
 
     if mx >= barX and mx <= totalEnd and my >= barY and my <= barY + cellH + pad * 2 then
         local ttW = 220
-        local ttH = solo and 185 or 110
+        local ttH = 185
         local ttx = barX
         local tty = barY + cellH + pad * 2 + 12
         love.graphics.setColor(0.1, 0.1, 0.2, 0.92)
@@ -2863,31 +2916,18 @@ function ui.drawChaosBar(mx, my)
         love.graphics.setColor(0.6, 0.4, 0.7, 0.8)
         love.graphics.rectangle("line", ttx, tty, ttW, ttH, 5)
 
-        local lines
-        if solo then
-            lines = {
-                {text = "Soul Power", color = {0.7, 0.55, 1, 1}},
-                {text = "", color = {1, 1, 1, 1}},
-                {text = "Your run resource. Lost buildings,", color = {0.8, 0.8, 0.8, 1}},
-                {text = "failed objectives and a fallen hero", color = {0.8, 0.8, 0.8, 1}},
-                {text = "spend it. At zero, defeat.", color = {0.8, 0.8, 0.8, 1}},
-                {text = "", color = {1, 1, 1, 1}},
-                {text = "Your hero's own HP (3) shows as", color = {0.7, 0.95, 0.8, 1}},
-                {text = "pips above the unit, like any other.", color = {0.7, 0.95, 0.8, 1}},
-                {text = "", color = {1, 1, 1, 1}},
-                {text = string.format("Current: %d / %d", barVal, barMax), color = barVal <= 0 and {1, 0.3, 0.3, 1} or {0.9, 0.8, 1, 1}},
-            }
-        else
-            lines = {
-                {text = "Chaos", color = {0.9, 0.6, 0.8, 1}},
-                {text = "", color = {1, 1, 1, 1}},
-                {text = "Chaos rises when buildings take", color = {0.8, 0.8, 0.8, 1}},
-                {text = "damage or secondary objectives fail.", color = {0.8, 0.8, 0.8, 1}},
-                {text = "At maximum, the realm collapses.", color = {0.8, 0.8, 0.8, 1}},
-                {text = "", color = {1, 1, 1, 1}},
-                {text = string.format("Current: %d / %d", barVal, barMax), color = barVal >= barMax and {1, 0.3, 0.3, 1} or {1, 0.9, 0.2, 1}},
-            }
-        end
+        local lines = {
+            {text = "Soul Power", color = {0.7, 0.55, 1, 1}},
+            {text = "", color = {1, 1, 1, 1}},
+            {text = "Your run resource. Lost buildings,", color = {0.8, 0.8, 0.8, 1}},
+            {text = "failed objectives and a fallen hero", color = {0.8, 0.8, 0.8, 1}},
+            {text = "spend it. At zero, defeat.", color = {0.8, 0.8, 0.8, 1}},
+            {text = "", color = {1, 1, 1, 1}},
+            {text = "Your hero's own HP (3) shows as", color = {0.7, 0.95, 0.8, 1}},
+            {text = "pips above the unit, like any other.", color = {0.7, 0.95, 0.8, 1}},
+            {text = "", color = {1, 1, 1, 1}},
+            {text = string.format("Current: %d / %d", barVal, barMax), color = barVal <= 0 and {1, 0.3, 0.3, 1} or {0.9, 0.8, 1, 1}},
+        }
         local curY = tty + 6
         for _, l in ipairs(lines) do
             love.graphics.setColor(l.color[1], l.color[2], l.color[3], l.color[4] or 1)

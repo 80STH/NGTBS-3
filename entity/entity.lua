@@ -154,6 +154,16 @@ function Entity:switchAttack()
     return false
 end
 
+-- Release any unit this entity is holding rooted. A rooting attacker can only
+-- keep its victim rooted while it is alive; once it dies nobody can re-apply it,
+-- so the debuff must drop immediately.
+function Entity:releaseRoot()
+    if self.rootedTarget then
+        status.removeFromEntity(self.rootedTarget, "rooted")
+        self.rootedTarget = nil
+    end
+end
+
 -- Apply damage. ignoreShields kept for API compatibility (no shields left);
 -- objective/building damage drains soul power, not any entity's health.
 function Entity:takeDamage(damage, ignoreShields)
@@ -170,44 +180,37 @@ function Entity:takeDamage(damage, ignoreShields)
     local actualDamage = math.min(damage, self.health)
     self.health = self.health - actualDamage
 
-    -- Solo hero: a lethal hit is a knockdown, not a death — soul power pays
+    -- The hero: a lethal hit is a knockdown, not a death — soul power pays
     -- for the respawn and the hero comes back with 1 HP (see heroDeathSave).
-    if self.health <= 0 and _G.soloMode and self.isPlayable and _G.hero == self
+    if self.health <= 0 and self.isPlayable and _G.hero == self
         and not self.isDying and not self._trueDeath then
         return _G.heroDeathSave(self)
     end
+    -- A dead rooter loses its grip (some death paths skip startDeath).
+    if self.health <= 0 then self:releaseRoot() end
 
     if self:isBuilding() and actualDamage > 0 and not self.isTrainCar    and self.name ~= "TunnelEntrance" and self.name ~= "TunnelExit" and self.name ~= "OccupiedTunnel" then
-        if _G.soloMode and _G.damageHero then
-            _G.damageHero(actualDamage)
-        else
-            _G.chaos = (_G.chaos or 0) + actualDamage
-            log.infof("entity", "Building damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos)
-        end
+        _G.damageHero(actualDamage)
     end
 
     if self.isTrainCar and actualDamage > 0 then
-        if _G.soloMode and _G.damageHero then
-            _G.damageHero(actualDamage)
-        else
-            _G.chaos = (_G.chaos or 0) + actualDamage
-            log.infof("entity", "Train car damaged! Chaos +%d (total: %d)", actualDamage, _G.chaos)
-        end
+        _G.damageHero(actualDamage)
     end
 
     log.debugf("entity", "%s takes %d damage! (%d/%d HP)",
           self.name, actualDamage, math.max(0, self.health), self.maxHealth)
 
-    -- Acid: any damage is lethal (solo hero: knockdown via soul respawn)
+    -- Acid: any damage is lethal (hero: knockdown via soul respawn)
     if actualDamage > 0 and status.hasEntityStatus(self, "acid") then
         if self:isCharacter() then
             self.health = 0
         else
             self.health = 0
         end
-        if _G.soloMode and self.isPlayable and _G.hero == self then
+        if self.isPlayable and _G.hero == self then
             return _G.heroDeathSave(self)
         end
+        self:releaseRoot()
         log.infof("entity", "%s dissolves in acid!", self.name)
         return true
     end
@@ -231,10 +234,10 @@ end
 function Entity:startDeath()
      if self.isDying then return end
      if self:isEdge() then return end  -- map borders can never die
-    -- Solo hero: direct kills that skip takeDamage (pillar crush, etc.) still
+    -- The hero: direct kills that skip takeDamage (pillar crush, etc.) still
     -- go through the death-save. heroDeathSave marks _trueDeath for its own
     -- real-death call so it passes through here exactly once.
-    if _G.soloMode and self.isPlayable and _G.hero == self and not self._trueDeath then
+    if self.isPlayable and _G.hero == self and not self._trueDeath then
         _G.heroDeathSave(self)
         return
     end
@@ -251,8 +254,7 @@ function Entity:startDeath()
     self.summonTargetQ = nil
     self.summonTargetR = nil
     if self.rootedTarget then
-        status.removeFromEntity(self.rootedTarget, "rooted")
-        self.rootedTarget = nil
+        self:releaseRoot()
     end
     if not self.isPlayable and self:isCharacter() then
         _G.objective_enemiesKilled = (_G.objective_enemiesKilled or 0) + 1

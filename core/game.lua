@@ -82,7 +82,7 @@ end
 
 -- All valid collapse targets for a pillar at (q,r): faced cell first, then
 -- other adjacent active non-water hexes. Skips cells that can't be crushed
--- (indestructible occupants or another StonePillar — prevents infinite
+-- (indestructible occupants or another StonePillar РІР‚вЂќ prevents infinite
 -- collapse ping-pong).
 local function pillarCollapseTargets(q, r, dir)
     local faced, others = nil, {}
@@ -291,7 +291,7 @@ function restartGame(mapPath)
             initialAlive = initialAlive + 1
         end
     end
-    local enemyTarget = soloMode and 3 or 5
+    local enemyTarget = 3
     if initialAlive < enemyTarget then
         local needed = enemyTarget - initialAlive
         local spots = findRandomEmptyCells(needed, function(q, r)
@@ -313,8 +313,8 @@ function restartGame(mapPath)
     hero = nil
     heroRevivePending = false
     heroDeathPos = nil
-    if soloMode and selectedSoloHero then
-        hero = environment.createSoloHero(selectedSoloHero, -1, -1)
+    if selectedHero then
+        hero = environment.createHero(selectedHero, -1, -1)
         unplacedAllies = { hero }
         -- Blade brings two player-controlled summons to the deploy phase.
         if hero and hero.name == "Blade" then
@@ -456,13 +456,13 @@ function restartGame(mapPath)
     end
     clearCellDuplicateWarnings()
     rebuildEntityIndex()
-    log.infof("game", "=== MAP LOADED — %s ===", (skipDeploy and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
+    log.infof("game", "=== MAP LOADED РІР‚вЂќ %s ===", (skipDeploy and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
 end
 
 function confirmDeploy()
     -- Hero redeploy after a death-save: simple landing, no deploy effects,
-    -- no turn restart — the player turn is already running.
-    if soloMode and heroRevivePending and hero and #placedAllies == 1 and placedAllies[1] == hero then
+    -- no turn restart РІР‚вЂќ the player turn is already running.
+    if heroRevivePending and hero and #placedAllies == 1 and placedAllies[1] == hero then
         table.insert(entities, hero)
         heroRevivePending = false
         -- Coming back from a death-save costs 1 move point (not an attack).
@@ -480,7 +480,7 @@ function confirmDeploy()
         updateAttackButtons(hero)
         rebuildEntityIndex()
         gamePhase = "playing"
-        log.info("game", "=== HERO REDEPLOYED — TURN CONTINUES ===")
+        log.info("game", "=== HERO REDEPLOYED РІР‚вЂќ TURN CONTINUES ===")
         return
     end
 
@@ -525,14 +525,13 @@ function confirmDeploy()
     placedAllies = {}
     deploySelectedIdx = nil
 
-    log.info("game", "=== DEPLOY CONFIRMED — GAME STARTED ===")
+    log.info("game", "=== DEPLOY CONFIRMED РІР‚вЂќ GAME STARTED ===")
 end
 
--- Solo losses (building damage, objectives, train cars) drain Soul Power
--- instead of the chaos meter (non-solo keeps the chaos meter). Hitting zero
--- ends the run unless the hero can still fight on borrowed time — see loss rules.
+-- Losses (building damage, objectives, train cars) drain Soul Power. Hitting
+-- zero ends the run unless the hero can still fight on borrowed time вЂ” see loss rules.
 function spendSoul(amount)
-    if _G.soloMode and soulPower ~= nil then
+    if soulPower ~= nil then
         soulPower = math.max(0, soulPower - amount)
         log.infof("game", "Soul Power -%d (now %d/%d)", amount, soulPower, soulPowerMax)
         if soulPower <= 0 then
@@ -568,7 +567,7 @@ function damageHero(amount)
     spendSoul(amount)
 end
 
--- Solo hero respawn (called from Entity.takeDamage/startDeath on a lethal
+-- Hero respawn (called from Entity.takeDamage/startDeath on a lethal
 -- hit). Costs 1 Soul Power; the hero comes back next player turn with only
 -- 1 HP. Without soul power the hero truly dies (run over).
 -- Returns true when the hero is truly destroyed, false when revived.
@@ -599,7 +598,7 @@ function heroDeathSave(h)
             visual.addEffect(cx, cy, "slam", 0.5)
         end
         rebuildEntityIndex()
-        log.info("game", "The hero drops — redeploy him next turn!")
+        log.info("game", "The hero drops РІР‚вЂќ redeploy him next turn!")
         return false
     end
 
@@ -612,7 +611,7 @@ function heroDeathSave(h)
 end
 
 -- The Mechanism button: one press drives every environment mechanism on
--- the map at once — toggles the retractable highground, activates the
+-- the map at once РІР‚вЂќ toggles the retractable highground, activates the
 -- teleporters and runs the conveyor belts. 1-turn cooldown.
 function activateMechanisms()
     local teleporters = require("system.teleporters")
@@ -679,7 +678,7 @@ function activateMechanisms()
     end
 
     -- 4. Hazard plates: spikes deal 1 damage, burners ignite, oxidizers
-    --    coat in acid — to every living character standing on a marked cell.
+    --    coat in acid РІР‚вЂќ to every living character standing on a marked cell.
     if mechanismTrapCells and #mechanismTrapCells > 0 then
         for _, cell in ipairs(mechanismTrapCells) do
             for _, e in ipairs(entities) do
@@ -718,13 +717,11 @@ end
 function checkGameEnd()
     if not gameActive then return end
 
-    if soloMode then
-        if not (hero and hero.health > 0 and not hero.isDying) then
-            loss = true
-            gameActive = false
-            log.warn("game", "DEFEAT: The hero has fallen!")
-            return
-        end
+    if not (hero and hero.health > 0 and not hero.isDying) then
+        loss = true
+        gameActive = false
+        log.warn("game", "DEFEAT: The hero has fallen!")
+        return
     end
 
     if (chaos or 0) >= chaosMax then
