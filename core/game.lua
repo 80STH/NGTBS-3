@@ -341,11 +341,10 @@ function restartGame(mapPath)
     hex.hoverQ = -1
     hex.hoverR = -1
 
-    if not isProgressionRun then
-        global_abilities.initWithCommander(selectedCommander)
-    end
+    global_abilities.setSquadAbilities(environment.getHeroAbilities(selectedHero))
     global_abilities.reset()
     _G.graveyard = {}
+    _G.summonReviveUsed = {}
     if not isProgressionRun then
         _G.genericUpgrades = {}
     end
@@ -807,15 +806,27 @@ function updateDeathAnimations(dt)
 
                 if e.isPlayable and e:isCharacter() and e.health <= 0 then
                     _G.graveyard = _G.graveyard or {}
-                    table.insert(_G.graveyard, {
-                        name = e.name, q = e.q, r = e.r,
-                        maxHealth = e.maxHealth, moveRange = e.moveRange,
-                        hovering = e.hovering,
-                        teleporting = e.teleporting, waterWalker = e.waterWalker,
-                        sprite = e.sprite, color = e.color,
-                        attacks = e.attacks, upgradeLevel = e.upgradeLevel,
-                    })
-                    log.infof("game", "Ally %s added to graveyard at (%d,%d)", e.name, e.q, e.r)
+                    -- Summons can be revived only once each: a summon that already
+                    -- spent its revive leaves no button behind when it dies again.
+                    local revivable = not (e.isSummon and _G.summonReviveUsed and _G.summonReviveUsed[e.name])
+                    if revivable then
+                        table.insert(_G.graveyard, {
+                            name = e.name, q = e.q, r = e.r,
+                            maxHealth = e.maxHealth, moveRange = e.moveRange,
+                            hovering = e.hovering,
+                            teleporting = e.teleporting, waterWalker = e.waterWalker,
+                            sprite = e.sprite, color = e.color,
+                            attacks = e.attacks, upgradeLevel = e.upgradeLevel,
+                            -- Summons revive (once each) instead of leaving a ghost.
+                            isSummon = e.isSummon,
+                            maxAttacks = e.maxAttacks, maxMoves = e.maxMoves,
+                            pushSpike = e.pushSpike, flipPad = e.flipPad,
+                            passives = e.passives,
+                        })
+                        log.infof("game", "Ally %s added to graveyard at (%d,%d)", e.name, e.q, e.r)
+                    else
+                        log.infof("game", "Summon %s died again; revive already spent", e.name)
+                    end
                 end
 
                 table.remove(entities, i)

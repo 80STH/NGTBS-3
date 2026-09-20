@@ -38,6 +38,9 @@ global_abilities.heroicAbilities = {
 
 global_abilities.unlocked = {}
 
+-- Abilities every squad/hero can always use.
+global_abilities.universalAbilities = { "Heal" }
+
 function global_abilities.setUnlocked(name)
     if name then global_abilities.unlocked[name] = true end
 end
@@ -52,21 +55,16 @@ function global_abilities.resetUnlocks()
     global_abilities.unlocked = {}
 end
 
-function global_abilities.initWithCommander(commanderName)
-    local commanders = require("system.commanders")
-    local cmd = commanders.get(commanderName)
-    if not cmd then
-        global_abilities.unlocked = { Heal = true }
-        global_abilities.mana = 3
-        global_abilities.maxMana = 3
-        return
-    end
+-- Squad abilities come from the hero definition; universals are always on.
+-- "Revive <summon>" buttons are dynamic (graveyard) and need no unlocking.
+function global_abilities.setSquadAbilities(names)
     global_abilities.unlocked = {}
-    for _, ab in ipairs(cmd.startAbilities) do
+    for _, ab in ipairs(global_abilities.universalAbilities) do
         global_abilities.unlocked[ab] = true
     end
-    global_abilities.mana = cmd.startMana
-    global_abilities.maxMana = cmd.startMaxMana
+    for _, ab in ipairs(names or {}) do
+        global_abilities.unlocked[ab] = true
+    end
 end
 
 function global_abilities.getDisplayOrder(state)
@@ -75,12 +73,16 @@ function global_abilities.getDisplayOrder(state)
     local unlimited = state and state.unlimitedAbilities
     for _, name in ipairs(global_abilities.abilityOrder) do
         if unlimited or global_abilities.unlocked[name] then
-            table.insert(result, name)
+            local ab = global_abilities.registry[name]
+            -- Abilities with a usability check stay hidden until they'd do something.
+            if not (ab and ab.isUsable) or ab:isUsable(state) then
+                table.insert(result, name)
+            end
         end
     end
     -- Append dynamic graveyard buttons
     for name, ab in pairs(global_abilities.registry) do
-        if getmetatable(ab) == RespawnAllyAbility then
+        if ab.snapshot then
             local found = false
             for _, n in ipairs(result) do
                 if n == name then found = true; break end
@@ -451,6 +453,11 @@ end
 local HealAbility = {}
 HealAbility.__index = HealAbility
 
+-- Only show the button when at least one ally is wounded or debuffed.
+function HealAbility:isUsable(state)
+    return self:cleansesAnything(state)
+end
+
 function HealAbility.new()
     local self = {
         name = "Heal",
@@ -465,63 +472,55 @@ function HealAbility:reset()
     self.hasBeenUsed = false
 end
 
-function HealAbility:onActivate(state)
-    log.info("abilities", "Click on an ally to heal, or press ESC to cancel")
-end
+-- Negative statuses removed by Heal; positive ones (empowered, rage) survive.
+local NEGATIVE_ENTITY_STATUSES = { fire = true, acid = true, decay = true, rooted = true, slow = true }
 
-function HealAbility:onDeactivate(state)
-    restoreSelectedActor()
-        log.infof("abilities", "%s cancelled", self.name)
-end
-
-function HealAbility:onClickHex(q, r, hex, state)
-    local target = nil
-    for _, e in ipairs(state.entities) do
-        if e.q == q and e.r == r then
-            target = e
-            break
+function HealAbility:cleansesAnything(state)
+    for _, e in ipairs((state and state.entities) or _G.entities or {}) do
+        if e.isPlayable and e:isCharacter() and e.health > 0 then
+            if e.health < e.maxHealth then return true end
+            for _, st in ipairs(status.getEntityStatuses(e)) do
+                if NEGATIVE_ENTITY_STATUSES[st] then return true end
+            end
         end
     end
+    return false
+end
 
-    if not target or target:isBuilding() then
-        log.warn("abilities", "No valid target!")
-        return true
-    end
-    if target.health <= 0 then
-        log.warn("abilities", "Cannot heal dead units!")
-        return true
-    end
-
-    local hasDebuffs = #status.getEntityStatuses(target) > 0 or status.hasDigSite(target.q, target.r)
-    if target.health >= target.maxHealth and not hasDebuffs then
-        log.infof("abilities", "%s is at full health with no debuffs to cure!", tostring(target.name))
-        return true
-    end
-
-    target.health = target.maxHealth
-    status.entityStatuses[target] = nil
-    if status.hasAtHex(target.q, target.r, "fire") then
-        status.removeFromHex(target.q, target.r, "fire")
-        log.info("abilities", "Fire on the ground extinguished!")
+-- Heal acts on every living playable ally at once: +1 HP and cleanse debuffs.
+function HealAbility:onActivate(state)
+    local healed = 0
+    undo.snapshot()
+    for _, e in ipairs(state.entities or _G.entities) do
+        if e.isPlayable and e:isCharacter() and e.health > 0 then
+            if e.health < e.maxHealth then
+                e.health = math.min(e.maxHealth, e.health + 1)
+                healed = healed + 1
+            end
+            local toClear = {}
+            for _, st in ipairs(status.getEntityStatuses(e)) do
+                if NEGATIVE_ENTITY_STATUSES[st] then table.insert(toClear, st) end
+            end
+            for _, st in ipairs(toClear) do
+                status.removeFromEntity(e, st)
+            end
+        end
     end
     global_abilities.spendAbility(self)
-    undo.snapshot()
-    log.infof("abilities", "%s fully healed and all negative effects removed!", tostring(target.name))
-    restoreSelectedActor()
+    log.infof("abilities", "Heal: %d allies restored, debuffs cleansed", healed)
     global_abilities.activeAbility = nil
-    return true
 end
 
 function HealAbility:drawButton(mx, my, state)
     global_abilities.drawAbilityButton(self, mx, my, state, {
         color = {0.2, 0.8, 0.3},
         label = "Heal",
-        activeLabel = "Select target",
+        activeLabel = "Heal all",
         tooltipH = 64,
         tooltipTitle = "Heal",
         tooltipLines = {
-            "Fully restore HP and remove all",
-            "debuffs for one allied unit.",
+            "Restore 1 HP and remove all",
+            "debuffs for every allied unit.",
         },
     })
 end
@@ -1320,7 +1319,7 @@ AirStrikeAbility.__index = AirStrikeAbility
 function AirStrikeAbility.new()
     local self = {
         name = "Air Strike",
-        manaCost = 2,
+        manaCost = 1,
         button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
         phase = nil,
@@ -2926,18 +2925,22 @@ function SpeedBoostAbility:drawButton(mx, my, state)
 end
 
 -- ============================================================
--- RESPAWN ALLY: per-ally ghost summon buttons
+-- RESPAWN ALLY: per-ally ghost summon buttons.
+-- `isSummon` snapshots get a "Revive <name>" button instead that brings back
+-- the real summon (full HP, AP, movement spent for this turn), once per summon.
 -- ============================================================
 local RespawnAllyAbility = {}
 RespawnAllyAbility.__index = RespawnAllyAbility
 
 function RespawnAllyAbility.new(snapshot)
+    local revive = snapshot.isSummon and true or false
     local self = {
-        name = "Respawn " .. snapshot.name,
-        displayName = "Respawn " .. snapshot.name,
-        manaCost = 1,
+        name = (revive and "Revive " or "Respawn ") .. snapshot.name,
+        displayName = (revive and "Revive " or "Respawn ") .. snapshot.name,
+        manaCost = revive and 2 or 1,
         button = { x = 0, y = 0, width = 120, height = 24 },
         hasBeenUsed = false,
+        revive = revive,
         snapshot = snapshot,
     }
     return setmetatable(self, RespawnAllyAbility)
@@ -3014,30 +3017,56 @@ function RespawnAllyAbility:onClickHex(q, r, hex, state)
 
     undo.snapshot()
 
-    local ghost = Entity.new(
-        snapshot.name .. " Ghost",
-        Entity.TYPES.CHARACTER,
-        q, r,
-        1, true,
-        snapshot.moveRange or 1,
-        snapshot.sprite,
-        snapshot.color and {snapshot.color[1], snapshot.color[2], snapshot.color[3], 0.7} or {0.5, 0.7, 1, 0.7},
-        {}
-    )
-    ghost.hovering = snapshot.hovering or false
-    ghost.teleporting = snapshot.teleporting or false
-    ghost.waterWalker = snapshot.waterWalker or false
-    ghost.hasMovedThisTurn = false
-    ghost.hasActedThisTurn = false
+    local spawned
+    if self.revive then
+        _G.summonReviveUsed = _G.summonReviveUsed or {}
+        _G.summonReviveUsed[snapshot.name] = true
+        spawned = Entity.new(
+            snapshot.name,
+            Entity.TYPES.CHARACTER,
+            q, r,
+            snapshot.maxHealth or 2, true,
+            snapshot.moveRange or 1,
+            snapshot.sprite,
+            snapshot.color,
+            snapshot.attacks or {}
+        )
+        spawned.isSummon = true
+        spawned.multiAction = true
+        spawned.maxAttacks = snapshot.maxAttacks or 1
+        spawned.maxMoves = snapshot.maxMoves or 1
+        spawned.attacksLeft = spawned.maxAttacks
+        -- Movement is spent for the turn of the revival; turn transition refills it.
+        spawned.movesLeft = 0
+        if snapshot.pushSpike then spawned.pushSpike = true end
+        if snapshot.flipPad then spawned.flipPad = true end
+        if snapshot.passives then spawned.passives = snapshot.passives end
+        log.infof("abilities", "%s revived at (%d,%d) with movement spent this turn!", snapshot.name, q, r)
+    else
+        spawned = Entity.new(
+            snapshot.name .. " Ghost",
+            Entity.TYPES.CHARACTER,
+            q, r,
+            1, true,
+            snapshot.moveRange or 1,
+            snapshot.sprite,
+            snapshot.color and {snapshot.color[1], snapshot.color[2], snapshot.color[3], 0.7} or {0.5, 0.7, 1, 0.7},
+            {}
+        )
+        log.infof("abilities", "%s's ghost summoned at (%d,%d)! Move range: %d", snapshot.name, q, r, spawned.moveRange)
+    end
+    spawned.hovering = snapshot.hovering or false
+    spawned.teleporting = snapshot.teleporting or false
+    spawned.waterWalker = snapshot.waterWalker or false
+    spawned.hasMovedThisTurn = false
+    spawned.hasActedThisTurn = false
 
-    table.insert(state.entities, ghost)
+    table.insert(state.entities, spawned)
 
     local x, y = hex:hexToPixel(q, r)
     if visual and visual.addEffect then
         visual.addEffect(x, y, "heal", 0.6)
     end
-
-    log.infof("abilities", "%s's ghost summoned at (%d,%d)! Move range: %d", snapshot.name, q, r, ghost.moveRange)
 
     global_abilities.spendAbility(self)
     restoreSelectedActor()
@@ -3046,17 +3075,29 @@ function RespawnAllyAbility:onClickHex(q, r, hex, state)
 end
 
 function RespawnAllyAbility:drawButton(mx, my, state)
-    global_abilities.drawAbilityButton(self, mx, my, state, {
-        color = {0.4, 0.6, 1},
-        label = self.displayName,
-        activeLabel = "Pick hex",
-        tooltipH = 80,
-        tooltipTitle = "Respawn " .. self.snapshot.name,
-        tooltipLines = {
+    local lines, title
+    if self.revive then
+        title = "Revive " .. self.snapshot.name
+        lines = {
+            "Revive " .. self.snapshot.name .. " at full HP.",
+            "Spawns with its actions, but",
+            "cannot move this turn.",
+        }
+    else
+        title = "Respawn " .. self.snapshot.name
+        lines = {
             "Summon a ghost of " .. self.snapshot.name .. ".",
             "Inherits movement traits.",
             "Spawns with 1 HP.",
-        },
+        }
+    end
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = self.revive and {0.6, 0.4, 1} or {0.4, 0.6, 1},
+        label = self.displayName,
+        activeLabel = "Pick hex",
+        tooltipH = 80,
+        tooltipTitle = title,
+        tooltipLines = lines,
     })
 end
 
@@ -3068,7 +3109,7 @@ function global_abilities.syncGraveyardAbilities()
     -- Remove buttons for entries no longer in graveyard
     local toRemove = {}
     for name, ab in pairs(global_abilities.registry) do
-        if getmetatable(ab) == RespawnAllyAbility then
+        if ab.snapshot then
             local found = false
             for _, s in ipairs(g) do
                 if s == ab.snapshot then found = true; break end
@@ -3084,7 +3125,7 @@ function global_abilities.syncGraveyardAbilities()
 
     -- Add buttons for new graveyard entries
     for _, snapshot in ipairs(g) do
-        local key = "Respawn " .. snapshot.name
+        local key = (snapshot.isSummon and "Revive " or "Respawn ") .. snapshot.name
         if not global_abilities.registry[key] then
             global_abilities.registry[key] = RespawnAllyAbility.new(snapshot)
         end
@@ -3094,7 +3135,7 @@ end
 function global_abilities.clearGraveyardAbilities()
     local toRemove = {}
     for name, ab in pairs(global_abilities.registry) do
-        if getmetatable(ab) == RespawnAllyAbility then
+        if ab.snapshot then
             table.insert(toRemove, name)
         end
     end

@@ -2868,11 +2868,22 @@ function ui.drawChaosBar(mx, my)
     local manaBgW = manaW + 8
     love.graphics.setColor(0.08, 0.08, 0.18, 0.7)
     love.graphics.rectangle("fill", manaBgX, 2, manaBgW, panelH - 4, 4)
+    -- Hovering an ability previews its cost: blink the cells it would spend.
+    local manaSpend = math.max(0, math.min(manaVal, (state and state.previewManaSpend) or 0))
+    local manaPulse = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(love.timer.getTime() * 8))
     for i = 1, manaMaxVal do
         local mx2 = manaX + (i - 1) * (manaCellR * 2 + manaGap) + manaCellR
-        love.graphics.setColor(i <= manaVal and 0.3 or 0.1, i <= manaVal and 0.5 or 0.1, i <= manaVal and 0.9 or 0.1, 0.9)
+        local filled = i <= manaVal
+        local cellSpent = filled and i > (manaVal - manaSpend)
+        if cellSpent then
+            love.graphics.setColor(1 * manaPulse, 0.35 * manaPulse, 0.35 * manaPulse, 0.98)
+        elseif filled then
+            love.graphics.setColor(0.3, 0.5, 0.9, 0.9)
+        else
+            love.graphics.setColor(0.1, 0.1, 0.1, 0.9)
+        end
         love.graphics.circle("fill", mx2, manaCY, manaCellR)
-        if i <= manaVal then
+        if filled and not cellSpent then
             love.graphics.setColor(0.5, 0.7, 1, 0.6)
             love.graphics.circle("line", mx2, manaCY, manaCellR)
         end

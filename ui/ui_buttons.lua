@@ -799,6 +799,7 @@ return function(ui)
     -- в•ђв•ђв•ђ Ability buttons (square, grouped in a bottom row when panel open) в•ђв•ђв•ђ
     function ui.drawAbilityButtons(state)
         if not global_abilities.showPanel then return end
+        state.previewManaSpend = 0
         local displayOrder = global_abilities.getDisplayOrder(state)
         if #displayOrder == 0 then return end
 
@@ -841,6 +842,9 @@ return function(ui)
 
                 -- Tooltip to the right of the square
                 if mx >= ri.x and mx <= ri.x + ri.w and my >= ri.y and my <= ri.y + ri.h then
+                    -- Hovering an affordable, unused ability previews its mana cost
+                    -- so the top bar can blink the cells it would spend.
+                    if available then state.previewManaSpend = ab.manaCost or 0 end
                     local ttW = 240
                     local ttH = 36 + #(ab._cfg and ab._cfg.tooltipLines or {}) * 16
                     local ttx = ri.x + ri.w + 8

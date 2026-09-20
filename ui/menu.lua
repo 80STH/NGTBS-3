@@ -1,6 +1,5 @@
 local menu = {}
 local shop = require("ui.shop")
-local commanders = require("system.commanders")
 local fonts = require("util.fonts")
 local heroDefs = require("entity.environment")
 
@@ -26,12 +25,7 @@ local defaultsSet = false
 local function ensureDefaults()
     if defaultsSet then return end
     defaultsSet = true
-    if not selectedCommander then
-        local names = {}
-        for name, _ in pairs(commanders.list) do table.insert(names, name) end
-        table.sort(names)
-        if #names > 0 then selectedCommander = names[1] end
-    end
+    if not selectedHero then selectedHero = 1 end
 end
 
 -- Cached layout data (computed on draw, reused on click)
@@ -45,40 +39,18 @@ local function computeLayout(w, h)
     l.cx = cx
     l.contentW = contentW
 
-    local cmdNames = {}
-    for name, _ in pairs(commanders.list) do table.insert(cmdNames, name) end
-    table.sort(cmdNames)
-    l.cmdNames = cmdNames
-
     local y = 14
     local titleFont = fonts.get(math.max(18, math.floor(h * 0.032)))
     l.titleFont = titleFont
     l.titleY = y
     y = y + titleFont:getHeight() + 18
 
-    -- Commanders (horizontal row of compact cards)
     local cardFont = fonts.get(16)
     local tinyFont = fonts.get(13)
     l.cardFont = cardFont
     l.tinyFont = tinyFont
 
-    l.cmdLabelY = y
-    y = y + 24
-    local cmdCardW = math.floor((contentW - (#cmdNames - 1) * 8) / #cmdNames)
-    local cmdCardH = 52
-    l.cmdCards = {}
-    for i, name in ipairs(cmdNames) do
-        l.cmdCards[i] = {
-            name = name,
-            x = cx + (i - 1) * (cmdCardW + 8),
-            y = y,
-            w = cmdCardW,
-            h = cmdCardH,
-        }
-    end
-    y = y + cmdCardH + 14
-
-    -- Heroes
+    -- Heroes / squads
     l.heroLabelY = y
     y = y + 24
     local heroCount = #heroDefs.getHeroes()
@@ -179,37 +151,6 @@ function menu.draw()
     love.graphics.setColor(1, 1, 1, 0.9)
     love.graphics.printf("HEX STRATEGY", 0, l.titleY, w, "center")
 
-    -- Commander label
-    love.graphics.setFont(l.cardFont)
-    love.graphics.setColor(0.6, 0.8, 1, 0.9)
-    love.graphics.printf("Commander", l.cx, l.cmdLabelY, l.contentW, "center")
-
-    -- Commander cards
-    for i, card in ipairs(l.cmdCards) do
-        local cmd = commanders.get(card.name)
-        local hover = mx >= card.x and mx <= card.x + card.w and my >= card.y and my <= card.y + card.h
-        local sel = selectedCommander == card.name
-
-        love.graphics.setColor(hover and 0.2 or 0.12, hover and 0.28 or 0.16, hover and 0.4 or 0.25, 0.95)
-        love.graphics.rectangle("fill", card.x, card.y, card.w, card.h, 5)
-        if sel then
-            love.graphics.setColor(cmd.color[1], cmd.color[2], cmd.color[3], 0.9)
-            love.graphics.setLineWidth(2)
-            love.graphics.rectangle("line", card.x, card.y, card.w, card.h, 5)
-            love.graphics.setLineWidth(1)
-        else
-            love.graphics.setColor(cmd.color[1] * 0.4, cmd.color[2] * 0.4, cmd.color[3] * 0.4, 0.3)
-            love.graphics.rectangle("line", card.x, card.y, card.w, card.h, 5)
-        end
-
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.setFont(l.cardFont)
-        love.graphics.printf(cmd.name, card.x + 6, card.y + 4, card.w - 12, "center")
-        love.graphics.setColor(0.6, 0.6, 0.6, 0.7)
-        love.graphics.setFont(l.tinyFont)
-        love.graphics.printf(table.concat(cmd.startAbilities, ", "), card.x + 6, card.y + 27, card.w - 12, "center")
-    end
-
     -- Hero label
     love.graphics.setFont(l.cardFont)
     love.graphics.setColor(0.6, 0.8, 1, 0.9)
@@ -245,10 +186,15 @@ function menu.draw()
         love.graphics.setColor(0.7, 0.8, 1, 0.85)
         love.graphics.setFont(fonts.get(9))
         love.graphics.printf(table.concat(names, " / "), card.x + 2, card.y + 35, card.w - 4, "center")
+        local abil = hero.abilities or {}
+        if #abil > 0 then
+            love.graphics.setColor(0.8, 0.6, 1, 0.9)
+            love.graphics.printf("Abilities: " .. table.concat(abil, " / "), card.x + 2, card.y + 50, card.w - 4, "center")
+        end
     end
 
     -- Map label
-    local canClickMap = selectedCommander ~= nil
+    local canClickMap = selectedHero ~= nil
     love.graphics.setFont(l.cardFont)
     love.graphics.setColor(0.6, 0.8, 1, 0.9)
     love.graphics.printf("Map", l.cx, l.mapLabelY, l.contentW, "center")
@@ -326,18 +272,9 @@ function menu.mousepressed(x, y)
     computeLayout(w, h)
     local l = layout
 
-    -- Commanders
-    for i, card in ipairs(l.cmdCards) do
-        if x >= card.x and x <= card.x + card.w and y >= card.y and y <= card.y + card.h then
-            selectedCommander = card.name
-            return true
-        end
-    end
-
     -- Heroes
     for i, card in ipairs(l.heroCards) do
         if x >= card.x and x <= card.x + card.w and y >= card.y and y <= card.y + card.h then
-            if not selectedCommander then return true end
             selectedHero = i
             return true
         end
@@ -346,11 +283,9 @@ function menu.mousepressed(x, y)
     -- Maps
     for i, btn in ipairs(l.mapBtns) do
         if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
-            if not selectedCommander then return true end
             if not selectedHero then selectedHero = 1 end
             isProgressionRun = false
             soulPowerInit()
-            global_abilities.initWithCommander(selectedCommander)
             beginCurrentMission()
             restartGame(btn.path)
             return true
@@ -361,9 +296,7 @@ function menu.mousepressed(x, y)
     for _, btn in ipairs(l.btns) do
         if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
             if btn.key == "progression" then
-                if not selectedCommander then return true end
                 selectedHero = 1
-                commanderArtifacts = {}
                 genericUpgrades = {}
                 progressionChoices = {}
                 chaosSurplus = 0
@@ -372,7 +305,6 @@ function menu.mousepressed(x, y)
                 currentMapIndex = 1
                 progressionShopOpened = false
                 soulPowerInit()
-                global_abilities.initWithCommander(selectedCommander)
                 beginCurrentMission()
                 restartGame("maps/map1.lua")
                 return true
@@ -414,10 +346,8 @@ function menu.keypressed(key)
     if shop.keypressed(key) then return true end
     if key == "return" or key == " " then
         if #mapList > 0 then
-            if not selectedCommander then return true end
             if not selectedHero then selectedHero = 1 end
             soulPowerInit()
-            global_abilities.initWithCommander(selectedCommander)
             beginCurrentMission()
             restartGame(mapList[1])
             return true

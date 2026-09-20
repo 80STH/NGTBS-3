@@ -1,5 +1,5 @@
 -- shop.lua
--- 4-category upgrade system: unit upgrades, generic upgrades, spells, commander upgrades
+-- 3-category upgrade system: unit upgrades, generic upgrades, spells
 
 local shop = {}
 local fonts = require("util.fonts")
@@ -107,33 +107,6 @@ local function buildHeroicCategory()
     return cat
 end
 
-local function buildCommanderCategory()
-    local cat = { title = "COMMANDER", slots = {}, taken = false }
-    if not _G.selectedCommander then return cat end
-    local commanders = require("system.commanders")
-    local cmd = commanders.get(_G.selectedCommander)
-    if not cmd or not cmd.exclusiveArtifacts then return cat end
-    local takenCmd = _G.commanderArtifacts or {}
-    for _, cart in ipairs(cmd.exclusiveArtifacts) do
-        local already = false
-        for _, a in ipairs(takenCmd) do
-            if a == cart.id then already = true; break end
-        end
-        if not already then
-            table.insert(cat.slots, {
-                type = "commander",
-                id = cart.id,
-                name = cart.name,
-                desc = cart.desc,
-                icon = "shop_star",
-                apply = cart.apply,
-                taken = false,
-            })
-        end
-    end
-    return cat
-end
-
 local function ensureCategories()
     local key = shop.allowedCategory or "generic"
     if not shop.categories[key] then
@@ -146,7 +119,6 @@ function shop.reroll()
         local builders = {
             generic = buildGenericCategory,
             spell = buildSpellCategory,
-            commander = buildCommanderCategory,
             heroic = buildHeroicCategory,
         }
         local builder = builders[shop.allowedCategory]
@@ -156,12 +128,11 @@ function shop.reroll()
         shop.categories = {
             generic = buildGenericCategory(),
             spell = buildSpellCategory(),
-            commander = buildCommanderCategory(),
             heroic = buildHeroicCategory(),
         }
-        log.debugf("shop", "Rerolled: generic=%d spell=%d commander=%d heroic=%d",
+        log.debugf("shop", "Rerolled: generic=%d spell=%d heroic=%d",
             #shop.categories.generic.slots, #shop.categories.spell.slots,
-            #shop.categories.commander.slots, #shop.categories.heroic.slots)
+            #shop.categories.heroic.slots)
     end
 end
 
@@ -177,7 +148,7 @@ function shop.openForProgression(bothObjectivesCompleted)
     shop.autoOpened = true
     shop.bothObjectivesCompleted = bothObjectivesCompleted or false
     local mapIdx = _G.currentMapIndex or 1
-    local catMap = { [1] = "spell", [2] = "generic", [3] = "heroic", [4] = "commander" }
+    local catMap = { [1] = "spell", [2] = "generic", [3] = "heroic" }
     shop.allowedCategory = catMap[mapIdx]
     shop.reroll()
     shop.isOpen = true
@@ -203,17 +174,12 @@ local function applyTake(slot, catKey)
             table.insert(_G.progressionChoices, { type = "heroic", name = slot.name })
             log.infof("shop", "Heroic ability unlocked: %s", slot.id)
         end
-    elseif slot.type == "commander" then
-        table.insert(_G.commanderArtifacts, slot.id)
-        table.insert(_G.progressionChoices, { type = "commander", name = slot.name })
-        if slot.apply then slot.apply() end
-        log.infof("shop", "Commander upgrade applied: %s", slot.name)
     end
     shop.categories[catKey].taken = true
 end
 
 local function getContentHeight()
-    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "generic", "spell", "commander", "heroic" }
+    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "generic", "spell", "heroic" }
     local h = 45
     for _, catKey in ipairs(catOrder) do
         local cat = shop.categories[catKey]
@@ -276,11 +242,10 @@ function shop.draw()
     love.graphics.setFont(fonts.get(16))
     love.graphics.printf("X", closeX, closeY + 4, 28, "center")
 
-    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "generic", "spell", "commander", "heroic" }
+    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "generic", "spell", "heroic" }
     local catColors = {
         generic = {0.5, 0.9, 0.5},
         spell = {0.8, 0.5, 1.0},
-        commander = {0.4, 0.8, 1.0},
         heroic = {1.0, 0.6, 0.2},
     }
 
@@ -411,7 +376,7 @@ function shop.mousepressed(x, y)
         return true
     end
 
-    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "generic", "spell", "commander", "heroic" }
+    local catOrder = shop.allowedCategory and { shop.allowedCategory } or { "generic", "spell", "heroic" }
     local y = startY
     for _, catKey in ipairs(catOrder) do
         local cat = shop.categories[catKey]

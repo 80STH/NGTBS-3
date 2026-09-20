@@ -30,7 +30,6 @@ map_editor = require("editor.map_editor")
 pause_menu = require("ui.pause_menu")
 enemy_lab = require("ui.enemy_lab")
 require("core.game")
-local commanders = require("system.commanders")
 
 -- Logging: enable here (or via _G.LOG_ENABLED).
 -- Categories: ai, combat, effects, entity, env, game, input, objectives,
@@ -69,7 +68,6 @@ testViewOffsetY = 0
 
 gamePhase = "menu"
 selectedMapPath = nil
-selectedCommander = nil
 selectedHero = nil
 hero = nil  -- the single playable hero entity
 
@@ -97,7 +95,6 @@ progressionShopOpened = false
 progressionOverlay = nil
 mapProgression = {"maps/map1.lua", "maps/map2.lua", "maps/map3.lua", "maps/map4.lua"}
 progressionChoices = {}
-commanderArtifacts = {}  -- commander-specific artifact IDs
 placedAllies = {}
 deploySelectedIdx = nil
 allyPanelButtons = {}

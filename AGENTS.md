@@ -27,8 +27,26 @@ Love2D 11.5 installed. The game window will open — close it manually when done
      `HexGrid.CONVEYOR_DIRS` cube steps — flat-top hexes have NO pure e/w neighbors;
      push into occupied cell = collision: `combat.applyCollisionDamage` + bounce)
 - **Undo** (`system/undo.lua`): snapshot AFTER an action; `undo.undoLast()` pops to previous.
-  Restores entities (by ref), hexStatuses, upperTerrain, elevationMap, digSites, abilities,
-  mechanism flags.
+  Restores entities (by ref), hexStatuses, upperTerrain, terrainMap, elevationMap, digSites,
+  abilities, mechanism flags, graveyard, `summonReviveUsed`.
+- **Global abilities** (`system/global_abilities.lua`): one object per ability in
+  `registry`. Commanders were removed — squads are just the hero, and its global abilities come
+  from the hero def's `abilities` list (`environment.getHeroAbilities(idx)`), applied via
+  `global_abilities.setSquadAbilities(names)`. Heal is universal for every squad
+  (`global_abilities.universalAbilities`); "Revive <summon>" buttons are dynamic (graveyard) and
+  need no unlock. `getDisplayOrder(state)` hides an ability while its optional `ab:isUsable(state)`
+  returns false (e.g. Heal hides when nobody is wounded/debuffed). Hovering an affordable ability
+  sets `state.previewManaSpend` so the top mana bar blinks the cells it would drain (chaos-threat
+  style). Heal = +1 HP and cleanse all debuffs (fire/acid/decay/rooted/slow,
+  keeps `empowered`) for EVERY living playable ally. Dead `e.isSummon` allies (Blade summons)
+  get a per-summon "Revive <name>" button that resurrects the real summon at full HP with
+  actions but `movesLeft = 0` (movement spent for the turn); once-per-summon tracked in
+  `_G.summonReviveUsed` (snapshot/reset with graveyard).
+- **EVERY ability and attack MUST be undoable (hard rule)**: any new/changed ability or attack
+  that mutates battlefield state (terrain like Void's "emptiness", entities, hex statuses,
+  upperTerrain, dig sites, globals) MUST call `undo.snapshot()` on the execute path and any new
+  state it touches MUST be added to both `undo.snapshot` and `undo.restore`. If undoing does not
+  fully revert it, the ability is not done.
 - **Overlap guard**: `rebuildEntityIndex()` (main.lua) runs every frame and warns
   `[WARN] ENTITY OVERLAP` with traceback; AI batch moves reserve destinations via
   `_reservedCell` (combat/ai.lua `moveToCell`).

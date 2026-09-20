@@ -69,6 +69,11 @@ function undo.snapshot()
         maxTurns = _G.maxTurns,
         digSites = status.saveDigSites(),
         graveyard = _G.graveyard and {unpack(_G.graveyard)} or {},
+        summonReviveUsed = (function()
+            local s = {}
+            for k in pairs(_G.summonReviveUsed or {}) do s[k] = true end
+            return s
+        end)(),
         highgroundRaised = _G.highgroundRaised,
         mechanismUsedThisTurn = _G.mechanismUsedThisTurn,
         elevationMap = (function()
@@ -79,6 +84,15 @@ function undo.snapshot()
                 em[q] = rowCopy
             end
             return em
+        end)(),
+        terrainMap = (function()
+            local tm = {}
+            for q, row in pairs(_G.terrainMap or {}) do
+                local rowCopy = {}
+                for r, v in pairs(row) do rowCopy[r] = v end
+                tm[q] = rowCopy
+            end
+            return tm
         end)(),
     }
     -- Save every entity's state
@@ -275,13 +289,14 @@ function undo.restore(snap)
 
     -- Restore graveyard
     _G.graveyard = snap.graveyard and {unpack(snap.graveyard)} or {}
+    _G.summonReviveUsed = {}
+    for k in pairs(snap.summonReviveUsed or {}) do _G.summonReviveUsed[k] = true end
 
     -- Restore dig sites
     status.restoreDigSites(snap.digSites)
 
     -- Restore upper terrain map
-    if not _G.upperTerrainMap then _G.upperTerrainMap = {} end
-    local utm = _G.upperTerrainMap
+    if not _G.upperTerrainMap then _G.upperTerrainMap = {} end    local utm = _G.upperTerrainMap
     for q, _ in pairs(utm) do
         utm[q] = nil
     end
@@ -295,6 +310,19 @@ function undo.restore(snap)
 
     -- Rebuild teleporter pairs from the restored markers (also resets cooldowns)
     require("system.teleporters").scan(utm)
+
+    -- Restore terrain map (Void turns cells into "emptiness"; water/grass etc.)
+    if not _G.terrainMap then _G.terrainMap = {} end
+    local tm = _G.terrainMap
+    for q, _ in pairs(tm) do
+        tm[q] = nil
+    end
+    for q, row in pairs(snap.terrainMap or {}) do
+        local rowCopy = {}
+        for r, v in pairs(row) do rowCopy[r] = v end
+        tm[q] = rowCopy
+    end
+    if _G.hex and _G.hex.invalidateSortedCells then _G.hex:invalidateSortedCells() end
 
     -- Restore retractable highground state
     _G.highgroundRaised = snap.highgroundRaised or false

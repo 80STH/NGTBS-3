@@ -211,13 +211,7 @@ local function spawnCreature()
         _G.pendingGeneratedBoss = currentCreature
     end
     
-    if not selectedCommander then
-        local commanders = require("system.commanders")
-        local names = {}
-        for name, _ in pairs(commanders.list) do table.insert(names, name) end
-        selectedCommander = names[1]
-    end
-    global_abilities.initWithCommander(selectedCommander)
+    _G.selectedHero = _G.selectedHero or 1
     restartGame("maps/map1.lua")
     
     local params = activeTab == "enemy" and _G.pendingGeneratedEnemy or _G.pendingGeneratedBoss
