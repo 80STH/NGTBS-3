@@ -804,7 +804,7 @@ function updateDeathAnimations(dt)
                 -- Place upper_terrain rubble for destroyed buildings/obstacles
                 placeRubble(e)
 
-                if e.isPlayable and e:isCharacter() and e.health <= 0 then
+                if e.isPlayable and e:isCharacter() and e.health <= 0 and not e.diesAtEndOfTurn then
                     _G.graveyard = _G.graveyard or {}
                     -- Summons can be revived only once each: a summon that already
                     -- spent its revive leaves no button behind when it dies again.

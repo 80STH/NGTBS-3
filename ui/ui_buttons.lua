@@ -40,6 +40,18 @@ return function(ui)
         }
     end
 
+    -- Temporary summons (e.g. Infest's Infested) get their own small squares on
+    -- the right, stacked above the right-button column, so they never displace
+    -- the hero / real summons in the bottom-left selector.
+    function ui.getTempUnitRect(index)
+        local w = 84
+        local h = 84
+        local gap = 10
+        local x = logicalW - rightCol.margin - w
+        local y = 100 + (index - 1) * (h + gap)
+        return { x = x, y = y, w = w, h = h }
+    end
+
     ui.endTurnHoldTime = 0.7
 
     -- Shared: does the player still have anything to do this turn?
@@ -183,9 +195,16 @@ return function(ui)
     function ui.drawUnitSelectButtons(state, mouseX, mouseY)
         if global_abilities.showPanel == nil then return end
         local allies = {}
+        local temps = {}
         for _, e in ipairs(entities) do
             if e:isCharacter() and e.isPlayable and e.health and e.health > 0 and not e.isDying then
-                table.insert(allies, e)
+                -- Temporary summons (Infest's Infested) do NOT take a main slot:
+                -- they are shown in their own panel on the right.
+                if e.diesAtEndOfTurn then
+                    table.insert(temps, e)
+                else
+                    table.insert(allies, e)
+                end
             end
         end
         -- Stable order: hero first, then by name.
@@ -193,7 +212,9 @@ return function(ui)
             if (a == _G.hero) ~= (b == _G.hero) then return a == _G.hero end
             return (a.name or "") < (b.name or "")
         end)
+        table.sort(temps, function(a, b) return (a.name or "") < (b.name or "") end)
         ui._unitSelectEntities = allies
+        ui._tempUnitEntities = temps
 
         -- Units occupy slots 1..3; the hero (slot 1) is double width.
         for i = 1, 3 do
@@ -250,10 +271,37 @@ return function(ui)
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.setFont(fonts.get(9))
         love.graphics.printf("Abilities", ar.x, ar.y + ar.h - 16, ar.w, "center")
+
+        -- Temporary summons (Infest's Infested): own squares on the right, never
+        -- in the main selector.
+        for i, ally in ipairs(temps) do
+            local rect = ui.getTempUnitRect(i)
+            local hover = mouseX and mouseX >= rect.x and mouseX <= rect.x + rect.w
+                and mouseY >= rect.y and mouseY <= rect.y + rect.h
+            local sel = state.selectedActor == ally
+            local cr, cg, cb
+            if sel then cr, cg, cb = 0.5, 0.3, 0.55
+            elseif hover then cr, cg, cb = 0.42, 0.28, 0.5
+            else cr, cg, cb = 0.3, 0.2, 0.42 end
+            love.graphics.setColor(cr, cg, cb, 0.9)
+            love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 5)
+            love.graphics.setColor(1, 0.5, 0.4, hover and 0.9 or 0.6)
+            love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h, 5)
+            if ally.sprite then
+                local sw, sh = ally.sprite:getDimensions()
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.draw(ally.sprite, rect.x + rect.w / 2, rect.y + rect.h - 6, 0, 2.4, 2.4, sw / 2, sh)
+            end
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.setFont(fonts.get(9))
+            love.graphics.printf(ally.name, rect.x + 2, rect.y + 2, rect.w - 4, "center")
+            love.graphics.setColor(1, 1, 1, 0.75)
+            love.graphics.printf((ally.health or 0) .. "/" .. (ally.maxHealth or 1), rect.x + 2, rect.y + rect.h - 18, rect.w - 4, "center")
+        end
     end
 
     -- Selector click hit-test. Returns the chosen unit index, "abilities",
-    -- "gentle" (hero's Gentle Touch half), or nil.
+    -- "gentle" (hero's Gentle Touch half), a temp-unit tag, or nil.
     function ui.unitSelectHit(mouseX, mouseY)
         local ar = ui.getAbilitiesToggleRect()
         if mouseX >= ar.x and mouseX <= ar.x + ar.w and mouseY >= ar.y and mouseY <= ar.y + ar.h then
@@ -267,6 +315,13 @@ return function(ui)
                     if mouseX >= rect.x + rect.w - abBlock.square then return "gentle" end
                 end
                 return i
+            end
+        end
+        -- Temporary summons on the right.
+        for i = 1, #(ui._tempUnitEntities or {}) do
+            local rect = ui.getTempUnitRect(i)
+            if mouseY >= rect.y and mouseY <= rect.y + rect.h and mouseX >= rect.x and mouseX <= rect.x + rect.w then
+                return "temp", i
             end
         end
         return nil

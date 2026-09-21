@@ -563,6 +563,25 @@ end
 handlers["Shove"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     handleLineShot(p, attacker, attack, hoverQ, hoverR, hex, entities)
 end
+-- Infest Shot (the summoned unit's attack): line shot, push only, no damage.
+-- The push arrow is shown ONLY on the unit that will actually be pushed (never
+-- on an empty cell). Targets may be friend or foe.
+handlers["Infest Shot"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
+    local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, hoverQ, hoverR, hex)
+    if not stepX then return end
+
+    preview.addLine(p, attacker.q, attacker.r, hoverQ, hoverR)
+
+    local firstTarget, firstHex = attack:findFirstTargetOnLine(attacker.q, attacker.r, stepX, stepY, stepZ, hex, entities)
+    if not firstTarget or not firstHex then return end
+
+    preview.addOverlay(p, firstHex.q, firstHex.r, "target")
+
+    if firstTarget.isPushable ~= false and firstTarget.health > 0 then
+        local pushQ, pushR = hex_utils.applyCubeStep(firstHex.q, firstHex.r, stepX, stepY, stepZ)
+        preview.applyPush(p, firstTarget, firstHex.q, firstHex.r, pushQ, pushR, hex, entities, attack.lethalPush)
+    end
+end
 handlers["Strike"] = function(p, attacker, attack, hoverQ, hoverR, hex, entities)
     local dist = hex:getDistance(attacker.q, attacker.r, hoverQ, hoverR)
     if dist ~= 1 then return end

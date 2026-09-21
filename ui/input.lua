@@ -140,13 +140,26 @@ end
     -- Unit selector squares (bottom-left, slots 1-3): select hero/summon.
     -- Slot 4 ("Abilities") is handled by the toggle block above.
     do
-        local sel = turnState.phase == "player" and ui.unitSelectHit(x, y)
+        local sel, selArg = turnState.phase == "player" and ui.unitSelectHit(x, y)
         local list = ui._unitSelectEntities
         if sel == "gentle" then
             -- Hero's Gentle Touch half: free toggle, no action cost.
             local hero = _G.hero
             if hero and hero.gentleAvailable then
                 hero.gentleTouch = not hero.gentleTouch
+                sounds.play("click")
+            end
+            return
+        end
+        if sel == "temp" then
+            local temps = ui._tempUnitEntities
+            if temps and temps[selArg] and not (selectedActor and selectedActor.isMoving) then
+                selectedActor = temps[selArg]
+                hex.selectedQ, hex.selectedR = selectedActor.q, selectedActor.r
+                updateAttackButtons(selectedActor)
+                attackMode = false
+                selectedAttack = nil
+                global_abilities.showPanel = false
                 sounds.play("click")
             end
             return

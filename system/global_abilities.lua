@@ -26,7 +26,7 @@ global_abilities.mana = 3
 global_abilities.maxMana = 3
 global_abilities.abilityUsedThisTurn = false
 
-global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport", "Speed Boost", "Void"}
+global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport", "Speed Boost", "Void", "Infest"}
 
 global_abilities.heroicAbilities = {
     ["Wind Torrent"] = true,
@@ -3144,6 +3144,143 @@ function global_abilities.clearGraveyardAbilities()
     end
 end
 
+-- ============================================================
+-- INFEST: pick a specific enemy and deal 1 damage to it; the cast
+-- harms no one (Blade survives). If that damage is lethal, an ally
+-- (1 HP) spawns on the enemy's cell. That summoned "Infested" unit
+-- is a disposable sacrifice: its shot pushes the first unit along a
+-- line (no damage) and then it dies; it also dies at end of turn.
+-- ============================================================
+local InfestAbility = {}
+InfestAbility.__index = InfestAbility
+
+-- The summoned unit's shot: line push (no damage), then the attacker
+-- (the Infested itself) is sacrificed.
+local InfestedShotAttack = setmetatable({}, combat.LineShotAttack)
+InfestedShotAttack.__index = InfestedShotAttack
+
+function InfestedShotAttack.new()
+    local self = combat.LineShotAttack.new("Infest Shot",
+        "Shoot a line, pushing the first unit. The attacker is consumed.", math.huge, 0)
+    return setmetatable(self, InfestedShotAttack)
+end
+
+function InfestedShotAttack:execute(attacker, q, r, hex, entities, sounds)
+    local ok, err = combat.LineShotAttack.execute(self, attacker, q, r, hex, entities, sounds)
+    if ok and attacker.health > 0 and not attacker.isDying then
+        attacker.health = 0
+        attacker:startDeath()
+    end
+    return ok, err
+end
+
+function InfestAbility.new()
+    local self = {
+        name = "Infest",
+        manaCost = 2,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }
+    return setmetatable(self, InfestAbility)
+end
+
+function InfestAbility:reset()
+    self.hasBeenUsed = false
+end
+
+function InfestAbility:onActivate(state)
+    clearSelectedActor()
+    log.info("abilities", "Click an enemy to infest it, or press ESC to cancel")
+end
+
+function InfestAbility:onDeactivate(state)
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+
+function InfestAbility:onClickHex(q, r, hex, state)
+    local target = combat.getEntityAtHex(q, r, state.entities)
+    if not target or not target:isCharacter() or target.isPlayable then
+        log.warn("abilities", "Infest: click an enemy!")
+        return true
+    end
+    if target.health <= 0 then
+        log.warn("abilities", "Infest: target is already dead!")
+        return true
+    end
+
+    local targetQ, targetR = q, r
+
+    combat.withDeferredDeaths(function()
+        -- Infest's own 1 damage; if it kills the enemy, spawn an Infested ally on its cell
+        local lineAtk = combat.Attack.new("Infest", "Infest", math.huge, 1)
+        local wasDestroyed = lineAtk:dealDamageToTarget(target, _G.hero, 1, state.entities, sounds, nil)
+        if wasDestroyed then
+            -- Drop the dying corpse so the summoned ally takes the cell cleanly.
+            for i = #state.entities, 1, -1 do
+                local o = state.entities[i]
+                if o.q == targetQ and o.r == targetR then
+                    table.remove(state.entities, i)
+                end
+            end
+            local sprite = environment.unitSpriteCache and environment.unitSpriteCache[42]
+            local shot = InfestedShotAttack.new()
+            local victim = Entity.new("Infested", Entity.TYPES.CHARACTER, targetQ, targetR,
+                1, true, 2, sprite, nil, {
+                { attack = shot, name = shot.name, description = shot.description },
+            })
+            victim.maxAttacks = 1
+            victim.maxMoves = 2
+            victim.diesAtEndOfTurn = true
+            table.insert(state.entities, victim)
+        end
+    end)
+
+    global_abilities.spendAbility(self)
+    undo.snapshot()
+
+    if visual then
+        local x, y = getDrawCoords(targetQ, targetR)
+        visual.addMagicExplosion(x, y, 0.8, 0.5, 0.1)
+    end
+    sounds.play("summon_attack")
+    if _G.rebuildEntityIndex then _G.rebuildEntityIndex() end
+    if _G.checkGameEnd then _G.checkGameEnd() end
+    restoreSelectedActor()
+    global_abilities.activeAbility = nil
+    return true
+end
+
+function InfestAbility:collectOverlays(hex, cellOverlays, state)
+    -- Highlight every clickable enemy.
+    for _, e in ipairs(state.entities) do
+        if e:isCharacter() and not e.isPlayable and e.health > 0 then
+            local key = e.q .. "," .. e.r
+            local hovered = (hex.hoverQ == e.q and hex.hoverR == e.r)
+            cellOverlays[key] = hovered
+                and { fill = {1, 0.3, 0.2, 0.55}, line = {1, 0.3, 0.2, 1.0} }
+                or { fill = {0.8, 0.3, 0.1, 0.4}, line = {1, 0.4, 0.2, 0.8} }
+        end
+    end
+end
+
+function InfestAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.8, 0.3, 0.1},
+        label = "Infest",
+        activeLabel = "Select enemy",
+        tooltipH = 96,
+        tooltipTitle = "Infest",
+        tooltipLines = {
+            "Deal 1 damage to a specific",
+            "enemy. If lethal, an Infested",
+            "ally (1 HP) spawns on its cell.",
+            "Its shot pushes the first unit,",
+            "then it dies (also at end of turn).",
+        },
+    })
+end
+
 -- Register all abilities
 global_abilities.register(HealAbility.new())
 global_abilities.register(ExtraMoveAbility.new())
@@ -3165,5 +3302,6 @@ global_abilities.register(UpsideDownAbility.new())
 global_abilities.register(TeleportAbility.new())
 global_abilities.register(SpeedBoostAbility.new())
 global_abilities.register(VoidAbility.new())
+global_abilities.register(InfestAbility.new())
 
 return global_abilities

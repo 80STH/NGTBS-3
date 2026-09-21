@@ -42,6 +42,14 @@ function turnManager.endPlayerTurn()
         end
     end
 
+    -- Temporary units (Infest's spawn) expire when the player's turn ends.
+    for _, a in ipairs(entities) do
+        if a.diesAtEndOfTurn and a.health > 0 and not a.isDying then
+            a:startDeath()
+        end
+    end
+    checkGameEnd()
+
     -- Delayed attacks fire right after the player's turn ends
     for _, a in ipairs(entities) do
         local pa = a.pendingDelayedAttack

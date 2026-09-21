@@ -658,7 +658,7 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
                         canApply = true
                     end
                 end
-            elseif attack.name == "Shoot" or attack.name == "Piercing Shot" or attack.name == "Push" then
+            elseif attack.name == "Shoot" or attack.name == "Piercing Shot" or attack.name == "Push" or attack.name == "Infest Shot" then
                 local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
                 if stepX then canApply = true end
             elseif attack.name == "Summon" or attack.name == "Split" then

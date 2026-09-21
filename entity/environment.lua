@@ -1046,7 +1046,7 @@ local function buildHeroes()
             id = "blade", name = "Blade", spriteGid = 34, hp = 3, move = 3, tags = {"fire", "push"},
             deployEffect = { type = "damage_nearby", damage = 1, radius = 1 },
             -- Squad's global abilities (Heal + Revive Summon are universal).
-            abilities = { "Upside Down", "Air Strike" },
+            abilities = { "Upside Down", "Air Strike", "Infest" },
             attacks = function()
                 -- Blade-only: Dash deals +1 damage (clash bonus over the base dash).
                 local dash = c.DashAttack.new()
