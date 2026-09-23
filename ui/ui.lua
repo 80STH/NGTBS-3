@@ -2907,6 +2907,50 @@ function ui.getPauseBtnRect()
     return pauseBtnRect
 end
 
+function ui.drawDecayTooltip(active, turnsLeft)
+    local lines = {
+        { text = "Decay", color = {1, 0.5, 0.6} },
+        { text = "When the turn limit is reached, Decay", color = {0.85, 0.85, 0.85} },
+        { text = "strikes all enemies except bosses at the", color = {0.85, 0.85, 0.85} },
+        { text = "end of each of your turns. It escalates:", color = {0.85, 0.85, 0.85} },
+        { text = "  turn 1: 1 damage", color = {1, 0.7, 0.4} },
+        { text = "  turn 2: 2 damage", color = {1, 0.5, 0.3} },
+        { text = "  turn 3+: lethal damage", color = {1, 0.3, 0.3} },
+    }
+    if not active then
+        table.insert(lines, { text = "Activates in " .. turnsLeft .. " turn(s).", color = {0.7, 0.9, 1} })
+    else
+        table.insert(lines, { text = "Active now!", color = {1, 0.4, 0.4} })
+    end
+
+    local f = fonts.get(13)
+    local prevFont = love.graphics.getFont()
+    love.graphics.setFont(f)
+    local pad = 9
+    local lineH = 17
+    local contentWidth = 260
+    for _, l in ipairs(lines) do
+        local w = f:getWidth(l.text)
+        if w > contentWidth then contentWidth = w end
+    end
+    contentWidth = contentWidth + pad * 2
+    local panelH = pad + #lines * lineH + pad
+    local px = math.floor((logicalW - contentWidth) / 2)
+    local py = 40
+
+    love.graphics.setColor(0.1, 0.1, 0.16, 0.95)
+    love.graphics.rectangle("fill", px, py, contentWidth, panelH, 8)
+    love.graphics.setColor(1, 0.4, 0.4, 0.8)
+    love.graphics.rectangle("line", px, py, contentWidth, panelH, 8)
+    local curY = py + pad
+    for _, l in ipairs(lines) do
+        love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
+        love.graphics.print(l.text, px + pad, curY)
+        curY = curY + lineH
+    end
+    love.graphics.setFont(prevFont)
+end
+
 function ui.drawChaosBar(mx, my)
     -- Hero-only: the top bar is always the hero's Soul Power — a run resource
     -- drained by lost buildings/objectives and by the hero's respawn. The
@@ -2954,8 +2998,15 @@ function ui.drawChaosBar(mx, my)
         decayText = "Decay: " .. (maxTurns - turnCount)
     end
     local decayW = love.graphics.getFont():getWidth(decayText)
+    local decayX = math.floor((logicalW - decayW) / 2)
+    local decayY = math.floor((panelH - 14) / 2)
     love.graphics.setColor(decayActive and 1 or 0.7, decayActive and 0.3 or 0.7, decayActive and 0.3 or 0.9, 1)
-    love.graphics.print(decayText, math.floor((logicalW - decayW) / 2), math.floor((panelH - 14) / 2))
+    love.graphics.print(decayText, decayX, decayY)
+
+    -- Hover help for the Decay timer.
+    if mx and my and mx >= decayX and mx <= decayX + decayW and my >= 0 and my <= panelH then
+        ui.drawDecayTooltip(decayActive, maxTurns - turnCount)
+    end
 
     local barX = 10
     local barY = 6   -- top of the HP bar
