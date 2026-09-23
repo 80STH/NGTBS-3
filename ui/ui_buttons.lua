@@ -71,7 +71,8 @@ return function(ui)
             for _, name in ipairs(global_abilities.getDisplayOrder(state)) do
                 local ab = global_abilities.registry[name]
                 if ab and not ab.hasBeenUsed and not global_abilities.abilityUsedThisTurn
-                    and global_abilities.mana >= ab.manaCost then
+                    and global_abilities.mana >= ab.manaCost
+                    and (not ab.isEffective or ab:isEffective(state)) then
                     canUseAbility = true
                     break
                 end
@@ -872,7 +873,9 @@ return function(ui)
                 ab.button.height = ri.h
 
                 local unlimited = state.unlimitedAbilities
+                local effective = not ab.isEffective or ab:isEffective(state)
                 local available = (state.turnState.phase == "player"
+                    and effective
                     and (unlimited or (not ab.hasBeenUsed and not global_abilities.abilityUsedThisTurn
                     and global_abilities.mana >= ab.manaCost)))
                 local isActive = (global_abilities.activeAbility == ab)

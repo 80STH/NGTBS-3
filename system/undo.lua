@@ -145,6 +145,7 @@ function undo.snapshot()
             color = e.color,
             attacks = e.attacks,
             moveRange = e.moveRange,
+            stimPack = e.stimPack,
         }
         -- Copy statuses
         es.statuses = status.copyEntityStatuses(e)
@@ -245,6 +246,7 @@ function undo.restore(snap)
             es.ref.color = es.color
             es.ref.attacks = es.attacks
             es.ref.moveRange = es.moveRange
+            es.ref.stimPack = es.stimPack
             es.ref._reservedCell = nil
             -- Restore statuses
             status.setEntityStatuses(es.ref, es.statuses)

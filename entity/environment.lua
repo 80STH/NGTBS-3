@@ -1045,8 +1045,9 @@ local function buildHeroes()
         {
             id = "blade", name = "Blade", spriteGid = 34, hp = 3, move = 3, tags = {"fire", "push"},
             deployEffect = { type = "damage_nearby", damage = 1, radius = 1 },
-            -- Squad's global abilities (Heal + Revive Summon are universal).
-            abilities = { "Upside Down", "Air Strike", "Infest" },
+            -- Squad's global abilities (Heal + Revive Summon are universal;
+            -- the hero's starting spell is chosen in the menu via `startingSpell`).
+            abilities = {},
             attacks = function()
                 -- Blade-only: Dash deals +1 damage (clash bonus over the base dash).
                 local dash = c.DashAttack.new()
@@ -1072,7 +1073,15 @@ end
 
 function environment.getHeroAbilities(idx)
     local def = buildHeroes()[idx]
-    return (def and def.abilities) or {}
+    local abilities = {}
+    for _, a in ipairs(((def and def.abilities) or {})) do
+        table.insert(abilities, a)
+    end
+    -- The starting spell chosen in the menu is added to the hero's abilities.
+    if _G.startingSpell then
+        table.insert(abilities, _G.startingSpell)
+    end
+    return abilities
 end
 
 -- Build the chosen playable hero entity. q/r = -1 until placed.

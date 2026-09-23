@@ -26,7 +26,7 @@ global_abilities.mana = 3
 global_abilities.maxMana = 3
 global_abilities.abilityUsedThisTurn = false
 
-global_abilities.abilityOrder = {"Heal", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport", "Speed Boost", "Void", "Infest"}
+global_abilities.abilityOrder = {"Heal", "Flash Heal", "Stim Pack", "Armor Pack", "Extra Move", "Wind Torrent", "Unearth", "Mind Control", "Accelerate Decay", "Force Attack", "Rage", "The Big One", "Air Strike", "Jumping Strike", "Overload", "Chain Lightning", "Invulnerability", "Vortex", "Hex", "Upside Down", "Teleport", "Speed Boost", "Void", "Infest"}
 
 global_abilities.heroicAbilities = {
     ["Wind Torrent"] = true,
@@ -38,8 +38,9 @@ global_abilities.heroicAbilities = {
 
 global_abilities.unlocked = {}
 
--- Abilities every squad/hero can always use.
-global_abilities.universalAbilities = { "Heal" }
+-- Healing ability every squad/hero can always use; chosen in the main menu.
+global_abilities.healAbilities = { "Heal", "Flash Heal", "Stim Pack", "Armor Pack" }
+global_abilities.defaultHeal = "Heal"
 
 function global_abilities.setUnlocked(name)
     if name then global_abilities.unlocked[name] = true end
@@ -55,13 +56,12 @@ function global_abilities.resetUnlocks()
     global_abilities.unlocked = {}
 end
 
--- Squad abilities come from the hero definition; universals are always on.
+-- Squad abilities come from the hero definition; the menu-chosen heal is always on.
 -- "Revive <summon>" buttons are dynamic (graveyard) and need no unlocking.
 function global_abilities.setSquadAbilities(names)
     global_abilities.unlocked = {}
-    for _, ab in ipairs(global_abilities.universalAbilities) do
-        global_abilities.unlocked[ab] = true
-    end
+    local heal = _G.healSpell or global_abilities.defaultHeal
+    global_abilities.unlocked[heal] = true
     for _, ab in ipairs(names or {}) do
         global_abilities.unlocked[ab] = true
     end
@@ -131,6 +131,15 @@ function global_abilities.reset()
     end
 end
 
+-- Abilities are reusable: clear the per-ability "used" latch at the start of
+-- every player turn. The 1-per-turn limit is enforced by abilityUsedThisTurn.
+function global_abilities.resetUsage()
+    for _, ab in pairs(global_abilities.registry) do
+        if ab.reset then ab:reset() end
+        ab.hasBeenUsed = false
+    end
+end
+
 function global_abilities.handleAbilityButtonClick(x, y, state)
     if not global_abilities.showPanel then return false end
     local displayOrder = global_abilities.getDisplayOrder(state)
@@ -144,6 +153,8 @@ function global_abilities.handleAbilityButtonClick(x, y, state)
                     if not unlimited and ab.hasBeenUsed then return true end
                     if not unlimited and global_abilities.abilityUsedThisTurn then return true end
                     if not unlimited and global_abilities.mana < ab.manaCost then return true end
+                    -- Healing that would do nothing cannot be used.
+                    if ab.isEffective and not ab:isEffective(state) then return true end
                     if global_abilities.activeAbility then
                         global_abilities.activeAbility:onDeactivate(state)
                     end
@@ -177,6 +188,22 @@ function global_abilities.collectOverlays(hex, cellOverlays, state)
     local ab = global_abilities.activeAbility
     if ab and ab.collectOverlays then
         ab:collectOverlays(hex, cellOverlays, state)
+    end
+    -- Hover preview: when the mouse is over an ability button (and none is
+    -- active), let it highlight who it would affect. Button rects are cached
+    -- by ui.drawAbilityButtons on the previous frame.
+    if not ab and global_abilities.showPanel then
+        local mx, my = love.mouse.getPosition()
+        mx, my = mx / (state.dpiScale or 1), my / (state.dpiScale or 1)
+        for _, name in ipairs(global_abilities.getDisplayOrder(state)) do
+            local hab = global_abilities.registry[name]
+            local b = hab and hab.button
+            if b and b.width and mx >= b.x and mx <= b.x + b.width
+                and my >= b.y and my <= b.y + b.height then
+                if hab.collectHoverOverlays then hab:collectHoverOverlays(hex, cellOverlays, state) end
+                break
+            end
+        end
     end
 end
 
@@ -453,11 +480,8 @@ end
 local HealAbility = {}
 HealAbility.__index = HealAbility
 
--- Only show the button when at least one ally is wounded or debuffed.
-function HealAbility:isUsable(state)
-    return self:cleansesAnything(state)
-end
-
+-- Heals are always available: the button must show even at full HP so the
+-- player can find the chosen healing ability. Cleansing is the only effect.
 function HealAbility.new()
     local self = {
         name = "Heal",
@@ -472,19 +496,69 @@ function HealAbility:reset()
     self.hasBeenUsed = false
 end
 
--- Negative statuses removed by Heal; positive ones (empowered, rage) survive.
+-- Negative statuses removed by heal effects; positive ones (empowered, rage) survive.
 local NEGATIVE_ENTITY_STATUSES = { fire = true, acid = true, decay = true, rooted = true, slow = true }
 
-function HealAbility:cleansesAnything(state)
+-- Strip every negative status from one entity (shared by all heal effects).
+local function cleanseEntity(e)
+    local toClear = {}
+    for _, st in ipairs(status.getEntityStatuses(e)) do
+        if NEGATIVE_ENTITY_STATUSES[st] then table.insert(toClear, st) end
+    end
+    for _, st in ipairs(toClear) do
+        status.removeFromEntity(e, st)
+    end
+end
+
+-- True if this living playable ally would benefit from healing (wounded or debuffed).
+local function isWoundedOrDebuffed(e)
+    if not (e.isPlayable and e:isCharacter() and e.health > 0) then return false end
+    if e.health < e.maxHealth then return true end
+    for _, st in ipairs(status.getEntityStatuses(e)) do
+        if NEGATIVE_ENTITY_STATUSES[st] then return true end
+    end
+    return false
+end
+
+-- True if any living playable ally would benefit from a heal/cleanse.
+local function anyAllyNeedsHeal(state)
     for _, e in ipairs((state and state.entities) or _G.entities or {}) do
+        if isWoundedOrDebuffed(e) then return true end
+    end
+    return false
+end
+
+-- Highlight the allies a heal would affect.
+--   onlyWounded = true  -> only allies that actually need healing (Heal / Flash Heal)
+--   onlyWounded = false -> every living ally; wounded ones glow brighter.
+local function highlightHealTargets(hex, cellOverlays, state, onlyWounded)
+    for _, e in ipairs(state.entities or {}) do
         if e.isPlayable and e:isCharacter() and e.health > 0 then
-            if e.health < e.maxHealth then return true end
-            for _, st in ipairs(status.getEntityStatuses(e)) do
-                if NEGATIVE_ENTITY_STATUSES[st] then return true end
+            local wounded = isWoundedOrDebuffed(e)
+            if not onlyWounded or wounded then
+                local key = e.q .. "," .. e.r
+                local hovered = hex and (hex.hoverQ == e.q and hex.hoverR == e.r)
+                if wounded then
+                    cellOverlays[key] = hovered
+                        and { fill = {0.2, 0.9, 0.4, 0.55}, line = {0.2, 1.0, 0.4, 1.0} }
+                        or { fill = {0.2, 0.8, 0.3, 0.4}, line = {0.3, 0.9, 0.4, 0.8} }
+                else
+                    -- Not wounded: still a valid target for Stim/Armor, but faint.
+                    cellOverlays[key] = { fill = {0.2, 0.7, 0.3, 0.18}, line = {0.3, 0.8, 0.4, 0.4} }
+                end
             end
         end
     end
-    return false
+end
+
+-- Heal is effective only when some ally is wounded or debuffed.
+function HealAbility:isEffective(state)
+    return anyAllyNeedsHeal(state)
+end
+
+-- Hovering the button previews which allies it would heal.
+function HealAbility:collectHoverOverlays(hex, cellOverlays, state)
+    highlightHealTargets(hex, cellOverlays, state, true)
 end
 
 -- Heal acts on every living playable ally at once: +1 HP and cleanse debuffs.
@@ -497,13 +571,7 @@ function HealAbility:onActivate(state)
                 e.health = math.min(e.maxHealth, e.health + 1)
                 healed = healed + 1
             end
-            local toClear = {}
-            for _, st in ipairs(status.getEntityStatuses(e)) do
-                if NEGATIVE_ENTITY_STATUSES[st] then table.insert(toClear, st) end
-            end
-            for _, st in ipairs(toClear) do
-                status.removeFromEntity(e, st)
-            end
+            cleanseEntity(e)
         end
     end
     global_abilities.spendAbility(self)
@@ -521,6 +589,189 @@ function HealAbility:drawButton(mx, my, state)
         tooltipLines = {
             "Restore 1 HP and remove all",
             "debuffs for every allied unit.",
+        },
+    })
+end
+
+-- ============================================================
+-- HEAL VARIANTS (menu-chosen healing ability)
+-- All of them cleanse every negative effect from the target.
+-- ============================================================
+
+-- Shared targeting: pick one living playable ally.
+local function findAllyAt(state, q, r)
+    for _, e in ipairs(state.entities) do
+        if e.q == q and e.r == r and e.health > 0 and e:isCharacter() and e.isPlayable then
+            return e
+        end
+    end
+    return nil
+end
+
+-- FLASH HEAL: +1 HP to a single ally, free.
+local FlashHealAbility = {}
+FlashHealAbility.__index = FlashHealAbility
+
+function FlashHealAbility.new()
+    return setmetatable({
+        name = "Flash Heal",
+        manaCost = 0,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }, FlashHealAbility)
+end
+
+function FlashHealAbility:reset() self.hasBeenUsed = false end
+-- Effective only when some ally is wounded or debuffed.
+function FlashHealAbility:isEffective(state) return anyAllyNeedsHeal(state) end
+function FlashHealAbility:onActivate(state)
+    log.info("abilities", "Click on a wounded ally to heal, or press ESC to cancel")
+end
+function FlashHealAbility:onDeactivate(state)
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+function FlashHealAbility:collectOverlays(hex, cellOverlays, state) highlightHealTargets(hex, cellOverlays, state, true) end
+function FlashHealAbility:collectHoverOverlays(hex, cellOverlays, state) highlightHealTargets(hex, cellOverlays, state, true) end
+function FlashHealAbility:onClickHex(q, r, hex, state)
+    local target = findAllyAt(state, q, r)
+    if not target then
+        log.warn("abilities", "No valid ally at this cell!")
+        return true
+    end
+    -- Refuse to waste the heal on an ally that would not benefit.
+    if not isWoundedOrDebuffed(target) then
+        log.warn("abilities", "Target is at full HP with no debuffs!")
+        return true
+    end
+    undo.snapshot()
+    if target.health < target.maxHealth then
+        target.health = math.min(target.maxHealth, target.health + 1)
+    end
+    cleanseEntity(target)
+    global_abilities.spendAbility(self)
+    restoreSelectedActor()
+    global_abilities.activeAbility = nil
+    return true
+end
+function FlashHealAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.3, 0.9, 0.5},
+        label = "Flash Heal",
+        activeLabel = "Select ally",
+        tooltipH = 64,
+        tooltipTitle = "Flash Heal",
+        tooltipLines = {
+            "Restore 1 HP to one ally and",
+            "remove all debuffs. Free.",
+        },
+    })
+end
+
+-- STIM PACK: +1 movement for this turn only, free.
+local StimPackAbility = {}
+StimPackAbility.__index = StimPackAbility
+
+function StimPackAbility.new()
+    return setmetatable({
+        name = "Stim Pack",
+        manaCost = 0,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }, StimPackAbility)
+end
+
+function StimPackAbility:reset() self.hasBeenUsed = false end
+function StimPackAbility:onActivate(state)
+    log.info("abilities", "Click on an ally to boost movement, or press ESC to cancel")
+end
+function StimPackAbility:onDeactivate(state)
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+function StimPackAbility:collectOverlays(hex, cellOverlays, state) highlightHealTargets(hex, cellOverlays, state, false) end
+function StimPackAbility:collectHoverOverlays(hex, cellOverlays, state) highlightHealTargets(hex, cellOverlays, state, false) end
+function StimPackAbility:onClickHex(q, r, hex, state)
+    local target = findAllyAt(state, q, r)
+    if not target then
+        log.warn("abilities", "No valid ally at this cell!")
+        return true
+    end
+    undo.snapshot()
+    -- Temporary: reverted at the start of the next player turn.
+    target.stimPack = (target.stimPack or 0) + 1
+    target.moveRange = (target.moveRange or 1) + 1
+    cleanseEntity(target)
+    global_abilities.spendAbility(self)
+    restoreSelectedActor()
+    global_abilities.activeAbility = nil
+    return true
+end
+function StimPackAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.3, 0.8, 1.0},
+        label = "Stim Pack",
+        activeLabel = "Select ally",
+        tooltipH = 80,
+        tooltipTitle = "Stim Pack",
+        tooltipLines = {
+            "Give one ally +1 movement",
+            "this turn and remove all",
+            "debuffs. Free; the bonus does",
+            "not carry to the next turn.",
+        },
+    })
+end
+
+-- ARMOR PACK: +2 current and max HP to one ally, 1 mana.
+local ArmorPackAbility = {}
+ArmorPackAbility.__index = ArmorPackAbility
+
+function ArmorPackAbility.new()
+    return setmetatable({
+        name = "Armor Pack",
+        manaCost = 1,
+        button = { x = 0, y = 0, width = 120, height = 24 },
+        hasBeenUsed = false,
+    }, ArmorPackAbility)
+end
+
+function ArmorPackAbility:reset() self.hasBeenUsed = false end
+function ArmorPackAbility:onActivate(state)
+    log.info("abilities", "Click on an ally to armor them, or press ESC to cancel")
+end
+function ArmorPackAbility:onDeactivate(state)
+    restoreSelectedActor()
+    log.infof("abilities", "%s cancelled", self.name)
+end
+function ArmorPackAbility:collectOverlays(hex, cellOverlays, state) highlightHealTargets(hex, cellOverlays, state, false) end
+function ArmorPackAbility:collectHoverOverlays(hex, cellOverlays, state) highlightHealTargets(hex, cellOverlays, state, false) end
+function ArmorPackAbility:onClickHex(q, r, hex, state)
+    local target = findAllyAt(state, q, r)
+    if not target then
+        log.warn("abilities", "No valid ally at this cell!")
+        return true
+    end
+    undo.snapshot()
+    target.maxHealth = (target.maxHealth or 0) + 2
+    target.health = math.min(target.maxHealth, (target.health or 0) + 2)
+    cleanseEntity(target)
+    global_abilities.spendAbility(self)
+    restoreSelectedActor()
+    global_abilities.activeAbility = nil
+    return true
+end
+function ArmorPackAbility:drawButton(mx, my, state)
+    global_abilities.drawAbilityButton(self, mx, my, state, {
+        color = {0.7, 0.7, 0.4},
+        label = "Armor Pack",
+        activeLabel = "Select ally",
+        tooltipH = 80,
+        tooltipTitle = "Armor Pack",
+        tooltipLines = {
+            "Give one ally +2 current and",
+            "maximum HP and remove all",
+            "debuffs. Costs 1 mana.",
         },
     })
 end
@@ -3283,6 +3534,9 @@ end
 
 -- Register all abilities
 global_abilities.register(HealAbility.new())
+global_abilities.register(FlashHealAbility.new())
+global_abilities.register(StimPackAbility.new())
+global_abilities.register(ArmorPackAbility.new())
 global_abilities.register(ExtraMoveAbility.new())
 global_abilities.register(WindTorrent.new())
 global_abilities.register(UnearthAbility.new())

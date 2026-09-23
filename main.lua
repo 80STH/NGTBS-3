@@ -80,6 +80,8 @@ mechanismUsedThisTurn = false  -- 1-turn cooldown for the Mechanism button
 highgroundAnim = nil        -- { start=, duration=, raising= } while animating
 spawnAllUnits = false
 unlimitedAbilities = false
+startingSpell = "Infest"  -- menu-chosen starting spell for the hero (added to squad abilities)
+healSpell = "Heal"  -- menu-chosen healing ability for the squad (Heal/Flash Heal/Stim Pack/Armor Pack)
 chaos = 0
 chaosMax = 4
 soulPower = nil          -- run resource; drains on building loss/respawn (persists between missions)

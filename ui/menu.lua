@@ -3,6 +3,39 @@ local shop = require("ui.shop")
 local fonts = require("util.fonts")
 local heroDefs = require("entity.environment")
 
+-- Healing pool: menu picks one heal ability for the whole run. `name` is the
+-- ability name used in-game ("Heal" = the global all-ally heal).
+local healList = {
+    { name = "Flash Heal", desc = "+1 HP one ally, free" },
+    { name = "Heal", desc = "+1 HP all allies, 1 mana" },
+    { name = "Stim Pack", desc = "+1 move this turn, free" },
+    { name = "Armor Pack", desc = "+2 HP & max HP, 1 mana" },
+}
+
+-- Starting-spell pool (Heal/Revive are base spells, excluded). name + one-line description.
+local spellList = {
+    { name = "Extra Move", desc = "Cleanse and shift an ally 1 cell" },
+    { name = "Wind Torrent", desc = "Push all units away from a hex" },
+    { name = "Unearth", desc = "Enemies in dig sites emerge now" },
+    { name = "Mind Control", desc = "Move an enemy 1 cell" },
+    { name = "Accelerate Decay", desc = "Decay activates 1 turn sooner" },
+    { name = "Force Attack", desc = "Enemy attacks first in turn order" },
+    { name = "Rage", desc = "1-damage attacks become fatal (1 turn)" },
+    { name = "The Big One", desc = "Fatal damage in a triangle sector" },
+    { name = "Air Strike", desc = "1 damage in a straight line" },
+    { name = "Jumping Strike", desc = "1 damage to every other cell in line" },
+    { name = "Overload", desc = "Fatal damage to ally + adjacent units" },
+    { name = "Chain Lightning", desc = "1 dmg, fatal to adjacent 2nd target" },
+    { name = "Invulnerability", desc = "Immune to damage, cleanse debuffs" },
+    { name = "Vortex", desc = "Rotate units 60 deg around a cell" },
+    { name = "Hex", desc = "Turn an enemy into a cowardly beast" },
+    { name = "Upside Down", desc = "Kill a creature; corpse falls later" },
+    { name = "Teleport", desc = "Ally teleports anywhere this battle" },
+    { name = "Speed Boost", desc = "+1 move for an ally (free)" },
+    { name = "Void", desc = "Turn a cell into emptiness" },
+    { name = "Infest", desc = "1 dmg; lethal spawns an Infested ally" },
+}
+
 local function loadMapList()
     local items = love.filesystem.getDirectoryItems("maps")
     local list = {}
@@ -26,6 +59,8 @@ local function ensureDefaults()
     if defaultsSet then return end
     defaultsSet = true
     if not selectedHero then selectedHero = 1 end
+    if not healSpell then healSpell = "Heal" end
+    if not startingSpell then startingSpell = "Infest" end
 end
 
 -- Cached layout data (computed on draw, reused on click)
@@ -67,13 +102,57 @@ local function computeLayout(w, h)
     end
     y = y + heroCardH + 16
 
+    -- Healing selection (2 columns)
+    l.healLabelY = y
+    y = y + 24
+    local healGap = 4
+    local healCardH = 24
+    local healColW = math.floor((contentW - healGap) / 2)
+    l.healCards = {}
+    for i, hp in ipairs(healList) do
+        local col = (i - 1) % 2
+        local row = math.floor((i - 1) / 2)
+        l.healCards[i] = {
+            name = hp.name,
+            x = cx + col * (healColW + healGap),
+            y = y + row * (healCardH + healGap),
+            w = healColW,
+            h = healCardH,
+        }
+    end
+    y = y + math.ceil(#healList / 2) * (healCardH + healGap) + 12
+
+    -- Starting spell selection (2 columns)
+    l.spellLabelY = y
+    y = y + 24
+    local spellGap = 4
+    local spellCardH = 24
+    local spellColW = math.floor((contentW - spellGap) / 2)
+    l.spellCards = {}
+    for i, sp in ipairs(spellList) do
+        local col = (i - 1) % 2
+        local row = math.floor((i - 1) / 2)
+        l.spellCards[i] = {
+            name = sp.name,
+            x = cx + col * (spellColW + spellGap),
+            y = y + row * (spellCardH + spellGap),
+            w = spellColW,
+            h = spellCardH,
+        }
+    end
+    y = y + math.ceil(#spellList / 2) * (spellCardH + spellGap) + 12
+
+    -- "No starting spell" clear option
+    l.noneBtn = { x = cx, y = y, w = contentW, h = 16 }
+    y = y + 16 + 4
+
     -- Maps
     local smallFont = fonts.get(14)
     l.smallFont = smallFont
     l.mapLabelY = y
     y = y + 24
-    local mapBtnH = 42
-    local mapBtnGap = 6
+    local mapBtnH = 32
+    local mapBtnGap = 4
     l.mapBtns = {}
     for i, mapPath in ipairs(mapList) do
         l.mapBtns[i] = {
@@ -88,7 +167,7 @@ local function computeLayout(w, h)
     y = y + 8
 
     -- Bottom buttons (2-column grid)
-    local btnH = 62
+    local btnH = 54
     local btnGap = 12
     local btnColW = math.floor((contentW - btnGap) / 2)
     l.btns = {}
@@ -193,9 +272,71 @@ function menu.draw()
         end
     end
 
+    -- Healing selection
+    love.graphics.setFont(l.cardFont)
+    love.graphics.setColor(0.6, 1.0, 0.7, 0.9)
+    love.graphics.printf("Healing (always available)", l.cx, l.healLabelY, l.contentW, "center")
+
+    for i, card in ipairs(l.healCards) do
+        local hover = mx >= card.x and mx <= card.x + card.w and my >= card.y and my <= card.y + card.h
+        local sel = (healSpell or "Heal") == card.name
+        love.graphics.setColor(hover and 0.16 or 0.1, hover and 0.26 or 0.18, hover and 0.16 or 0.12, 0.95)
+        love.graphics.rectangle("fill", card.x, card.y, card.w, card.h, 3)
+        if sel then
+            love.graphics.setColor(0.3, 0.9, 0.4, 0.9)
+            love.graphics.setLineWidth(2)
+            love.graphics.rectangle("line", card.x, card.y, card.w, card.h, 3)
+            love.graphics.setLineWidth(1)
+        else
+            love.graphics.setColor(0.3, 0.5, 0.35, 0.35)
+            love.graphics.rectangle("line", card.x, card.y, card.w, card.h, 3)
+        end
+        love.graphics.setFont(l.smallFont)
+        love.graphics.setColor(1, 1, 1, 0.95)
+        love.graphics.print(card.name, card.x + 4, card.y + 1)
+        local hp = healList[i]
+        love.graphics.setFont(fonts.get(10))
+        love.graphics.setColor(0.75, 0.85, 0.8, 0.85)
+        love.graphics.print(hp.desc, card.x + 4, card.y + 13)
+    end
+
+    -- Starting spell selection
+    love.graphics.setFont(l.cardFont)
+    love.graphics.setColor(0.6, 0.8, 1, 0.9)
+    love.graphics.printf("Starting Spell (optional)", l.cx, l.spellLabelY, l.contentW, "center")
+
+    for i, card in ipairs(l.spellCards) do
+        local hover = mx >= card.x and mx <= card.x + card.w and my >= card.y and my <= card.y + card.h
+        local sel = startingSpell == card.name
+        love.graphics.setColor(hover and 0.22 or 0.12, hover and 0.18 or 0.12, hover and 0.3 or (sel and 0.25 or 0.14), 0.95)
+        love.graphics.rectangle("fill", card.x, card.y, card.w, card.h, 3)
+        if sel then
+            love.graphics.setColor(0.9, 0.55, 0.2, 0.9)
+            love.graphics.setLineWidth(2)
+            love.graphics.rectangle("line", card.x, card.y, card.w, card.h, 3)
+            love.graphics.setLineWidth(1)
+        else
+            love.graphics.setColor(0.4, 0.35, 0.3, 0.35)
+            love.graphics.rectangle("line", card.x, card.y, card.w, card.h, 3)
+        end
+        love.graphics.setFont(l.smallFont)
+        love.graphics.setColor(1, 1, 1, 0.95)
+        love.graphics.print(card.name, card.x + 4, card.y + 1)
+        local sp = spellList[i]
+        love.graphics.setFont(fonts.get(10))
+        love.graphics.setColor(0.75, 0.75, 0.8, 0.85)
+        love.graphics.print(sp.desc, card.x + 4, card.y + 13)
+    end
+    -- "None" option clears the choice
+    local nb = l.noneBtn
+    local noneHover = mx >= nb.x and mx <= nb.x + nb.w and my >= nb.y and my <= nb.y + nb.h
+    love.graphics.setFont(fonts.get(11))
+    local noneActive = startingSpell == nil
+    love.graphics.setColor(noneActive and (noneHover and 0.9 or 0.7) or (noneHover and 0.6 or 0.4), noneActive and (noneHover and 0.9 or 0.7) or (noneHover and 0.6 or 0.4), noneActive and 1.0 or (noneHover and 0.7 or 0.5), 0.9)
+    love.graphics.print("(no starting spell)", nb.x, nb.y)
+
     -- Map label
     local canClickMap = selectedHero ~= nil
-    love.graphics.setFont(l.cardFont)
     love.graphics.setColor(0.6, 0.8, 1, 0.9)
     love.graphics.printf("Map", l.cx, l.mapLabelY, l.contentW, "center")
 
@@ -276,6 +417,27 @@ function menu.mousepressed(x, y)
     for i, card in ipairs(l.heroCards) do
         if x >= card.x and x <= card.x + card.w and y >= card.y and y <= card.y + card.h then
             selectedHero = i
+            return true
+        end
+    end
+
+    -- Healing selection
+    for i, card in ipairs(l.healCards) do
+        if x >= card.x and x <= card.x + card.w and y >= card.y and y <= card.y + card.h then
+            healSpell = card.name
+            return true
+        end
+    end
+
+    -- Starting spell selection
+    local nb = l.noneBtn
+    if nb and x >= nb.x and x <= nb.x + nb.w and y >= nb.y and y <= nb.y + nb.h then
+        startingSpell = nil
+        return true
+    end
+    for i, card in ipairs(l.spellCards) do
+        if x >= card.x and x <= card.x + card.w and y >= card.y and y <= card.y + card.h then
+            startingSpell = card.name
             return true
         end
     end

@@ -198,6 +198,11 @@ function transitionToPlayerTurn()
                 a.redirectPending = nil
                 a.pendingDelayedAttack = nil
                 a.deflectArmed = false
+                -- Stim Pack movement bonus lasts only the turn it was cast.
+                if a.stimPack and a.stimPack > 0 then
+                    a.moveRange = math.max(0, (a.moveRange or 0) - a.stimPack)
+                    a.stimPack = nil
+                end
                 if a.multiAction then
                     a.attacksLeft = a.maxAttacks or 2
                     a.movesLeft = a.maxMoves or 2
@@ -208,6 +213,7 @@ function transitionToPlayerTurn()
     undo.clear()
     undo.snapshot()
     global_abilities.abilityUsedThisTurn = false
+    global_abilities.resetUsage()
     _G.mechanismUsedThisTurn = false
     selectLightningTarget()
     log.info("turn", "=== PLAYER TURN ===")

@@ -56,8 +56,10 @@ local function buildSpellCategory()
     if not _G.global_abilities then return cat end
     local available = {}
     local heroic = _G.global_abilities.heroicAbilities or {}
+    local heals = {}
+    for _, h in ipairs(_G.global_abilities.healAbilities or {}) do heals[h] = true end
     for _, abName in ipairs(_G.global_abilities.abilityOrder or {}) do
-        if not _G.global_abilities.unlocked[abName] and not heroic[abName] then
+        if not _G.global_abilities.unlocked[abName] and not heroic[abName] and not heals[abName] then
             table.insert(available, abName)
         end
     end
