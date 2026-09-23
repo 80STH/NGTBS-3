@@ -130,14 +130,6 @@ function status.getDamageMultiplier(entity)
     return 1.0
 end
 
--- Wounded: true for non-player characters with health below maximum
-function status.isWounded(entity)
-    if not entity or entity.isPlayable then return false end
-    if not entity:isCharacter() then return false end
-    if entity.health <= 0 then return false end
-    return entity.health < entity.maxHealth
-end
-
 function status.initHexStatuses(loadedStatuses)
     status.hexStatuses = loadedStatuses or {}
 end

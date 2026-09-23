@@ -819,9 +819,6 @@ function ai.getEffectiveMoveRange(enemy, hex, entities)
         return 0
     end
     local base = enemy.moveRange + (status.hasEntityStatus(enemy, "empowered") and 1 or 0)
-    if status.isWounded and status.isWounded(enemy) then
-        base = base - 1
-    end
     if hex and entities and combat and combat.isInSlowingAura then
         if combat.isInSlowingAura(enemy, entities, hex) then
             base = math.max(1, base - 2)

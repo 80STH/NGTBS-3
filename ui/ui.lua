@@ -50,9 +50,6 @@ function ui.getEffectiveMoveRange(actor, entities, hex)
     if status and status.hasEntityStatus and status.hasEntityStatus(actor, "empowered") then
         base = base + 1
     end
-    if status and status.isWounded and status.isWounded(actor) then
-        base = base - 1
-    end
     if combat and combat.isInSlowingAura and entities and hex then
         if combat.isInSlowingAura(actor, entities, hex) then
             base = math.max(1, base - 2)
@@ -1675,9 +1672,6 @@ function ui.getEffectiveStatuses(entity)
     if status.hasDigSite(entity.q, entity.r) then
         table.insert(statuses, "dig_site")
     end
-    if status.isWounded and status.isWounded(entity) then
-        table.insert(statuses, "wounded")
-    end
     return statuses
 end
 function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
@@ -2555,7 +2549,6 @@ ui.STATUS_DESCRIPTIONS = {
     slow      = "Slowed: movement range reduced.",
     empowered = "Empowered: +1 move range and +1 attack damage.",
     rage      = "Rage: +1 attack damage; expires at end of turn.",
-    wounded   = "Wounded: below max health.",
     dig_site  = "On a dig site: will spawn enemies.",
 }
 
