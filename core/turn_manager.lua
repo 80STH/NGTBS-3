@@ -1,4 +1,4 @@
--- turn_manager.lua
+﻿-- turn_manager.lua
 -- State machine for turn phases (enemy_prepare / player / enemy_attack).
 -- Uses globals (entities, hex, turnState, sounds, terrainMap).
 
@@ -71,11 +71,17 @@ function turnManager.endPlayerTurn()
         checkGameEnd()
     end
 
-    if turnCount >= maxTurns and not decayAppliedForTurnLimit then
-        applyDecayToAllEnemies()
-        decayAppliedForTurnLimit = true
+    -- Decay: once the turn limit is reached, non-boss enemies take escalating
+    -- damage at the end of every player turn (1 -> 2 -> lethal).
+    if turnCount >= maxTurns then
+        if not decayAppliedForTurnLimit then
+            decayAppliedForTurnLimit = true
+            status.clearAllDigSites()
+        end
+        decayTick = (decayTick or 0) + 1
+        applyDecayToAllEnemies(decayTick)
         decayMessageTimer = 2.0
-        status.clearAllDigSites()
+        checkGameEnd()
     end
 
     -- Prepare train attacks for this turn
@@ -132,7 +138,7 @@ function updatePreparePhase(dt)
             if anyMoving then
                 turnState._waitingForMoves = true
             else
-                -- No enemies moved вЂ” prepare all attacks now
+                -- No enemies moved — prepare all attacks now
                 for _, e in ipairs(entities) do
                     if e:isCharacter() and not e.isPlayable and e.health > 0 then
                         if e._willPrepareAfterMove or not e.hasPreparedAttack then

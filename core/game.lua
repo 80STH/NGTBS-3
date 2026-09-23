@@ -1,4 +1,4 @@
--- game.lua
+﻿-- game.lua
 -- Game lifecycle: restart, end check, global effects.
 -- Functions are global (used by other modules via _G).
 
@@ -82,7 +82,7 @@ end
 
 -- All valid collapse targets for a pillar at (q,r): faced cell first, then
 -- other adjacent active non-water hexes. Skips cells that can't be crushed
--- (indestructible occupants or another StonePillar РІР‚вЂќ prevents infinite
+-- (indestructible occupants or another StonePillar — prevents infinite
 -- collapse ping-pong).
 local function pillarCollapseTargets(q, r, dir)
     local faced, others = nil, {}
@@ -373,6 +373,7 @@ function restartGame(mapPath)
     _G.slowMode = false
     fireAppliedForTurnLimit = false
     decayAppliedForTurnLimit = false
+    decayTick = 0
     chaos = 0
     lichKilledPlayer = false
     status.clearAllDigSites()
@@ -455,12 +456,12 @@ function restartGame(mapPath)
     end
     clearCellDuplicateWarnings()
     rebuildEntityIndex()
-    log.infof("game", "=== MAP LOADED РІР‚вЂќ %s ===", (skipDeploy and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
+    log.infof("game", "=== MAP LOADED — %s ===", (skipDeploy and "GAME STARTED" or "DEPLOY YOUR ALLIES"))
 end
 
 function confirmDeploy()
     -- Hero redeploy after a death-save: simple landing, no deploy effects,
-    -- no turn restart РІР‚вЂќ the player turn is already running.
+    -- no turn restart — the player turn is already running.
     if heroRevivePending and hero and #placedAllies == 1 and placedAllies[1] == hero then
         table.insert(entities, hero)
         heroRevivePending = false
@@ -479,7 +480,7 @@ function confirmDeploy()
         updateAttackButtons(hero)
         rebuildEntityIndex()
         gamePhase = "playing"
-        log.info("game", "=== HERO REDEPLOYED РІР‚вЂќ TURN CONTINUES ===")
+        log.info("game", "=== HERO REDEPLOYED — TURN CONTINUES ===")
         return
     end
 
@@ -524,11 +525,11 @@ function confirmDeploy()
     placedAllies = {}
     deploySelectedIdx = nil
 
-    log.info("game", "=== DEPLOY CONFIRMED РІР‚вЂќ GAME STARTED ===")
+    log.info("game", "=== DEPLOY CONFIRMED — GAME STARTED ===")
 end
 
 -- Losses (building damage, objectives, train cars) drain Soul Power. Hitting
--- zero ends the run unless the hero can still fight on borrowed time вЂ” see loss rules.
+-- zero ends the run unless the hero can still fight on borrowed time — see loss rules.
 function spendSoul(amount)
     if soulPower ~= nil then
         soulPower = math.max(0, soulPower - amount)
@@ -597,7 +598,7 @@ function heroDeathSave(h)
             visual.addEffect(cx, cy, "slam", 0.5)
         end
         rebuildEntityIndex()
-        log.info("game", "The hero drops РІР‚вЂќ redeploy him next turn!")
+        log.info("game", "The hero drops — redeploy him next turn!")
         return false
     end
 
@@ -610,7 +611,7 @@ function heroDeathSave(h)
 end
 
 -- The Mechanism button: one press drives every environment mechanism on
--- the map at once РІР‚вЂќ toggles the retractable highground, activates the
+-- the map at once — toggles the retractable highground, activates the
 -- teleporters and runs the conveyor belts. 1-turn cooldown.
 function activateMechanisms()
     local teleporters = require("system.teleporters")
@@ -677,7 +678,7 @@ function activateMechanisms()
     end
 
     -- 4. Hazard plates: spikes deal 1 damage, burners ignite, oxidizers
-    --    coat in acid РІР‚вЂќ to every living character standing on a marked cell.
+    --    coat in acid — to every living character standing on a marked cell.
     if mechanismTrapCells and #mechanismTrapCells > 0 then
         for _, cell in ipairs(mechanismTrapCells) do
             for _, e in ipairs(entities) do
@@ -746,19 +747,26 @@ function checkGameEnd()
     end
 end
 
-function applyDecayToAllEnemies()
-    log.debugf("game", "applyDecayToAllEnemies called, turnCount=%s maxTurns=%s", turnCount, maxTurns)
+-- Decay: once the turn limit is reached, every non-boss enemy takes escalating
+-- damage at the end of each player turn. tick 1 -> 1 damage, tick 2 -> 2 damage,
+-- tick 3+ -> lethal (99). Bosses (isLeader) are immune.
+function applyDecayToAllEnemies(tick)
+    tick = tick or 1
+    local damage = 1
+    if tick == 2 then damage = 2
+    elseif tick >= 3 then damage = 99 end
+    log.debugf("game", "applyDecayToAllEnemies tick=%s damage=%s (turnCount=%s maxTurns=%s)", tick, damage, turnCount, maxTurns)
     local count = 0
     for _, e in ipairs(entities) do
-        if e:isCharacter() and not e.isPlayable and e.health > 0 then
+        if e:isCharacter() and not e.isPlayable and e.health > 0 and not e.isDying and not e.isLeader then
             count = count + 1
-            if not status.hasEntityStatus(e, "decay") then
-                status.applyToEntity(e, "decay")
-                log.debugf("game", "Decay afflicts %s", e.name)
-            end
+            local wasDestroyed = e:takeDamage(damage)
+            if wasDestroyed then e:startDeath() end
+            log.debugf("game", "Decay hits %s for %d", e.name, damage)
+            if sounds and sounds.play then sounds.play("decay") end
         end
     end
-    log.debugf("game", "Total living enemies found: %d", count)
+    log.debugf("game", "Total non-boss enemies hit by decay: %d", count)
 end
 
 function updateDeathAnimations(dt)

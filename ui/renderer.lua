@@ -1,4 +1,4 @@
--- renderer.lua
+﻿-- renderer.lua
 -- Responsible for rendering the game. Called from love.draw(state).
 local renderer = {}
 local ui = require("ui.ui")
@@ -532,10 +532,11 @@ function renderer.draw(state)
     end
 
     ui.drawAttackPanel(state.selectedActor, state.attackButtons, state.selectedAttack, state.attackMode)
-    if state.selectedActor then
-        ui.drawSelectedStats(state.selectedActor, state.entities, hex)
-    elseif global_abilities.activeAbility then
+    if global_abilities.activeAbility then
+        ui.selectedPanelRect = nil
         ui.drawAbilityStats(global_abilities.activeAbility)
+    else
+        ui.drawSelectedStats(state.selectedActor, state.entities, hex)
     end
 
     local showOrder = hoverOrder or state.showEnemyOrder or love.keyboard.isDown("o")
@@ -1306,7 +1307,7 @@ function renderer.drawDeployPhase(state, unplacedAllies, placedAllies, deploySel
     state.deployConfirmBtn = canConfirm and {x = btnX, y = btnY, w = btnW, h = btnH} or nil
 
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("DEPLOYMENT PHASE вЂ” Place your units", 10, 55)
+    love.graphics.print("DEPLOYMENT PHASE — Place your units", 10, 55)
 end
 
 return renderer

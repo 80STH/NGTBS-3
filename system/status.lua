@@ -111,11 +111,11 @@ function status.getEntityStatuses(entity)
     return status.entityStatuses[entity] or {}
 end
 
--- Check for negative statuses on a hex (fire, acid, decay)
+-- Check for negative statuses on a hex (fire, acid)
 function status.hasNegativeHexStatus(q, r)
     local hexStatuses = status.getAtHex(q, r)
     for _, st in ipairs(hexStatuses) do
-        if st == "fire" or st == "acid" or st == "decay" then
+        if st == "fire" or st == "acid" then
             return true
         end
     end

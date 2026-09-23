@@ -79,18 +79,6 @@ function effects.applyEndOfTurnEffects(entities, terrainMap)
 
             end
 
-            -- ===== ADD DECAY HANDLING =====
-            if status.hasEntityStatus(entity, "decay") then
-                local damage = 1
-                log.infof("effects", "%s decays for %d damage!", entity.name, damage)
-                local wasDestroyed = entity:takeDamage(damage)
-                sounds.play("decay")
-                if wasDestroyed then
-                    entity:startDeath()
-                end
-            end
-            -- ====================================
-
             -- Rage expires at end of turn
             if status.hasEntityStatus(entity, "rage") then
                 status.removeFromEntity(entity, "rage")

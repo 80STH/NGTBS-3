@@ -1,4 +1,4 @@
-local Entity = require("entity.entity")
+﻿local Entity = require("entity.entity")
 local log = require("util.log")
 local status = require("system.status")
 local env = require("entity.environment")
@@ -188,7 +188,7 @@ local killLeaderDef = {
     name = "Destroy the Leader",
     desc = "Find and eliminate the enemy leader!",
     onGenerate = function(entities, hex)
-        -- Power Lich already placed in game.lua Р Р†Р вЂљРІР‚Сњ just mark it
+        -- Power Lich already placed in game.lua — just mark it
         for _, e in ipairs(entities) do
             if e:isCharacter() and not e.isPlayable and e.name == "PowerLich" then
                 e.isLeader = true
@@ -287,7 +287,7 @@ local function definePool()
         {
             id = "kill_poisonous_with_decay",
             name = "Poisonous Dies With Decay",
-            desc = "The poisonous enemy must die with decay applied",
+            desc = "The poisonous enemy must die while Decay is active",
             incompatible = { "slaughter" },
             onGenerate = function(entities, hex)
                 local hasZombie = isEntityAlive(entities, "PoisonousZombie")
@@ -323,7 +323,9 @@ local function definePool()
                 end
                 if target then
                     _G.poisonousSeenAlive = true
-                    if status_mod.hasEntityStatus(target, "decay") then
+                    -- Decay is a global escalating effect now, not a status: the
+                    -- poisonous enemy "dies with decay" if it dies while decay is active.
+                    if _G.decayAppliedForTurnLimit then
                         _G.poisonousHadDecay = true
                     end
                     if target.isDying or target.health <= 0 then
@@ -386,7 +388,7 @@ local function definePool()
         },
         -- Hero-exclusive objectives: only offered when the hero
         -- has the required capabilities (see the hero `tags`).
-        -- ponytail: disabled by request Р Р†Р вЂљРІР‚Сњ kept intact (flip `disabled` to re-enable).
+        -- ponytail: disabled by request — kept intact (flip `disabled` to re-enable).
         {
             id = "impale",
             name = "Impale",
@@ -747,7 +749,7 @@ function objectives.generate(entities, hex, forcedObjectives)
                 if def.requires then
                     for _, t in ipairs(def.requires) do
                         if not heroTags[t] then
-                            log.debugf("objectives", "Skipping '%s' РІР‚вЂќ hero lacks '%s' capability", def.id, t)
+                            log.debugf("objectives", "Skipping '%s' — hero lacks '%s' capability", def.id, t)
                             skip = true
                             break
                         end
@@ -886,7 +888,7 @@ function objectives.update(entities)
         if activePrimaryObjective.check then
             activePrimaryObjective.check(entities, objectiveStates)
         end
-        -- kill_leader (Power Lich boss) Р Р†Р вЂљРІР‚Сњ completion/defeat
+        -- kill_leader (Power Lich boss) — completion/defeat
         if activePrimaryObjective.id == "kill_leader" then
             local state = objectiveStates["kill_leader"]
             if state == "failed" then
@@ -970,13 +972,22 @@ end
 function objectives.draw()
     if not smallFont then smallFont = fonts.get(12) end
     local x = 10
-    local y = 46
     local w = 200
     local lineH = 16
     local padding = 6
     local totalH = objectives.getPanelHeight()
 
     if totalH == 0 then return end
+
+    -- Stack below the selected-unit panel (drawn on top now). Fall back to a
+    -- standard name-bar height if the ui module hasn't recorded its panel yet.
+    local topH = 0
+    if _G.ui and _G.ui.selectedPanelRect then
+        topH = _G.ui.selectedPanelRect.h + 4
+    else
+        topH = 34 + 4
+    end
+    local y = 46 + topH
 
     love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
     love.graphics.rectangle("fill", x, y, w, totalH, 5)
@@ -1010,7 +1021,7 @@ function objectives.draw()
         while name ~= "" and smallFont:getWidth(name) > maxNameW do
             name = name:sub(1, -2)
         end
-        if name ~= (obj.name or obj.id or "") then name = name .. "Р Р†Р вЂљР’В¦" end
+        if name ~= (obj.name or obj.id or "") then name = name .. "…" end
         local nameX = x + padding
         if icon_cache and icon_cache.get(iconKey) then
             icon_cache.drawSmall(iconKey, nameX + 7, curY + lineH / 2, 14, 1, txtColor)

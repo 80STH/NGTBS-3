@@ -132,7 +132,8 @@ function global_abilities.reset()
 end
 
 -- Abilities are reusable: clear the per-ability "used" latch at the start of
--- every player turn. The 1-per-turn limit is enforced by abilityUsedThisTurn.
+-- every player turn. Each individual ability can therefore be cast once per
+-- turn, but different abilities may all be cast in the same turn (mana-limited).
 function global_abilities.resetUsage()
     for _, ab in pairs(global_abilities.registry) do
         if ab.reset then ab:reset() end
@@ -151,7 +152,6 @@ function global_abilities.handleAbilityButtonClick(x, y, state)
                 if state.turnState.phase == "player" and not (state.selectedActor and state.selectedActor.isMoving) then
                     local unlimited = state.unlimitedAbilities
                     if not unlimited and ab.hasBeenUsed then return true end
-                    if not unlimited and global_abilities.abilityUsedThisTurn then return true end
                     if not unlimited and global_abilities.mana < ab.manaCost then return true end
                     -- Healing that would do nothing cannot be used.
                     if ab.isEffective and not ab:isEffective(state) then return true end
@@ -497,7 +497,7 @@ function HealAbility:reset()
 end
 
 -- Negative statuses removed by heal effects; positive ones (empowered, rage) survive.
-local NEGATIVE_ENTITY_STATUSES = { fire = true, acid = true, decay = true, rooted = true, slow = true }
+local NEGATIVE_ENTITY_STATUSES = { fire = true, acid = true, rooted = true, slow = true }
 
 -- Strip every negative status from one entity (shared by all heal effects).
 local function cleanseEntity(e)

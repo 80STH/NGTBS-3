@@ -1,4 +1,4 @@
--- ui_buttons.lua
+﻿-- ui_buttons.lua
 -- Right column: Abilities toggle, Order, Undo (vertical stack)
 -- Bottom center: End Turn
 -- Left column: Attacks OR Abilities (toggled)
@@ -70,7 +70,7 @@ return function(ui)
         if state and global_abilities then
             for _, name in ipairs(global_abilities.getDisplayOrder(state)) do
                 local ab = global_abilities.registry[name]
-                if ab and not ab.hasBeenUsed and not global_abilities.abilityUsedThisTurn
+                if ab and not ab.hasBeenUsed
                     and global_abilities.mana >= ab.manaCost
                     and (not ab.isEffective or ab:isEffective(state)) then
                     canUseAbility = true
@@ -511,7 +511,7 @@ return function(ui)
             local hasCaravan, hasBlockpost = false, false
             local hasEnemies, hasPrepared = false, false
             local hasUnitTargets, hasBuildingTargets = false, false
-            local hasBurningOrDecay = false
+            local hasBurning = false
             for _, e in ipairs(entities) do
                 if e:isCharacter() and not e.isPlayable and e.health > 0 then
                     hasEnemies = true
@@ -527,8 +527,8 @@ return function(ui)
                 if e.health and e.health > 0 and not e.isDying then
                     if e.name == "Caravan" then hasCaravan = true
                     elseif e.name == "Blockpost" then hasBlockpost = true end
-                    if status.hasEntityStatus(e, "fire") or status.hasEntityStatus(e, "decay") then
-                        hasBurningOrDecay = true
+                    if status.hasEntityStatus(e, "fire") then
+                        hasBurning = true
                     end
                 end
             end
@@ -539,7 +539,7 @@ return function(ui)
                 if hasUnitTargets then lines[#lines + 1] = "Enemies attack player/units (in order)" end
                 if hasBuildingTargets then lines[#lines + 1] = "Enemies attack buildings (in order)" end
             end
-            if hasBurningOrDecay then lines[#lines + 1] = "Debuffs: fire & decay apply" end
+            if hasBurning then lines[#lines + 1] = "Debuffs: fire applies" end
             if status.getAllDigSites and #status.getAllDigSites() > 0 then
                 lines[#lines + 1] = "Dig sites damage & spawn"
             end
@@ -745,7 +745,7 @@ return function(ui)
                 local ttW = 220
                 local maxW = ttW - 16
                 local words = {}
-                for w in (btn.name .. " вЂ” " .. btn.desc):gmatch("%S+") do table.insert(words, w) end
+                for w in (btn.name .. " — " .. btn.desc):gmatch("%S+") do table.insert(words, w) end
                 local lines = {}
                 for _, w in ipairs(words) do
                     if #lines == 0 then
@@ -876,7 +876,7 @@ return function(ui)
                 local effective = not ab.isEffective or ab:isEffective(state)
                 local available = (state.turnState.phase == "player"
                     and effective
-                    and (unlimited or (not ab.hasBeenUsed and not global_abilities.abilityUsedThisTurn
+                    and (unlimited or (not ab.hasBeenUsed
                     and global_abilities.mana >= ab.manaCost)))
                 local isActive = (global_abilities.activeAbility == ab)
 
@@ -893,7 +893,9 @@ return function(ui)
                 icon_cache.drawSmall(iconKey, ri.x + ri.w / 2, ri.y + ri.h / 2 - 7, 30)
 
                 love.graphics.setFont(buttonFont)
-                love.graphics.setColor(1, 1, 1, (global_abilities.mana >= ab.manaCost) and 1 or 0.4)
+                -- Mana cost, shown on every ability button (dimmed if unaffordable).
+                local afford = global_abilities.mana >= (ab.manaCost or 0)
+                love.graphics.setColor(0.4, 0.6, 1, afford and 1 or 0.4)
                 love.graphics.print(ab.manaCost, ri.x + ri.w / 2 - 5, ri.y + ri.h - 18)
                 love.graphics.setFont(old)
                 love.graphics.setColor(1, 1, 1, 1)

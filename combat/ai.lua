@@ -41,7 +41,7 @@ local function debugPrint(...)
     log.debug("ai", ...)
 end
 
--- Whether the attack requires a straight line (for Bite and Magic Bolt вЂ” no)
+-- Whether the attack requires a straight line (for Bite and Magic Bolt — no)
 local function attackRequiresLine(attack)
     return true
 end
@@ -249,7 +249,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
 
     -- ===== 1. Determine the target cell and, possibly, the target =====
     if attackHitsFirstTarget(attack) then
-        -- Ghost Bolt, Shoot, Dash, Piercing вЂ“ follow the line to the first target or to the edge
+        -- Ghost Bolt, Shoot, Dash, Piercing – follow the line to the first target or to the edge
         local dir = enemy.attackDirection
         if dir then
             local curQ, curR = enemy.q, enemy.r
@@ -267,7 +267,7 @@ function ai.executePreparedAttack(enemy, entities, hex, sounds)
                 curQ, curR = nextQ, nextR
             end
             if not target then
-                -- No target вЂ” take the last traversed cell (end of line or edge)
+                -- No target — take the last traversed cell (end of line or edge)
                 targetQ, targetR = lastValidQ, lastValidR
             end
         end
@@ -553,7 +553,7 @@ function ai.moveAndPrepare(enemy, entities, hex)
         return "failed"
     end
 
-    -- If already able to attack вЂ” record for later (batch) or prepare immediately
+    -- If already able to attack — record for later (batch) or prepare immediately
     if ai.canPrepareAttack(enemy, entities) then
         if _G._batchMovePlanning then
             enemy._willPrepareAfterMove = true
@@ -897,7 +897,7 @@ end
 
 function ai.isPositionOccupied(q, r, movingEntity, entities, hex)
     -- Delegates to cell_rules.isOccupied. Enemies don't have phaseThroughEnemies,
-    -- so we disable this check вЂ” behavior is equivalent to the old version.
+    -- so we disable this check — behavior is equivalent to the old version.
     return require("grid.cell_rules").isOccupied(q, r, movingEntity, {
         entities = entities, hex = hex,
         allowPhaseThroughEnemies = false,
@@ -1028,7 +1028,7 @@ function isCellDangerousForEntity(q, r, entity)
         return false
     end
     for _, st in ipairs(cellStatuses) do
-        if st == "fire" or st == "acid" or st == "decay" then
+        if st == "fire" or st == "acid" then
             if not status.hasEntityStatus(entity, st) then
                 return true
             end

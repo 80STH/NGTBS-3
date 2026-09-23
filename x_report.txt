@@ -1,5 +1,0 @@
-OK   no temp units before Infest
-OK   temp unit listed on the right
-OK   main selector unchanged (not displaced)
-OK   temp unit NOT in the main selector
-OK   clicking the right-side square targets the temp unit

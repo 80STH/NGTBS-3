@@ -1,4 +1,4 @@
--- ui.lua
+﻿-- ui.lua
 -- All UI functions (buttons, panels, attack preview, movement, etc.)
 local ui = {}
 local pathfinding = require("grid.pathfinding")
@@ -574,7 +574,7 @@ function ui.collectFlipDestOverlays(hex, selectedActor, flipTargetActor, attack,
     end
 end
 -- Where a dash toward (targetQ, targetR) actually ends, mirroring
--- combat.DashAttack:execute РІР‚вЂќ first elevation boundary (crash/fall) or the
+-- combat.DashAttack:execute — first elevation boundary (crash/fall) or the
 -- first target on the line. Returns endQ, endR, reason ("crash" | "fall" |
 -- "target" | "free").
 local function dashEndpoint(attacker, targetQ, targetR, stepX, stepY, stepZ, hex, entities)
@@ -650,7 +650,7 @@ function ui.getAttackableCellKeys(hex, attacker, attack, entities)
                 end
             elseif attack.name == "Dash" or attack.name == "Heavy Charge" then
                 -- Elevation-aware: only highlight cells the dash can actually
-                -- reach (target, crash or fall landing) РІР‚вЂќ nothing beyond a cliff.
+                -- reach (target, crash or fall landing) — nothing beyond a cliff.
                 local stepX, stepY, stepZ = attack:getLineDirection(attacker.q, attacker.r, q, r, hex)
                 if stepX then
                     local endQ, endR, reason = dashEndpoint(attacker, q, r, stepX, stepY, stepZ, hex, entities)
@@ -1125,7 +1125,7 @@ end
                 end
             end
         elseif vortexTargetCell then
-            -- Second click phase: show arrows for AРІвЂ вЂ™dest and BРІвЂ вЂ™further + damage preview
+            -- Second click phase: show arrows for A→dest and B→further + damage preview
             local target = getEntityAtHex(vortexTargetCell.q, vortexTargetCell.r, entities)
             if target then
                 local dests = attack:getShiftDestinations(attacker, vortexTargetCell.q, vortexTargetCell.r, hex)
@@ -1142,7 +1142,7 @@ end
                     local tx, ty = getDrawCoords(vortexTargetCell.q, vortexTargetCell.r)
                     local hx, hy = getDrawCoords(hoverQ, hoverR)
                     local occupant = getEntityAtHex(hoverQ, hoverR, entities)
-                    -- Arrow: A РІвЂ вЂ™ destination
+                    -- Arrow: A → destination
                     ui.drawPushArrow(tx, ty, hx, hy, nil, nil, nil, nil, vortexTargetCell.q, vortexTargetCell.r, hoverQ, hoverR)
                     local hasCollision = false
                     local occDamaged = false
@@ -1719,14 +1719,36 @@ function ui.drawEntityTooltip(entity, terrainMap, hex, entities)
     local panelHeight = pad + #lines * 16 + pad
     local px = logicalW - contentWidth - margin
     local py = 46
+
+    -- Small entity icon on the left of the tooltip
+    local iconSize = 32
+    local textIndent = 0
+    if entity.sprite then
+        local sw, sh = entity.sprite:getDimensions()
+        local scale = math.min(iconSize / sw, iconSize / sh)
+        local cx = px + pad + iconSize / 2
+        local cy = py + pad + iconSize / 2
+        love.graphics.setColor(0, 0, 0, 0.35)
+        love.graphics.rectangle("fill", px + pad, py + pad, iconSize, iconSize, 4)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(entity.sprite, cx, cy, 0, scale, scale, sw / 2, sh / 2)
+        textIndent = iconSize + 6
+        panelHeight = math.max(panelHeight, pad + iconSize + pad)
+    end
+
     love.graphics.setColor(bgColor)
     love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
     love.graphics.setColor(borderColor)
     love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 8)
     local curY = py + pad
-    for _, l in ipairs(lines) do
+    for i, l in ipairs(lines) do
         love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
-        love.graphics.print(l.text, px + pad, curY)
+        if i == 1 and textIndent > 0 then
+            local textY = curY + math.floor((iconSize - 16) / 2)
+            love.graphics.print(l.text, px + pad + textIndent, textY)
+        else
+            love.graphics.print(l.text, px + pad, curY)
+        end
         curY = curY + 16
     end
 end
@@ -1973,10 +1995,10 @@ function ui.drawCellTooltip(q, r, terrain, hex)
     local effectDescriptions = {
         fire = { name = "Fire", color = {1, 0.5, 0}, desc = "Burns for 1 damage at end of turn. Extinguished by water." },
         acid = { name = "Acid", color = {0.3, 0.9, 0.3}, desc = "Any damage is instantly lethal." },
-        decay = { name = "Decay", color = {0.7, 0.2, 0.8}, desc = "Takes 1 damage per move and at end of turn." },
     }
     local content = {}
     local hasSpecial = false
+    local iconSprite = nil
     if terrain == "water" then
         table.insert(content, { text = "Water", color = {0.4, 0.7, 1} })
         hasSpecial = true
@@ -2015,8 +2037,8 @@ function ui.drawCellTooltip(q, r, terrain, hex)
             local kindName = ({ mountain = "Mountain Range", reef = "Sharp Reefs", slope = "Mountain Slope" })[kind] or "Map Border"
             table.insert(content, { text = "Map Border", color = {0.9, 0.7, 0.35} })
             table.insert(content, { text = kindName, color = {0.7, 0.6, 0.45} })
-            table.insert(content, { text = "Impassable РІР‚вЂќ nothing can enter or cross it.", color = {0.8, 0.8, 0.8} })
-            table.insert(content, { text = "Invulnerable РІР‚вЂќ cannot be damaged or pushed.", color = {0.8, 0.8, 0.8} })
+            table.insert(content, { text = "Impassable — nothing can enter or cross it.", color = {0.8, 0.8, 0.8} })
+            table.insert(content, { text = "Invulnerable — cannot be damaged or pushed.", color = {0.8, 0.8, 0.8} })
             if borderEntity.lethalCollision then
                 table.insert(content, { text = "Collisions with it are lethal!", color = {1, 0.5, 0.4} })
             elseif borderEntity.noCollisionDamage then
@@ -2024,9 +2046,11 @@ function ui.drawCellTooltip(q, r, terrain, hex)
             else
                 table.insert(content, { text = "Pushing into it deals collision damage.", color = {0.9, 0.8, 0.5} })
             end
+            iconSprite = borderEntity.sprite
             hasSpecial = true
         else
             table.insert(content, { text = "Ground Tile", color = {0.7, 0.7, 0.7} })
+            table.insert(content, { text = "Nothing special — ordinary passable ground.", color = {0.6, 0.6, 0.6} })
         end
     end
     local minWidth = 160
@@ -2040,14 +2064,35 @@ function ui.drawCellTooltip(q, r, terrain, hex)
     local panelHeight = pad + #content * 16 + pad
     local px = logicalW - contentWidth - margin
     local py = 46
+
+    -- Small icon on the left when the cell has a sprite (map border)
+    local iconSize = 32
+    local textIndent = 0
+    if iconSprite then
+        local sw, sh = iconSprite:getDimensions()
+        local scale = math.min(iconSize / sw, iconSize / sh)
+        local cx = px + pad + iconSize / 2
+        local cy = py + pad + iconSize / 2
+        love.graphics.setColor(0, 0, 0, 0.35)
+        love.graphics.rectangle("fill", px + pad, py + pad, iconSize, iconSize, 4)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(iconSprite, cx, cy, 0, scale, scale, sw / 2, sh / 2)
+        textIndent = iconSize + 6
+        panelHeight = math.max(panelHeight, pad + iconSize + pad)
+    end
+
     love.graphics.setColor(0.1, 0.1, 0.2, 0.85)
     love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 5)
     love.graphics.setColor(0.8, 0.8, 0.8, 1)
     love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 5)
     local curY = py + pad
-    for _, l in ipairs(content) do
+    for i, l in ipairs(content) do
         love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
-        love.graphics.print(l.text, px + pad, curY)
+        if i == 1 and textIndent > 0 then
+            love.graphics.print(l.text, px + pad + textIndent, curY + math.floor((iconSize - 16) / 2))
+        else
+            love.graphics.print(l.text, px + pad, curY)
+        end
         curY = curY + 16
     end
 end
@@ -2502,16 +2547,36 @@ function ui.collectAttackPreviewOverlays(hex, attacker, attack, hoverQ, hoverR, 
         return
     end
 end
+-- Descriptions of entity statuses for the detailed hover tooltip.
+ui.STATUS_DESCRIPTIONS = {
+    fire      = "Burning: takes 1 damage at end of turn (extinguished by water).",
+    acid      = "Acid: takes double damage while affected.",
+    rooted    = "Rooted: cannot move this turn.",
+    slow      = "Slowed: movement range reduced.",
+    empowered = "Empowered: +1 move range and +1 attack damage.",
+    rage      = "Rage: +1 attack damage; expires at end of turn.",
+    wounded   = "Wounded: below max health.",
+    dig_site  = "On a dig site: will spawn enemies.",
+}
+
+function ui.getSelectedPanelHeight(actor)
+    if actor and not actor:isCharacter() and not (actor:isBuilding() and actor.moveRange > 0) then return 0 end
+    local pad = 8
+    local lineH = 18
+    return lineH + pad * 2
+end
+
 function ui.drawSelectedStats(actor, entities, hex)
-    if not actor then return end
-    if actor.multiAction then return end -- the hero has no stats panel
-    if not actor:isCharacter() and not (actor:isBuilding() and actor.moveRange > 0) then return end
+    local dummy = not actor
+    if not dummy and not actor:isCharacter() and not (actor:isBuilding() and actor.moveRange > 0) then return end
     local font = love.graphics.getFont()
     local pad = 8
     local lineH = 18
     local margin = 10
     local nameColor
-    if actor.isPlayable then
+    if dummy then
+        nameColor = {0.5, 0.5, 0.5}
+    elseif actor.isPlayable then
         nameColor = {0.4, 0.9, 0.4}
     elseif actor:isCharacter() then
         nameColor = {0.9, 0.4, 0.4}
@@ -2519,29 +2584,60 @@ function ui.drawSelectedStats(actor, entities, hex)
         nameColor = {1, 1, 1}
     end
 
-    -- Name panel (compact, just name)
+    -- Name panel (compact, just name) at top
     love.graphics.setFont(fonts.get(14))
-    local nameText = actor.name
-    if actor.hasActedThisTurn then nameText = nameText .. " (acted)" end
-    local nameW = font:getWidth(nameText) + pad * 4 + 24
-    local objectives = require("system.objectives")
-    local objH = objectives.getPanelHeight()
-    local py = (objH > 0) and (46 + objH + 4) or 46
+    local nameText = dummy and "No unit selected" or actor.name
+    if not dummy and actor.hasActedThisTurn then nameText = nameText .. " (acted)" end
+    local panelH = lineH + pad * 2
+    local iconSpace = 0
+    if not dummy and actor.sprite then iconSpace = (panelH - pad) + 6 end
+    local nameW = math.max(font:getWidth(nameText) + pad * 4 + 24 + iconSpace, 160)
+    local py = 46
     local px = margin
-    love.graphics.setColor(0.1, 0.15, 0.1, 0.9)
-    love.graphics.rectangle("fill", px, py, nameW, lineH + pad * 2, 8)
-    love.graphics.setColor(nameColor[1], nameColor[2], nameColor[3], 1)
-    love.graphics.rectangle("line", px, py, nameW, lineH + pad * 2, 8)
+    if dummy then
+        love.graphics.setColor(0.1, 0.1, 0.12, 0.9)
+    else
+        love.graphics.setColor(0.1, 0.15, 0.1, 0.9)
+    end
+    love.graphics.rectangle("fill", px, py, nameW, panelH, 8)
+    love.graphics.setColor(nameColor[1], nameColor[2], nameColor[3], dummy and 0.6 or 1)
+    love.graphics.rectangle("line", px, py, nameW, panelH, 8)
     love.graphics.setColor(nameColor)
-    love.graphics.print(nameText, px + pad, py + pad)
+
+    -- Small unit icon on the left
+    local iconSize = panelH - pad
+    if not dummy and actor.sprite then
+        local sw, sh = actor.sprite:getDimensions()
+        local scale = math.min(iconSize / sw, iconSize / sh)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(actor.sprite, px + pad + iconSize / 2, py + panelH / 2, 0, scale, scale, sw / 2, sh / 2)
+        love.graphics.print(nameText, px + pad + iconSize + 6, py + pad)
+    else
+        love.graphics.print(nameText, px + pad, py + pad)
+    end
+
+    -- Store panel bounds for hover detection
+    ui.selectedPanelRect = { x = px, y = py, w = nameW, h = panelH }
+
+    if dummy then
+        love.graphics.setColor(1, 1, 1, 1)
+        return
+    end
+
+    -- Hover tooltip with detailed effects
+    local dpi = _G.dpiScale or 1
+    local mx, my = love.mouse.getPosition()
+    mx, my = mx / dpi, my / dpi
+    local r = ui.selectedPanelRect
+    if mx >= r.x and mx <= r.x + r.w and my >= r.y and my <= r.y + r.h then
+        ui.drawSelectedEffectsTooltip(actor)
+    end
 
     -- Right-side info (single line, outside frame)
     if not smallFont then smallFont = fonts.get(12) end
     love.graphics.setFont(smallFont)
 
     local statsParts = {}
-    -- HP
-    table.insert(statsParts, { icon = "health", text = actor.health .. "/" .. actor.maxHealth, color = {1, 0.4, 0.4} })
     -- Move
     local baseMove = actor.moveRange or 0
     local effMove = ui.getEffectiveMoveRange(actor, entities, hex)
@@ -2586,6 +2682,60 @@ function ui.drawSelectedStats(actor, entities, hex)
         end
     end
 end
+
+-- Detailed tooltip showing every status/effect applied to the selected unit.
+function ui.drawSelectedEffectsTooltip(actor)
+    local statuses = ui.getEffectiveStatuses(actor) or {}
+    local lines = {}
+    table.insert(lines, { text = "Effects on " .. actor.name, color = {1, 1, 1} })
+    if #statuses == 0 then
+        table.insert(lines, { text = "  (none)", color = {0.6, 0.6, 0.6} })
+    end
+    for _, st in ipairs(statuses) do
+        local label = tostring(st):gsub("_", " "):gsub("^%l", string.upper)
+        local desc = ui.STATUS_DESCRIPTIONS[st] or ""
+        table.insert(lines, { text = label, color = {1, 0.8, 0.4} })
+        if desc ~= "" then
+            table.insert(lines, { text = "  " .. desc, color = {0.8, 0.8, 0.8} })
+        end
+    end
+
+    local f = fonts.get(13)
+    local prevFont = love.graphics.getFont()
+    love.graphics.setFont(f)
+    local pad = 9
+    local lineH = 17
+    local minWidth = 240
+    local maxWidth = 360
+    local contentWidth = minWidth
+    for _, l in ipairs(lines) do
+        local w = f:getWidth(l.text)
+        if w > contentWidth then contentWidth = w end
+    end
+    contentWidth = math.max(minWidth, math.min(maxWidth, contentWidth + pad * 2))
+    local panelHeight = pad + #lines * lineH + pad
+
+    local r = ui.selectedPanelRect
+    local px = r and r.x + r.w + 12 or 20
+    local py = r and r.y or 46
+    -- clamp to screen
+    local sw = love.graphics.getWidth() / (_G.dpiScale or 1)
+    if px + contentWidth > sw - 8 then px = sw - contentWidth - 8 end
+
+    love.graphics.setColor(0.1, 0.1, 0.16, 0.95)
+    love.graphics.rectangle("fill", px, py, contentWidth, panelHeight, 8)
+    love.graphics.setColor(1, 0.8, 0.4, 0.8)
+    love.graphics.rectangle("line", px, py, contentWidth, panelHeight, 8)
+
+    local curY = py + pad
+    for _, l in ipairs(lines) do
+        love.graphics.setColor(l.color[1], l.color[2], l.color[3], 1)
+        love.graphics.print(l.text, px + pad, curY)
+        curY = curY + lineH
+    end
+    love.graphics.setFont(prevFont)
+end
+
 -- Full plan preview for a Heavy Charge toward a target cell (used both while
 -- aiming and for the pending delayed cast).
 function ui.drawHeavyChargePlan(hex, attacker, attack, targetQ, targetR, entities)
@@ -2758,7 +2908,7 @@ function ui.getPauseBtnRect()
 end
 
 function ui.drawChaosBar(mx, my)
-    -- Hero-only: the top bar is always the hero's Soul Power РІР‚вЂќ a run resource
+    -- Hero-only: the top bar is always the hero's Soul Power — a run resource
     -- drained by lost buildings/objectives and by the hero's respawn. The
     -- hero's own combat HP (3) is a separate quantity shown as pips above him.
     local barVal = _G.soulPower or 0
@@ -2788,13 +2938,21 @@ function ui.drawChaosBar(mx, my)
     love.graphics.setColor(0.3, 0.2, 0.4, 0.4)
     love.graphics.line(0, panelH, logicalW, panelH)
 
-    -- Decay timer (center)
+    -- Decay timer (center). Once active it escalates: 1 -> 2 -> lethal damage
+    -- to all non-boss enemies at the end of each player turn.
     local turnCount = _G.turnCount or 0
     local maxTurns = _G.maxTurns or 5
     local decayActive = turnCount >= maxTurns
     if not smallFont then smallFont = fonts.get(12) end
     love.graphics.setFont(smallFont)
-    local decayText = decayActive and "Decay!" or ("Decay: " .. (maxTurns - turnCount))
+    local decayText
+    if decayActive then
+        local tick = (_G.decayTick or 0) + 1  -- next tick's damage
+        local dmg = tick == 1 and "1" or (tick == 2 and "2" or "LETHAL")
+        decayText = "Decay: " .. dmg .. " next turn!"
+    else
+        decayText = "Decay: " .. (maxTurns - turnCount)
+    end
     local decayW = love.graphics.getFont():getWidth(decayText)
     love.graphics.setColor(decayActive and 1 or 0.7, decayActive and 0.3 or 0.7, decayActive and 0.3 or 0.9, 1)
     love.graphics.print(decayText, math.floor((logicalW - decayW) / 2), math.floor((panelH - 14) / 2))

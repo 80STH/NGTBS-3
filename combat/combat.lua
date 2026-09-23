@@ -1,4 +1,4 @@
--- combat.lua
+﻿-- combat.lua
 -- Combat system with cubic coordinates (pointy-top, odd-r)
 local combat = {}
 local visual = require("system.visual_effects")
@@ -168,7 +168,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
                  target.q, target.r = fromQ, fromR
                  target.currentDrawX = nil
                  target.currentDrawY = nil
-                 log.infof("combat", "%s is grounded вЂ” snaps back to (%d,%d)!", target.name, fromQ, fromR)
+                 log.infof("combat", "%s is grounded — snaps back to (%d,%d)!", target.name, fromQ, fromR)
              end
              if realOnComplete then realOnComplete(result) end
          end
@@ -246,13 +246,13 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
             if onComplete then onComplete(false) end
             return
         end
-        -- Mountain slope (indestructible) вЂ” bounce animation without damage
+        -- Mountain slope (indestructible) — bounce animation without damage
         if occupant.noCollisionDamage then
             combat.addCollisionBounceAnimation(target, fromQ, fromR, toQ, toR, hex, entities, sounds, occupant, true)
             if onComplete then onComplete(false) end
             return
         end
-        -- Directional entity (MountainSlope) вЂ” side check (StonePillar is not a
+        -- Directional entity (MountainSlope) — side check (StonePillar is not a
         -- directional push: it always takes normal collision damage.)
         if occupant.direction and not occupant.noSidedPush then
             local safe = hex_utils.isPushFromSafeSide(occupant, fromQ, fromR)
@@ -263,7 +263,7 @@ function combat.Attack:pushTargetToHex(target, fromQ, fromR, toQ, toR, hex, enti
             if onComplete then onComplete(false) end
             return
         end
-        -- Deep water / hazard вЂ” move into the cell
+        -- Deep water / hazard — move into the cell
         if occupant.isHazard then
             finalizeMove(target, toQ, toR)
             combat.addPushAnimation(target, fromQ, fromR, toQ, toR, function()
@@ -546,13 +546,17 @@ function combat.DashAttack:execute(attacker, targetQ, targetR, hex, entities, so
     -- right after the attack includes the collision results (e.g. uphill
     -- collision damage). The lunge animation below is purely visual.
     combat.withDeferredDeaths(function()
-        if firstTarget and firstTarget.health > 0 then
+        -- Push even if the dash kills the target: its body still slams into the
+        -- rear target and deals collision damage. Only a target that was already
+        -- dead before the dash is left alone.
+        local targetAliveBefore = firstTarget and firstTarget.health > 0
+        if targetAliveBefore then
             -- Blade "Gentle Touch": no direct damage, still pushes/slams.
             if not attacker.gentleTouch then
                 self:dealDamageToTarget(firstTarget, attacker, self.damage, entities, sounds, nil)
             end
         end
-        if firstTarget and firstTarget.health > 0 and targetHex and firstTarget.isPushable then
+        if firstTarget and targetAliveBefore and targetHex and firstTarget.isPushable then
             self:pushTargetInDirection(firstTarget, targetHex.q, targetHex.r, stepX, stepY, stepZ, hex, entities, sounds)
         end
     end)
@@ -582,7 +586,7 @@ end
 -- ============================================================
 -- HEAVY CHARGE (player-only): delayed finisher.
 -- Reinhardt-style pin: drags the first enemy along the line until it
--- collides with something вЂ” obstacle / cliff = lethal, edge = slam.
+-- collides with something — obstacle / cliff = lethal, edge = slam.
 -- ============================================================
 combat.HeavyChargeAttack = setmetatable({}, combat.DelayedAttack)
 combat.HeavyChargeAttack.__index = combat.HeavyChargeAttack
@@ -799,7 +803,7 @@ function combat.checkDeflect(target, attacker, sounds)
     return true
 end
 
--- 2. FLIP вЂ“ 1 damage, toss onto 3 chosen cells
+-- 2. FLIP – 1 damage, toss onto 3 chosen cells
 combat.FlipAttack = setmetatable({}, combat.Attack)
 combat.FlipAttack.__index = combat.FlipAttack
 function combat.FlipAttack.new()
@@ -1157,7 +1161,7 @@ function combat.AoePushAttack:getPushCells(attacker, targetQ, targetR, hex, enti
 end
 
 
--- 6. AoE DIRECTIONAL (Cone Blast) вЂ” pushes 3 front neighbors of attacker
+-- 6. AoE DIRECTIONAL (Cone Blast) — pushes 3 front neighbors of attacker
 combat.AoeDirectionalAttack = setmetatable({}, combat.Attack)
 combat.AoeDirectionalAttack.__index = combat.AoeDirectionalAttack
 function combat.AoeDirectionalAttack.new()
@@ -1582,7 +1586,7 @@ function combat.SummonEnemyAttack:execute(attacker, targetQ, targetR, hex, entit
     local sq, sr = attacker.summonTargetQ, attacker.summonTargetR
     if not sq or not sr then return false end
 
-    -- If cell is occupied вЂ” 2 damage to occupant
+    -- If cell is occupied — 2 damage to occupant
     local occupant = combat.getEntityAtHex(sq, sr, entities)
     if occupant and occupant.health > 0 then
         local wasDestroyed = occupant:takeDamage(1)
@@ -2202,8 +2206,8 @@ end
 -- ============================================================
 -- WIDE STRIKE (Blade): cleave of three cells in front. Normally it
 -- deals 1 damage to every target there; with "Gentle Touch" active it
--- instead shoves all three away from the hero вЂ” one shared forward
--- direction вЂ” dealing no direct damage.
+-- instead shoves all three away from the hero — one shared forward
+-- direction — dealing no direct damage.
 -- ============================================================
 combat.WideStrikeAttack = setmetatable({}, combat.Attack)
 combat.WideStrikeAttack.__index = combat.WideStrikeAttack
@@ -2728,7 +2732,7 @@ function combat.triggerTeleporter(entity)
 end
 
 -- Poisoned marker: checks the "Poisonous" enemy name. Affects ONLY the
--- kill_poisonous_with_decay objective вЂ” no gameplay effect.
+-- kill_poisonous_with_decay objective — no gameplay effect.
 function combat.isPoisonousEnemy(entity)
     if not entity or not entity.name then return false end
     return entity.name:match("Poisonous") ~= nil
@@ -2758,8 +2762,8 @@ end
 -- Apply immediate move logic and queue a move animation.
 -- Root is a two-way bond: when EITHER side is forcibly displaced the effect
 -- breaks. As a victim (has the "rooted" debuff) or as the attacker holding
--- someone via rootedTarget вЂ” the moved entity frees itself and/or its pin.
--- Called from every forced-move choke point (knockbacks, pulls, teleportsвЂ¦).
+-- someone via rootedTarget — the moved entity frees itself and/or its pin.
+-- Called from every forced-move choke point (knockbacks, pulls, teleports…).
 function combat.unrootForcedMove(entity)
     if not entity then return end
     -- As the victim: the pinned unit wrenches free.
@@ -2783,7 +2787,7 @@ function combat.unrootForcedMove(entity)
         end
     end
     -- Just in case an entity has both roles (it rooted someone but some other
-    -- attacker rooted it) вЂ” strip any remaining root mark after the sweep.
+    -- attacker rooted it) — strip any remaining root mark after the sweep.
     if status.hasEntityStatus(entity, "rooted") then
         status.removeFromEntity(entity, "rooted")
     end
@@ -3195,7 +3199,7 @@ if attacker.hasActedThisTurn and not (attacker.multiAction and (attacker.attacks
             if hasTag(attack.tags, "finisher") then
                 attacker.attacksLeft = 0
             end
-            -- Unified MP/AP: an attack spends the AP core of its cell вЂ” and any
+            -- Unified MP/AP: an attack spends the AP core of its cell — and any
             -- still-unspent MP shell can't outlast its core, so movement remaining
             -- drops to what the surviving cores allow.
             if (attacker.movesLeft or 0) > (attacker.attacksLeft or 0) then
@@ -3583,7 +3587,7 @@ combat.HuntAttack = setmetatable({}, combat.Attack)
 combat.HuntAttack.__index = combat.HuntAttack
 
 function combat.HuntAttack.new()
-    local self = combat.Attack.new("Hunt", "Push target away. If target collides with Colossus вЂ” lethal damage, no harm to Colossus", 1, 0, {})
+    local self = combat.Attack.new("Hunt", "Push target away. If target collides with Colossus — lethal damage, no harm to Colossus", 1, 0, {})
     return setmetatable(self, combat.HuntAttack)
 end
 

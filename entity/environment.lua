@@ -1,4 +1,4 @@
--- environment.lua
+﻿-- environment.lua
 local Entity = require("entity.entity")
 local config = require("core.config")
 local log = require("util.log")
@@ -63,7 +63,7 @@ local nameToSpriteKey = {
 }
 -- CONTENT REGISTRY: attack sets and enemy types.
 -- Previously there were 19 get*Attacks() functions + long if/elseif
--- in three places. Now Р Р†Р вЂљРІР‚Сњ two tables.
+-- in three places. Now — two tables.
 -- ============================================================
 
 -- Each set is a function returning a list of attacks.
@@ -881,7 +881,7 @@ function environment.loadUnitSprites()
 end
 
 function environment.createEnemyByType(enemyType, q, r)
-    -- Specification from registry; fallback Р Р†Р вЂљРІР‚Сњ Zombie.
+    -- Specification from registry; fallback — Zombie.
     local spec = ENEMY_TYPES[enemyType] or ENEMY_TYPES.Zombie
     local name = (ENEMY_TYPES[enemyType] and enemyType) or "Zombie"
     local attacks = environment.getAttacks(spec.attackSet)
@@ -1025,13 +1025,13 @@ function environment.getAvailableEntityDefs()
     return list
 end
 
--- Р Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљ
+-- ———————————————————————————————————————————————————————————
 -- HERO roster
 -- Menu = list heroes + their attacks; game spawns one chosen hero;
 -- objectives read a hero def for capability tags.
 -- The registry is built lazily so combat (whose attack classes these defs
 -- reference) is only required once everything else has loaded.
--- Р Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљР Р†РІР‚СњР вЂљ
+-- ———————————————————————————————————————————————————————————
 local heroDefs = nil
 
 local function combatModule()
@@ -1095,7 +1095,7 @@ function environment.createHero(defIdx, q, r)
     e.attacksLeft = 2
     e.movesLeft = 2
     e.deployEffect = def.deployEffect
-    -- Toggle mechanics: Blade has "Gentle Touch" Р Р†Р вЂљРІР‚Сњ when on, Dash/Flip lose
+    -- Toggle mechanics: Blade has "Gentle Touch" — when on, Dash/Flip lose
     -- their direct damage. Flag lives on the hero so combat reads it live.
     if def.id == "blade" then
         e.gentleTouch = false
