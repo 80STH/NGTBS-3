@@ -675,6 +675,12 @@ function input.keyreleased(key)
         showEnemyOrder = false
         log.debugf("input", "Enemy order display: OFF")
     end
+    if key == "e" or key == "E" then
+        if endTurnButton.isHeld then
+            endTurnButton.isHeld = false
+            endTurnButton.holdTimer = 0
+        end
+    end
     if key == "u" or key == "U" then
         if undoButton.isHeld and not undoTriggeredThisCycle and undoHeldByKeyboard then
             local wasHeld = undoButton.holdTimer >= (config.HOLD_TIME or 0.7)
